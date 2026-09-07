@@ -3,6 +3,24 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
+const projectSearchBindingProviderSource = readFileSync(
+  new URL(
+    '../src/features/search/projectSearchRouteBindingProviderV2.ts',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const projectCronJobsBindingProviderSource = readFileSync(
+  new URL(
+    '../src/features/automations/projectCronJobsRouteBindingProviderV2.ts',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const searchSource = readFileSync(
   new URL('../src/features/search/DesktopSearch.tsx', import.meta.url),
   'utf8',
@@ -12,11 +30,36 @@ const automationsSource = readFileSync(
   'utf8',
 );
 
-test('App composes the capability snapshot into Search and Automation product surfaces', () => {
-  assert.match(appSource, /createDesktopWorkbenchCapabilityClient/u);
+test('App projects capabilities into V2 Search and Automation route bindings', () => {
+  assert.match(appSource, /desktopWorkbenchCapabilityClientProviderV2\.publish/u);
+  assert.doesNotMatch(appSource, /createDesktopWorkbenchCapabilityClient\(/u);
   assert.match(appSource, /useDesktopCapabilitySnapshot/u);
-  assert.match(appSource, /capability=\{searchCapability\}/u);
-  assert.match(appSource, /runCapability=\{automationRunCapability\}/u);
+  assert.match(
+    appSource,
+    /projectSearchRouteBindingProviderV2\.publish\([\s\S]*capabilitySnapshot: desktopCapabilityState\.snapshot/u,
+  );
+  assert.match(
+    projectSearchBindingProviderSource,
+    /desktopCapability\(input\.capabilitySnapshot,\s*PROJECT_SEARCH_ROUTE_ID\)/u,
+  );
+  assert.match(appSource, /createDesktopProjectSearchOperationsV2/u);
+  assert.doesNotMatch(projectSearchBindingProviderSource, /DesktopApiClient|\bapi:/u);
+  assert.doesNotMatch(appSource, /projectSearchCapability|PROJECT_SEARCH_ROUTE_ID/u);
+  assert.match(
+    appSource,
+    /projectCronJobsRouteBindingProviderV2\.publish\([\s\S]*capabilitySnapshot: desktopCapabilityState\.snapshot/u,
+  );
+  assert.match(
+    projectCronJobsBindingProviderSource,
+    /desktopCapability\(input\.capabilitySnapshot,\s*AUTOMATION_RUN_CAPABILITY_ID\)/u,
+  );
+  assert.match(registrySource, /projectSearchRouteBindingProviderV2\.resolve\(context\)/u);
+  assert.match(registrySource, /projectSearchOperationsV2/u);
+  assert.match(registrySource, /projectCronJobsRouteBindingProviderV2\.resolve\(context\)/u);
+  assert.doesNotMatch(appSource, /projectCronJobsRouteBindingRef|automationRunCapability/u);
+  assert.doesNotMatch(registrySource, /current\?\.runCapability/u);
+  assert.doesNotMatch(appSource, /capability=\{searchCapability\}/u);
+  assert.doesNotMatch(appSource, /runCapability=\{automationRunCapability\}/u);
 });
 
 test('Search blocks requests until structured availability is declared', () => {

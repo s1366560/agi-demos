@@ -8,9 +8,8 @@ inheritance.
 
 from __future__ import annotations
 
-import contextlib
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -18,26 +17,52 @@ from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 from ..plugins.policy_context import PolicyContext
 from ..plugins.selection_pipeline import ToolSelectionContext
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
-from ..sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID, get_builtin_agent_by_id
+from ..sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from ..sisyphus.prompt_builder import SisyphusPromptBuilder, SisyphusPromptContext
 from .react_agent_profile import AgentRuntimeProfile
 
 if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+
     from .processor import ToolDefinition
 
 logger = logging.getLogger(__name__)
+
+
+async def _build_system_prompt_from_runtime_v2(
+    *,
+    manager: object,
+    context: PromptContext,
+    subagent: object | None,
+) -> str:
+    """Build the prompt through the required provider in the pinned v2 operation."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+    from src.infrastructure.plugins.v2.system_prompt import (
+        SYSTEM_PROMPT_BUILDER_SERVICE_V2,
+        SystemPromptBuilderProtocolV2,
+    )
+
+    operation = current_operation_context_v2()
+    builder = operation.require(SYSTEM_PROMPT_BUILDER_SERVICE_V2)
+    if not isinstance(builder, SystemPromptBuilderProtocolV2):
+        raise RuntimeError("v2 system prompt builder has an invalid implementation")
+    return await builder.build(
+        manager=manager,
+        context=context,
+        subagent=subagent,
+    )
 
 
 class _PromptAgent(Protocol):
     """Subset of ``ReActAgent`` state used by :class:`PromptMixin`."""
 
     model: str
-    skills: list[Skill]
-    subagents: list[SubAgent]
     project_root: Path
     max_steps: int
     max_tokens: int
@@ -45,12 +70,12 @@ class _PromptAgent(Protocol):
     prompt_manager: Any
     _enable_subagent_as_tool: bool
     _workspace_manager: Any
-    _session_factory: Any
     _sisyphus_prompt_builder: SisyphusPromptBuilder
     _tool_policy_layers: dict[str, dict[str, Any]]
     _tool_selection_max_tools: int
     _tool_selection_semantic_backend: str
     _stream_memory_context: Any
+    _provider_id: str
 
     def _get_current_tools(
         self,
@@ -63,7 +88,12 @@ class _PromptAgent(Protocol):
         tenant_agent_config_data: dict[str, Any] | None,
     ) -> TenantAgentConfig: ...
 
-    def _filter_skills_for_agent(self, selected_agent: Agent | None) -> list[Skill]: ...
+    def _filter_skills_for_agent(
+        self,
+        selected_agent: Agent | None,
+        *,
+        available_skills: Sequence[Skill],
+    ) -> list[Skill]: ...
 
     def _resolve_tool_policy(
         self,
@@ -158,11 +188,14 @@ class PromptMixin:
         agent_definition_prompt: str | None = None,
         primary_agent_prompt: str | None = None,
         available_skills: list[Skill] | None = None,
+        available_subagents: list[SubAgent] | None = None,
         model_name: str | None = None,
         max_steps_override: int | None = None,
         workspace_manager: Any | None = None,
         selected_agent_name: str | None = None,
         is_workspace_conversation: bool = False,
+        *,
+        tool_set: ToolSetV2,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -186,7 +219,7 @@ class PromptMixin:
 
         # Convert skills to dict format for PromptContext
         skills_data = None
-        effective_skills = available_skills if available_skills is not None else self.skills
+        effective_skills = list(available_skills or [])
         # Strip workspace-scoped skills from non-workspace conversations.
         if effective_skills and not is_workspace_conversation:
             effective_skills = [s for s in effective_skills if not s.name.startswith("workspace-")]
@@ -213,31 +246,18 @@ class PromptMixin:
                 "force_execution": force_execution,
             }
 
-        # Convert tool definitions to dict format - use current tools (hot-plug support)
-        _, current_tool_definitions = self._get_current_tools(selection_context=selection_context)
-        # Strip workspace-scoped tools from non-workspace conversations so the
-        # system prompt does not advertise tools that will be filtered out at
-        # execution time anyway.
-        if not is_workspace_conversation:
-            current_tool_definitions = [
-                t for t in current_tool_definitions if not t.name.startswith("workspace_")
-            ]
-        # When a forced skill is active, exclude skill_loader from tool list
-        # to prevent the LLM from calling it and loading a different skill.
-        if force_execution and matched_skill:
-            tool_defs = [
-                {"name": t.name, "description": t.description}
-                for t in current_tool_definitions
-                if t.name != "skill_loader"
-            ]
-        else:
-            tool_defs = [
-                {"name": t.name, "description": t.description} for t in current_tool_definitions
-            ]
+        # The turn owner resolves and scope-filters one immutable V2 ToolSet
+        # before any model-visible consumer runs. Prompt building must never
+        # refresh the native/static collection independently.
+        tool_defs = [
+            {"name": definition.name, "description": definition.description}
+            for definition in tool_set.definitions
+        ]
 
         # Convert SubAgents to dict format for PromptContext (SubAgent-as-Tool mode)
         subagents_data = None
-        if self.subagents and self._enable_subagent_as_tool:
+        effective_subagents = list(available_subagents or [])
+        if effective_subagents and self._enable_subagent_as_tool:
             subagents_data = [
                 {
                     "name": sa.name,
@@ -247,7 +267,7 @@ class PromptMixin:
                         sa.trigger.description if sa.trigger else "general tasks"
                     ),
                 }
-                for sa in self.subagents
+                for sa in effective_subagents
                 if sa.enabled
             ]
 
@@ -301,13 +321,10 @@ class PromptMixin:
             selected_agent_name=selected_agent_name,
         )
 
-        # Use SystemPromptManager to build the prompt
-        return cast(
-            str,
-            await self.prompt_manager.build_system_prompt(
-                context=context,
-                subagent=subagent,
-            ),
+        return await _build_system_prompt_from_runtime_v2(
+            manager=self.prompt_manager,
+            context=context,
+            subagent=subagent,
         )
 
     async def _load_selected_agent(
@@ -317,57 +334,25 @@ class PromptMixin:
         tenant_id: str,
         project_id: str,
     ) -> Agent | None:
-        """Load the selected runtime agent from built-ins, orchestrator, or DB."""
-        builtin_agent = get_builtin_agent_by_id(
-            agent_id,
-            tenant_id=tenant_id,
-            project_id=project_id,
+        """Load an explicit agent definition through the active v2 Provider."""
+        from src.infrastructure.plugins.v2.agent_definition import (
+            AGENT_DEFINITION_RESOLVER_SERVICE_V2,
+            AgentDefinitionResolverProtocolV2,
         )
-        if builtin_agent is not None:
-            return builtin_agent
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 
-        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
-
-        orchestrator = get_agent_orchestrator()
-        if orchestrator is not None:
-            try:
-                agent_def = await orchestrator.get_agent(
-                    agent_id,
-                    tenant_id=tenant_id,
-                    project_id=project_id,
-                )
-                if agent_def is not None:
-                    return cast(Agent, agent_def)
-            except Exception:
-                logger.exception("[ReActAgent] Failed orchestrator lookup for agent %s", agent_id)
-
-        session_factory = self._session_factory
-        if session_factory is None:
-            logger.debug("[ReActAgent] No session_factory available for agent lookup: %s", agent_id)
-            return None
-
-        from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
-            SqlAgentRegistryRepository,
-        )
-
-        session = session_factory()
-        try:
-            repository = SqlAgentRegistryRepository(session)
-            agent_def = await repository.get_by_id(
-                agent_id,
+        operation = current_operation_context_v2()
+        resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+        if not isinstance(resolver, AgentDefinitionResolverProtocolV2):
+            raise RuntimeError("v2 agent-definition resolver has an invalid implementation")
+        return cast(
+            Agent | None,
+            await resolver.resolve(
+                agent_id=agent_id,
                 tenant_id=tenant_id,
                 project_id=project_id,
-            )
-            if agent_def is None:
-                logger.warning("[ReActAgent] Agent definition not found: %s", agent_id)
-            return agent_def
-        except Exception:
-            logger.exception("[ReActAgent] Failed DB lookup for agent definition: %s", agent_id)
-            return None
-        finally:
-            with contextlib.suppress(Exception):
-                await session.rollback()
-            await session.close()
+            ),
+        )
 
     def _build_runtime_profile(
         self: _PromptAgent,
@@ -375,11 +360,16 @@ class PromptMixin:
         tenant_id: str,
         tenant_agent_config_data: dict[str, Any] | None,
         selected_agent: Agent | None,
+        selected_agent_model_route: ModelRouteRef | None = None,
         is_workspace_worker_runtime: bool = False,
+        available_skills: Sequence[Skill] = (),
     ) -> AgentRuntimeProfile:
         """Build the request-scoped runtime profile."""
         tenant_agent_config = self._load_tenant_agent_config(tenant_id, tenant_agent_config_data)
-        available_skills = self._filter_skills_for_agent(selected_agent)
+        filtered_skills = self._filter_skills_for_agent(
+            selected_agent,
+            available_skills=available_skills,
+        )
         allow_tools, deny_tools = self._resolve_tool_policy(
             selected_agent=selected_agent,
             tenant_agent_config=tenant_agent_config,
@@ -388,6 +378,30 @@ class PromptMixin:
             selected_agent=selected_agent,
             tenant_agent_config=tenant_agent_config,
         )
+        selected_agent_has_explicit_model = (
+            selected_agent is not None and selected_agent.model.value != "inherit"
+        )
+        if selected_agent_model_route is None:
+            if selected_agent_has_explicit_model:
+                assert selected_agent is not None
+                raise RuntimeV2Error(
+                    "agent_model_route_missing",
+                    f"agent {selected_agent.id} declares model {effective_model} "
+                    "without an explicit provider route",
+                )
+            effective_model_route = ModelRouteRef(
+                provider_id=self._provider_id,
+                model_id=effective_model,
+            )
+        else:
+            if selected_agent_model_route.model_id != effective_model:
+                selected_agent_id = selected_agent.id if selected_agent is not None else "default"
+                raise RuntimeV2Error(
+                    "agent_model_route_mismatch",
+                    f"agent {selected_agent_id} declares model {effective_model}, but its route "
+                    f"declares {selected_agent_model_route.model_id}",
+                )
+            effective_model_route = selected_agent_model_route
         effective_temperature = (
             selected_agent.temperature
             if selected_agent is not None and selected_agent.has_explicit_temperature()
@@ -401,10 +415,7 @@ class PromptMixin:
         agent_max_iterations_explicit = (
             selected_agent is not None
             and selected_agent.has_explicit_max_iterations()
-            and not (
-                is_workspace_worker_runtime
-                and _is_workspace_plan_team_agent(selected_agent)
-            )
+            and not (is_workspace_worker_runtime and _is_workspace_plan_team_agent(selected_agent))
         )
         effective_max_steps = (
             selected_agent.max_iterations
@@ -428,10 +439,10 @@ class PromptMixin:
         return AgentRuntimeProfile(
             selected_agent=selected_agent,
             tenant_agent_config=tenant_agent_config,
-            available_skills=available_skills,
+            available_skills=filtered_skills,
             allow_tools=allow_tools,
             deny_tools=deny_tools,
-            effective_model=effective_model,
+            effective_model_route=effective_model_route,
             effective_temperature=effective_temperature,
             effective_max_tokens=effective_max_tokens,
             effective_max_steps=effective_max_steps,
@@ -444,19 +455,21 @@ class PromptMixin:
         *,
         runtime_profile: AgentRuntimeProfile,
         selection_context: ToolSelectionContext,
+        tool_set: ToolSetV2,
+        available_subagents: Sequence[SubAgent] = (),
     ) -> str | None:
         """Build a dynamic primary prompt when the selected agent is built-in Sisyphus."""
         selected_agent = runtime_profile.selected_agent
         if selected_agent is None or selected_agent.id != BUILTIN_SISYPHUS_ID:
             return None
-        _, current_tool_definitions = self._get_current_tools(selection_context=selection_context)
+        _ = selection_context
         return self._sisyphus_prompt_builder.build(
             SisyphusPromptContext(
                 model_name=runtime_profile.effective_model,
                 max_steps=runtime_profile.effective_max_steps,
-                tools=current_tool_definitions,
+                tools=list(tool_set.definitions),
                 skills=runtime_profile.available_skills,
-                subagents=list(self.subagents or []),
+                subagents=list(available_subagents),
             )
         )
 

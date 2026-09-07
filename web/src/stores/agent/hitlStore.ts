@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../../plugins/webOperationAdmissionV2';
 /**
  * Agent HITL Interactivity Store - Extracted from agentV3.ts (Wave 2)
  *
@@ -64,8 +65,8 @@ interface AgentHITLState {
 }
 
 const RECENT_HITL_LOAD_SKIP_MS = 30_000;
-const pendingHITLLoadRequests = new Map<string, Promise<boolean>>();
-const completedHITLLoadRequests = new Map<string, number>();
+const pendingByOwner = new WeakMap<object, Map<string, Promise<boolean>>>();
+const completedByOwner = new WeakMap<object, Map<string, number>>();
 
 // -- Store --
 
@@ -93,6 +94,17 @@ export const useAgentHITLStore = create<AgentHITLState>()(
       },
 
       loadPendingHITL: async (conversationId: string) => {
+        const availability = getWebOperationAvailabilityV2();
+        if (!availability.available) return;
+        const current = () =>
+          getWebOperationAvailabilityV2().available &&
+          getWebOperationAvailabilityV2().owner === availability.owner;
+        const pendingHITLLoadRequests =
+          pendingByOwner.get(availability.owner) ?? new Map<string, Promise<boolean>>();
+        const completedHITLLoadRequests =
+          completedByOwner.get(availability.owner) ?? new Map<string, number>();
+        pendingByOwner.set(availability.owner, pendingHITLLoadRequests);
+        completedByOwner.set(availability.owner, completedHITLLoadRequests);
         const activeRequest = pendingHITLLoadRequests.get(conversationId);
         if (activeRequest) {
           logger.debug('[hitlStore] Pending HITL load already running for:', conversationId);
@@ -116,6 +128,7 @@ export const useAgentHITLStore = create<AgentHITLState>()(
           );
           try {
             const response = await agentService.getPendingHITLRequests(conversationId);
+            if (!current()) return false;
             logger.debug('[hitlStore] Pending HITL response:', response);
 
             if (response.requests.length === 0) {
@@ -125,6 +138,7 @@ export const useAgentHITLStore = create<AgentHITLState>()(
 
             // Process each pending request and restore dialog state
             for (const request of response.requests) {
+              if (!current()) return false;
               logger.debug(
                 '[hitlStore] Restoring pending HITL request:',
                 request.request_type,
@@ -205,7 +219,7 @@ export const useAgentHITLStore = create<AgentHITLState>()(
         pendingHITLLoadRequests.set(conversationId, request);
         try {
           const didLoad = await request;
-          if (didLoad) {
+          if (didLoad && current()) {
             completedHITLLoadRequests.set(conversationId, Date.now());
           }
         } finally {

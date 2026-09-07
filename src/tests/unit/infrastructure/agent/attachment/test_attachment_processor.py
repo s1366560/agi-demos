@@ -6,12 +6,12 @@ Tests the unified attachment processing logic extracted from ReActAgent.
 
 import pytest
 
+from src.configuration.containers.agent_container import AgentContainer
+from src.infrastructure.agent.attachment import processor as processor_module
 from src.infrastructure.agent.attachment.processor import (
     AttachmentContext,
     AttachmentProcessor,
     ProcessedAttachment,
-    get_attachment_processor,
-    set_attachment_processor,
 )
 
 # ============================================================
@@ -426,35 +426,18 @@ class TestEnhanceMessage:
 
 
 # ============================================================
-# Test Singleton Functions
+# Retired Process-Global Authority
 # ============================================================
 
 
 @pytest.mark.unit
-class TestSingletonFunctions:
-    """Test singleton getter/setter functions."""
-
-    def test_get_attachment_processor(self):
-        """Test getting default processor."""
-        processor = get_attachment_processor()
-        assert isinstance(processor, AttachmentProcessor)
-
-    def test_get_returns_same_instance(self):
-        """Test that getter returns same instance."""
-        p1 = get_attachment_processor()
-        p2 = get_attachment_processor()
-        assert p1 is p2
-
-    def test_set_attachment_processor(self):
-        """Test setting custom processor."""
-        custom = AttachmentProcessor(debug_logging=True)
-        set_attachment_processor(custom)
-
-        result = get_attachment_processor()
-        assert result is custom
-
-        # Cleanup
-        set_attachment_processor(AttachmentProcessor())
+@pytest.mark.parametrize(
+    "authority_name",
+    ("_default_processor", "get_attachment_processor", "set_attachment_processor"),
+)
+def test_process_global_attachment_processor_authority_is_retired(authority_name: str) -> None:
+    assert not hasattr(processor_module, authority_name)
+    assert not hasattr(AgentContainer, "attachment_processor")
 
 
 # ============================================================

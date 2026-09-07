@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "source": "create_app().routes and create_app().openapi()",
+  "source": "Workspace Core V2 route contributions and generation OpenAPI",
   "routerModules": [
     "src.infrastructure.adapters.primary.web.routers.blackboard",
     "src.infrastructure.adapters.primary.web.routers.cyber_genes",
@@ -14535,5 +14535,5 @@
     },
     "securitySchemes": {}
   },
-  "contractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768"
+  "contractSha256": "c7563012aaf94f8d798897013be127d9d60d0c4d38e078b18c71858a131ad113"
 }

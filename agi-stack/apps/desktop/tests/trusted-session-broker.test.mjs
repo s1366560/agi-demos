@@ -11,6 +11,7 @@ const {
   hasNativeTrustedSessionBroker,
   loadLocalTrustedSession,
   saveLocalTrustedSession,
+  selectPlatformPluginAuthorityV2,
 } = require('/tmp/agistack-desktop-test-dist/src/api/trustedSession.js');
 
 const cloudRecord = {
@@ -62,6 +63,25 @@ test('renderer can clear but cannot load or save the native Cloud bearer', async
 
   await clearNativeTrustedSession();
   assert.deepEqual(commands, [{ command: 'trusted_session_clear', args: undefined }]);
+  delete globalThis.window;
+});
+
+test('renderer selects the protocol-v2 platform plugin authority explicitly', async () => {
+  const commands = [];
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
+      core: { invoke: async (command, args) => commands.push({ command, args }) },
+    },
+  };
+
+  await selectPlatformPluginAuthorityV2('local');
+  await selectPlatformPluginAuthorityV2('cloud');
+
+  assert.deepEqual(commands, [
+    { command: 'platform_plugin_authority_select_v2', args: { mode: 'local' } },
+    { command: 'platform_plugin_authority_select_v2', args: { mode: 'cloud' } },
+  ]);
   delete globalThis.window;
 });
 
@@ -123,4 +143,16 @@ test('renderer source does not expose Cloud vault load or save helpers', () => {
   const source = readFileSync(new URL('../src/api/trustedSession.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /loadNativeTrustedSession/u);
   assert.doesNotMatch(source, /saveNativeTrustedSession/u);
+});
+
+test('session restore waits for explicit platform plugin authority selection', () => {
+  const selection = appSource.indexOf('await selectPlatformPluginAuthorityV2(config.mode)');
+  const cloudRestore = appSource.indexOf(
+    'await hydrateProjectedCloudSession(authAttemptRevision)',
+  );
+  const localRestore = appSource.indexOf('await loadLocalTrustedSession()');
+
+  assert.ok(selection >= 0);
+  assert.ok(selection < cloudRestore);
+  assert.ok(selection < localRestore);
 });

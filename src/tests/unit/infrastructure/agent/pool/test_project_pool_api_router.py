@@ -43,11 +43,7 @@ def _instance(tenant_id: str, project_id: str, agent_mode: str = "chat") -> Simp
 
 
 @pytest.mark.unit
-async def test_project_pool_read_resolves_only_the_exact_project_instance(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "src.configuration.config.get_settings",
-        lambda: SimpleNamespace(agent_pool_enabled=True),
-    )
+async def test_project_pool_read_resolves_only_the_exact_project_instance() -> None:
     exact = _instance("tenant-a", "project-a")
     manager = SimpleNamespace(
         _instances={

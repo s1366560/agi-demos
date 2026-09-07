@@ -5,7 +5,10 @@ Covers: models, manager, events, and tools with 80%+ coverage target.
 
 from __future__ import annotations
 
+import asyncio
 import json
+from contextvars import ContextVar
+from unittest.mock import patch
 
 import pytest
 
@@ -23,10 +26,10 @@ from src.infrastructure.agent.canvas.tools import (
     canvas_create_interactive,
     canvas_delete,
     canvas_update,
-    configure_canvas,
     get_canvas_manager,
 )
 from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.tests.unit.agent.canvas.a2ui_contract_fixtures import (
     contract_case_jsonl,
     get_a2ui_contract_case,
@@ -40,6 +43,39 @@ from src.tests.unit.agent.canvas.native_block_contract_fixtures import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+_TEST_CANVAS_MANAGER: ContextVar[CanvasManager | None] = ContextVar(
+    "test_canvas_manager",
+    default=None,
+)
+
+
+def configure_canvas(manager: CanvasManager | None) -> None:
+    """Set the manager returned by the test-only V2 projection."""
+    _TEST_CANVAS_MANAGER.set(manager)
+
+
+def _current_canvas_manager_v2() -> CanvasManager:
+    manager = _TEST_CANVAS_MANAGER.get()
+    if manager is None:
+        raise RuntimeV2Error(
+            "operation_context_not_pinned",
+            "test Canvas projection requires a pinned operation",
+        )
+    return manager
+
+
+@pytest.fixture(autouse=True)
+def _canvas_runtime_projection() -> object:
+    token = _TEST_CANVAS_MANAGER.set(None)
+    try:
+        with patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_canvas_manager_v2",
+            side_effect=_current_canvas_manager_v2,
+        ):
+            yield
+    finally:
+        _TEST_CANVAS_MANAGER.reset(token)
 
 
 @pytest.fixture()
@@ -385,8 +421,47 @@ class TestCanvasTools:
 
     def test_get_manager_unconfigured(self) -> None:
         configure_canvas(None)  # reset global
-        with pytest.raises(RuntimeError, match="Canvas not configured"):
+        with pytest.raises(RuntimeV2Error) as error:
             get_canvas_manager()
+
+        assert error.value.code == "operation_context_not_pinned"
+
+    async def test_bound_canvas_tools_ignore_legacy_manager_changes(self) -> None:
+        from src.infrastructure.agent.canvas.tools import make_canvas_tools
+
+        manager_a = CanvasManager()
+        manager_b = CanvasManager()
+        legacy_manager = CanvasManager()
+        tool_a = make_canvas_tools(manager=manager_a)["canvas_create"]
+        tool_b = make_canvas_tools(manager=manager_b)["canvas_create"]
+        configure_canvas(legacy_manager)
+
+        ctx_a = ToolContext(
+            session_id="session-a",
+            message_id="message-a",
+            call_id="call-a",
+            agent_name="agent-a",
+            conversation_id="conversation-a",
+        )
+        ctx_b = ToolContext(
+            session_id="session-b",
+            message_id="message-b",
+            call_id="call-b",
+            agent_name="agent-b",
+            conversation_id="conversation-b",
+        )
+        result_a, result_b = await asyncio.gather(
+            tool_a.execute(ctx_a, block_type="markdown", title="A", content="alpha"),
+            tool_b.execute(ctx_b, block_type="markdown", title="B", content="beta"),
+        )
+
+        assert result_a.is_error is False
+        assert result_b.is_error is False
+        assert [block.title for block in manager_a.get_blocks("conversation-a")] == ["A"]
+        assert [block.title for block in manager_b.get_blocks("conversation-b")] == ["B"]
+        assert legacy_manager.get_blocks("conversation-a") == []
+        assert legacy_manager.get_blocks("conversation-b") == []
+        configure_canvas(None)
 
     async def test_canvas_create_success(self, ctx: ToolContext) -> None:
         mgr = CanvasManager()
@@ -500,7 +575,9 @@ class TestCanvasTools:
         title = str(case["title"])
         updated_title = str(case.get("updatedTitle", f"Updated {title}"))
         initial_content = serialize_native_block_content(case["content"])
-        updated_content = serialize_native_block_content(case.get("updatedContent", case["content"]))
+        updated_content = serialize_native_block_content(
+            case.get("updatedContent", case["content"])
+        )
 
         create_result = await canvas_create.execute(
             ctx,
@@ -1137,7 +1214,10 @@ class TestCanvasTools:
         assert '"root": "alert-settings__root"' in stored_content
         assert '"id": "alert-settings__root"' in stored_content
         assert '"Column"' in stored_content
-        assert '"explicitList": ["title-text", "enable-checkbox", "priority-select", "confirm-btn"]' in stored_content
+        assert (
+            '"explicitList": ["title-text", "enable-checkbox", "priority-select", "confirm-btn"]'
+            in stored_content
+        )
 
         configure_canvas(None)  # reset global
 

@@ -5,12 +5,10 @@ Tests the full context building pipeline:
 - ContextFacade integration with all components
 - End-to-end context building flow
 - Compression behavior
-- DI container factory methods
 """
 
 import pytest
 
-from src.configuration.di_container import DIContainer
 from src.domain.ports.agent.context_manager_port import (
     CompressionStrategy,
     ContextBuildRequest,
@@ -135,63 +133,6 @@ class TestContextFacadeIntegration:
         # Token budget should reflect custom config
         # Budget = max_context - max_output = 32000 - 2048 = 29952
         assert result.token_budget == 29952
-
-
-class TestDIContainerContextFactories:
-    """Integration tests for DI container context factories."""
-
-    def test_message_builder_factory(self):
-        """Test MessageBuilder from DI container."""
-        container = DIContainer()
-        builder = container.message_builder()
-
-        assert isinstance(builder, MessageBuilder)
-
-        # Verify it works
-        messages = builder.convert_to_openai_format([{"role": "user", "content": "Hello"}])
-        assert len(messages) == 1
-        assert messages[0]["role"] == "user"
-
-    def test_attachment_injector_factory(self):
-        """Test AttachmentInjector from DI container."""
-        container = DIContainer()
-        injector = container.attachment_injector()
-
-        assert isinstance(injector, AttachmentInjector)
-
-        # Verify it works
-        metadata_list = injector.parse_metadata_list(
-            [{"filename": "test.py", "sandbox_path": "/workspace/test.py"}]
-        )
-        assert len(metadata_list) == 1
-        assert metadata_list[0].filename == "test.py"
-
-    def test_context_facade_factory(self):
-        """Test ContextFacade from DI container."""
-        container = DIContainer()
-        facade = container.context_facade()
-
-        assert isinstance(facade, ContextFacade)
-        assert facade.message_builder is not None
-        assert facade.attachment_injector is not None
-        assert facade.window_manager is not None
-
-    @pytest.mark.asyncio
-    async def test_context_facade_from_di_works(self):
-        """Test ContextFacade from DI container works end-to-end."""
-        container = DIContainer()
-        facade = container.context_facade()
-
-        request = ContextBuildRequest(
-            system_prompt="Test system",
-            conversation_context=[{"role": "user", "content": "Hi"}],
-            user_message="Hello from DI test",
-        )
-
-        result = await facade.build_context(request)
-
-        assert result.messages is not None
-        assert result.final_message_count >= 2
 
 
 class TestMessageBuilderIntegration:

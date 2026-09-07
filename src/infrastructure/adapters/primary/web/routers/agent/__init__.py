@@ -69,7 +69,6 @@ from .schemas import (
     WorkflowPatternResponse,
     WorkflowStatusResponse,
 )
-from .utils import get_container_with_db
 
 # Create main router with prefix
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
@@ -138,6 +137,5 @@ __all__ = [
     "UpdateTenantAgentConfigRequest",
     "WorkflowPatternResponse",
     "WorkflowStatusResponse",
-    "get_container_with_db",
     "router",
 ]

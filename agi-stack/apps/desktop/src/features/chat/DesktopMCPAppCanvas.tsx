@@ -14,7 +14,7 @@ import { Cross2Icon, CubeIcon, ExclamationTriangleIcon } from '@radix-ui/react-i
 import type { AppRendererProps, SandboxConfig } from '@mcp-ui/client';
 
 import { useI18n } from '../../i18n';
-import type { MCPAppHostClient } from './mcpAppHostBridge';
+import type { DesktopProjectMcpAppsClientV2 } from '../../plugins/desktopProjectMcpAppsAuthorityModuleV2';
 import {
   callMCPAppTool,
   listMCPAppResources,
@@ -33,7 +33,7 @@ const LazyAppRenderer = React.lazy(async () => {
 
 type DesktopMCPAppCanvasProps = {
   state: MCPAppCanvasState;
-  api: MCPAppHostClient;
+  api: DesktopProjectMcpAppsClientV2;
   projectId: string;
   sandboxProxyUrl: string;
   onSendMessage: (message: string) => void | Promise<void>;
@@ -130,35 +130,71 @@ export function DesktopMCPAppCanvas({
     }),
     [active?.appId, active?.serverName, active?.toolName, projectId],
   );
+  const requestLifetime = useMemo(
+    () => ({ controller: new AbortController() }),
+    [mcpAppsClient, hostContext, active?.id],
+  );
+  const lifetimeRef = useRef(requestLifetime);
+  lifetimeRef.current = requestLifetime;
+  useEffect(() => {
+    // StrictMode may replay effect setup after cleanup for the same render.
+    if (requestLifetime.controller.signal.aborted) {
+      requestLifetime.controller = new AbortController();
+    }
+    return () => requestLifetime.controller.abort();
+  }, [requestLifetime]);
+  const requireCurrentLifetime = useCallback(() => {
+    if (lifetimeRef.current !== requestLifetime || requestLifetime.controller.signal.aborted) {
+      throw new DOMException('MCP App request cancelled', 'AbortError');
+    }
+    return requestLifetime.controller.signal;
+  }, [requestLifetime]);
   const handleCallTool = useCallback<NonNullable<AppRendererProps['onCallTool']>>(
-    async (params) => callMCPAppTool(mcpAppsClient, hostContext, params),
-    [hostContext, mcpAppsClient],
+    async (params) => {
+      const signal = requireCurrentLifetime();
+      const result = await callMCPAppTool(mcpAppsClient, hostContext, params, undefined, signal);
+      requireCurrentLifetime();
+      return result;
+    },
+    [hostContext, mcpAppsClient, requireCurrentLifetime],
   );
   const handleReadResource = useCallback<NonNullable<AppRendererProps['onReadResource']>>(
-    async ({ uri }) => readMCPAppResource(mcpAppsClient, hostContext, uri),
-    [hostContext, mcpAppsClient],
+    async ({ uri }) => {
+      const signal = requireCurrentLifetime();
+      const result = await readMCPAppResource(mcpAppsClient, hostContext, uri, signal);
+      requireCurrentLifetime();
+      return result;
+    },
+    [hostContext, mcpAppsClient, requireCurrentLifetime],
   );
-  const handleListResources = useCallback<NonNullable<AppRendererProps['onListResources']>>(
-    async () => listMCPAppResources(mcpAppsClient, hostContext),
-    [hostContext, mcpAppsClient],
-  );
+  const handleListResources = useCallback<
+    NonNullable<AppRendererProps['onListResources']>
+  >(async () => {
+    const signal = requireCurrentLifetime();
+    const result = await listMCPAppResources(mcpAppsClient, hostContext, signal);
+    requireCurrentLifetime();
+    return result;
+  }, [hostContext, mcpAppsClient, requireCurrentLifetime]);
   const handleMessage = useCallback<NonNullable<AppRendererProps['onMessage']>>(
     async (params) => {
+      requireCurrentLifetime();
       const message = mcpAppMessageText(params);
       if (message) await onSendMessage(message);
+      requireCurrentLifetime();
       return {};
     },
-    [onSendMessage],
+    [onSendMessage, requireCurrentLifetime],
   );
   const handleOpenLink = useCallback<NonNullable<AppRendererProps['onOpenLink']>>(
     async ({ url }) => {
+      requireCurrentLifetime();
       const safeUrl = safeMCPAppExternalUrl(url);
       if (!safeUrl) throw new Error('MCP App requested an unsafe external URL');
       const opened = window.open(safeUrl, '_blank', 'noopener,noreferrer');
       if (opened) opened.opener = null;
       return {};
     },
-    [],
+    [requireCurrentLifetime],
   );
 
   useEffect(() => {
@@ -201,10 +237,22 @@ export function DesktopMCPAppCanvas({
           onMessage={handleMessage}
           onOpenLink={handleOpenLink}
           onSizeChanged={({ height }) => {
+            if (
+              lifetimeRef.current !== requestLifetime ||
+              requestLifetime.controller.signal.aborted
+            )
+              return;
             if (typeof height !== 'number' || !Number.isFinite(height)) return;
             setFrameHeight(Math.min(900, Math.max(240, height)));
           }}
-          onError={(error) => setRenderError(error.message)}
+          onError={(error) => {
+            if (
+              lifetimeRef.current !== requestLifetime ||
+              requestLifetime.controller.signal.aborted
+            )
+              return;
+            setRenderError(error.message);
+          }}
         />
       </Suspense>
     </MCPAppRendererBoundary>
@@ -260,11 +308,7 @@ export function DesktopMCPAppCanvas({
         aria-label={t('mcpApp.content', { title })}
         style={{ minHeight: frameHeight }}
       >
-        {renderError ? (
-          errorFallback
-        ) : (
-          <IsolatedMCPAppRenderer renderer={renderer} />
-        )}
+        {renderError ? errorFallback : <IsolatedMCPAppRenderer renderer={renderer} />}
       </article>
     </section>
   );

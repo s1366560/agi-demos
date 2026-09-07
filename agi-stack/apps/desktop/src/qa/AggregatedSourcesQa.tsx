@@ -169,6 +169,7 @@ function AggregatedSourcesQa() {
         <div className="message-scroll">
           <div className="message-stack" data-testid="aggregated-sources-timeline">
             <AgentTimeline
+              imagePreviewClient={null}
               state={state}
               expandedItems={expandedItems}
               onToggleItem={(item) =>

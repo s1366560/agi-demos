@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -13,7 +14,7 @@ from fastapi import FastAPI
 from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.infrastructure.adapters.primary.web import workspace_core_provider
 from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
-    install_workspace_core_runtime,
+    install_legacy_workspace_core_runtime,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.workspace_core.autonomy_judge import (
@@ -42,6 +43,19 @@ from src.infrastructure.workspace_core.provider import (
     ProviderRuntimeEvent,
     ProviderWebhookRequest,
 )
+
+
+class _ImmediateGenerationReservation:
+    @asynccontextmanager
+    async def admit(self) -> AsyncIterator[object]:
+        yield object()
+
+    async def release(self) -> None:
+        return None
+
+
+async def _reserve_immediate_generation() -> _ImmediateGenerationReservation:
+    return _ImmediateGenerationReservation()
 
 
 def _settings() -> WorkspaceCoreSettings:
@@ -205,11 +219,12 @@ class RecordingProviderAdapter(AvernetProviderAdapter):
 
 def _app() -> FastAPI:
     app = FastAPI()
-    install_workspace_core_runtime(app, _settings())
+    install_legacy_workspace_core_runtime(app, _settings())
     app.state.workspace_core_provider_adapter = AvernetProviderAdapter(
         FakeRuntime(),
         FakeSink(),
         app.state.workspace_core_client,
+        generation_reserver=_reserve_immediate_generation,
     )
     return app
 

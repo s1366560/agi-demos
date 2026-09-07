@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import Module, { createRequire } from 'node:module';
+import { delimiter } from 'node:path';
 import { test } from 'node:test';
 
-process.env.NODE_PATH = new URL('../node_modules', import.meta.url).pathname;
+process.env.NODE_PATH = [
+  '/tmp/agistack-desktop-test-dist/test-node-modules',
+  new URL('../node_modules', import.meta.url).pathname,
+].join(delimiter);
 Module._initPaths();
 
 const require = createRequire(import.meta.url);
@@ -11,15 +15,31 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 
-const { createProjectAgentDashboardClient, PROJECT_AGENT_DASHBOARD_LOCAL_REASON } = require(
+const { PROJECT_AGENT_DASHBOARD_LOCAL_REASON } = require(
   `${compiled}/projectAgentDashboardClient.js`,
 );
-const { createProjectAgentLogsClient, PROJECT_AGENT_LOGS_LOCAL_REASON } = require(
-  `${compiled}/projectAgentLogsClient.js`,
-);
-const { createProjectAgentPatternsClient, PROJECT_AGENT_PATTERNS_LOCAL_REASON } = require(
+const { PROJECT_AGENT_LOGS_LOCAL_REASON } = require(`${compiled}/projectAgentLogsClient.js`);
+const {
+  createDesktopProjectAgentDashboardClientV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentDashboardAuthorityModuleV2.js');
+const {
+  createDesktopProjectAgentDashboardHttpAuthorityV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentDashboardHttpProjectionV2.js');
+const {
+  createDesktopProjectAgentLogsClientV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.js');
+const {
+  createDesktopProjectAgentLogsHttpAuthorityV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentLogsHttpProjectionV2.js');
+const { PROJECT_AGENT_PATTERNS_LOCAL_REASON } = require(
   `${compiled}/projectAgentPatternsClient.js`,
 );
+const {
+  createDesktopProjectAgentPatternsClientV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentPatternsAuthorityModuleV2.js');
+const {
+  createDesktopProjectAgentPatternsHttpAuthorityV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentPatternsHttpProjectionV2.js');
 const { createProjectAgentLogsController } = require(`${compiled}/projectAgentLogsController.js`);
 const { createProjectAgentDashboardController } = require(
   `${compiled}/projectAgentDashboardController.js`,
@@ -99,11 +119,11 @@ test('Project Agent Cloud clients use trusted-session project authorities and ex
     throw new Error(`unexpected request: ${String(input)}`);
   };
   try {
-    const dashboard = await createProjectAgentDashboardClient(cloudConfig).load(cloudScope);
-    const logs = await createProjectAgentLogsClient(cloudConfig).load(cloudScope, {
+    const dashboard = await projectAgentDashboardClientV2Fixture(cloudConfig).load(cloudScope);
+    const logs = await projectAgentLogsClientV2Fixture(cloudConfig).load(cloudScope, {
       status: 'completed',
     });
-    const patterns = await createProjectAgentPatternsClient(cloudConfig).load(cloudScope);
+    const patterns = await projectAgentPatternsClientV2Fixture(cloudConfig).load(cloudScope);
     assert.equal(dashboard.activeCount, 1);
     assert.equal(dashboard.scopeRevision, 17);
     assert.equal(logs.runs[0].id, 'run-1');
@@ -130,9 +150,9 @@ test('Project Agent Local clients fail closed with stable reasons before network
   };
   try {
     const cases = [
-      [createProjectAgentDashboardClient(localConfig), PROJECT_AGENT_DASHBOARD_LOCAL_REASON],
-      [createProjectAgentLogsClient(localConfig), PROJECT_AGENT_LOGS_LOCAL_REASON],
-      [createProjectAgentPatternsClient(localConfig), PROJECT_AGENT_PATTERNS_LOCAL_REASON],
+      [projectAgentDashboardClientV2Fixture(localConfig), PROJECT_AGENT_DASHBOARD_LOCAL_REASON],
+      [projectAgentLogsClientV2Fixture(localConfig), PROJECT_AGENT_LOGS_LOCAL_REASON],
+      [projectAgentPatternsClientV2Fixture(localConfig), PROJECT_AGENT_PATTERNS_LOCAL_REASON],
     ];
     for (const [client, reasonCode] of cases) {
       await assert.rejects(client.load(localScope), (error) => {
@@ -167,7 +187,7 @@ test('Project Agent clients reject mismatched authority responses', async () => 
   };
   try {
     await assert.rejects(
-      createProjectAgentLogsClient(cloudConfig).load(cloudScope),
+      projectAgentLogsClientV2Fixture(cloudConfig).load(cloudScope),
       /project_agent_logs_scope_conflict/u,
     );
   } finally {
@@ -220,17 +240,17 @@ test('Project Agent controllers map backend-shaped plain 403 responses to stable
   const originalFetch = globalThis.fetch;
   const cases = [
     [
-      createProjectAgentDashboardClient,
+      projectAgentDashboardClientV2Fixture,
       createProjectAgentDashboardController,
       'project_agent_dashboard_forbidden',
     ],
     [
-      createProjectAgentLogsClient,
+      projectAgentLogsClientV2Fixture,
       createProjectAgentLogsController,
       'project_agent_logs_forbidden',
     ],
     [
-      createProjectAgentPatternsClient,
+      projectAgentPatternsClientV2Fixture,
       createProjectAgentPatternsController,
       'project_agent_patterns_forbidden',
     ],
@@ -271,17 +291,17 @@ test('Project Agent controllers map unstructured outages to stable unavailable r
   const originalFetch = globalThis.fetch;
   const cases = [
     [
-      createProjectAgentDashboardClient,
+      projectAgentDashboardClientV2Fixture,
       createProjectAgentDashboardController,
       'project_agent_dashboard_authority_unavailable',
     ],
     [
-      createProjectAgentLogsClient,
+      projectAgentLogsClientV2Fixture,
       createProjectAgentLogsController,
       'project_agent_logs_authority_unavailable',
     ],
     [
-      createProjectAgentPatternsClient,
+      projectAgentPatternsClientV2Fixture,
       createProjectAgentPatternsController,
       'project_agent_patterns_authority_unavailable',
     ],
@@ -363,6 +383,47 @@ function run(title = 'Run') {
     trace_id: null,
     parent_span_id: null,
   };
+}
+
+function projectAgentLogsClientV2Fixture(config) {
+  return createDesktopProjectAgentLogsClientV2(
+    {
+      loadProjectAgentLogs({ config: operationConfig, scope, status, limit, signal }) {
+        return createDesktopProjectAgentLogsHttpAuthorityV2(operationConfig, scope).load(
+          status,
+          limit,
+          signal,
+        );
+      },
+    },
+    config,
+  );
+}
+
+function projectAgentDashboardClientV2Fixture(config) {
+  return createDesktopProjectAgentDashboardClientV2(
+    {
+      loadProjectAgentDashboard({ config: operationConfig, scope, signal }) {
+        return createDesktopProjectAgentDashboardHttpAuthorityV2(operationConfig, scope).load(
+          signal,
+        );
+      },
+    },
+    config,
+  );
+}
+
+function projectAgentPatternsClientV2Fixture(config) {
+  return createDesktopProjectAgentPatternsClientV2(
+    {
+      loadProjectAgentPatterns({ config: operationConfig, scope, signal }) {
+        return createDesktopProjectAgentPatternsHttpAuthorityV2(operationConfig, scope).load(
+          signal,
+        );
+      },
+    },
+    config,
+  );
 }
 
 function pattern() {

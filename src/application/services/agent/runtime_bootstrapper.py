@@ -15,16 +15,13 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from subprocess import DEVNULL
-from typing import TYPE_CHECKING, Any, ClassVar
-
-from sqlalchemy.exc import SQLAlchemyError
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from src.configuration.config import Settings
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.domain.model.agent import Conversation
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-from src.infrastructure.agent.sisyphus.builtin_agent import DEFAULT_GENERAL_AGENT_ID
 from src.infrastructure.llm.provider_credentials import resolve_persisted_provider_credential
 
 if TYPE_CHECKING:
@@ -49,6 +46,41 @@ _WORKSPACE_CONTRACT_STAGES = frozenset(
     }
 )
 _WORKSPACE_WORKER_STAGES = frozenset({"worker_launch"})
+
+
+def _current_plugin_distribution_v2() -> tuple[
+    dict[str, str | int] | None,
+    dict[str, Any] | None,
+]:
+    """Return process-safe v2 distribution data for the pinned operation, if any."""
+    from src.infrastructure.plugins.v2.boundary import (
+        OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+        current_generation_descriptor_v2,
+        current_operation_context_v2,
+    )
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    try:
+        plugin_generation = current_generation_descriptor_v2().to_payload()
+    except RuntimeV2Error as exc:
+        if exc.code != "generation_not_pinned":
+            raise
+        return None, None
+
+    try:
+        operation = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        return plugin_generation, None
+
+    distribution_value = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+    if not isinstance(distribution_value, dict):
+        raise RuntimeError("plugin operation distribution must be an object")
+    plugin_distribution = dict(cast(dict[str, Any], distribution_value))
+    if plugin_distribution.get("descriptor") != plugin_generation:
+        raise RuntimeError("plugin operation distribution does not match the pinned generation")
+    return plugin_generation, plugin_distribution
 
 
 @dataclass(frozen=True)
@@ -194,36 +226,37 @@ class AgentRuntimeBootstrapper:
 
     @staticmethod
     async def _load_tenant_agent_config(tenant_id: str) -> TenantAgentConfig:
-        """Load tenant agent config for request-scoped runtime policy."""
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
-            SqlTenantAgentConfigRepository,
+        """Load runtime policy through the resolver in the pinned V2 generation."""
+        from src.infrastructure.plugins.v2.tenant_agent_config_services import (
+            current_tenant_agent_config_application_resolver_v2,
         )
 
-        session = async_session_factory()
-        try:
-            repo = SqlTenantAgentConfigRepository(session)
-            try:
-                config = await repo.get_by_tenant(tenant_id)
-            except (RuntimeError, SQLAlchemyError) as exc:
-                logger.warning(
-                    "Failed to load tenant agent config for tenant %s; using defaults instead: %s",
-                    tenant_id,
-                    exc,
-                )
-                return TenantAgentConfig.create_default(tenant_id=tenant_id)
-            return config or TenantAgentConfig.create_default(tenant_id=tenant_id)
-        finally:
-            try:
-                await session.close()
-            except (RuntimeError, SQLAlchemyError) as exc:
-                logger.warning(
-                    "Failed to close tenant agent config session for tenant %s: %s",
-                    tenant_id,
-                    exc,
-                )
+        resolver = current_tenant_agent_config_application_resolver_v2(tenant_id)
+        return await resolver.load(tenant_id)
+
+    @staticmethod
+    def _resolve_agent_id_v2(
+        *,
+        conversation: Conversation,
+        explicit_agent_id: str | None,
+    ) -> str:
+        """Resolve explicit, persisted, then Profile-owned default selection."""
+        resolved_explicit = _non_empty_string(explicit_agent_id)
+        if resolved_explicit is not None:
+            return resolved_explicit
+        persisted_agent_id = _selected_agent_id_from_conversation(conversation)
+        if persisted_agent_id is not None:
+            return persisted_agent_id
+
+        from src.infrastructure.plugins.v2.agent_default_selection_consumer import (
+            resolve_current_agent_default_selection_v2,
+        )
+
+        resolution = resolve_current_agent_default_selection_v2(
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+        )
+        return resolution.agent_id
 
     @staticmethod
     async def ensure_spawned_agent_conversation(
@@ -401,10 +434,9 @@ class AgentRuntimeBootstrapper:
             conversation,
             app_model_context,
         )
-        resolved_agent_id = (
-            agent_id
-            or _selected_agent_id_from_conversation(conversation)
-            or DEFAULT_GENERAL_AGENT_ID
+        resolved_agent_id = self._resolve_agent_id_v2(
+            conversation=conversation,
+            explicit_agent_id=agent_id,
         )
         runtime_mode = self._resolve_runtime_mode(
             configured_mode=settings.agent_runtime_mode,
@@ -450,6 +482,8 @@ class AgentRuntimeBootstrapper:
             enable_subagents=True,
         )
 
+        plugin_generation, plugin_distribution = _current_plugin_distribution_v2()
+
         chat_request = ProjectChatRequest(
             conversation_id=conversation.id,
             message_id=message_id,
@@ -473,6 +507,8 @@ class AgentRuntimeBootstrapper:
             api_auth_token=api_auth_token,
             automation_run_id=automation_run_id,
             canonical_run_id=canonical_run_id,
+            plugin_generation=plugin_generation,
+            plugin_distribution=plugin_distribution,
         )
 
         if runtime_mode == "local":
@@ -1115,8 +1151,6 @@ class AgentRuntimeBootstrapper:
         )
 
         try:
-            await self._ensure_local_runtime_bootstrapped()
-
             agent_config = ProjectAgentConfig(
                 tenant_id=config.tenant_id,
                 project_id=config.project_id,
@@ -1136,7 +1170,6 @@ class AgentRuntimeBootstrapper:
             )
 
             agent = ProjectReActAgent(agent_config)
-            await agent.initialize()
 
             # Inject plan repository for Plan Mode awareness
             try:
@@ -1153,7 +1186,68 @@ class AgentRuntimeBootstrapper:
             except Exception:
                 pass  # Plan Mode awareness is optional
 
-            result = await execute_project_chat(agent, request, abort_signal=abort_signal)
+            from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+            from src.infrastructure.plugins.v2.agent_worker_runtime import (
+                agent_worker_graph_runtime_factory_v2,
+                agent_worker_redis_runtime_factory_v2,
+                agent_worker_sandbox_runtime_factory_v2,
+            )
+            from src.infrastructure.plugins.v2.boundary import (
+                OPERATION_IDENTITY_SERVICE_V2,
+                OPERATION_METADATA_SERVICE_V2,
+            )
+            from src.infrastructure.plugins.v2.builtin_modules import (
+                builtin_runtime_definitions_v2,
+            )
+            from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+            from src.infrastructure.plugins.v2.runtime_host import (
+                DataPlaneGenerationAdmissionV2,
+            )
+
+            admission = DataPlaneGenerationAdmissionV2(
+                builtin_runtime_definitions_v2(
+                    graph_runtime_factory=agent_worker_graph_runtime_factory_v2(config.tenant_id),
+                    redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
+                    sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
+                )
+            )
+            try:
+                async with admission.admit(
+                    descriptor_payload=request.plugin_generation,
+                    distribution_payload=request.plugin_distribution,
+                    operation_id=f"local-turn:{request.message_id}",
+                    scope=ScopeV2(
+                        kind=ScopeKindV2.SESSION,
+                        tenant_id=config.tenant_id,
+                        project_id=config.project_id,
+                        session_id=request.conversation_id,
+                    ),
+                    services={
+                        OPERATION_IDENTITY_SERVICE_V2: {
+                            "tenant_id": config.tenant_id,
+                            "user_id": request.user_id,
+                        },
+                        OPERATION_METADATA_SERVICE_V2: {
+                            "kind": "local-agent-turn",
+                            "conversation_id": request.conversation_id,
+                            "message_id": request.message_id,
+                        },
+                    },
+                ):
+                    await self._ensure_local_runtime_bootstrapped()
+                    initialized = await agent.initialize()
+                    if not initialized:
+                        raise RuntimeV2Error(
+                            "agent_initialization_failed",
+                            "agent initialization failed for the admitted plugin generation",
+                        )
+                    result = await execute_project_chat(
+                        agent,
+                        request,
+                        abort_signal=abort_signal,
+                    )
+            finally:
+                await admission.close()
 
             if result.is_error:
                 logger.warning(
@@ -1187,159 +1281,42 @@ class AgentRuntimeBootstrapper:
                 logger.warning("[AgentService] Failed to publish error event: %s", pub_err)
 
     async def _ensure_local_runtime_bootstrapped(self) -> None:
-        """Bootstrap shared services for local (non-Ray) agent execution."""
-        if AgentRuntimeBootstrapper._local_bootstrapped:
-            return
-
-        async with AgentRuntimeBootstrapper._local_bootstrap_lock:
-            if AgentRuntimeBootstrapper._local_bootstrapped:
-                return  # type: ignore[unreachable]
-
-            from src.configuration.factories import create_native_graph_adapter
-            from src.domain.llm_providers.models import NoActiveProviderError
-            from src.infrastructure.agent.state.agent_worker_state import (
-                get_agent_graph_service,
-                set_agent_graph_service,
-            )
-            from src.infrastructure.llm.initializer import initialize_default_llm_providers
-
-            try:
-                await initialize_default_llm_providers()
-            except Exception as e:
-                logger.warning("[AgentService] LLM provider init failed: %s", e)
-
-            if not get_agent_graph_service():
-                try:
-                    graph_service = await create_native_graph_adapter()
-                    set_agent_graph_service(graph_service)
-                    logger.info("[AgentService] Graph service bootstrapped for local execution")
-                except NoActiveProviderError:
-                    logger.warning(
-                        "[AgentService] No active LLM provider configured "
-                        "-- graph service disabled for local execution. "
-                        "Agent will work without knowledge graph features."
+        """Bootstrap process services and bind the admitted generation orchestrator."""
+        if not AgentRuntimeBootstrapper._local_bootstrapped:
+            async with AgentRuntimeBootstrapper._local_bootstrap_lock:
+                if not AgentRuntimeBootstrapper._local_bootstrapped:
+                    from src.infrastructure.llm.initializer import (
+                        initialize_default_llm_providers,
                     )
-                except Exception as e:
-                    logger.error("[AgentService] Graph service init failed: %s", e)
-                    raise
 
-            await self._bootstrap_mcp_sandbox()
-            await self._bootstrap_agent_orchestrator()
+                    try:
+                        await initialize_default_llm_providers()
+                    except Exception as e:
+                        logger.warning("[AgentService] LLM provider init failed: %s", e)
 
-            AgentRuntimeBootstrapper._local_bootstrapped = True
+                    AgentRuntimeBootstrapper._local_bootstrapped = True
 
-    async def _bootstrap_mcp_sandbox(self) -> None:
-        """Initialize MCP Sandbox Adapter for Project Sandbox tool loading."""
-        from src.infrastructure.agent.state.agent_worker_state import (
-            get_mcp_sandbox_adapter,
-            set_mcp_sandbox_adapter,
-            sync_mcp_sandbox_adapter_from_docker,
-        )
-
-        if get_mcp_sandbox_adapter():
-            return
-
-        try:
-            from src.configuration.config import get_settings
-            from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-                MCPSandboxAdapter,
-            )
-
-            settings = get_settings()
-            mcp_sandbox_adapter = MCPSandboxAdapter(
-                mcp_image=settings.sandbox_default_image,
-                default_timeout=settings.sandbox_timeout_seconds,
-                default_memory_limit=settings.sandbox_memory_limit,
-                default_cpu_limit=settings.sandbox_cpu_limit,
-            )
-            set_mcp_sandbox_adapter(mcp_sandbox_adapter)
-            count = await sync_mcp_sandbox_adapter_from_docker()
-            if count > 0:
-                logger.info("[AgentService] Synced %d existing sandboxes from Docker", count)
-            logger.info("[AgentService] MCP Sandbox adapter bootstrapped for local execution")
-        except Exception as e:
-            logger.warning(
-                "[AgentService] MCP Sandbox adapter init failed (Sandbox tools disabled): %s",
-                e,
-            )
+        # Process services are initialized once, but every admitted generation owns
+        # a distinct orchestration runtime that must be bound before the turn starts.
+        await self._bootstrap_agent_orchestrator()
 
     async def _bootstrap_agent_orchestrator(self) -> None:
-        """Initialize AgentOrchestrator for multi-agent tools."""
-        from src.infrastructure.agent.state.agent_worker_state import (
-            get_agent_orchestrator,
-            set_agent_orchestrator,
-        )
-
-        if get_agent_orchestrator():
-            return
+        """Bind AgentOrchestrator through the admitted generation runtime."""
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
         try:
-            from src.configuration.config import get_settings as _get_ma_settings
+            from src.infrastructure.plugins.v2.agent_worker_runtime import (
+                bind_current_agent_orchestrator_v2,
+            )
 
-            _ma_settings = _get_ma_settings()
-            if _ma_settings.multi_agent_enabled:
-                from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
-                    RedisAgentMessageBusAdapter,
-                )
-                from src.infrastructure.adapters.secondary.persistence.database import (
-                    async_session_factory,
-                )
-                from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
-                    SqlAgentRegistryRepository,
-                )
-                from src.infrastructure.agent.orchestration.orchestrator import (
-                    AgentOrchestrator,
-                )
-                from src.infrastructure.agent.orchestration.session_registry import (
-                    AgentSessionRegistry,
-                )
-                from src.infrastructure.agent.orchestration.spawn_manager import (
-                    SpawnManager,
-                )
-                from src.infrastructure.agent.state.agent_worker_state import (
-                    get_redis_client,
-                )
-                from src.infrastructure.agent.subagent.run_registry import (
-                    get_shared_subagent_run_registry,
-                )
-
-                _db_session = async_session_factory()
-                _redis = await get_redis_client()
-                _session_registry = AgentSessionRegistry()
-                _run_registry = get_shared_subagent_run_registry(
-                    persistence_path=getattr(
-                        _ma_settings, "agent_subagent_run_registry_path", None
-                    ),
-                    postgres_persistence_dsn=getattr(
-                        _ma_settings, "agent_subagent_run_postgres_dsn", None
-                    ),
-                    sqlite_persistence_path=getattr(
-                        _ma_settings, "agent_subagent_run_sqlite_path", None
-                    ),
-                    redis_cache_url=getattr(
-                        _ma_settings, "agent_subagent_run_redis_cache_url", None
-                    ),
-                    redis_cache_ttl_seconds=(
-                        getattr(_ma_settings, "agent_subagent_run_redis_cache_ttl_seconds", 60)
-                    ),
-                    terminal_retention_seconds=(
-                        _ma_settings.agent_subagent_terminal_retention_seconds
-                    ),
-                )
-                _orchestrator = AgentOrchestrator(
-                    agent_registry=SqlAgentRegistryRepository(_db_session),
-                    session_registry=_session_registry,
-                    spawn_manager=SpawnManager(
-                        session_registry=_session_registry,
-                        run_registry=_run_registry,
-                    ),
-                    message_bus=RedisAgentMessageBusAdapter(_redis),
-                    db_session=_db_session,
-                    spawn_executor=self.launch_spawned_agent_session,
-                    session_turn_executor=self.launch_agent_session_turn,
-                )
-                set_agent_orchestrator(_orchestrator)
-                logger.info("[AgentService] AgentOrchestrator bootstrapped for multi-agent tools")
+            _ = await bind_current_agent_orchestrator_v2(
+                owner=AgentRuntimeBootstrapper,
+                spawn_executor=self.launch_spawned_agent_session,
+                session_turn_executor=self.launch_agent_session_turn,
+            )
+            logger.info("[AgentService] AgentOrchestrator bootstrapped for Agent runtime")
+        except RuntimeV2Error:
+            raise
         except Exception as e:
             logger.warning(
                 "[AgentService] AgentOrchestrator init failed (multi-agent tools disabled): %s",

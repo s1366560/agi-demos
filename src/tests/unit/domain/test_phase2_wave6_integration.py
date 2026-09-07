@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import MappingProxyType
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -34,6 +35,52 @@ from src.infrastructure.agent.processor.processor import (
     SessionProcessor,
     ToolDefinition,
 )
+from src.infrastructure.agent.tools import subagent_sessions as subagent_sessions_module
+
+
+def _bind_control_runtime(
+    *,
+    registry: MagicMock,
+    conversation_id: str,
+    subagent_names: tuple[str, ...],
+    subagent_descriptions: dict[str, str],
+    cancel_callback: AsyncMock,
+    control_channel: AsyncMock,
+) -> None:
+    runtime = subagent_sessions_module.SubAgentSessionToolRuntime(
+        control=subagent_sessions_module.SubAgentControlRuntime(
+            run_registry=registry,
+            conversation_id=conversation_id,
+            subagent_names=subagent_names,
+            subagent_descriptions=MappingProxyType(subagent_descriptions),
+            cancel_callback=cancel_callback,
+            restart_callback=None,
+            control_channel=control_channel,
+            steer_rate_limit_ms=2000,
+            max_active_runs=16,
+            max_active_runs_per_lineage=16,
+            max_children_per_requester=16,
+            requester_session_key=conversation_id,
+            delegation_depth=0,
+            max_delegation_depth=1,
+        )
+    )
+    _ = subagent_sessions_module._session_tool_runtime.set(  # pyright: ignore[reportPrivateUsage]
+        runtime
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_control_runtime() -> object:
+    token = subagent_sessions_module._session_tool_runtime.set(  # pyright: ignore[reportPrivateUsage]
+        None
+    )
+    try:
+        yield
+    finally:
+        subagent_sessions_module._session_tool_runtime.reset(  # pyright: ignore[reportPrivateUsage]
+            token
+        )
 
 
 def _make_processor(
@@ -194,20 +241,15 @@ class TestE2EToolKillSteerViaTools:
 
         cancel_cb = AsyncMock(return_value=True)
 
-        with (
-            patch("src.infrastructure.agent.tools.subagent_sessions._ctrl_run_registry", registry),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_cancel_callback", cancel_cb
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "parent-conv",
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel", channel
-            ),
-        ):
-            count = await _ctrl_exec_cancellations(ctx, {"run-target": "root"}, "target")
+        _bind_control_runtime(
+            registry=registry,
+            conversation_id="parent-conv",
+            subagent_names=("worker",),
+            subagent_descriptions={"worker": "Worker"},
+            cancel_callback=cancel_cb,
+            control_channel=channel,
+        )
+        count = await _ctrl_exec_cancellations(ctx, {"run-target": "root"}, "target")
 
         assert count == 1
         channel.send_control.assert_awaited_once()
@@ -234,17 +276,15 @@ class TestE2EToolKillSteerViaTools:
         channel = AsyncMock()
         channel.send_control = AsyncMock(return_value=True)
 
-        with (
-            patch("src.infrastructure.agent.tools.subagent_sessions._ctrl_run_registry", registry),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "parent-conv",
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel", channel
-            ),
-        ):
-            result = await _ctrl_steer_metadata_only(ctx, "run-steer", "change focus")
+        _bind_control_runtime(
+            registry=registry,
+            conversation_id="parent-conv",
+            subagent_names=("worker",),
+            subagent_descriptions={"worker": "Worker"},
+            cancel_callback=AsyncMock(return_value=True),
+            control_channel=channel,
+        )
+        result = await _ctrl_steer_metadata_only(ctx, "run-steer", "change focus")
 
         assert not result.is_error
         channel.send_control.assert_awaited_once()

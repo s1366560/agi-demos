@@ -1,8 +1,7 @@
 """Build dynamic workspace context for agent system prompts.
 
-Fetches live workspace data (members, agents, recent messages, blackboard posts)
-from the database and formats it as an XML-structured text block for injection
-into the agent's system prompt.
+Resolves live workspace data through the pinned V2 operation and formats it as
+an XML-structured text block for injection into the agent's system prompt.
 
 Unlike WorkspaceManager (which loads static persona files like SOUL.md),
 this module provides DYNAMIC runtime context from the database.
@@ -13,15 +12,11 @@ Usage in ReActAgent._build_system_prompt:
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecordModel
-from src.application.services.workspace_goal_sensing_service import (
-    WorkspaceGoalSensingService,
-)
 from src.application.services.workspace_task_experience_service import (
     build_workspace_task_experience_summary,
 )
@@ -32,7 +27,6 @@ from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_message import WorkspaceMessage
 from src.domain.model.workspace.workspace_task import WorkspaceTask
-from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
@@ -40,17 +34,9 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REMEDIATION_STATUS,
     TASK_ROLE,
 )
-from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
-logger = logging.getLogger(__name__)
-
-_MAX_RECENT_MESSAGES = 20
-_MAX_BLACKBOARD_POSTS = 5
-_MAX_MEMBERS = 50
-_MAX_AGENTS = 20
-_MAX_TASKS = 20
-_MAX_OBJECTIVES = 10
-_MAX_GOAL_CANDIDATES = 5
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.runtime import OperationContextV2
 
 
 async def build_workspace_context(
@@ -59,8 +45,8 @@ async def build_workspace_context(
 ) -> str | None:
     """Build a workspace context string for the agent system prompt.
 
-    Fetches workspace data from the database using a fresh session,
-    following the agent runtime DB access pattern (async_session_factory).
+    Resolves the service from the current operation so the conversation read,
+    Workspace Core client, and generation lease stay on one immutable boundary.
 
     Args:
         project_id: The project ID to find associated workspaces.
@@ -72,87 +58,31 @@ async def build_workspace_context(
     """
     if not project_id or not tenant_id:
         return None
-    legacy_workspace_runtime_retired("dynamic Workspace context builder")
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+    from src.infrastructure.plugins.v2.workspace_prompt_context_services import (
+        WORKSPACE_PROMPT_CONTEXT_SERVICE_V2,
+        WorkspacePromptContextProtocolV2,
+    )
 
-    try:  # pragma: no cover - unreachable compatibility body
-        async with async_session_factory() as db:
-            workspace_repo = legacy_workspace_runtime_retired(db)
-            workspaces = await workspace_repo.find_by_project(
-                tenant_id=tenant_id,
-                project_id=project_id,
-                limit=1,
-            )
-            if not workspaces:
-                return None
-
-            workspace = workspaces[0]
-
-            member_repo = legacy_workspace_runtime_retired(db)
-            agent_repo = legacy_workspace_runtime_retired(db)
-            message_repo = legacy_workspace_runtime_retired(db)
-            blackboard_repo = legacy_workspace_runtime_retired(db)
-            task_repo = legacy_workspace_runtime_retired(db)
-            attempt_repo = legacy_workspace_runtime_retired(db)
-            objective_repo = legacy_workspace_runtime_retired(db)
-
-            members = await member_repo.find_by_workspace(
-                workspace.id,
-                limit=_MAX_MEMBERS,
-            )
-            agents = await agent_repo.find_by_workspace(
-                workspace.id,
-                active_only=True,
-                limit=_MAX_AGENTS,
-            )
-            messages = await message_repo.find_by_workspace(
-                workspace.id,
-                limit=_MAX_RECENT_MESSAGES,
-            )
-            posts = await blackboard_repo.list_posts_by_workspace(
-                workspace.id,
-                limit=_MAX_BLACKBOARD_POSTS,
-            )
-            tasks = await task_repo.find_by_workspace(
-                workspace.id,
-                limit=_MAX_TASKS,
-            )
-            task_experience_summaries: dict[str, dict[str, Any]] = {}
-            attempts_by_task = await attempt_repo.find_by_workspace_task_ids(
-                [task.id for task in tasks],
-                limit_per_task=3,
-            )
-            for task in tasks:
-                task_experience_summaries[task.id] = build_workspace_task_experience_summary(
-                    task,
-                    attempts=attempts_by_task.get(task.id, []),
-                )
-            objectives = await objective_repo.find_by_workspace(
-                workspace.id,
-                limit=_MAX_OBJECTIVES,
-            )
-            goal_candidates = WorkspaceGoalSensingService().sense_candidates(
-                tasks=tasks,
-                objectives=objectives,
-                posts=posts,
-                messages=messages,
-            )[:_MAX_GOAL_CANDIDATES]
-
-        return format_workspace_context(
-            workspace,
-            members,
-            agents,
-            messages,
-            posts,
-            tasks,
-            objectives,
-            goal_candidates,
-            task_experience_summaries,
+    operation = current_operation_context_v2()
+    service = operation.require(WORKSPACE_PROMPT_CONTEXT_SERVICE_V2)
+    if not isinstance(service, WorkspacePromptContextProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_workspace_prompt_context_service",
+            "Workspace prompt context Provider has an invalid implementation",
         )
-    except Exception:
-        logger.warning(
-            "Failed to build workspace context for project %s", project_id, exc_info=True
-        )
-        return None
+    return await service.build(
+        operation,
+        project_id=project_id,
+        tenant_id=tenant_id,
+    )
+
+
+def current_operation_context_v2() -> OperationContextV2:
+    """Resolve the operation lazily to keep prompt formatters cycle-free."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2 as current
+
+    return current()
 
 
 def format_workspace_context(

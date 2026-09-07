@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -14,6 +15,7 @@ from src.domain.model.agent import (
     AgentClientTurnPayloadConflictError,
     AgentClientTurnStatus,
 )
+from src.infrastructure.adapters.primary.web.websocket.handlers import chat_handler
 from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler import (
     stream_agent_to_websocket_with_fresh_session,
 )
@@ -26,9 +28,17 @@ pytestmark = pytest.mark.unit
 
 class _StreamContext:
     tenant_id = "tenant-1"
+    user_id = "user-1"
+    session_id = "websocket-session-1"
+    api_key = "redacted-test-token"
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+        self.connection_manager = SimpleNamespace(
+            send_to_session=AsyncMock(),
+            is_subscribed=lambda *_args: True,
+            broadcast_to_conversation=AsyncMock(),
+        )
 
     @asynccontextmanager
     async def fresh_db_context(self) -> AsyncIterator[_StreamContext]:
@@ -195,27 +205,31 @@ async def test_llm_setup_failure_rolls_back_execution_claim(
         payload_hash=payload_hash,
     )
 
-    async def fail_create_llm_client(_tenant_id: str) -> Any:
+    @asynccontextmanager
+    async def noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
+        yield None
+
+    async def fail_resolve_turn() -> object:
         raise RuntimeError("provider unavailable")
 
-    import src.configuration.factories as factories
+    monkeypatch.setattr(chat_handler, "pin_agent_turn_operation_v2", noop_agent_turn_operation)
+    monkeypatch.setattr(chat_handler, "current_agent_turn_service_v2", fail_resolve_turn)
+    context = _StreamContext(test_db)
 
-    monkeypatch.setattr(factories, "create_llm_client", fail_create_llm_client)
-
-    with pytest.raises(RuntimeError, match="provider unavailable"):
-        await stream_agent_to_websocket_with_fresh_session(
-            context=_StreamContext(test_db),  # type: ignore[arg-type]
-            conversation_id="conversation-1",
-            user_message="Plan the requested change",
-            project_id="project-1",
-            client_message_id="desktop-message-llm-failure",
-            client_payload_hash=payload_hash,
-            execution_message_id=SqlAgentClientTurnRepository.execution_message_id(
-                "conversation-1",
-                "desktop-message-llm-failure",
-            ),
-        )
+    await stream_agent_to_websocket_with_fresh_session(
+        context=context,  # type: ignore[arg-type]
+        conversation_id="conversation-1",
+        user_message="Plan the requested change",
+        project_id="project-1",
+        client_message_id="desktop-message-llm-failure",
+        client_payload_hash=payload_hash,
+        execution_message_id=SqlAgentClientTurnRepository.execution_message_id(
+            "conversation-1",
+            "desktop-message-llm-failure",
+        ),
+    )
 
     persisted = await repository.find("conversation-1", "desktop-message-llm-failure")
     assert persisted is not None
     assert persisted.status is AgentClientTurnStatus.ACCEPTED
+    context.connection_manager.send_to_session.assert_awaited_once()

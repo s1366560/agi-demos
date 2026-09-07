@@ -39,12 +39,14 @@ export function matchProfileAuxiliaryRoute(
   return null;
 }
 
-export function createProfileFilteredHashLocationPort(
+export function createProfileGenerationHashLocationPort(
   base: DesktopHashLocationPort,
 ): DesktopHashLocationPort {
   return Object.freeze({
-    readHash: () =>
-      matchProfileAuxiliaryRoute(base.readHash()) ? '' : base.readHash(),
+    readHash: () => {
+      const current = base.readHash();
+      return matchProfileAuxiliaryRoute(current) ? '#/tenant/profile' : current;
+    },
     subscribe: (listener) => base.subscribe(listener),
   });
 }

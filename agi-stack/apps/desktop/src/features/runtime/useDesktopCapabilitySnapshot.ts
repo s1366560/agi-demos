@@ -29,7 +29,9 @@ export function useDesktopCapabilitySnapshot(
     setLoading(true);
     void client
       .loadSnapshot(controller.signal)
-      .then((nextSnapshot) => setSnapshot(nextSnapshot))
+      .then((nextSnapshot) => {
+        if (!controller.signal.aborted) setSnapshot(nextSnapshot);
+      })
       .catch(() => {
         if (!controller.signal.aborted) setSnapshot(null);
       })

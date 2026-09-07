@@ -46,11 +46,10 @@ pub mod control_plane;
 pub mod host;
 pub mod manifest;
 pub mod native;
-pub mod profile_reconcile;
+pub mod protocol_v2;
 pub mod reconcile;
 pub mod registry;
 pub mod skill;
-pub mod snapshot;
 pub mod tool;
 pub mod toolhost;
 
@@ -58,15 +57,26 @@ pub use control_plane::{ConfigAck, ConfigSnapshot, ControlPlane, TOOL_REGISTRY_T
 pub use host::{PluginHost, ToolFactory};
 pub use manifest::{CapabilityKind, PluginManifest, ToolDecl};
 pub use native::{EchoTool, LenTool, NativeToolFactory, UpperTool};
-pub use profile_reconcile::{
-    PlatformPluginActivator, PlatformPluginEnvelope, PlatformPluginSnapshotReconciler,
-    PluginActivation, PluginApplyReceipt, PluginApplyStatus,
+pub use protocol_v2::{
+    desktop_sidecar_host_definition_v2, desktop_sidecar_http_routes_definition_v2,
+    parse_control_plane_distribution_v2, parse_profile_snapshot_v2, project_snapshot_entries_v2,
+    rust_server_host_definition_v2, rust_server_http_routes_definition_v2, ApplyStatusV2,
+    ContextV2, ControlPlaneDistributionV2, DataPlaneTargetV2,
+    DesktopSidecarHttpRouteContributionV2, FiberPhaseV2, FiberV2, GenerationLeaseV2,
+    GenerationManagerV2, GenerationRetirementV2, LoaderV2, PluginDefinitionV2,
+    PluginGenerationDescriptorV2, PluginModuleRuntimeV2, PluginProtocolV2Error,
+    PluginSnapshotReconcilerV2, PreparedSnapshotApplyV2, RuntimeGenerationV2, RuntimeV2Error,
+    RustServerHttpRouteContributionV2, ScopeKindV2, ScopeV2, SnapshotApplyReceiptV2,
+    SnapshotPreparationV2, TargetHostDescriptorV2,
+    DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2, DESKTOP_SIDECAR_HOST_MODULE_REF_V2,
+    DESKTOP_SIDECAR_HOST_SERVICE_V2, DESKTOP_SIDECAR_HTTP_ROUTES_MODULE_REF_V2,
+    DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2, DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_VERSION_V2,
+    DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2, PLATFORM_PLUGIN_SNAPSHOT_TYPE_URL_V2,
+    RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2, RUST_SERVER_HOST_MODULE_REF_V2,
+    RUST_SERVER_HOST_SERVICE_V2, RUST_SERVER_HTTP_ROUTES_MODULE_REF_V2,
+    RUST_SERVER_HTTP_ROUTES_SERVICE_V2, RUST_SERVER_HTTP_ROUTE_STRATEGY_V2,
 };
 pub use reconcile::{DataPlaneReconciler, ReconcileOutcome};
 pub use registry::{HotPlugRegistry, ToolRegistry};
 pub use skill::{Skill, SkillContext, SkillEngine};
-pub use snapshot::{
-    PlatformPluginSnapshot, SnapshotActivation, SnapshotCapability, SnapshotPlugin,
-    SnapshotRequirement, PLATFORM_PLUGIN_SNAPSHOT_TYPE_URL,
-};
 pub use tool::{PluginShape, Tool, ToolAccessClass, Trust};

@@ -1,668 +1,305 @@
-"""Unit tests for workspace lifecycle/member/agent router."""
+"""Regression coverage for Workspace Core-owned workspace route contracts."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, Mock
+from collections.abc import Awaitable, Callable
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
-from fastapi import FastAPI, status
-from fastapi.testclient import TestClient
-from sqlalchemy.exc import IntegrityError
+from fastapi import BackgroundTasks, HTTPException, status
+from pydantic import ValidationError
 
-from src.domain.model.workspace.workspace import Workspace
-from src.domain.model.workspace.workspace_agent import WorkspaceAgent
-from src.domain.model.workspace.workspace_member import WorkspaceMember
-from src.domain.model.workspace.workspace_role import WorkspaceRole
+from src.application.services.workspace_collaboration_authority import (
+    WORKSPACE_COLLABORATION_CONTRACT_VERSION,
+    WorkspaceCollaborationActor,
+    WorkspaceCollaborationMutationCommand,
+)
+from src.application.services.workspace_layout_limits import MAX_WORKSPACE_HEX_COORDINATE
+from src.infrastructure.adapters.primary.web.routers import workspaces
+from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_secondary_dispatch import (
+    dispatch_secondary_workspace_mutation,
+)
+
+type _LegacyHandlerCall = Callable[[Any], Awaitable[object]]
 
 
-def _make_workspace(workspace_id: str = "ws-1") -> Workspace:
-    return Workspace(
-        id=workspace_id,
-        tenant_id="tenant-1",
-        project_id="project-1",
-        name="Team Workspace",
-        created_by="user-1",
-        description="Workspace description",
-        metadata={"source": "test"},
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+class _AccessTrap:
+    def __getattribute__(self, name: str) -> object:
+        raise AssertionError(f"retired workspace handler accessed {name}")
+
+
+def _legacy_handler_calls() -> tuple[_LegacyHandlerCall, ...]:
+    scope = {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+    }
+    workspace = {**scope, "workspace_id": "workspace-1"}
+    return (
+        lambda trap: workspaces.create_workspace(
+            payload=workspaces.WorkspaceCreateRequest(name="Workspace"),
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **scope,
+        ),
+        lambda trap: workspaces.list_workspaces(
+            limit=50,
+            offset=0,
+            request=trap,
+            current_user=trap,
+            **scope,
+        ),
+        lambda trap: workspaces.get_workspace(
+            request=trap,
+            current_user=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.get_workspace_collaboration_capabilities(
+            request=trap,
+            current_user=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.update_workspace(
+            payload=workspaces.WorkspaceUpdateRequest(name="Updated"),
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.delete_workspace(
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.list_workspace_members(
+            limit=100,
+            offset=0,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.add_workspace_member(
+            payload=workspaces.WorkspaceMemberCreateRequest(user_id="user-2"),
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.update_workspace_member(
+            user_id="user-2",
+            payload=workspaces.WorkspaceMemberUpdateRequest(role="editor"),
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.remove_workspace_member(
+            user_id="user-2",
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.list_workspace_agents(
+            active_only=True,
+            limit=100,
+            offset=0,
+            request=trap,
+            current_user=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.bind_workspace_agent(
+            payload=workspaces.WorkspaceAgentCreateRequest(agent_id="agent-1"),
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.update_workspace_agent(
+            workspace_agent_id="binding-1",
+            payload=workspaces.WorkspaceAgentUpdateRequest(display_name="Updated"),
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
+        lambda trap: workspaces.delete_workspace_agent(
+            workspace_agent_id="binding-1",
+            background_tasks=trap,
+            request=trap,
+            current_user=trap,
+            db=trap,
+            **workspace,
+        ),
     )
-
-
-def _make_member(
-    user_id: str = "user-2", role: WorkspaceRole = WorkspaceRole.EDITOR
-) -> WorkspaceMember:
-    return WorkspaceMember(
-        id=f"wm-{user_id}",
-        workspace_id="ws-1",
-        user_id=user_id,
-        role=role,
-        invited_by="user-1",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-
-
-def _make_workspace_agent(binding_id: str = "wa-1") -> WorkspaceAgent:
-    return WorkspaceAgent(
-        id=binding_id,
-        workspace_id="ws-1",
-        agent_id="agent-1",
-        display_name="Helper Agent",
-        description="Assists workspace operations",
-        config={"temperature": 0.2},
-        is_active=True,
-        hex_q=1,
-        hex_r=-1,
-        theme_color="#52d685",
-        label="relay",
-        status="running",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-
-
-@pytest.fixture
-def mock_workspace_service() -> AsyncMock:
-    service = AsyncMock()
-    service.create_workspace = AsyncMock(return_value=_make_workspace())
-    service.list_workspaces = AsyncMock(return_value=[_make_workspace()])
-    service.get_workspace = AsyncMock(return_value=_make_workspace())
-    service.update_workspace = AsyncMock(return_value=_make_workspace())
-    service.delete_workspace = AsyncMock(return_value=True)
-    service.list_members = AsyncMock(return_value=[_make_member()])
-    service.add_member = AsyncMock(return_value=_make_member())
-    service.update_member_role = AsyncMock(return_value=_make_member(role=WorkspaceRole.VIEWER))
-    service.remove_member = AsyncMock(return_value=True)
-    service.list_workspace_agents = AsyncMock(return_value=[_make_workspace_agent()])
-    service.bind_agent = AsyncMock(return_value=_make_workspace_agent())
-    service.update_agent_binding = AsyncMock(return_value=_make_workspace_agent())
-    service.unbind_agent = AsyncMock(return_value=True)
-    service.publish_pending_events = AsyncMock(return_value=None)
-    return service
-
-
-@pytest.fixture
-def workspaces_client(mock_workspace_service: AsyncMock) -> TestClient:
-    from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-    from src.infrastructure.adapters.primary.web.routers.workspaces import (
-        get_workspace_service,
-        router,
-    )
-    from src.infrastructure.adapters.secondary.persistence.database import get_db
-
-    app = FastAPI()
-    app.include_router(router)
-
-    mock_db = AsyncMock()
-    mock_db.commit = AsyncMock()
-    mock_db.rollback = AsyncMock()
-    project_access_result = Mock()
-    project_access_result.scalar_one_or_none.return_value = "project-1"
-    mock_db.execute = AsyncMock(return_value=project_access_result)
-
-    async def override_get_db():
-        yield mock_db
-
-    user = Mock()
-    user.id = "user-1"
-
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[get_workspace_service] = lambda: mock_workspace_service
-    client = TestClient(app)
-    client.mock_db = mock_db  # type: ignore[attr-defined]
-    client.mock_project_access_result = project_access_result  # type: ignore[attr-defined]
-    return client
 
 
 @pytest.mark.unit
-class TestWorkspacesRouter:
-    def test_create_workspace_success(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
-            json={"name": "Team Workspace", "description": "Workspace description"},
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.json()["id"] == "ws-1"
-        assert mock_workspace_service.create_workspace.await_count == 1
-        metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
-        assert metadata["workspace_use_case"] == "general"
-        assert metadata["workspace_type"] == "general"
-        assert metadata["collaboration_mode"] == "single_agent"
-        assert metadata["agent_conversation_mode"] == "single_agent"
-
-    def test_create_workspace_forwards_programming_metadata_without_delivery_defaults(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
-            json={
-                "name": "Delivery Room",
-                "use_case": "programming",
-                "collaboration_mode": "autonomous",
-                "sandbox_code_root": "my-evo",
-                "metadata": {"source": "ui"},
-            },
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
-        assert metadata["source"] == "ui"
-        assert metadata["workspace_use_case"] == "programming"
-        assert metadata["workspace_type"] == "software_development"
-        assert metadata["collaboration_mode"] == "autonomous"
-        assert metadata["agent_conversation_mode"] == "autonomous"
-        assert metadata["autonomy_profile"] == {"workspace_type": "software_development"}
-        assert metadata["sandbox_code_root"] == "/workspace/my-evo"
-        assert metadata["code_context"]["sandbox_code_root"] == "/workspace/my-evo"
-        assert "source_control" not in metadata
-        assert "delivery_cicd" not in metadata
-
-    def test_create_workspace_maps_duplicate_name_to_conflict(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        mock_workspace_service.create_workspace.side_effect = IntegrityError(
-            "secret insert statement",
-            {"name": "secret-workspace"},
-            Exception(
-                'duplicate key value violates unique constraint "uq_workspaces_project_name"'
-            ),
-        )
-
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
-            json={"name": "Team Workspace", "description": "Workspace description"},
-        )
-
-        assert response.status_code == status.HTTP_409_CONFLICT
-        assert response.json()["detail"] == "Workspace already exists"
-        assert "secret" not in response.text
-        workspaces_client.mock_db.rollback.assert_awaited_once()  # type: ignore[attr-defined]
-
-    def test_create_workspace_ignores_top_level_source_control_defaults(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
-            json={
-                "name": "GitLab Delivery",
-                "use_case": "programming",
-                "sandbox_code_root": "gitlab-delivery",
-                "source_control": {
-                    "provider": "gitlab",
-                    "repo": "platform/gitlab-delivery",
-                    "default_branch": "develop",
-                    "server_url": "https://gitlab.example.com",
-                    "auth_token_env": "GITLAB_TOKEN",
-                },
-            },
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
-        assert metadata["workspace_use_case"] == "programming"
-        assert metadata["sandbox_code_root"] == "/workspace/gitlab-delivery"
-        assert "source_control" not in metadata
-        assert "delivery_cicd" not in metadata
-
-    def test_create_workspace_preserves_explicit_programming_delivery_provider(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
-            json={
-                "name": "Sandbox Native Delivery",
-                "use_case": "programming",
-                "sandbox_code_root": "my-evo",
-                "metadata": {
-                    "delivery_cicd": {
-                        "provider": "sandbox_native",
-                        "install_command": "pnpm install",
-                    }
-                },
-            },
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
-        delivery = metadata["delivery_cicd"]
-        assert delivery["provider"] == "sandbox_native"
-        assert delivery["install_command"] == "pnpm install"
-        assert "drone" not in delivery
-
-    def test_create_workspace_rejects_unscoped_programming_root(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
-            json={
-                "name": "Unsafe Delivery Room",
-                "use_case": "programming",
-                "sandbox_code_root": "/workspace",
-            },
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        mock_workspace_service.create_workspace.assert_not_awaited()
-
-    def test_create_workspace_requires_project_membership(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        workspaces_client.mock_project_access_result.scalar_one_or_none.return_value = None  # type: ignore[attr-defined]
-
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
-            json={"name": "Unauthorized Workspace"},
-        )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.json()["detail"] == "Access denied"
-        mock_workspace_service.create_workspace.assert_not_awaited()
-        workspaces_client.mock_db.rollback.assert_awaited_once()  # type: ignore[attr-defined]
-
-    def test_list_workspaces_success(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.get("/api/v1/tenants/tenant-1/projects/project-1/workspaces")
-
-        assert response.status_code == status.HTTP_200_OK
-        assert len(response.json()) == 1
-        assert response.json()[0]["id"] == "ws-1"
-        assert mock_workspace_service.list_workspaces.await_count == 1
-
-    def test_get_workspace_maps_not_found(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        mock_workspace_service.get_workspace.side_effect = ValueError("Workspace ws-404 not found")
-
-        response = workspaces_client.get(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-404"
-        )
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()["detail"] == "Workspace not found"
-        assert "ws-404" not in response.text
-
-    def test_get_workspace_sanitizes_internal_errors(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        mock_workspace_service.get_workspace.side_effect = RuntimeError(
-            "internal workspace backend secret"
-        )
-
-        response = workspaces_client.get(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1"
-        )
-
-        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert response.json()["detail"] == "Internal server error"
-        assert "internal" not in response.json()["detail"]
-
-    def test_update_workspace_maps_forbidden_and_rolls_back(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        mock_workspace_service.update_workspace.side_effect = PermissionError(
-            "Insufficient permission"
-        )
-
-        response = workspaces_client.patch(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1",
-            json={"name": "New Name"},
-        )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.json()["detail"] == "Access denied"
-        assert "permission" not in response.text.lower()
-        assert workspaces_client.mock_db.rollback.await_count == 1  # type: ignore[attr-defined]
-
-    def test_add_member_maps_bad_request(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        mock_workspace_service.add_member.side_effect = ValueError("User already a member")
-
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/members",
-            json={"user_id": "user-2", "role": "editor"},
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["detail"] == "Invalid workspace request"
-        assert "already" not in response.text.lower()
-
-    def test_add_member_requires_target_project_membership(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        workspaces_client.mock_project_access_result.scalar_one_or_none.return_value = None  # type: ignore[attr-defined]
-
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/members",
-            json={"user_id": "user-2", "role": "editor"},
-        )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.json()["detail"] == "Access denied"
-        mock_workspace_service.add_member.assert_not_awaited()
-        workspaces_client.mock_db.rollback.assert_awaited_once()  # type: ignore[attr-defined]
-
-    def test_list_members_batch_resolves_user_email(
-        self,
-        workspaces_client: TestClient,
-        mock_workspace_service: AsyncMock,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        mock_workspace_service.list_members.return_value = [
-            _make_member("user-2"),
-            _make_member("user-3", role=WorkspaceRole.VIEWER),
-        ]
-        user_repo = Mock()
-        user_repo.find_by_ids = AsyncMock(
-            return_value=[
-                Mock(id="user-2", email="editor@example.com"),
-                Mock(id="user-3", email="viewer@example.com"),
-            ]
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.workspaces.SqlUserRepository",
-            lambda _db: user_repo,
-        )
-
-        response = workspaces_client.get(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/members"
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json() == [
-            {
-                "id": "wm-user-2",
-                "workspace_id": "ws-1",
-                "user_id": "user-2",
-                "user_email": "editor@example.com",
-                "role": "editor",
-                "invited_by": "user-1",
-                "created_at": response.json()[0]["created_at"],
-                "updated_at": response.json()[0]["updated_at"],
-            },
-            {
-                "id": "wm-user-3",
-                "workspace_id": "ws-1",
-                "user_id": "user-3",
-                "user_email": "viewer@example.com",
-                "role": "viewer",
-                "invited_by": "user-1",
-                "created_at": response.json()[1]["created_at"],
-                "updated_at": response.json()[1]["updated_at"],
-            },
-        ]
-        user_repo.find_by_ids.assert_awaited_once_with(["user-2", "user-3"])
-
-    def test_list_agents_success(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.get(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents?active_only=true"
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        assert len(response.json()) == 1
-        assert mock_workspace_service.list_workspace_agents.await_count == 1
-
-    def test_create_agent_forwards_layout_fields(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents",
-            json={
-                "agent_id": "agent-1",
-                "display_name": "Planner",
-                "hex_q": 3,
-                "hex_r": -2,
-                "theme_color": "#8b5cf6",
-                "label": "planner",
-            },
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.json()["hex_q"] == 1
-        await_kwargs = mock_workspace_service.bind_agent.await_args.kwargs
-        assert await_kwargs["hex_q"] == 3
-        assert await_kwargs["hex_r"] == -2
-        assert await_kwargs["theme_color"] == "#8b5cf6"
-        assert await_kwargs["label"] == "planner"
-        assert mock_workspace_service.publish_pending_events.await_count == 1
-
-    def test_update_agent_forwards_layout_fields(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.patch(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents/wa-1",
-            json={
-                "hex_q": 4,
-                "hex_r": 0,
-                "theme_color": "#f59e0b",
-                "label": "ops",
-            },
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        await_kwargs = mock_workspace_service.update_agent_binding.await_args.kwargs
-        assert await_kwargs["hex_q"] == 4
-        assert await_kwargs["hex_r"] == 0
-        assert await_kwargs["theme_color"] == "#f59e0b"
-        assert await_kwargs["label"] == "ops"
-        assert mock_workspace_service.publish_pending_events.await_count == 1
-
-    def test_update_agent_still_succeeds_when_event_publish_fails(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        mock_workspace_service.publish_pending_events.side_effect = [
-            RuntimeError("redis unavailable"),
-            None,
-        ]
-
-        response = workspaces_client.patch(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents/wa-1",
-            json={"hex_q": 4, "hex_r": 0},
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        assert workspaces_client.mock_db.commit.await_count == 1  # type: ignore[attr-defined]
-        assert mock_workspace_service.publish_pending_events.await_count == 2
-
-    def test_update_agent_rejects_user_supplied_status_field(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.patch(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents/wa-1",
-            json={"status": "busy"},
-        )
-
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-        mock_workspace_service.update_agent_binding.assert_not_awaited()
-
-    def test_create_agent_rejects_out_of_bounds_hex(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
-    ) -> None:
-        response = workspaces_client.post(
-            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents",
-            json={
-                "agent_id": "agent-1",
-                "hex_q": 25,
-                "hex_r": 0,
-            },
-        )
-
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-        mock_workspace_service.bind_agent.assert_not_awaited()
-
-
-def test_workspace_collaboration_capability_declares_durable_mutation_authority(
-    workspaces_client: TestClient,
-    mock_workspace_service: AsyncMock,
+@pytest.mark.parametrize("call", _legacy_handler_calls())
+async def test_legacy_workspace_handlers_fail_closed_without_local_di(
+    call: _LegacyHandlerCall,
 ) -> None:
-    response = workspaces_client.get(
-        "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/collaboration/capabilities"
-    )
+    with pytest.raises(HTTPException) as exc_info:
+        await call(cast("Any", _AccessTrap()))
 
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json() == {
-        "service_version": "0.2.0",
-        "contract_version": "2.0.0",
-        "authority": "cloud",
-        "tenant_id": "tenant-1",
-        "project_id": "project-1",
-        "workspace_id": "ws-1",
-        "status": "available",
-        "reason_code": None,
-        "canonical_read": True,
-        "read_surfaces": [
-            "goals",
-            "discussion",
-            "status",
-            "collaboration",
-            "members",
-            "genes",
-            "files",
-            "notes",
-            "topology",
-            "settings",
-        ],
-        "mutations": {
-            "allowed": True,
-            "revision_guarded": True,
-            "idempotency_guarded": True,
-            "actions": {
-                "goals": [
-                    "create_objective",
-                    "update_objective",
-                    "delete_objective",
-                    "project_objective_to_task",
-                    "create_task",
-                    "update_task",
-                    "delete_task",
-                    "assign_task_agent",
-                    "unassign_task_agent",
-                ],
-                "discussion": [
-                    "create_post",
-                    "update_post",
-                    "delete_post",
-                    "pin_post",
-                    "unpin_post",
-                    "create_reply",
-                    "update_reply",
-                    "delete_reply",
-                ],
-                "status": ["update_task", "apply_task_recovery_action"],
-                "collaboration": [
-                    "bind_agent",
-                    "update_agent_binding",
-                    "unbind_agent",
-                    "add_member",
-                    "update_member_role",
-                    "remove_member",
-                    "create_task",
-                    "update_task",
-                    "delete_task",
-                    "assign_task_agent",
-                    "unassign_task_agent",
-                ],
-                "members": ["add_member", "update_member_role", "remove_member"],
-                "genes": ["create_gene", "update_gene", "delete_gene"],
-                "files": [
-                    "create_directory",
-                    "upload_file",
-                    "update_file",
-                    "delete_file",
-                    "copy_file",
-                ],
-                "notes": [],
-                "topology": [
-                    "create_node",
-                    "update_node",
-                    "delete_node",
-                    "create_edge",
-                    "update_edge",
-                    "delete_edge",
-                ],
-                "settings": ["update_workspace"],
-            },
-        },
-        "allowed_actions": {
-            "goals": [
-                "create_objective",
-                "update_objective",
-                "delete_objective",
-                "project_objective_to_task",
-                "create_task",
-                "update_task",
-                "delete_task",
-                "assign_task_agent",
-                "unassign_task_agent",
-            ],
-            "discussion": [
-                "create_post",
-                "update_post",
-                "delete_post",
-                "pin_post",
-                "unpin_post",
-                "create_reply",
-                "update_reply",
-                "delete_reply",
-            ],
-            "status": ["update_task", "apply_task_recovery_action"],
-            "collaboration": [
-                "bind_agent",
-                "update_agent_binding",
-                "unbind_agent",
-                "add_member",
-                "update_member_role",
-                "remove_member",
-                "create_task",
-                "update_task",
-                "delete_task",
-                "assign_task_agent",
-                "unassign_task_agent",
-            ],
-            "members": ["add_member", "update_member_role", "remove_member"],
-            "genes": ["create_gene", "update_gene", "delete_gene"],
-            "files": [
-                "create_directory",
-                "upload_file",
-                "update_file",
-                "delete_file",
-                "copy_file",
-            ],
-            "notes": [],
-            "topology": [
-                "create_node",
-                "update_node",
-                "delete_node",
-                "create_edge",
-                "update_edge",
-                "delete_edge",
-            ],
-            "settings": ["update_workspace"],
-        },
+    assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert exc_info.value.detail == {
+        "code": "WORKSPACE_CORE_UNAVAILABLE",
+        "reason": "workspace_core_unavailable",
+        "detail": "Workspace Core is unavailable",
     }
-    mock_workspace_service.get_workspace.assert_awaited_once_with(
-        workspace_id="ws-1",
-        actor_user_id="user-1",
-    )
 
 
-def test_workspace_collaboration_capability_fails_closed_on_scope_drift(
-    workspaces_client: TestClient,
-    mock_workspace_service: AsyncMock,
+@pytest.mark.unit
+def test_workspace_contract_module_has_no_static_service_or_di_fallback() -> None:
+    retired_names = {
+        "WorkspaceService",
+        "get_workspace_service",
+        "get_db",
+        "SqlUserRepository",
+        "_map_error",
+        "_is_workspace_name_conflict",
+        "_publish_pending_workspace_events",
+        "_retry_publish_pending_workspace_events",
+        "_ensure_workspace_scope",
+        "_ensure_project_access_for_workspace_create",
+        "_ensure_project_member",
+        "_as_mapping",
+        "_coerce_use_case",
+        "_coerce_workspace_type",
+        "_coerce_collaboration_mode",
+        "_resolve_use_case",
+        "_resolve_collaboration_mode",
+        "_workspace_type_for_use_case",
+        "_compose_workspace_metadata",
+        "_to_workspace_response",
+        "_to_member_response",
+        "_to_agent_response",
+    }
+
+    assert retired_names.isdisjoint(vars(workspaces))
+
+
+@pytest.mark.unit
+def test_workspace_contract_models_remain_stable() -> None:
+    assert set(workspaces.WorkspaceCreateRequest.model_fields) == {
+        "name",
+        "description",
+        "metadata",
+        "use_case",
+        "collaboration_mode",
+        "autonomy_profile",
+        "sandbox_code_root",
+    }
+    assert set(workspaces.WorkspaceUpdateRequest.model_fields) == {
+        "name",
+        "description",
+        "is_archived",
+        "metadata",
+    }
+    assert set(workspaces.WorkspaceResponse.model_fields) == {
+        "id",
+        "tenant_id",
+        "project_id",
+        "name",
+        "created_by",
+        "description",
+        "is_archived",
+        "metadata",
+        "office_status",
+        "hex_layout_config",
+        "created_at",
+        "updated_at",
+    }
+    assert set(workspaces.WorkspaceMemberResponse.model_fields) == {
+        "id",
+        "workspace_id",
+        "user_id",
+        "user_email",
+        "role",
+        "invited_by",
+        "created_at",
+        "updated_at",
+    }
+    assert set(workspaces.WorkspaceAgentResponse.model_fields) == {
+        "id",
+        "workspace_id",
+        "agent_id",
+        "display_name",
+        "description",
+        "config",
+        "is_active",
+        "hex_q",
+        "hex_r",
+        "theme_color",
+        "label",
+        "status",
+        "created_at",
+        "updated_at",
+    }
+
+
+@pytest.mark.unit
+def test_workspace_contract_models_keep_validation_boundaries() -> None:
+    with pytest.raises(ValidationError):
+        workspaces.WorkspaceAgentCreateRequest(
+            agent_id="agent-1",
+            hex_q=MAX_WORKSPACE_HEX_COORDINATE + 1,
+        )
+    with pytest.raises(ValidationError):
+        workspaces.WorkspaceAgentUpdateRequest.model_validate({"status": "busy"})
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "surface,action,payload",
+    [
+        ("collaboration", "bind_agent", {"agent_id": "agent-1"}),
+        ("settings", "update_workspace", {"name": "Updated"}),
+    ],
+)
+async def test_secondary_dispatcher_does_not_resolve_legacy_workspace_service(
+    monkeypatch: pytest.MonkeyPatch,
+    surface: str,
+    action: str,
+    payload: dict[str, object],
 ) -> None:
-    response = workspaces_client.get(
-        "/api/v1/tenants/tenant-other/projects/project-1/workspaces/ws-1/collaboration/capabilities"
-    )
+    def legacy_service_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("secondary dispatcher touched the retired workspace service")
 
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json() == {"detail": "Workspace not found"}
-    assert mock_workspace_service.get_workspace.await_count == 1
+    monkeypatch.setattr(workspaces, "get_workspace_service", legacy_service_trap, raising=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await dispatch_secondary_workspace_mutation(
+            actor=WorkspaceCollaborationActor(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                workspace_id="workspace-1",
+                user_id="user-1",
+            ),
+            command=WorkspaceCollaborationMutationCommand(
+                contract_version=WORKSPACE_COLLABORATION_CONTRACT_VERSION,
+                surface=surface,
+                action=action,
+                expected_revision=0,
+                idempotency_key=f"{surface}-command-1",
+                payload=payload,
+            ),
+            request=cast("Any", SimpleNamespace()),
+            background_tasks=BackgroundTasks(),
+            current_user=cast("Any", SimpleNamespace(id="user-1")),
+            db=cast("Any", SimpleNamespace()),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE

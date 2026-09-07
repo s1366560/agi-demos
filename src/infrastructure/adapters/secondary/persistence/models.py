@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -33,6 +34,11 @@ except ImportError:
     Vector = None
 
 from src.domain.model.enums import DataStatus, ProcessingStatus
+from src.infrastructure.adapters.secondary.persistence.plugin_scope_columns_v2 import (
+    ROOT_SCOPE_KEY_V2,
+    PluginScopeColumnsV2,
+    plugin_scope_constraints_v2,
+)
 
 
 class Base(DeclarativeBase):
@@ -3244,6 +3250,381 @@ class PlatformPluginApplyStateEventModel(IdGeneratorMixin, Base):
     )
 
 
+class PlatformPluginV2DesiredBundleSetModel(IdGeneratorMixin, Base):
+    """One immutable DesiredBundleSetV2 revision bound to an exact scope."""
+
+    __tablename__ = "platform_plugin_v2_desired_bundle_sets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    desired_set_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_key",
+            "revision",
+            name="uq_platform_plugin_v2_desired_scope_revision",
+        ),
+        UniqueConstraint(
+            "scope_key",
+            "digest",
+            name="uq_platform_plugin_v2_desired_scope_digest",
+        ),
+        CheckConstraint(
+            "scope_kind IN ('root', 'tenant', 'project', 'session')",
+            name="ck_platform_plugin_v2_desired_scope_kind",
+        ),
+        CheckConstraint(
+            "revision > 0",
+            name="ck_platform_plugin_v2_desired_revision",
+        ),
+        CheckConstraint(
+            "length(digest) = 71 AND substr(digest, 1, 7) = 'sha256:'",
+            name="ck_platform_plugin_v2_desired_digest",
+        ),
+        Index(
+            "ix_platform_plugin_v2_desired_scope_revision",
+            "scope_key",
+            "revision",
+        ),
+        Index(
+            "ix_platform_plugin_v2_desired_scope_path",
+            "scope_kind",
+            "tenant_id",
+            "project_id",
+            "session_id",
+        ),
+    )
+
+
+class PlatformPluginV1MigrationRunModel(IdGeneratorMixin, Base):
+    """Completed, append-only audit for one offline V1 desired-state conversion."""
+
+    __tablename__ = "platform_plugin_v1_conversion_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    migration_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    source_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    mapping_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    output_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    report: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "length(source_digest) = 71 AND substr(source_digest, 1, 7) = 'sha256:'",
+            name="ck_platform_plugin_v1_conversion_source_digest",
+        ),
+        CheckConstraint(
+            "length(mapping_digest) = 71 AND substr(mapping_digest, 1, 7) = 'sha256:'",
+            name="ck_platform_plugin_v1_conversion_mapping_digest",
+        ),
+        CheckConstraint(
+            "length(output_digest) = 71 AND substr(output_digest, 1, 7) = 'sha256:'",
+            name="ck_platform_plugin_v1_conversion_output_digest",
+        ),
+        Index(
+            "ix_platform_plugin_v1_conversion_created",
+            "created_at",
+            "migration_id",
+        ),
+    )
+
+
+class PlatformPluginV2DataPlaneCredentialModel(IdGeneratorMixin, Base):
+    """Dedicated hashed workload credential bound to one protocol-v2 data plane."""
+
+    __tablename__ = "platform_plugin_v2_data_plane_credentials"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(18), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rotated_from_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("platform_plugin_v2_data_plane_credentials.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "length(data_plane_id) > 0",
+            name="ck_platform_plugin_v2_data_plane_credential_plane",
+        ),
+        CheckConstraint(
+            "length(key_hash) = 64",
+            name="ck_platform_plugin_v2_data_plane_credential_hash",
+        ),
+        CheckConstraint(
+            "length(key_prefix) = 18 AND substr(key_prefix, 1, 6) = 'ms_dp_'",
+            name="ck_platform_plugin_v2_data_plane_credential_prefix",
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR expires_at > created_at",
+            name="ck_platform_plugin_v2_data_plane_credential_expiry",
+        ),
+        CheckConstraint(
+            " ".join(
+                (
+                    "(revoked_at IS NULL AND revoked_by_user_id IS NULL) OR",
+                    "(revoked_at IS NOT NULL AND revoked_by_user_id IS NOT NULL)",
+                )
+            ),
+            name="ck_platform_plugin_v2_data_plane_credential_revocation",
+        ),
+        UniqueConstraint(
+            "key_hash",
+            name="uq_platform_plugin_v2_data_plane_credential_hash",
+        ),
+        Index(
+            "ix_platform_plugin_v2_data_plane_credential_plane_active",
+            "data_plane_id",
+            "revoked_at",
+            "expires_at",
+        ),
+        Index(
+            "ix_platform_plugin_v2_data_plane_credential_rotated_from",
+            "rotated_from_id",
+        ),
+    )
+
+
+class PlatformPluginV2ScopeHeadModel(PluginScopeColumnsV2, Base):
+    """Transaction-locked version high water mark for one exact scope."""
+
+    __tablename__ = "platform_plugin_v2_scope_heads"
+
+    scope_key: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=ROOT_SCOPE_KEY_V2, server_default=ROOT_SCOPE_KEY_V2
+    )
+    version_high_watermark: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+
+    __table_args__ = (
+        *plugin_scope_constraints_v2("plugin_v2_head"),
+        CheckConstraint("version_high_watermark >= 0", name="ck_plugin_v2_head_version"),
+    )
+
+
+class PlatformPluginV2PublicationModel(PluginScopeColumnsV2, IdGeneratorMixin, Base):
+    """Append-only requested protocol-v2 snapshot distribution."""
+
+    __tablename__ = "platform_plugin_v2_publications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    profile_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    snapshot_digest: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    nonce: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    type_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    distribution: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    required_data_plane_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    ack_deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="reconciling", server_default="reconciling"
+    )
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    republished_from_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        *plugin_scope_constraints_v2("plugin_v2_publication"),
+        ForeignKeyConstraint(
+            ["scope_key", "republished_from_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_publication_republished_from_id",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("scope_key", "id", name="uq_plugin_v2_publication_scope_id"),
+        Index(
+            "ix_plugin_v2_publication_scope_latest",
+            "scope_key",
+            "requested_version",
+            "created_at",
+            "id",
+        ),
+        CheckConstraint(
+            "generation > 0 AND requested_version > 0",
+            name="ck_platform_plugin_v2_publication_versions",
+        ),
+        CheckConstraint(
+            "length(snapshot_digest) = 64",
+            name="ck_platform_plugin_v2_publication_digest",
+        ),
+        CheckConstraint(
+            "status IN ('reconciling', 'ready', 'degraded')",
+            name="ck_platform_plugin_v2_publication_status",
+        ),
+        CheckConstraint(
+            "ack_deadline_at > created_at",
+            name="ck_platform_plugin_v2_publication_deadline",
+        ),
+        Index(
+            "ix_platform_plugin_v2_publication_profile_generation",
+            "profile_id",
+            "generation",
+        ),
+        Index(
+            "ix_platform_plugin_v2_publication_status_ready",
+            "status",
+            "ready_at",
+        ),
+        Index(
+            "ix_platform_plugin_v2_publication_republished_from",
+            "republished_from_id",
+        ),
+    )
+
+
+class PlatformPluginV2ApplyStateModel(PluginScopeColumnsV2, IdGeneratorMixin, Base):
+    """Latest requested receipt and retained last-good v2 publication per data plane."""
+
+    __tablename__ = "platform_plugin_v2_apply_states"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    requested_publication_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+    )
+    requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    requested_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    applied_publication_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    applied_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    applied_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        *plugin_scope_constraints_v2("plugin_v2_apply"),
+        ForeignKeyConstraint(
+            ["scope_key", "requested_publication_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_apply_requested_publication_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["scope_key", "applied_publication_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_apply_applied_publication_id",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("scope_key", "data_plane_id", name="uq_plugin_v2_apply_scope_plane"),
+        CheckConstraint(
+            "requested_version > 0 AND (applied_version IS NULL OR applied_version > 0)",
+            name="ck_platform_plugin_v2_apply_versions",
+        ),
+        CheckConstraint(
+            "status IN ('ack', 'nack')",
+            name="ck_platform_plugin_v2_apply_status",
+        ),
+        CheckConstraint(
+            "(applied_publication_id IS NULL AND applied_version IS NULL "
+            "AND applied_digest IS NULL) OR "
+            "(applied_publication_id IS NOT NULL AND applied_version IS NOT NULL "
+            "AND applied_digest IS NOT NULL)",
+            name="ck_platform_plugin_v2_apply_last_good",
+        ),
+    )
+
+
+class PlatformPluginV2ApplyStateEventModel(PluginScopeColumnsV2, IdGeneratorMixin, Base):
+    """Append-only protocol-v2 ACK/NACK evidence."""
+
+    __tablename__ = "platform_plugin_v2_apply_state_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    requested_publication_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+    )
+    requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    requested_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    applied_publication_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    applied_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    applied_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        *plugin_scope_constraints_v2("plugin_v2_apply_event"),
+        ForeignKeyConstraint(
+            ["scope_key", "requested_publication_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_apply_event_requested_publication_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["scope_key", "applied_publication_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_apply_event_applied_publication_id",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_plugin_v2_apply_event_scope_plane", "scope_key", "data_plane_id", "recorded_at"),
+        CheckConstraint(
+            "requested_version > 0 AND (applied_version IS NULL OR applied_version > 0)",
+            name="ck_platform_plugin_v2_apply_event_versions",
+        ),
+        CheckConstraint(
+            "status IN ('ack', 'nack')",
+            name="ck_platform_plugin_v2_apply_event_status",
+        ),
+        Index(
+            "ix_platform_plugin_v2_apply_event_plane_recorded",
+            "data_plane_id",
+            "recorded_at",
+        ),
+    )
+
+
 class PlatformPluginCutoverApprovalModel(IdGeneratorMixin, Base):
     """Durable operator approval of one platform-plugin cutover."""
 
@@ -4499,3 +4880,12 @@ class ReflectionVerdictRecord(Base):
             "created_at",
         ),
     )
+
+
+# Register private publication-source metadata without a circular class re-export.
+from . import (  # noqa: E402
+    platform_plugin_outcome_supersession_model_v2 as _outcome_supersession_model_v2,
+    platform_plugin_publication_source_model_v2 as _publication_source_model_v2,
+)
+
+del _publication_source_model_v2, _outcome_supersession_model_v2

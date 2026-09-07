@@ -96,9 +96,9 @@ test('session and workspace composers expose a controlled model switch backed by
   );
   assert.match(composerControlsSource, /chat\.resetModelOverride/);
   assert.match(composerControlsSource, /onReset/);
-  assert.match(appSource, /updateAgentConversationConfig/);
+  assert.match(appSource, /desktopConversationConfigOperationsV2\.updateModelOverride/);
   assert.match(appSource, /conversationRuntimeModelSelection/);
-  assert.match(appSource, /onModelReset=\{[\s\S]{0,180}resetChatRuntimeModel/);
+  assert.match(appSource, /onModelReset:\s*[\s\S]{0,180}resetChatRuntimeModel/);
   assert.match(composerControlsSource, /role="listbox"/);
   assert.match(composerControlsSource, /type="search"/);
   assert.match(qaSource, /model-override-events/);
@@ -529,7 +529,7 @@ test('composer catalog reloads managed resources whenever the same-scope menu re
   assert.ok(openMenu, 'ComposerPlusMenu should own an explicit open boundary');
   assert.match(
     openMenu[0],
-    /setCatalog\(null\);[\s\S]*setCatalogError\(null\);[\s\S]*setOpen\(true\);/u,
+    /setCatalogState\(null\);[\s\S]*setCatalogError\(null\);[\s\S]*setOpen\(true\);/u,
   );
   assert.doesNotMatch(openMenu[0], /window\.(?:addEventListener|dispatchEvent)/u);
   assert.match(

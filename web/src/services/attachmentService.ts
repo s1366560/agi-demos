@@ -1,3 +1,5 @@
+import { runWebOperationV2, type WebOperationOptionsV2 } from '@/plugins/webOperationAdmissionV2';
+import { runWebFetchV2 } from './client/webFetchV2';
 /**
  * Attachment Service - Handles file uploads for agent chat
  *
@@ -99,6 +101,8 @@ export interface UploadProgress {
 
 export type ProgressCallback = (progress: UploadProgress) => void;
 
+export type AttachmentOperationOptionsV2 = WebOperationOptionsV2;
+
 // API response DTOs (snake_case from backend)
 interface ApiErrorResponse {
   detail: string;
@@ -138,12 +142,13 @@ class AttachmentServiceClass {
     projectId: string,
     file: File,
     purpose: AttachmentPurpose = 'both',
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    options: AttachmentOperationOptionsV2 = {}
   ): Promise<AttachmentResponse> {
     if (file.size > MULTIPART_THRESHOLD) {
-      return this.uploadMultipart(conversationId, projectId, file, purpose, onProgress);
+      return this.uploadMultipart(conversationId, projectId, file, purpose, onProgress, options);
     } else {
-      return this.uploadSimple(conversationId, projectId, file, purpose, onProgress);
+      return this.uploadSimple(conversationId, projectId, file, purpose, onProgress, options);
     }
   }
 
@@ -155,65 +160,94 @@ class AttachmentServiceClass {
     projectId: string,
     file: File,
     purpose: AttachmentPurpose = 'both',
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    options: AttachmentOperationOptionsV2 = {}
   ): Promise<AttachmentResponse> {
-    const formData = new FormData();
-    formData.append('conversation_id', conversationId);
-    formData.append('project_id', projectId);
-    formData.append('purpose', purpose);
-    formData.append('file', file);
-
-    // Use XMLHttpRequest for progress tracking
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-
-      xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable && onProgress) {
-          onProgress({
-            loaded: event.loaded,
-            total: event.total,
-            percentage: Math.round((event.loaded / event.total) * 100),
-          });
-        }
-      });
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
+    return runWebOperationV2(async (operation) => {
+      operation.check();
+      const formData = new FormData();
+      formData.append('conversation_id', conversationId);
+      formData.append('project_id', projectId);
+      formData.append('purpose', purpose);
+      formData.append('file', file);
+      return new Promise<AttachmentResponse>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        let result: AttachmentResponse | undefined;
+        let failure: unknown;
+        let failed = false;
+        let settled = false;
+        const fail = (error: unknown) => {
+          if (!failed) {
+            failed = true;
+            failure = error;
+          }
+        };
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          operation.signal.removeEventListener('abort', abort);
+          if (failed) reject(failure);
+          else if (result) resolve(result);
+          else reject(new Error('Upload ended without a response'));
+        };
+        const abort = () => {
+          fail(operation.signal.reason ?? new DOMException('Upload cancelled', 'AbortError'));
+          xhr.abort();
+        };
+        xhr.upload.addEventListener('progress', (event) => {
           try {
-            const response = JSON.parse(xhr.responseText) as AttachmentResponse;
-            resolve(response);
-          } catch {
-            reject(new Error('Invalid response'));
+            operation.check();
+            if (event.lengthComputable && onProgress)
+              onProgress({
+                loaded: event.loaded,
+                total: event.total,
+                percentage: Math.round((event.loaded / event.total) * 100),
+              });
+          } catch (error) {
+            fail(error);
+            xhr.abort();
           }
-        } else {
-          if (xhr.status === 401) {
-            handleUnauthorized();
-          }
+        });
+        xhr.addEventListener('load', () => {
           try {
-            const error = JSON.parse(xhr.responseText) as ApiErrorResponse;
-            reject(new Error(error.detail || 'Upload failed'));
-          } catch {
-            reject(new Error(`Upload failed: ${xhr.statusText}`));
+            operation.check();
+            if (xhr.status >= 200 && xhr.status < 300) {
+              result = JSON.parse(xhr.responseText) as AttachmentResponse;
+            } else {
+              let detail = `Upload failed: ${xhr.statusText}`;
+              try {
+                detail = (JSON.parse(xhr.responseText) as ApiErrorResponse).detail || detail;
+              } catch {
+                /* Preserve the HTTP failure when its body is not JSON. */
+              }
+              fail(new Error(detail));
+              if (xhr.status === 401) handleUnauthorized();
+            }
+          } catch (error) {
+            fail(error);
           }
+        });
+        xhr.addEventListener('error', () => fail(new Error('Network error')));
+        xhr.addEventListener('timeout', () => fail(new Error('Upload timed out')));
+        xhr.addEventListener('abort', () =>
+          fail(operation.signal.reason ?? new DOMException('Upload cancelled', 'AbortError'))
+        );
+        // loadend follows load/error/abort: the lease must cover the complete XHR lifetime.
+        xhr.addEventListener('loadend', finish);
+        try {
+          xhr.open('POST', createApiUrl(`${HTTP_PATH}/upload/simple`));
+          for (const [key, value] of Object.entries(getAuthHeaders())) {
+            if (key.toLowerCase() !== 'content-type') xhr.setRequestHeader(key, value);
+          }
+          operation.signal.addEventListener('abort', abort, { once: true });
+          operation.check();
+          xhr.send(formData);
+        } catch (error) {
+          fail(error);
+          finish();
         }
       });
-
-      xhr.addEventListener('error', () => {
-        reject(new Error('Network error'));
-      });
-
-      xhr.open('POST', createApiUrl(`${HTTP_PATH}/upload/simple`));
-
-      // Add auth headers
-      const headers = getAuthHeaders();
-      Object.entries(headers).forEach(([key, value]) => {
-        if (key.toLowerCase() !== 'content-type') {
-          xhr.setRequestHeader(key, value);
-        }
-      });
-
-      xhr.send(formData);
-    });
+    }, options);
   }
 
   /**
@@ -224,73 +258,102 @@ class AttachmentServiceClass {
     projectId: string,
     file: File,
     purpose: AttachmentPurpose = 'both',
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    options: AttachmentOperationOptionsV2 = {}
   ): Promise<AttachmentResponse> {
-    // Step 1: Initiate multipart upload
-    const initResponse = await this.initiateUpload({
-      conversationId,
-      projectId,
-      filename: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      sizeBytes: file.size,
-      purpose,
-    });
+    return runWebOperationV2(async (operation) => {
+      operation.check();
+      const childOptions = { parent: operation, signal: operation.signal };
+      // Step 1: Initiate multipart upload
+      const initResponse = await this.initiateUpload(
+        {
+          conversationId,
+          projectId,
+          filename: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+          purpose,
+        },
+        childOptions
+      );
+      operation.check();
 
-    const { attachmentId, totalParts, partSize } = initResponse;
-    const parts: UploadPartResponse[] = [];
-    let uploadedBytes = 0;
+      const { attachmentId, totalParts, partSize } = initResponse;
+      const parts: UploadPartResponse[] = [];
+      let uploadedBytes = 0;
 
-    try {
-      if (
-        !Number.isSafeInteger(totalParts) ||
-        totalParts <= 0 ||
-        !Number.isSafeInteger(partSize) ||
-        partSize <= 0
-      ) {
-        throw new Error('Invalid upload session');
-      }
-
-      // Step 2: Upload each part
-      for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
-        const start = (partNumber - 1) * partSize;
-        const end = Math.min(start + partSize, file.size);
-        const chunk = file.slice(start, end);
-
-        const partResult = await this.uploadPart(attachmentId, partNumber, chunk);
-        parts.push(partResult);
-
-        uploadedBytes += chunk.size;
-
-        if (onProgress) {
-          onProgress({
-            loaded: uploadedBytes,
-            total: file.size,
-            percentage: Math.round((uploadedBytes / file.size) * 100),
-          });
+      try {
+        if (
+          !Number.isSafeInteger(totalParts) ||
+          totalParts <= 0 ||
+          !Number.isSafeInteger(partSize) ||
+          partSize <= 0
+        ) {
+          throw new Error('Invalid upload session');
         }
-      }
 
-      // Step 3: Complete multipart upload
-      return await this.completeUpload(attachmentId, parts);
-    } catch (error) {
-      // Abort on error
-      void this.abortUpload(attachmentId).catch(() => {});
-      throw error;
-    }
+        // Step 2: Upload each part
+        for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+          const start = (partNumber - 1) * partSize;
+          const end = Math.min(start + partSize, file.size);
+          const chunk = file.slice(start, end);
+
+          operation.check();
+          const partResult = await this.uploadPart(attachmentId, partNumber, chunk, childOptions);
+          operation.check();
+          parts.push(partResult);
+
+          uploadedBytes += chunk.size;
+
+          if (onProgress) {
+            onProgress({
+              loaded: uploadedBytes,
+              total: file.size,
+              percentage: Math.round((uploadedBytes / file.size) * 100),
+            });
+          }
+        }
+
+        // Step 3: Complete multipart upload
+        return await this.completeUpload(attachmentId, parts, childOptions);
+      } catch (error) {
+        // Do not admit cleanup under a replacement identity after cancellation.
+        // Cancelled multipart sessions require server-side cleanup; no rollback is claimed.
+        if (!operation.signal.aborted) {
+          try {
+            operation.check();
+            await this.abortUpload(attachmentId, childOptions);
+          } catch {
+            /* Keep the original upload failure; cleanup has nevertheless settled. */
+          }
+        }
+        throw error;
+      }
+    }, options);
   }
 
   /**
    * Initiate multipart upload
    */
-  async initiateUpload(request: InitiateUploadRequest): Promise<InitiateUploadResponse> {
-    const data = await httpClient.post<InitiateUploadApiResponse>(`${HTTP_PATH}/upload/initiate`, {
-      conversation_id: request.conversationId,
-      project_id: request.projectId,
-      filename: request.filename,
-      mime_type: request.mimeType,
-      size_bytes: request.sizeBytes,
-      purpose: request.purpose,
-    });
+  async initiateUpload(
+    request: InitiateUploadRequest,
+    options: AttachmentOperationOptionsV2 = {}
+  ): Promise<InitiateUploadResponse> {
+    const data = await httpClient.post<InitiateUploadApiResponse>(
+      `${HTTP_PATH}/upload/initiate`,
+      {
+        conversation_id: request.conversationId,
+        project_id: request.projectId,
+        filename: request.filename,
+        mime_type: request.mimeType,
+        size_bytes: request.sizeBytes,
+        purpose: request.purpose,
+      },
+      {
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.parent ? { operation: options.parent } : {}),
+      }
+    );
     return {
       attachmentId: data.attachment_id,
       uploadId: data.upload_id,
@@ -305,28 +368,32 @@ class AttachmentServiceClass {
   async uploadPart(
     attachmentId: string,
     partNumber: number,
-    data: Blob
+    data: Blob,
+    options: AttachmentOperationOptionsV2 = {}
   ): Promise<UploadPartResponse> {
     const formData = new FormData();
     formData.append('attachment_id', attachmentId);
     formData.append('part_number', partNumber.toString());
     formData.append('file', data);
 
-    const response = await fetch(createApiUrl(`${HTTP_PATH}/upload/part`), {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: formData,
-    });
-
-    if (response.status === 401) {
-      handleUnauthorized();
-    }
-    if (!response.ok) {
-      const detail = await getErrorDetail(response);
-      throw new Error(detail || 'Failed to upload part');
-    }
-
-    return response.json() as Promise<UploadPartResponse>;
+    return runWebFetchV2(
+      createApiUrl(`${HTTP_PATH}/upload/part`),
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+        ...(options.signal ? { signal: options.signal } : {}),
+      },
+      async (response) => {
+        if (!response.ok) {
+          const detail = await getErrorDetail(response);
+          if (response.status === 401) handleUnauthorized();
+          throw new Error(detail || 'Failed to upload part');
+        }
+        return response.json() as Promise<UploadPartResponse>;
+      },
+      options.parent ? { parent: options.parent } : {}
+    );
   }
 
   /**
@@ -334,21 +401,35 @@ class AttachmentServiceClass {
    */
   async completeUpload(
     attachmentId: string,
-    parts: UploadPartResponse[]
+    parts: UploadPartResponse[],
+    options: AttachmentOperationOptionsV2 = {}
   ): Promise<AttachmentResponse> {
-    return httpClient.post<AttachmentResponse>(`${HTTP_PATH}/upload/complete`, {
-      attachment_id: attachmentId,
-      parts: parts,
-    });
+    return httpClient.post<AttachmentResponse>(
+      `${HTTP_PATH}/upload/complete`,
+      {
+        attachment_id: attachmentId,
+        parts: parts,
+      },
+      {
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.parent ? { operation: options.parent } : {}),
+      }
+    );
   }
 
   /**
    * Abort multipart upload
    */
-  async abortUpload(attachmentId: string): Promise<void> {
+  async abortUpload(
+    attachmentId: string,
+    options: AttachmentOperationOptionsV2 = {}
+  ): Promise<void> {
     const formData = new FormData();
     formData.append('attachment_id', attachmentId);
-    await httpClient.upload(`${HTTP_PATH}/upload/abort`, formData);
+    await httpClient.upload(`${HTTP_PATH}/upload/abort`, formData, undefined, {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.parent ? { operation: options.parent } : {}),
+    });
   }
 
   /**

@@ -159,6 +159,34 @@ class TestHITLAgentState:
         assert restored.message_id == "client-message"
         assert restored.canonical_run_id == "plan-run"
 
+    def test_roundtrip_preserves_plugin_distribution(self):
+        descriptor = {
+            "profile_id": "default-v2",
+            "generation": 7,
+            "digest": "a" * 64,
+        }
+        distribution = {
+            "descriptor": descriptor,
+            "snapshot": {"profile_id": "default-v2", "generation": 7},
+            "envelope": {"version": 11, "nonce": "publication-11"},
+        }
+        original = HITLAgentState(
+            conversation_id="conv-v2",
+            message_id="message-v2",
+            tenant_id="tenant-v2",
+            project_id="project-v2",
+            hitl_request_id="permission-v2",
+            hitl_type="permission",
+            hitl_request_data={"action": "write"},
+            plugin_generation=descriptor,
+            plugin_distribution=distribution,
+        )
+
+        restored = HITLAgentState.from_dict(original.to_dict())
+
+        assert restored.plugin_generation == descriptor
+        assert restored.plugin_distribution == distribution
+
     def test_state_with_pending_tool_call_id(self):
         """Test state with pending_tool_call_id field."""
         state = HITLAgentState(

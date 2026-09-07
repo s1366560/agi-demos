@@ -6,19 +6,19 @@ import type {
   ProjectAdministrationSnapshotBase,
 } from './projectAdministrationClient';
 import {
-  createProjectMaintenanceClient,
   PROJECT_MAINTENANCE_LOCAL_REASON,
   PROJECT_MAINTENANCE_ROUTE_ID,
+  type ProjectMaintenanceClient,
 } from './projectMaintenanceClient';
 import {
-  createProjectSchemaClient,
   PROJECT_SCHEMA_LOCAL_REASON,
   PROJECT_SCHEMA_ROUTE_ID,
+  type ProjectSchemaClient,
 } from './projectSchemaClient';
 import {
-  createProjectSettingsClient,
   PROJECT_SETTINGS_LOCAL_REASON,
   PROJECT_SETTINGS_ROUTE_ID,
+  type ProjectSettingsClient,
 } from './projectSettingsClient';
 
 export const PROJECT_ADMINISTRATION_CAPABILITY_IDS = Object.freeze([
@@ -62,11 +62,14 @@ const REASON_PREFIXES: Readonly<Record<ProjectAdministrationCapabilityId, string
 
 export function createProjectAdministrationCapabilityClients(
   config: DesktopRuntimeConfig,
+  projectSchemaClient: Pick<ProjectSchemaClient, 'load'>,
+  projectMaintenanceClient: Pick<ProjectMaintenanceClient, 'load'>,
+  projectSettingsClient: Pick<ProjectSettingsClient, 'load'>,
 ): ProjectAdministrationCapabilityClients {
   return Object.freeze({
-    [PROJECT_SCHEMA_ROUTE_ID]: createProjectSchemaClient(config),
-    [PROJECT_MAINTENANCE_ROUTE_ID]: createProjectMaintenanceClient(config),
-    [PROJECT_SETTINGS_ROUTE_ID]: createProjectSettingsClient(config),
+    [PROJECT_SCHEMA_ROUTE_ID]: projectSchemaClient,
+    [PROJECT_MAINTENANCE_ROUTE_ID]: projectMaintenanceClient,
+    [PROJECT_SETTINGS_ROUTE_ID]: projectSettingsClient,
   });
 }
 

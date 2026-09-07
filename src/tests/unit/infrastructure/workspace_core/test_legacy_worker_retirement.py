@@ -5,17 +5,8 @@ from __future__ import annotations
 import ast
 import inspect
 from pathlib import Path
-from types import SimpleNamespace
-
-import pytest
 
 from src.infrastructure.adapters.primary.web import startup
-from src.infrastructure.adapters.primary.web.startup import (
-    attempt_recovery,
-    autonomy_waker,
-    task_execution_session_recovery as session_recovery,
-    workspace_plan_outbox,
-)
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 LEGACY_MODELS = {
@@ -28,13 +19,17 @@ RETIRED_MODULES = (
     "src/application/services/task_execution_session_monitor.py",
     "src/application/services/task_execution_session_recovery.py",
     "src/application/services/workspace_autonomy_idle_waker.py",
-    "src/infrastructure/adapters/primary/web/startup/attempt_recovery.py",
-    "src/infrastructure/adapters/primary/web/startup/workspace_plan_outbox.py",
     "src/infrastructure/agent/tools/workspace_planning_contract.py",
     "src/infrastructure/agent/workspace/goal_runtime/v2_bridge.py",
     "src/infrastructure/agent/workspace_plan/factory.py",
     "src/infrastructure/agent/workspace_plan/outbox_handlers.py",
     "src/infrastructure/agent/workspace_plan/run_controller.py",
+)
+RETIRED_STARTUP_MODULES = (
+    "src/infrastructure/adapters/primary/web/startup/attempt_recovery.py",
+    "src/infrastructure/adapters/primary/web/startup/autonomy_waker.py",
+    "src/infrastructure/adapters/primary/web/startup/task_execution_session_recovery.py",
+    "src/infrastructure/adapters/primary/web/startup/workspace_plan_outbox.py",
 )
 
 
@@ -85,40 +80,26 @@ def test_retired_agent_plan_runtime_has_no_legacy_sql_authority() -> None:
     } == {path: [] for path in plan_runtime_paths}
 
 
-@pytest.mark.unit
-async def test_retired_workspace_workers_never_start(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("WORKSPACE_ATTEMPT_RECOVERY_ENABLED", "true")
-    monkeypatch.setenv("WORKSPACE_AUTONOMY_IDLE_WAKE_ENABLED", "true")
-    monkeypatch.setenv("WORKSPACE_TASK_EXECUTION_SESSION_RECOVERY_ENABLED", "true")
-    monkeypatch.setenv("WORKSPACE_PLAN_OUTBOX_ENABLED", "true")
-
-    assert await attempt_recovery.initialize_attempt_recovery() is None
-    assert await attempt_recovery.recover_workspace_attempts_once("workspace-1") == 0
-    assert await autonomy_waker.initialize_autonomy_idle_waker() is None
-    assert (
-        await session_recovery.initialize_task_execution_session_recovery(
-            container=SimpleNamespace(),  # type: ignore[arg-type]
-            redis_client=None,
-        )
-        is None
+def test_retired_workspace_worker_startup_modules_are_deleted() -> None:
+    assert {path: (REPO_ROOT / path).exists() for path in RETIRED_STARTUP_MODULES} == dict.fromkeys(
+        RETIRED_STARTUP_MODULES, False
     )
-    assert await workspace_plan_outbox.initialize_workspace_plan_outbox_worker() is None
-    assert await workspace_plan_outbox.shutdown_workspace_plan_outbox_worker() is None
 
 
 def test_startup_package_does_not_export_retired_recovery_workers() -> None:
     source = inspect.getsource(startup)
+    assert "initialize_blackboard_outbox_dispatcher" not in source
     assert "initialize_attempt_recovery" not in source
     assert "initialize_task_execution_session_recovery" not in source
+    assert "shutdown_blackboard_outbox_dispatcher" not in source
     assert "shutdown_attempt_recovery" not in source
     assert "shutdown_task_execution_session_recovery" not in source
     assert "initialize_workspace_plan_outbox_worker" not in source
     assert "shutdown_workspace_plan_outbox_worker" not in source
 
 
-def test_retired_workspace_plan_outbox_does_not_import_legacy_worker_graph() -> None:
-    source = inspect.getsource(workspace_plan_outbox)
-    assert "workspace_plan.outbox_handlers" not in source
-    assert "WorkspacePlanOutboxWorker" not in source
+def test_retired_blackboard_outbox_has_no_static_startup_module() -> None:
+    retired_startup = (
+        REPO_ROOT / "src/infrastructure/adapters/primary/web/startup/blackboard_outbox.py"
+    )
+    assert not retired_startup.exists()

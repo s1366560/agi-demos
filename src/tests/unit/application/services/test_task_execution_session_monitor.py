@@ -296,6 +296,102 @@ class TestTaskExecutionSessionMonitor:
         )
         attempt_repo.find_by_workspace_task_id.assert_awaited_once_with(task.id, limit=5)
 
+    async def test_typed_turn_admission_drives_no_response_detection(
+        self,
+        db_session: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        task = _task()
+        attempt = _attempt()
+        task_service = AsyncMock()
+        task_service.get_task.return_value = task
+        attempt_repo = AsyncMock()
+        attempt_repo.find_by_workspace_task_id.return_value = [attempt]
+        db_session.add(
+            Conversation(
+                id="conv-session-monitor-1",
+                project_id=test_project_db.id,
+                tenant_id=test_project_db.tenant_id,
+                user_id=test_user.id,
+                title="Typed admission monitor",
+                status="active",
+                workspace_id=task.workspace_id,
+                linked_workspace_task_id=task.id,
+            )
+        )
+        db_session.add(
+            AgentExecutionEvent(
+                id="evt-session-monitor-admitted",
+                conversation_id="conv-session-monitor-1",
+                message_id="msg-session-monitor-admitted",
+                event_type="turn_admitted",
+                event_data={
+                    "role": "assistant",
+                    "content": "legacy fallback must not be used",
+                    "model_message": {
+                        "role": "user",
+                        "content": "Start the typed task",
+                    },
+                },
+                event_time_us=1,
+                event_counter=1,
+                created_at=_NOW - timedelta(minutes=2),
+            )
+        )
+        await db_session.flush()
+        service = TaskExecutionSessionMonitor(
+            db=db_session,
+            task_service=task_service,
+            command_service=AsyncMock(),
+            attempt_repo=attempt_repo,
+        )
+
+        state = await service.get_state(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            actor_user_id=test_user.id,
+        )
+
+        incident_types = {incident.type for incident in state.incidents}
+        assert state.has_user_input is True
+        assert state.has_assistant_output is False
+        assert state.recent_events[0]["message_id"] == "msg-session-monitor-admitted"
+        assert state.recent_events[0]["summary"] == "Start the typed task"
+        assert "no_assistant_response" in incident_types
+        assert "missing_execution_status" not in incident_types
+
+    @pytest.mark.parametrize(
+        "model_message",
+        [
+            None,
+            {"role": "assistant", "content": "not user input"},
+            {"role": "user", "content": {"text": "not a string"}},
+        ],
+    )
+    def test_malformed_typed_turn_admission_is_not_inferred_from_legacy_fields(
+        self,
+        model_message: object,
+    ) -> None:
+        event = AgentExecutionEvent(
+            id="evt-malformed-admission",
+            conversation_id="conv-session-monitor-1",
+            message_id="msg-malformed-admission",
+            event_type="turn_admitted",
+            event_data={
+                "role": "user",
+                "content": "legacy fallback must not be used",
+                "model_message": model_message,
+            },
+            event_time_us=1,
+            event_counter=1,
+            created_at=_NOW,
+        )
+
+        assert monitor_module._has_user_input([event]) is False
+        assert monitor_module._latest_user_input_time([event]) is None
+        assert monitor_module._event_summary(event) == "turn_admitted"
+
     async def test_detects_missing_execution_status_when_conversation_has_no_events(
         self,
         db_session: AsyncSession,

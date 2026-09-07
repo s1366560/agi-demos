@@ -1,3 +1,5 @@
+import type { StructuredImagePreviewClientV2 } from '../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
+import { resolveMarkdownArtifactImage } from '../features/chat/markdownArtifactImageModel';
 import '@radix-ui/themes/styles.css';
 import { useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -95,11 +97,35 @@ function historyMessage(): WorkspaceMessage {
   };
 }
 
+// Explicit presentation fixture, not authority/native acceptance evidence.
+function createQaImagePreviewClient(
+  kind: 'workspace' | 'conversation',
+): StructuredImagePreviewClientV2 {
+  return {
+    owner: Object.freeze({
+      kind,
+      tenantId: 'qa',
+      projectId: 'qa',
+      id: 'markdown-artifact-image-qa',
+    }),
+    async loadImage({ source, carriers, signal }) {
+      const resolution = resolveMarkdownArtifactImage(source, carriers);
+      const fixtureUrl = `${window.location.origin}/qa/routing-policy-implementation-before.png`;
+      if (resolution?.url !== fixtureUrl) throw new Error('QA image fixture unavailable');
+      const response = await fetch(fixtureUrl, { signal, credentials: 'omit' });
+      if (!response.ok) throw new Error('QA image fixture unavailable');
+      return response.blob();
+    },
+  };
+}
+
 function MarkdownArtifactImageQa() {
   const [appearance, setAppearance] = useState<QaAppearance>('dark');
   const [view, setView] = useState<QaView>('live-pending');
   const [narrow, setNarrow] = useState(false);
   const state = useMemo(() => timelineState(view), [view]);
+  const workspaceImageClient = useMemo(() => createQaImagePreviewClient('workspace'), []);
+  const conversationImageClient = useMemo(() => createQaImagePreviewClient('conversation'), []);
 
   return (
     <Theme appearance={appearance} accentColor="cyan" grayColor="slate" radius="medium">
@@ -146,9 +172,13 @@ function MarkdownArtifactImageQa() {
           <div className="message-scroll">
             <div className="message-stack">
               {view === 'history' ? (
-                <WorkspaceTranscriptMessage message={historyMessage()} />
+                <WorkspaceTranscriptMessage
+                  imagePreviewClient={workspaceImageClient}
+                  message={historyMessage()}
+                />
               ) : (
                 <AgentTimeline
+                  imagePreviewClient={conversationImageClient}
                   state={state}
                   expandedItems={{}}
                   onToggleItem={() => undefined}

@@ -1,16 +1,20 @@
-"""Tool Selection Strategy - structured tool filtering for LLM context optimization.
+"""Agent-backed tool filtering for LLM context optimization.
 
-When too many tools are available, this module preserves deterministic safety
-filters and allows an injected agent-backed ranker to order candidates. It
-does not infer tool relevance from conversation keywords locally.
+Structural allowlists remain deterministic. Subjective budget pruning happens
+only when an explicit Agent ranker is injected; otherwise the complete tool set
+is preserved.
 """
 
+import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, runtime_checkable
+
+from src.infrastructure.logging_redaction import redact_sensitive_log_text
 
 logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger("agent_decision_audit")
 
 
 # Core tools that should always be included
@@ -36,9 +40,6 @@ SKILL_TOOLS: set[str] = {
     "skill_sync",
 }
 
-# High priority baseline score for core tools
-CORE_TOOL_BASELINE_SCORE = 100
-
 
 @dataclass
 class ToolSelectionContext:
@@ -55,63 +56,41 @@ class ToolSelectionContext:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, kw_only=True)
+class ToolRankingAuditV2:
+    """Complete audit envelope for one Agent tool-ranking judgment."""
+
+    agent_id: str
+    tool_name: str
+    input_json: Mapping[str, Any]
+    output_json: Mapping[str, Any]
+    rationale: str
+    latency_ms: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolRankingDecisionV2:
+    """Validated Agent ordering plus its structured tool-call audit."""
+
+    ordered_tool_names: tuple[str, ...]
+    audit: ToolRankingAuditV2
+
+
+@runtime_checkable
 class SemanticToolRanker(Protocol):
-    """Protocol for pluggable semantic ranking backends."""
+    """Protocol for an audited structured-tool-call ranking authority."""
 
     name: str
+    decision_mode: str
+    audit_enabled: bool
 
     def rank_tools(
         self,
         tools: dict[str, Any],
         context: ToolSelectionContext,
-        *,
-        score_fallback: Callable[[Any], float],
-    ) -> list[str]:
-        """Return ordered tool names from highest to lowest relevance."""
+    ) -> ToolRankingDecisionV2:
+        """Return the Agent ordering and complete decision audit."""
         ...
-
-
-class DeterministicToolRanker:
-    """Safe default ranker using only structured/static tool facts."""
-
-    name = "deterministic"
-
-    def rank_tools(
-        self,
-        tools: dict[str, Any],
-        context: ToolSelectionContext,
-        *,
-        score_fallback: Callable[[Any], float],
-    ) -> list[str]:
-        _ = context
-        ranked = [
-            (name, score_fallback(tool), index) for index, (name, tool) in enumerate(tools.items())
-        ]
-        ranked.sort(key=lambda item: (-item[1], item[2]))
-        return [name for name, _, _ in ranked]
-
-
-class _CallableSemanticToolRanker:
-    """Adapter for function-style semantic ranker callables."""
-
-    name = "custom_callable"
-
-    def __init__(
-        self, callback: Callable[[dict[str, Any], ToolSelectionContext], list[str]]
-    ) -> None:
-        self._callback = callback
-
-    def rank_tools(
-        self,
-        tools: dict[str, Any],
-        context: ToolSelectionContext,
-        *,
-        score_fallback: Callable[[Any], float],
-    ) -> list[str]:
-        result = self._callback(tools, context)
-        if not isinstance(result, list):
-            raise TypeError("semantic_ranker callback must return List[str]")
-        return [str(name) for name in result]
 
 
 class ToolSelector:
@@ -121,10 +100,6 @@ class ToolSelector:
     this selector ranks and filters tools to reduce LLM
     context consumption while preserving functionality.
     """
-
-    def __init__(self) -> None:
-        """Initialize the tool selector."""
-        self._deterministic_ranker = DeterministicToolRanker()
 
     def select_tools(
         self,
@@ -144,13 +119,20 @@ class ToolSelector:
         if len(tools) <= context.max_tools:
             return list(tools.keys())
 
-        # Score each tool
         ranker = self._resolve_semantic_ranker(context)
+        if ranker is None:
+            logger.debug(
+                "Tool budget exceeded without an Agent ranker; preserving all %d tools",
+                len(tools),
+            )
+            return list(tools)
         ranked_names = self._rank_with_backend(
             ranker,
             tools,
             context,
         )
+        if ranked_names is None:
+            return list(tools)
 
         # Select top tools
         selected = []
@@ -178,152 +160,100 @@ class ToolSelector:
 
         return selected
 
-    def score_tool_relevance(
+    def _resolve_semantic_ranker(
         self,
-        tool: Any,
         context: ToolSelectionContext,
-    ) -> float:
-        """Score a tool's relevance to the context.
-
-        Args:
-            tool: Tool object with name and description
-            context: Selection context
-
-        Returns:
-            Relevance score (higher = more relevant)
-        """
-        # Core tools get high baseline score
-        tool_name = getattr(tool, "name", "")
-        if tool_name in CORE_TOOLS:
-            return CORE_TOOL_BASELINE_SCORE
-
-        score = 0.0
-
-        # MCP tools get slight bonus (they're user-configured, likely important)
-        if tool_name.startswith("mcp__"):
-            score += 1.0
-
-        score += self._resolve_quality_boost(
-            tool_name,
-            context.metadata if isinstance(context.metadata, Mapping) else {},
-        )
-
-        return score
-
-    def _resolve_semantic_ranker(self, context: ToolSelectionContext) -> SemanticToolRanker:
+    ) -> SemanticToolRanker | None:
         metadata = context.metadata if isinstance(context.metadata, Mapping) else {}
         backend = str(metadata.get("semantic_backend", "")).strip().lower()
-
-        if backend == "embedding_vector":
-            embedding_ranker = metadata.get("embedding_ranker")
-            if hasattr(embedding_ranker, "rank_tools"):
-                return embedding_ranker  # type: ignore[return-value]
-            if callable(embedding_ranker):
-                return _CallableSemanticToolRanker(
-                    cast(
-                        Callable[[dict[str, Any], ToolSelectionContext], list[str]],
-                        embedding_ranker,
-                    )
-                )
+        if backend != "agent_decision":
+            if backend:
+                logger.debug("Ignoring non-Agent tool ranking backend: %s", backend)
+            return None
 
         custom_ranker = metadata.get("semantic_ranker")
-        if hasattr(custom_ranker, "rank_tools"):
-            return custom_ranker  # type: ignore[return-value]
-        if callable(custom_ranker):
-            return _CallableSemanticToolRanker(
-                cast(Callable[[dict[str, Any], ToolSelectionContext], list[str]], custom_ranker)
+        if (
+            isinstance(custom_ranker, SemanticToolRanker)
+            and custom_ranker.decision_mode == "structured_tool_call"
+            and custom_ranker.audit_enabled is True
+        ):
+            return custom_ranker
+        if custom_ranker is not None:
+            logger.warning(
+                "Ignoring tool ranker without the structured decision and audit contract"
             )
-
-        if backend and backend != "agent_decision":
-            logger.debug("Ignoring unsupported local tool ranking backend: %s", backend)
-        return self._deterministic_ranker
-
-    def _resolve_quality_boost(self, tool_name: str, metadata: Mapping[str, Any]) -> float:
-        scores = metadata.get("tool_quality_scores")
-        if isinstance(scores, Mapping):
-            raw = scores.get(tool_name)
-            try:
-                score = float(raw) if raw is not None else 0.0
-            except (TypeError, ValueError):
-                score = None
-            if score is not None:
-                return max(0.0, min(score, 1.0)) * 10.0
-
-        stats = metadata.get("tool_quality_stats")
-        if isinstance(stats, Mapping):
-            raw_stats = stats.get(tool_name)
-            if isinstance(raw_stats, Mapping):
-                try:
-                    success_rate = float(raw_stats.get("success_rate", 0.0))
-                except (TypeError, ValueError):
-                    success_rate = 0.0
-                try:
-                    avg_duration_ms = float(raw_stats.get("avg_duration_ms", 0.0))
-                except (TypeError, ValueError):
-                    avg_duration_ms = 0.0
-
-                normalized_success = max(0.0, min(success_rate, 1.0))
-                latency_penalty = min(max(avg_duration_ms, 0.0) / 5000.0, 1.0) * 0.2
-                return max(0.0, normalized_success - latency_penalty) * 10.0
-
-        return 0.0
+        return None
 
     def _rank_with_backend(
         self,
         ranker: SemanticToolRanker,
         tools: dict[str, Any],
         context: ToolSelectionContext,
-    ) -> list[str]:
-        def _score_fallback(tool: Any) -> float:
-            return self.score_tool_relevance(tool, context)
-
+    ) -> list[str] | None:
         try:
-            ranked_names = ranker.rank_tools(
-                tools,
-                context,
-                score_fallback=_score_fallback,
-            )
+            decision = ranker.rank_tools(tools, context)
         except Exception:
-            logger.exception("Semantic ranker failed, using deterministic fallback")
-            ranked_names = self._deterministic_ranker.rank_tools(
-                tools,
-                context,
-                score_fallback=_score_fallback,
+            logger.exception("Agent tool ranker failed; preserving the complete tool set")
+            return None
+
+        if not isinstance(decision, ToolRankingDecisionV2):
+            logger.warning("Agent tool ranker returned no structured decision; preserving all")
+            return None
+        ranked_names = decision.ordered_tool_names
+        audit = decision.audit
+        if (
+            not isinstance(ranked_names, tuple)
+            or not all(isinstance(name, str) and name in tools for name in ranked_names)
+            or len(ranked_names) != len(set(ranked_names))
+            or not _is_valid_tool_ranking_audit_v2(
+                audit,
+                candidate_tool_names=tuple(tools),
+                ordered_tool_names=ranked_names,
             )
-
-        unique_ranked: list[str] = []
-        seen: set[str] = set()
-        for name in ranked_names:
-            if name in tools and name not in seen:
-                unique_ranked.append(name)
-                seen.add(name)
-
-        # Guarantee all tools are represented in deterministic fallback order.
-        if len(unique_ranked) < len(tools):
-            for name in self._deterministic_ranker.rank_tools(
-                tools,
-                context,
-                score_fallback=_score_fallback,
-            ):
-                if name in seen:
-                    continue
-                unique_ranked.append(name)
-                seen.add(name)
-
-        return unique_ranked
+        ):
+            logger.warning("Agent tool ranker returned an invalid decision; preserving all")
+            return None
+        _log_tool_ranking_audit_v2(audit)
+        return list(ranked_names)
 
 
-# Global selector instance
-_selector: ToolSelector | None = None
+def _is_valid_tool_ranking_audit_v2(
+    audit: object,
+    *,
+    candidate_tool_names: tuple[str, ...],
+    ordered_tool_names: tuple[str, ...],
+) -> bool:
+    if not isinstance(audit, ToolRankingAuditV2):
+        return False
+    return bool(
+        audit.agent_id.strip()
+        and audit.tool_name.strip()
+        and isinstance(audit.input_json, Mapping)
+        and audit.input_json.get("candidate_tool_names") == list(candidate_tool_names)
+        and isinstance(audit.output_json, Mapping)
+        and audit.output_json.get("ordered_tool_names") == list(ordered_tool_names)
+        and audit.rationale.strip()
+        and isinstance(audit.latency_ms, int)
+        and not isinstance(audit.latency_ms, bool)
+        and audit.latency_ms >= 0
+    )
 
 
-def get_tool_selector() -> ToolSelector:
-    """Get the global tool selector instance.
+def _log_tool_ranking_audit_v2(audit: ToolRankingAuditV2) -> None:
+    audit_logger.info(
+        "Agent tool ranking judgment completed",
+        extra={
+            "agent_id": audit.agent_id,
+            "tool_name": audit.tool_name,
+            "input": _redacted_audit_json_v2(audit.input_json),
+            "output": _redacted_audit_json_v2(audit.output_json),
+            "rationale": redact_sensitive_log_text(audit.rationale),
+            "latency_ms": audit.latency_ms,
+        },
+    )
 
-    Returns:
-        ToolSelector singleton
-    """
-    global _selector
-    if _selector is None:
-        _selector = ToolSelector()
-    return _selector
+
+def _redacted_audit_json_v2(value: Mapping[str, Any]) -> str:
+    return redact_sensitive_log_text(
+        json.dumps(dict(value), ensure_ascii=False, sort_keys=True, default=str)
+    )

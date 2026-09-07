@@ -1,14 +1,15 @@
 # FastAPI dependencies for authentication
 
-import logging
-from inspect import isawaitable
-from typing import cast
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator, AsyncIterator
+from typing import Protocol, cast
 
 from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
@@ -34,85 +35,97 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
     refresh_select_statement,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Project
-from src.infrastructure.adapters.secondary.persistence.sql_graph_store_repository import (
-    SqlGraphStoreRepository,
+from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX
+from src.infrastructure.plugins.v2.backend_store_services import BackendStoreServicesV2
+from src.infrastructure.plugins.v2.boundary import current_generation_v2
+from src.infrastructure.plugins.v2.graph_runtime import (
+    GRAPH_RUNTIME_SERVICE_V2,
+    GraphRuntimeServiceV2,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_retrieval_store_repository import (
-    SqlRetrievalStoreRepository,
+from src.infrastructure.plugins.v2.retrieval_runtime import (
+    RETRIEVAL_RUNTIME_SERVICE_V2,
+    RetrievalRuntimeServiceV2,
 )
-from src.infrastructure.graph.backend_factory import build_default_factory
-from src.infrastructure.graph.registry import (
-    get_env_default_store,
-    get_graph_backend_registry,
-)
-from src.infrastructure.retrieval.backend_factory import build_default_retrieval_factory
-from src.infrastructure.retrieval.registry import (
-    get_env_default_retrieval_store,
-    get_retrieval_backend_registry,
-)
-
-logger = logging.getLogger(__name__)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
-def get_neo4j_client(request: Request) -> None:
-    """Get Neo4j client from app state for direct graph queries."""
+class _BackendStoreAuthorityProtocolV2(Protocol):
+    """Cycle-free structural view of the canonical backend-store authority."""
+
+    db: AsyncSession
+    services: BackendStoreServicesV2
+
+
+async def _backend_store_authority_dependency_proxy_v2(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[_BackendStoreAuthorityProtocolV2]:
+    """Lazily enter the canonical authority without an import cycle."""
+    from src.infrastructure.adapters.primary.web.backend_store_authority_v2 import (
+        backend_store_authority_dependency_v2,
+    )
+
+    dependency = cast(
+        AsyncGenerator[_BackendStoreAuthorityProtocolV2, None],
+        backend_store_authority_dependency_v2(
+            request=request,
+            current_user=current_user,
+            db=db,
+        ),
+    )
     try:
-        return cast(None, request.app.state.container.neo4j_client)
-    except Exception:
-        logger.warning("Failed to get neo4j_client from container")
-        return None
+        yield await anext(dependency)
+    finally:
+        await dependency.aclose()
 
 
-def get_workflow_engine(request: Request) -> None:
-    """Get WorkflowEngine from app state.
+def get_neo4j_client(_request: Request) -> object | None:
+    """Resolve direct graph-driver access from the request's generation."""
+    graph_service = _graph_runtime_v2().graph_service
+    return getattr(graph_service, "client", None)
 
-    Returns the Temporal WorkflowEngine for submitting workflow tasks.
-    """
-    try:
-        app = request.app
-        state = app.state
-    except AttributeError as e:
-        logger.critical(
-            "Application state is not properly configured for workflow engine. "
-            "Ensure app.state and workflow_engine are initialized during app startup.",
-            exc_info=True,
+
+def _graph_runtime_v2() -> GraphRuntimeServiceV2:
+    runtime = current_generation_v2().resolve(
+        GRAPH_RUNTIME_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    if not isinstance(runtime, GraphRuntimeServiceV2):
+        raise RuntimeV2Error(
+            "invalid_graph_runtime",
+            "pinned generation has an invalid graph runtime service",
         )
-        raise RuntimeError(
-            "Workflow engine not initialized. Cannot process workflow requests."
-        ) from e
+    return runtime
 
-    if not hasattr(state, "workflow_engine"):
-        logger.critical(
-            "Workflow engine not available in app state. "
-            "Ensure workflow_engine is initialized during app startup."
+
+def _retrieval_runtime_v2() -> RetrievalRuntimeServiceV2:
+    runtime = current_generation_v2().resolve(
+        RETRIEVAL_RUNTIME_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    if not isinstance(runtime, RetrievalRuntimeServiceV2):
+        raise RuntimeV2Error(
+            "invalid_retrieval_runtime",
+            "pinned generation has an invalid env retrieval runtime service",
         )
-        raise RuntimeError("Workflow engine not initialized. Cannot process workflow requests.")
-
-    return cast(None, state.workflow_engine)
+    return runtime
 
 
-def get_graph_service(request: Request) -> None:
-    """Get GraphServicePort (NativeGraphAdapter) from app state.
-
-    This provides the adapter layer that handles knowledge graph operations
-    including entity extraction, search, and community detection.
-    """
-    try:
-        return cast(None, request.app.state.container.graph_service)
-    except Exception:
-        logger.warning("Failed to get graph_service from container")
-        return None
+def get_graph_service(_request: Request) -> GraphStorePort | None:
+    """Resolve the optional graph resource from the pinned V2 generation."""
+    return _graph_runtime_v2().graph_service
 
 
-def get_graphiti_client(request: Request) -> GraphServicePort | None:
+def get_graphiti_client(request: Request) -> GraphStorePort | None:
     """Legacy dependency returning the native graph service.
 
     Older routes still refer to this as a Graphiti client, but the runtime graph
     implementation is NativeGraphAdapter. It exposes the direct driver for
     compatibility with legacy read/query routes.
     """
-    return cast(GraphServicePort | None, get_graph_service(request))
+    return get_graph_service(request)
 
 
 def _request_project_id(request: Request) -> str | None:
@@ -125,89 +138,61 @@ def _request_project_id(request: Request) -> str | None:
 
 async def get_graph_store(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    backend_store: _BackendStoreAuthorityProtocolV2 = Depends(
+        _backend_store_authority_dependency_proxy_v2
+    ),
 ) -> GraphStorePort | None:
-    """Get the ``GraphStorePort`` (pluggable graph backend) from app state.
+    """Get the ``GraphStorePort`` from the request's pinned generation.
 
     If a project_id is present in the path/query, resolve that project's
-    ``graph_store_id`` through the registry. Null bindings fall back to the env
-    default singleton registered at startup.
+    persisted ``graph_store_id`` through the V2 application service. Null and
+    environment bindings resolve to the generation-owned graph resource.
     """
-    try:
-        project_id = _request_project_id(request)
-        if project_id:
-            result = await db.execute(
-                refresh_select_statement(
-                    select(Project.graph_store_id).where(Project.id == project_id)
-                )
+    project_id = _request_project_id(request)
+    if project_id:
+        result = await backend_store.db.execute(
+            refresh_select_statement(
+                select(Project.tenant_id, Project.graph_store_id).where(Project.id == project_id)
             )
-            store_id = result.scalar_one_or_none()
-            if store_id:
-                registry = get_graph_backend_registry()
-                registered = registry.get_by_store_id(store_id)
-                if registered is not None:
-                    return cast(GraphStorePort, registered)
-                tenant_result = await db.execute(
-                    refresh_select_statement(
-                        select(Project.tenant_id).where(Project.id == project_id)
-                    )
-                )
-                tenant_id = tenant_result.scalar_one_or_none()
-                if tenant_id:
-                    graph_store = await SqlGraphStoreRepository(db).find_by_id(tenant_id, store_id)
-                    if graph_store is not None:
-                        built = build_default_factory().build(graph_store)
-                        if isawaitable(built):
-                            built = await built
-                        registry.register_store(store_id, built)
-                        return cast(GraphStorePort, built)
-        default_store = get_env_default_store()
-        if default_store is not None:
-            return cast(GraphStorePort, default_store)
-        store = request.app.state.container.graph_service
-        return cast(GraphStorePort | None, store)
-    except Exception:
-        logger.warning("Failed to get graph_store from container")
-        return None
+        )
+        row = result.first()
+        tenant_id = str(row[0]) if row is not None else None
+        store_id = str(row[1]) if row is not None and row[1] else None
+        if tenant_id and store_id:
+            if store_id.startswith(ENV_STORE_ID_PREFIX):
+                return get_graph_service(request)
+            return await backend_store.services.graph_service.resolve_backend(
+                tenant_id,
+                store_id,
+            )
+    return get_graph_service(request)
 
 
 async def get_retrieval_store(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    backend_store: _BackendStoreAuthorityProtocolV2 = Depends(
+        _backend_store_authority_dependency_proxy_v2
+    ),
 ) -> RetrievalStorePort | None:
     """Resolve the project-bound retrieval backend, or env default."""
-    try:
-        project_id = _request_project_id(request)
-        if project_id:
-            result = await db.execute(
-                refresh_select_statement(
-                    select(Project.tenant_id, Project.retrieval_store_id).where(
-                        Project.id == project_id
-                    )
+    project_id = _request_project_id(request)
+    if project_id:
+        result = await backend_store.db.execute(
+            refresh_select_statement(
+                select(Project.tenant_id, Project.retrieval_store_id).where(
+                    Project.id == project_id
                 )
             )
-            row = result.first()
-            row_data = row._mapping if row else {}
-            retrieval_store_id = row_data.get("retrieval_store_id")
-            tenant_id = row_data.get("tenant_id")
-            if retrieval_store_id and tenant_id:
-                registry = get_retrieval_backend_registry()
-                registered = registry.get_by_store_id(retrieval_store_id)
-                if registered is not None:
-                    return cast(RetrievalStorePort, registered)
-                retrieval_store = await SqlRetrievalStoreRepository(db).find_by_id(
-                    tenant_id,
-                    retrieval_store_id,
-                )
-                if retrieval_store is not None:
-                    built = build_default_retrieval_factory().build(retrieval_store)
-                    registry.register_store(retrieval_store_id, built)
-                    return cast(RetrievalStorePort, built)
-        default_store = get_env_default_retrieval_store()
-        return cast(RetrievalStorePort | None, default_store)
-    except Exception:
-        logger.warning("Failed to get retrieval_store from registry")
-        return None
+        )
+        row = result.first()
+        tenant_id = str(row[0]) if row is not None else None
+        retrieval_store_id = str(row[1]) if row is not None and row[1] else None
+        if retrieval_store_id and tenant_id:
+            return await backend_store.services.retrieval_service.resolve_backend(
+                tenant_id,
+                retrieval_store_id,
+            )
+    return _retrieval_runtime_v2().retrieval_store
 
 
 __all__ = [
@@ -227,7 +212,6 @@ __all__ = [
     "get_neo4j_client",
     "get_password_hash",
     "get_retrieval_store",
-    "get_workflow_engine",
     "hash_api_key",
     "initialize_default_credentials",
     "security",

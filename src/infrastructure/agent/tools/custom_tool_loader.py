@@ -24,7 +24,7 @@ import importlib.util
 import logging
 import sys
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -62,14 +62,9 @@ class CustomToolLoader:
     """Discover and load custom tool files from the filesystem.
 
     Each tool file is expected to use the ``@tool_define`` decorator which
-    auto-registers ``ToolInfo`` instances into the module-level
-    ``_TOOL_REGISTRY`` in ``define.py``.
-
-    To avoid polluting that global registry, we:
-    1. Snapshot ``_TOOL_REGISTRY`` before import.
-    2. Import the file.
-    3. Diff to find newly registered tools.
-    4. Remove them from the global registry (they live in our own dict).
+    registers ``ToolInfo`` instances into an invocation-local capture during
+    import. The process-global decorator registry is never consulted or
+    mutated by this loader.
 
     Args:
         base_path: Project root directory containing ``.memstack/``.
@@ -180,6 +175,7 @@ class CustomToolLoader:
                         continue
                     info = modified
 
+                info = replace(info, tags=info.tags | frozenset({"custom"}))
                 if self._sandbox_mode:
                     info = self._wrap_as_sandbox_tool(info, file_path)
                 all_tools[name] = info
@@ -217,10 +213,8 @@ class CustomToolLoader:
                         break
                     stripped = line.strip()
                     if stripped.startswith("# memstack:dependencies:"):
-                        raw = stripped[len("# memstack:dependencies:"):].strip()
-                        deps.extend(
-                            d.strip() for d in raw.split(",") if d.strip()
-                        )
+                        raw = stripped[len("# memstack:dependencies:") :].strip()
+                        deps.extend(d.strip() for d in raw.split(",") if d.strip())
         except OSError:
             pass
         return deps
@@ -297,21 +291,19 @@ class CustomToolLoader:
     ) -> tuple[dict[str, ToolInfo], list[CustomToolDiagnostic]]:
         """Load a single tool file and extract ToolInfo instances.
 
-        Uses the snapshot-diff approach on ``_TOOL_REGISTRY`` to capture
-        tools registered via ``@tool_define`` without permanent side effects.
+        Uses an invocation-local decorator capture to collect tools registered
+        via ``@tool_define`` without process-global side effects.
         Also scans module-level attributes for ``ToolInfo`` instances that
         may have been created directly (without the decorator).
         """
         diagnostics: list[CustomToolDiagnostic] = []
         module_name = f"{_MODULE_PREFIX}{file_path.stem}"
 
-        # Snapshot the global registry before import.
-        from src.infrastructure.agent.tools.define import get_registered_tools, pop_registered_tool
-
-        pre_keys = set(get_registered_tools().keys())
+        from src.infrastructure.agent.tools.define import capture_tool_definitions
 
         try:
-            module = self._import_file(file_path, module_name, base_path=self._base_path)
+            with capture_tool_definitions() as captured:
+                module = self._import_file(file_path, module_name, base_path=self._base_path)
         except Exception as exc:
             import traceback
 
@@ -331,16 +323,7 @@ class CustomToolLoader:
             )
             return {}, diagnostics
 
-        # Diff to find newly registered tools.
-        post_keys = set(get_registered_tools().keys())
-        new_keys = post_keys - pre_keys
-
-        tools: dict[str, ToolInfo] = {}
-
-        # Capture decorator-registered tools.
-        for key in new_keys:
-            info = pop_registered_tool(key)
-            tools[key] = info
+        tools = dict(captured)
 
         # Also scan module attributes for ToolInfo instances that were
         # assigned directly (e.g. ``my_tool = ToolInfo(...)``).

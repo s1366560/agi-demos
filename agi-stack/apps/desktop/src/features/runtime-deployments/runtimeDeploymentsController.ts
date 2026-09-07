@@ -1,6 +1,8 @@
 import { DesktopApiError } from '../../api/client';
-import { RUNTIME_DEPLOYMENTS_CLOUD_ACTIONS } from './runtimeDeploymentsCapability';
-import { RuntimeDeploymentsUnavailableError } from './runtimeDeploymentsClient';
+import {
+  RUNTIME_DEPLOYMENTS_CLOUD_ACTIONS,
+  RuntimeDeploymentsUnavailableError,
+} from './runtimeDeploymentsContract';
 import type {
   RuntimeDeployment,
   RuntimeDeploymentDetailState,

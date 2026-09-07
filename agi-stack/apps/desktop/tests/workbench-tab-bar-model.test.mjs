@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -22,32 +23,36 @@ const conversationTab = (id, title = `Session ${id}`) => ({
   conversationId: id,
   title,
 });
+const tabBarSource = readFileSync(
+  new URL('../src/features/chrome/WorkbenchTabBar.tsx', import.meta.url),
+  'utf8',
+);
 
 test('tabKey distinguishes view and conversation tabs', () => {
   assert.equal(tabKey(viewTab('board')), 'view:board');
   assert.equal(tabKey(conversationTab('c-1')), 'conversation:c-1');
   assert.ok(isSameTab(viewTab('board'), viewTab('board')));
-  assert.ok(!isSameTab(viewTab('board'), viewTab('search')));
+  assert.ok(!isSameTab(viewTab('board'), viewTab('activity')));
   assert.ok(!isSameTab(viewTab('board'), conversationTab('board')));
 });
 
 test('ensureViewTab dedupes by section and keeps the declaration order', () => {
   let tabs = [];
-  tabs = ensureViewTab(tabs, 'search');
+  tabs = ensureViewTab(tabs, 'activity');
   tabs = ensureViewTab(tabs, 'workspace');
   tabs = ensureViewTab(tabs, 'board');
   assert.deepEqual(
     tabs.map((tab) => tab.section),
-    ['workspace', 'board', 'search'],
+    ['workspace', 'board', 'activity'],
   );
   const again = ensureViewTab(tabs, 'board');
   assert.deepEqual(again.map(tabKey), tabs.map(tabKey));
   // Views stay ahead of conversation tabs.
   tabs = ensureConversationTab(tabs, conversationTab('c-1'));
-  tabs = ensureViewTab(tabs, 'activity');
+  tabs = ensureViewTab(tabs, 'home');
   assert.deepEqual(
     tabs.map(tabKey),
-    ['view:workspace', 'view:board', 'view:search', 'view:activity', 'conversation:c-1'],
+    ['view:workspace', 'view:home', 'view:board', 'view:activity', 'conversation:c-1'],
   );
 });
 
@@ -56,10 +61,9 @@ test('view tab order covers exactly the navigable sections', () => {
     'workspace',
     'home',
     'board',
-    'automations',
-    'search',
     'activity',
   ]);
+  assert.doesNotMatch(tabBarSource, /automations:\s*'nav\.automations'|search:\s*'nav\.search'/u);
 });
 
 test('ensureConversationTab dedupes, appends in open order, refreshes titles', () => {

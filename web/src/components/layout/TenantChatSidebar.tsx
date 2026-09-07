@@ -33,6 +33,7 @@ import { projectAPI } from '@/services/api';
 
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 
+import { useWebTopNavigationItemsV2 } from '@/routes/v2/webNavigationAuthorityStateV2';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
 import {
@@ -806,21 +807,23 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const contextualProjectBasePath = contextualProjectId
     ? `${tenantBasePath}/project/${contextualProjectId}`
     : null;
+  const currentNavigationContext = contextualProjectBasePath ? 'project' : 'tenant';
+  const generationNavigationItems = useWebTopNavigationItemsV2(currentNavigationContext, {
+    tenantId: resolvedTenantId,
+    projectId: contextualProjectId,
+    preferredWorkspaceId,
+  });
   const contextualNavItems = useMemo(
     () =>
       getContextualTopNavItems({
         basePath: tenantBasePath,
+        navigationItems: generationNavigationItems,
         projectBasePath: contextualProjectBasePath,
-        preferredWorkspaceId,
         t: (key, fallback) => (fallback ? t(key, fallback) : t(key)),
-        tenantId: resolvedTenantId,
-        projectId: contextualProjectId,
       }),
     [
       contextualProjectBasePath,
-      contextualProjectId,
-      preferredWorkspaceId,
-      resolvedTenantId,
+      generationNavigationItems,
       t,
       tenantBasePath,
     ]
@@ -1271,7 +1274,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     []
   );
 
-  const confirmDeleteConversation = useCallback(async () => {
+  const confirmDeleteConversation = useCallback(() => {
     const target = deleteTarget;
     if (!target || !selectedProjectId) return;
 
@@ -1652,9 +1655,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             <div className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
               {t('agent.sidebar.workspaceTitle', 'Agent Workspace')}
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300">
-              {conversationCountText}
-            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">{conversationCountText}</p>
           </div>
         </div>
       </div>
@@ -1876,7 +1877,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   </button>
                 </div>
               ) : filteredConversations.length === 0 ? (
-                  <div className="text-center py-8 text-slate-600 dark:text-slate-300">
+                <div className="text-center py-8 text-slate-600 dark:text-slate-300">
                   <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                   <p className="text-xs">
                     {conversationFilter.trim()
@@ -2055,7 +2056,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               danger
               loading={isDeleting}
               onClick={() => {
-                void confirmDeleteConversation();
+                confirmDeleteConversation();
               }}
             >
               {t('agent.sidebar.deleteConversation', 'Delete conversation')}

@@ -6,6 +6,19 @@ Expand the chart name.
 {{- end -}}
 
 {{/*
+Require production deployments to publish an explicit finite protocol-v2 data-plane roster.
+Development may leave the roster empty so the application selects its local Python default.
+*/}}
+{{- define "memstack.pluginV2RequiredDataPlaneIds" -}}
+{{- $environment := lower (trim (toString .Values.config.environment)) -}}
+{{- $roster := trim (toString .Values.config.pluginV2RequiredDataPlaneIds) -}}
+{{- if and (or (eq $environment "production") (eq $environment "prod")) (empty $roster) -}}
+{{- fail "production requires config.pluginV2RequiredDataPlaneIds" -}}
+{{- end -}}
+{{- $roster -}}
+{{- end -}}
+
+{{/*
 Create a default fully qualified app name.
 */}}
 {{- define "memstack.fullname" -}}

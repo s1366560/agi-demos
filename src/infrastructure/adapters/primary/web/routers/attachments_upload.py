@@ -7,7 +7,7 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import Any, Self, cast
+from typing import Any, Self
 
 from fastapi import (
     APIRouter,
@@ -21,61 +21,41 @@ from fastapi import (
 )
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.attachment_service import AttachmentService
 from src.domain.model.agent.attachment import (
     DEFAULT_PART_SIZE,
     Attachment,
     AttachmentPurpose,
     AttachmentStatus,
 )
-from src.domain.ports.services.storage_service_port import PartUploadResult, StorageServicePort
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-)
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
-from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
-    SqlAttachmentRepository,
+from src.domain.ports.services.storage_service_port import PartUploadResult
+from src.infrastructure.adapters.primary.web.attachment_application_authority_v2 import (
+    AttachmentApplicationAuthorityV2,
+    attachment_application_authority_dependency_v2,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.attachment_services import (
+    AttachmentAccessDeniedV2,
+    AttachmentNotFoundV2,
+    AttachmentProjectAccessDeniedV2,
+    AttachmentServiceErrorV2,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/attachments", tags=["attachments"])
 
-# Cached storage service (stateless, can be reused)
-_storage_service: StorageServicePort | None = None
-
-
-def _get_storage_service() -> StorageServicePort:
-    """Get or create the storage service singleton (stateless)."""
-    global _storage_service
-    if _storage_service is None:
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        _storage_service = cast(StorageServicePort, container.storage_service())
-    return _storage_service
-
-
-async def get_attachment_service(
-    session: AsyncSession = Depends(get_db),
-) -> AttachmentService:
-    """Get attachment service with per-request database session."""
-    from src.configuration.config import get_settings
-
-    settings = get_settings()
-    repository = SqlAttachmentRepository(session)
-    return AttachmentService(
-        storage_service=_get_storage_service(),
-        attachment_repository=repository,
-        upload_max_size_llm_mb=settings.upload_max_size_llm_mb,
-        upload_max_size_sandbox_mb=settings.upload_max_size_sandbox_mb,
-    )
+_ATTACHMENT_HTTP_ERROR_SPECS: dict[type[AttachmentServiceErrorV2], tuple[int, str]] = {
+    AttachmentProjectAccessDeniedV2: (
+        http_status.HTTP_403_FORBIDDEN,
+        "Access denied to project",
+    ),
+    AttachmentNotFoundV2: (http_status.HTTP_404_NOT_FOUND, "Attachment not found"),
+    AttachmentAccessDeniedV2: (
+        http_status.HTTP_403_FORBIDDEN,
+        "Access denied to attachment",
+    ),
+}
 
 
 # === Request/Response Models ===
@@ -191,70 +171,12 @@ def _parse_purpose(purpose: str) -> AttachmentPurpose:
         ) from None
 
 
-async def _verify_project_access(project_id: str, user: User, db: AsyncSession) -> str:
-    """Verify project access and return the project's tenant ID."""
-    project_tenants = await _get_accessible_attachment_project_tenants({project_id}, user, db)
-    tenant_id = project_tenants.get(project_id)
-    if tenant_id is None:
-        raise HTTPException(
-            status_code=http_status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied to project"),
-        )
-    return tenant_id
-
-
-async def _get_accessible_attachment_project_tenants(
-    project_ids: set[str],
-    user: User,
-    db: AsyncSession,
-) -> dict[str, str]:
-    """Return accessible project IDs mapped to their authoritative tenant IDs."""
-    if not project_ids:
-        return {}
-
-    if user.is_superuser:
-        result = await db.execute(
-            refresh_select_statement(
-                select(Project.id, Project.tenant_id).where(Project.id.in_(project_ids))
-            )
-        )
-    else:
-        result = await db.execute(
-            refresh_select_statement(
-                select(Project.id, Project.tenant_id)
-                .join(UserProject, UserProject.project_id == Project.id)
-                .where(
-                    and_(
-                        UserProject.user_id == user.id,
-                        Project.id.in_(project_ids),
-                    )
-                )
-            )
-        )
-    return {str(project_id): str(tenant_id) for project_id, tenant_id in result.all()}
-
-
-async def _get_authorized_attachment(
-    attachment_id: str,
-    user: User,
-    db: AsyncSession,
-    attachment_service: AttachmentService,
-) -> Attachment:
-    """Load an attachment and verify tenant/project access before side effects."""
-    attachment = await attachment_service.get(attachment_id)
-    if not attachment:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=_("Attachment not found"),
-        )
-
-    project_tenant_id = await _verify_project_access(attachment.project_id, user, db)
-    if attachment.tenant_id != project_tenant_id:
-        raise HTTPException(
-            status_code=http_status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied to attachment"),
-        )
-    return attachment
+def _attachment_http_error(error: AttachmentServiceErrorV2) -> HTTPException:
+    status_code, detail = _ATTACHMENT_HTTP_ERROR_SPECS.get(
+        type(error),
+        (http_status.HTTP_400_BAD_REQUEST, "Attachment operation failed"),
+    )
+    return HTTPException(status_code=status_code, detail=_(detail))
 
 
 def _validate_part_upload(attachment: Attachment, part_number: int, data: bytes) -> None:
@@ -287,9 +209,9 @@ def _validate_complete_upload(attachment: Attachment, parts: list[CompleteUpload
 @router.post("/upload/initiate", response_model=InitiateUploadResponse)
 async def initiate_multipart_upload(
     request: InitiateUploadRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> InitiateUploadResponse:
     """
     Initialize a multipart upload for large files.
@@ -298,10 +220,11 @@ async def initiate_multipart_upload(
     upload each part using POST /upload/part, then complete with POST /upload/complete.
     """
     try:
+        attachments = attachment_application.services.attachments
         purpose = _parse_purpose(request.purpose)
-        project_tenant_id = await _verify_project_access(request.project_id, current_user, db)
+        project_tenant_id = await attachments.require_project_tenant(request.project_id)
 
-        attachment = await attachment_service.initiate_multipart_upload(
+        attachment = await attachments.service.initiate_multipart_upload(
             tenant_id=project_tenant_id,
             project_id=request.project_id,
             conversation_id=request.conversation_id,
@@ -320,6 +243,8 @@ async def initiate_multipart_upload(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=_("Invalid upload request")) from e
+    except AttachmentServiceErrorV2 as error:
+        raise _attachment_http_error(error) from error
     except HTTPException:
         raise
     except Exception as e:
@@ -335,9 +260,9 @@ async def upload_part(
     attachment_id: str = Form(..., description="ID of the attachment"),
     part_number: int = Form(..., ge=1, description="Part number (1-indexed)"),
     file: UploadFile = File(..., description="Part data"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> UploadPartResponse:
     """
     Upload a single part in a multipart upload.
@@ -346,16 +271,12 @@ async def upload_part(
     Each part (except the last) should be exactly part_size bytes.
     """
     try:
-        attachment = await _get_authorized_attachment(
-            attachment_id=attachment_id,
-            user=current_user,
-            db=db,
-            attachment_service=attachment_service,
-        )
+        attachments = attachment_application.services.attachments
+        attachment = await attachments.get_authorized(attachment_id)
         data = await file.read()
         _validate_part_upload(attachment, part_number, data)
 
-        result = await attachment_service.upload_part(
+        result = await attachments.service.upload_part(
             attachment_id=attachment_id,
             part_number=part_number,
             data=data,
@@ -368,6 +289,8 @@ async def upload_part(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=_("Invalid upload part")) from e
+    except AttachmentServiceErrorV2 as error:
+        raise _attachment_http_error(error) from error
     except HTTPException:
         raise
     except Exception as exc:
@@ -378,9 +301,9 @@ async def upload_part(
 @router.post("/upload/complete", response_model=AttachmentResponse)
 async def complete_multipart_upload(
     request: CompleteUploadRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> AttachmentResponse:
     """
     Complete a multipart upload.
@@ -389,12 +312,8 @@ async def complete_multipart_upload(
     The 'parts' array must contain all uploaded parts with their part_number and etag.
     """
     try:
-        attachment = await _get_authorized_attachment(
-            attachment_id=request.attachment_id,
-            user=current_user,
-            db=db,
-            attachment_service=attachment_service,
-        )
+        attachments = attachment_application.services.attachments
+        attachment = await attachments.get_authorized(request.attachment_id)
         _validate_complete_upload(attachment, request.parts)
 
         # Convert parts to PartUploadResult
@@ -406,7 +325,7 @@ async def complete_multipart_upload(
             for part in sorted(request.parts, key=lambda part: part.part_number)
         ]
 
-        attachment = await attachment_service.complete_multipart_upload(
+        attachment = await attachments.service.complete_multipart_upload(
             attachment_id=request.attachment_id,
             parts=parts,
         )
@@ -415,6 +334,8 @@ async def complete_multipart_upload(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=_("Invalid upload completion request")) from e
+    except AttachmentServiceErrorV2 as error:
+        raise _attachment_http_error(error) from error
     except HTTPException:
         raise
     except Exception as exc:
@@ -425,9 +346,9 @@ async def complete_multipart_upload(
 @router.post("/upload/abort")
 async def abort_multipart_upload(
     attachment_id: str = Form(..., description="ID of the attachment"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Abort a multipart upload.
@@ -435,19 +356,17 @@ async def abort_multipart_upload(
     Use this to cancel an in-progress multipart upload and clean up resources.
     """
     try:
-        authorized_attachment = await _get_authorized_attachment(
-            attachment_id=attachment_id,
-            user=current_user,
-            db=db,
-            attachment_service=attachment_service,
-        )
-        success = await attachment_service.abort_multipart_upload(authorized_attachment.id)
+        attachments = attachment_application.services.attachments
+        authorized_attachment = await attachments.get_authorized(attachment_id)
+        success = await attachments.service.abort_multipart_upload(authorized_attachment.id)
 
         if not success:
             raise HTTPException(status_code=404, detail=_("Attachment not found"))
 
         return {"success": True, "message": "Upload aborted"}
 
+    except AttachmentServiceErrorV2 as error:
+        raise _attachment_http_error(error) from error
     except HTTPException:
         raise
     except Exception as exc:
@@ -461,9 +380,9 @@ async def upload_simple(
     project_id: str = Form(..., description="ID of the project"),
     purpose: str = Form(default="both", description="Purpose of the attachment"),
     file: UploadFile = File(..., description="File to upload"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> AttachmentResponse:
     """
     Upload a small file directly (recommended for files ≤10MB).
@@ -471,11 +390,12 @@ async def upload_simple(
     For larger files, use the multipart upload endpoints instead.
     """
     try:
+        attachments = attachment_application.services.attachments
         purpose_enum = _parse_purpose(purpose)
-        project_tenant_id = await _verify_project_access(project_id, current_user, db)
+        project_tenant_id = await attachments.require_project_tenant(project_id)
         data = await file.read()
 
-        attachment = await attachment_service.upload_simple(
+        attachment = await attachments.service.upload_simple(
             tenant_id=project_tenant_id,
             project_id=project_id,
             conversation_id=conversation_id,
@@ -489,6 +409,8 @@ async def upload_simple(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=_("Invalid upload request")) from e
+    except AttachmentServiceErrorV2 as error:
+        raise _attachment_http_error(error) from error
     except HTTPException:
         raise
     except Exception as exc:
@@ -500,9 +422,9 @@ async def upload_simple(
 async def list_attachments(
     conversation_id: str = Query(..., description="Conversation ID to list attachments for"),
     status: str | None = Query(None, description="Filter by status"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> AttachmentListResponse:
     """
     List attachments for a conversation.
@@ -512,20 +434,10 @@ async def list_attachments(
     except ValueError:
         raise HTTPException(status_code=400, detail=_("Invalid attachment status")) from None
 
-    attachments = await attachment_service.get_by_conversation(
+    visible_attachments = await attachment_application.services.attachments.list_visible(
         conversation_id=conversation_id,
         status=status_enum,
     )
-    accessible_project_tenants = await _get_accessible_attachment_project_tenants(
-        {attachment.project_id for attachment in attachments},
-        current_user,
-        db,
-    )
-    visible_attachments = [
-        attachment
-        for attachment in attachments
-        if accessible_project_tenants.get(attachment.project_id) == attachment.tenant_id
-    ]
 
     return AttachmentListResponse(
         attachments=[_attachment_to_response(a) for a in visible_attachments],
@@ -536,19 +448,17 @@ async def list_attachments(
 @router.get("/{attachment_id}", response_model=AttachmentResponse)
 async def get_attachment(
     attachment_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> AttachmentResponse:
     """
     Get attachment details by ID.
     """
-    attachment = await _get_authorized_attachment(
-        attachment_id=attachment_id,
-        user=current_user,
-        db=db,
-        attachment_service=attachment_service,
-    )
+    try:
+        attachment = await attachment_application.services.attachments.get_authorized(attachment_id)
+    except AttachmentServiceErrorV2 as error:
+        raise _attachment_http_error(error) from error
 
     return _attachment_to_response(attachment)
 
@@ -556,20 +466,19 @@ async def get_attachment(
 @router.get("/{attachment_id}/download")
 async def download_attachment(
     attachment_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> RedirectResponse:
     """
     Download an attachment via presigned URL redirect.
     """
-    authorized_attachment = await _get_authorized_attachment(
-        attachment_id=attachment_id,
-        user=current_user,
-        db=db,
-        attachment_service=attachment_service,
-    )
-    url = await attachment_service.get_download_url(authorized_attachment.id)
+    attachments = attachment_application.services.attachments
+    try:
+        authorized_attachment = await attachments.get_authorized(attachment_id)
+    except AttachmentServiceErrorV2 as error:
+        raise _attachment_http_error(error) from error
+    url = await attachments.service.get_download_url(authorized_attachment.id)
 
     if not url:
         raise HTTPException(status_code=404, detail=_("Attachment not found or not ready"))
@@ -580,20 +489,19 @@ async def download_attachment(
 @router.delete("/{attachment_id}")
 async def delete_attachment(
     attachment_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    attachment_service: AttachmentService = Depends(get_attachment_service),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Delete an attachment.
     """
-    authorized_attachment = await _get_authorized_attachment(
-        attachment_id=attachment_id,
-        user=current_user,
-        db=db,
-        attachment_service=attachment_service,
-    )
-    success = await attachment_service.delete(authorized_attachment.id)
+    attachments = attachment_application.services.attachments
+    try:
+        authorized_attachment = await attachments.get_authorized(attachment_id)
+    except AttachmentServiceErrorV2 as error:
+        raise _attachment_http_error(error) from error
+    success = await attachments.service.delete(authorized_attachment.id)
 
     if not success:
         raise HTTPException(status_code=404, detail=_("Attachment not found"))

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException, status
@@ -26,79 +26,48 @@ class _FakeWebSocket:
 
 
 @pytest.mark.unit
-async def test_tunnel_connect_rejects_missing_auth_before_adapter(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_tunnel_connect_rejects_missing_auth_before_adapter() -> None:
     websocket = _FakeWebSocket()
-    adapter = SimpleNamespace(handle_websocket=AsyncMock())
-    monkeypatch.setattr(router_mod, "_tunnel_adapter", adapter)
 
-    await router_mod.tunnel_connect(websocket, token=None, db=SimpleNamespace())
+    await router_mod.tunnel_connect(websocket, tunnel=None)
 
     assert websocket.accepted is False
-    assert websocket.closed is True
-    assert websocket.close_code == 4003
-    adapter.handle_websocket.assert_not_awaited()
+    assert websocket.closed is False
 
 
 @pytest.mark.unit
-async def test_tunnel_connect_preserves_authenticated_connection(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_tunnel_connect_preserves_authenticated_connection() -> None:
     websocket = _FakeWebSocket()
-    adapter = SimpleNamespace(handle_websocket=AsyncMock())
-    monkeypatch.setattr(router_mod, "_tunnel_adapter", adapter)
-    monkeypatch.setattr(
-        router_mod,
-        "authenticate_websocket_or_close",
-        AsyncMock(return_value=("user-1", "tenant-1")),
-    )
+    authority = SimpleNamespace(connect=AsyncMock())
 
-    await router_mod.tunnel_connect(websocket, token=None, db=SimpleNamespace())
+    await router_mod.tunnel_connect(websocket, tunnel=authority)
 
-    adapter.handle_websocket.assert_awaited_once_with(websocket, subprotocol=None)
+    authority.connect.assert_awaited_once_with(websocket)
 
 
 @pytest.mark.unit
-async def test_tunnel_status_rejects_non_admin(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        router_mod,
-        "has_global_admin_access",
-        AsyncMock(return_value=False),
+async def test_tunnel_status_rejects_non_admin() -> None:
+    authority = SimpleNamespace(
+        status=Mock(
+            side_effect=HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required",
+            )
+        )
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await router_mod.tunnel_status(
-            SimpleNamespace(is_superuser=False, roles=[]),
-            SimpleNamespace(),
-        )
+        await router_mod.tunnel_status(tunnel=authority)
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.unit
-async def test_tunnel_status_hides_connection_identifiers(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        router_mod,
-        "has_global_admin_access",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        router_mod,
-        "_tunnel_adapter",
-        SimpleNamespace(
-            get_status=lambda: {
-                "active_connections": 1,
-                "connection_ids": ["sensitive-connection-id"],
-            }
-        ),
+async def test_tunnel_status_hides_connection_identifiers() -> None:
+    authority = SimpleNamespace(
+        status=Mock(return_value={"active_connections": 1}),
     )
 
-    result = await router_mod.tunnel_status(
-        SimpleNamespace(is_superuser=True, roles=[]),
-        SimpleNamespace(),
-    )
+    result = await router_mod.tunnel_status(tunnel=authority)
 
     assert result == {"active_connections": 1}

@@ -31,7 +31,6 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.conversation.conversation import Conversation
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
@@ -50,6 +49,10 @@ from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityScope,
     WorkspaceAuthorityUnavailableError,
 )
+from src.infrastructure.adapters.primary.web.conversation_participant_http_application_authority_v2 import (
+    ConversationParticipantHttpApplicationAuthorityV2,
+    conversation_participant_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -58,14 +61,13 @@ from src.infrastructure.adapters.primary.web.workspace_authority import (
     get_workspace_authority,
     workspace_core_unavailable_error,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-    SqlConversationRepository,
-)
 from src.infrastructure.i18n import gettext as _
-
-from .utils import get_container_with_db
+from src.infrastructure.plugins.v2.conversation_participant_services import (
+    ConversationParticipantConversationNotFoundV2,
+    ConversationParticipantProjectNotFoundV2,
+    ConversationParticipantServiceV2,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -144,23 +146,17 @@ class RosterParticipantResponse(BaseModel):
 
 
 async def _load_conversation_and_project(
-    request: Request,
-    db: AsyncSession,
+    service: ConversationParticipantServiceV2,
     conversation_id: str,
-) -> tuple[SqlConversationRepository, Conversation, Project]:
+) -> tuple[Conversation, Project]:
     """Load the conversation + its project, or raise 404."""
-    container = get_container_with_db(request, db)
-    conv_repo = container.conversation_repository()
-    project_repo = container.project_repository()
-
-    conversation = await conv_repo.find_by_id(conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-    project = await project_repo.find_by_id(conversation.project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail=_("Project not found"))
-    return conv_repo, conversation, project
+    try:
+        loaded = await service.load(conversation_id)
+    except ConversationParticipantConversationNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from exc
+    except ConversationParticipantProjectNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Project not found")) from exc
+    return loaded.conversation, loaded.project
 
 
 def _assert_tenant_scope(
@@ -176,15 +172,13 @@ def _assert_tenant_scope(
 
 
 async def _assert_agent_access(
-    request: Request,
-    db: AsyncSession,
+    service: ConversationParticipantServiceV2,
     conversation: Conversation,
     agent_id: str,
 ) -> None:
     """Ensure a roster addition targets an accessible agent definition."""
-    container = get_container_with_db(request, db)
-    agent = await container.agent_registry().get_by_id(
-        agent_id,
+    agent = await service.resolve_agent(
+        agent_id=agent_id,
         tenant_id=conversation.tenant_id,
         project_id=conversation.project_id,
     )
@@ -387,11 +381,14 @@ async def list_participants(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    participant_authority: ConversationParticipantHttpApplicationAuthorityV2 = Depends(
+        conversation_participant_http_application_authority_dependency_v2
+    ),
 ) -> RosterResponse:
     """Return the current roster + coordination state."""
-    _conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+    conversation, project = await _load_conversation_and_project(
+        participant_authority.service,
+        conversation_id,
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     await _assert_read_permission(conversation, project, current_user, request)
@@ -414,16 +411,19 @@ async def add_participant(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    participant_authority: ConversationParticipantHttpApplicationAuthorityV2 = Depends(
+        conversation_participant_http_application_authority_dependency_v2
+    ),
 ) -> RosterResponse:
     """Add an agent to the roster."""
-    conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+    conversation, project = await _load_conversation_and_project(
+        participant_authority.service,
+        conversation_id,
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
     _assert_write_permission(conversation, project, current_user, effective_mode)
-    await _assert_agent_access(request, db, conversation, data.agent_id)
+    await _assert_agent_access(participant_authority.service, conversation, data.agent_id)
 
     try:
         conversation.add_participant(
@@ -444,8 +444,13 @@ async def add_participant(
         raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
     await _assert_workspace_roster_projection(conversation, current_user, request)
-    await conv_repo.save(conversation)
-    await db.commit()
+    conversation = await participant_authority.service.save(
+        conversation,
+        tenant_id=tenant_id,
+        project_id=conversation.project_id,
+    )
+    await participant_authority.db.commit()
+    await participant_authority.service.after_mutation_committed(conversation.project_id)
     return await _roster_response(
         conversation,
         effective_mode,
@@ -465,11 +470,14 @@ async def remove_participant(
     data: ParticipantRemoveRequest | None = None,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    participant_authority: ConversationParticipantHttpApplicationAuthorityV2 = Depends(
+        conversation_participant_http_application_authority_dependency_v2
+    ),
 ) -> RosterResponse:
     """Remove an agent from the roster."""
-    conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+    conversation, project = await _load_conversation_and_project(
+        participant_authority.service,
+        conversation_id,
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
@@ -484,8 +492,13 @@ async def remove_participant(
         raise HTTPException(status_code=422, detail=_("Coordinator is required")) from e
 
     await _assert_workspace_roster_projection(conversation, current_user, request)
-    await conv_repo.save(conversation)
-    await db.commit()
+    conversation = await participant_authority.service.save(
+        conversation,
+        tenant_id=tenant_id,
+        project_id=conversation.project_id,
+    )
+    await participant_authority.db.commit()
+    await participant_authority.service.after_mutation_committed(conversation.project_id)
     return await _roster_response(
         conversation,
         effective_mode,
@@ -504,7 +517,9 @@ async def set_coordinator(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    participant_authority: ConversationParticipantHttpApplicationAuthorityV2 = Depends(
+        conversation_participant_http_application_authority_dependency_v2
+    ),
 ) -> RosterResponse:
     """Assign or clear the coordinator agent for a conversation.
 
@@ -512,8 +527,9 @@ async def set_coordinator(
     (``Conversation.assert_autonomous_invariants`` raises
     ``CoordinatorRequiredError`` when it is missing).
     """
-    conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+    conversation, project = await _load_conversation_and_project(
+        participant_authority.service,
+        conversation_id,
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
@@ -525,8 +541,13 @@ async def set_coordinator(
         raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
     await _assert_workspace_roster_projection(conversation, current_user, request)
-    await conv_repo.save(conversation)
-    await db.commit()
+    conversation = await participant_authority.service.save(
+        conversation,
+        tenant_id=tenant_id,
+        project_id=conversation.project_id,
+    )
+    await participant_authority.db.commit()
+    await participant_authority.service.after_mutation_committed(conversation.project_id)
     return await _roster_response(
         conversation,
         effective_mode,
@@ -545,11 +566,14 @@ async def set_focused_agent(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    participant_authority: ConversationParticipantHttpApplicationAuthorityV2 = Depends(
+        conversation_participant_http_application_authority_dependency_v2
+    ),
 ) -> RosterResponse:
     """Assign or clear the focused agent for a conversation."""
-    conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+    conversation, project = await _load_conversation_and_project(
+        participant_authority.service,
+        conversation_id,
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
@@ -561,8 +585,13 @@ async def set_focused_agent(
         raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
     await _assert_workspace_roster_projection(conversation, current_user, request)
-    await conv_repo.save(conversation)
-    await db.commit()
+    conversation = await participant_authority.service.save(
+        conversation,
+        tenant_id=tenant_id,
+        project_id=conversation.project_id,
+    )
+    await participant_authority.db.commit()
+    await participant_authority.service.after_mutation_committed(conversation.project_id)
     return await _roster_response(
         conversation,
         effective_mode,
@@ -605,7 +634,9 @@ async def list_mention_candidates(
     include_inactive: bool = False,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    participant_authority: ConversationParticipantHttpApplicationAuthorityV2 = Depends(
+        conversation_participant_http_application_authority_dependency_v2
+    ),
 ) -> MentionCandidatesResponse:
     """Return mention candidates for the ``MentionPicker``.
 
@@ -615,8 +646,9 @@ async def list_mention_candidates(
     the result is a bounded set — the frontend filters by substring
     *over this set* and never parses free-form text to guess an agent.
     """
-    _conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+    conversation, project = await _load_conversation_and_project(
+        participant_authority.service,
+        conversation_id,
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     await _assert_read_permission(conversation, project, current_user, request)

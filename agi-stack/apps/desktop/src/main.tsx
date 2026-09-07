@@ -5,6 +5,10 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ToastProvider } from './features/feedback/ToastCenter';
 import { I18nProvider } from './i18n';
+import {
+  activateDesktopPluginGenerationRootV2,
+  deactivateDesktopPluginGenerationRootV2,
+} from './plugins/useDesktopPluginGenerationV2';
 import { ThemePreferenceProvider } from './theme';
 import './styles/tokens.css';
 import './styles/chrome.css';
@@ -75,13 +79,15 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 try {
-  const root = document.getElementById('root');
-  if (!root) {
+  const rootElement = document.getElementById('root');
+  if (!rootElement) {
     throw new Error('Missing #root container');
   }
 
   markRuntimeShell();
-  createRoot(root).render(
+  activateDesktopPluginGenerationRootV2();
+  const root = createRoot(rootElement);
+  root.render(
     <React.StrictMode>
       <I18nProvider>
         <ThemePreferenceProvider>
@@ -92,6 +98,12 @@ try {
       </I18nProvider>
     </React.StrictMode>,
   );
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+      root.unmount();
+      void deactivateDesktopPluginGenerationRootV2().catch(showFatalError);
+    });
+  }
   reportFrontendReady();
 } catch (error) {
   showFatalError(error);

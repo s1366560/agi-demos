@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -12,7 +12,6 @@ from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
     WorkspaceTaskStatus,
 )
-from src.domain.model.workspace.wtp_envelope import WtpVerb
 from src.infrastructure.agent.workspace import worker_launch as wl
 from src.infrastructure.agent.workspace.code_context import (
     AgentsInstructionFile,
@@ -48,37 +47,6 @@ class TestConversationScope:
         assert wl._conversation_scope_for_task("t1", "att-9") == "task:t1:attempt:att-9"
 
 
-class TestPreferredLanguageFromMetadata:
-    """Workspace tasks store the user's UI language under the
-    PREFERRED_LANGUAGE metadata key. worker_launch reads it back here to
-    forward into stream_chat_v2 / system context. This is the bridge between
-    the persisted task and the LLM call — keep it strict."""
-
-    def test_returns_zh_cn(self) -> None:
-        assert wl._preferred_language_from_metadata({"preferred_language": "zh-CN"}) == "zh-CN"
-
-    def test_returns_en_us(self) -> None:
-        assert wl._preferred_language_from_metadata({"preferred_language": "en-US"}) == "en-US"
-
-    def test_unknown_locale_is_rejected(self) -> None:
-        assert wl._preferred_language_from_metadata({"preferred_language": "fr-FR"}) is None
-
-    def test_empty_string_is_rejected(self) -> None:
-        assert wl._preferred_language_from_metadata({"preferred_language": ""}) is None
-
-    def test_non_string_is_rejected(self) -> None:
-        assert wl._preferred_language_from_metadata({"preferred_language": 42}) is None
-
-    def test_missing_key_returns_none(self) -> None:
-        assert wl._preferred_language_from_metadata({}) is None
-
-    def test_none_metadata_returns_none(self) -> None:
-        assert wl._preferred_language_from_metadata(None) is None
-
-    def test_non_mapping_returns_none(self) -> None:
-        assert wl._preferred_language_from_metadata("preferred_language=zh-CN") is None
-
-
 class TestConversationId:
     def test_deterministic_and_distinct_per_scope(self) -> None:
         a = wl._conversation_id_for_worker(
@@ -108,557 +76,7 @@ class TestConversationId:
         assert a != b
 
 
-class TestWorkerConversationLinkage:
-    def test_worker_conversation_kwargs_include_canonical_linkage(self) -> None:
-        class _Workspace:
-            project_id = "project-1"
-            tenant_id = "tenant-1"
-
-        task = _make_task(task_id="task-link-1", workspace_id="workspace-link-1")
-        task.metadata["preferred_language"] = "zh-CN"
-
-        kwargs = wl._worker_conversation_kwargs(
-            conversation_id="conversation-link-1",
-            workspace_id=task.workspace_id,
-            workspace=_Workspace(),
-            task=task,
-            actor_user_id="user-1",
-            worker_agent_id="agent-1",
-            worker_binding_id="binding-1",
-            root_goal_task_id="root-1",
-            attempt_id="attempt-1",
-            active_status="active",
-        )
-
-        assert kwargs["workspace_id"] == task.workspace_id
-        assert kwargs["linked_workspace_task_id"] == task.id
-        assert kwargs["agent_config"]["selected_agent_id"] == "agent-1"
-        assert kwargs["metadata"]["workspace_id"] == task.workspace_id
-        assert kwargs["metadata"]["workspace_task_id"] == task.id
-        assert kwargs["metadata"]["linked_workspace_task_id"] == task.id
-        assert kwargs["metadata"]["source"] == "workspace_worker_launch"
-        assert kwargs["metadata"]["workspace_llm_stage"] == "worker_launch"
-        assert kwargs["metadata"]["preferred_language"] == "zh-CN"
-
-    def test_worker_conversation_linkage_backfills_empty_existing_row(self) -> None:
-        class _Conversation:
-            def __init__(self) -> None:
-                self.workspace_id = None
-                self.linked_workspace_task_id = None
-                self.agent_config: dict = {}
-                self.metadata: dict = {}
-                self.updated_at = None
-
-        conversation = _Conversation()
-
-        conflict = wl._worker_conversation_linkage_conflict(
-            conversation,
-            workspace_id="workspace-link-1",
-            task_id="task-link-1",
-        )
-        changed = wl._patch_worker_conversation_linkage(
-            conversation,
-            workspace_id="workspace-link-1",
-            task_id="task-link-1",
-            worker_agent_id="agent-1",
-        )
-
-        assert conflict is None
-        assert changed is True
-        assert conversation.workspace_id == "workspace-link-1"
-        assert conversation.linked_workspace_task_id == "task-link-1"
-        assert conversation.agent_config["selected_agent_id"] == "agent-1"
-        assert conversation.metadata["workspace_id"] == "workspace-link-1"
-        assert conversation.metadata["workspace_task_id"] == "task-link-1"
-        assert conversation.metadata["linked_workspace_task_id"] == "task-link-1"
-        assert conversation.metadata["source"] == "workspace_worker_launch"
-        assert conversation.metadata["workspace_llm_stage"] == "worker_launch"
-        assert conversation.updated_at is not None
-
-    def test_worker_conversation_linkage_reports_conflict_without_overwrite(self) -> None:
-        class _Conversation:
-            def __init__(self) -> None:
-                self.workspace_id = "other-workspace"
-                self.linked_workspace_task_id = "task-link-1"
-                self.agent_config: dict = {}
-                self.metadata: dict = {}
-                self.updated_at = None
-
-        conversation = _Conversation()
-
-        conflict = wl._worker_conversation_linkage_conflict(
-            conversation,
-            workspace_id="workspace-link-1",
-            task_id="task-link-1",
-        )
-
-        assert conflict == {
-            "conversation_workspace_id": "other-workspace",
-            "linked_workspace_task_id": "task-link-1",
-            "expected_workspace_id": "workspace-link-1",
-            "expected_workspace_task_id": "task-link-1",
-        }
-        assert conversation.workspace_id == "other-workspace"
-
-
-class TestWorkerLaunchHeartbeat:
-    @pytest.mark.asyncio
-    async def test_publish_worker_launch_heartbeat_emits_wtp_liveness(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        publish = AsyncMock(return_value="1-0")
-        redis = AsyncMock()
-        redis.exists.side_effect = [0, 1]
-        monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-            AsyncMock(return_value=redis),
-        )
-
-        await wl._publish_worker_launch_heartbeat(
-            workspace_id="ws-1",
-            task_id="task-1",
-            attempt_id="attempt-1",
-            root_goal_task_id="root-1",
-            conversation_id="conv-1",
-            actor_user_id="user-1",
-            worker_agent_id="worker-1",
-            leader_agent_id="leader-1",
-        )
-
-        publish.assert_awaited_once()
-        envelope = publish.await_args.args[0]
-        assert envelope.verb is WtpVerb.TASK_HEARTBEAT
-        assert envelope.workspace_id == "ws-1"
-        assert envelope.task_id == "task-1"
-        assert envelope.attempt_id == "attempt-1"
-        assert envelope.root_goal_task_id == "root-1"
-        assert envelope.extra_metadata["worker_conversation_id"] == "conv-1"
-        assert envelope.extra_metadata["worker_agent_id"] == "worker-1"
-        assert envelope.extra_metadata["leader_agent_id"] == "leader-1"
-        assert envelope.extra_metadata["actor_user_id"] == "user-1"
-        assert envelope.extra_metadata["source"] == "workspace_worker_launch"
-        redis.expire.assert_has_awaits(
-            [
-                call(
-                    "workspace:worker_launch:cooldown:conv-1",
-                    wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
-                ),
-                call("agent:running:conv-1", wl.WORKER_LAUNCH_COOLDOWN_SECONDS),
-            ]
-        )
-        redis.exists.assert_has_awaits(
-            [call("agent:finished:conv-1"), call("agent:running:conv-1")]
-        )
-        redis.setex.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_publish_worker_launch_heartbeat_does_not_resurrect_finished_agent(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        publish = AsyncMock(return_value="1-0")
-        redis = AsyncMock()
-        redis.exists.return_value = 1
-        monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-            AsyncMock(return_value=redis),
-        )
-
-        await wl._publish_worker_launch_heartbeat(
-            workspace_id="ws-1",
-            task_id="task-1",
-            attempt_id="attempt-1",
-            root_goal_task_id="root-1",
-            conversation_id="conv-1",
-            actor_user_id="user-1",
-            worker_agent_id="worker-1",
-            leader_agent_id="leader-1",
-        )
-
-        publish.assert_awaited_once()
-        redis.expire.assert_awaited_once_with(
-            "workspace:worker_launch:cooldown:conv-1",
-            wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
-        )
-        redis.exists.assert_awaited_once_with("agent:finished:conv-1")
-        redis.setex.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_publish_worker_launch_heartbeat_skips_without_attempt_id(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        publish = AsyncMock()
-        monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
-        )
-
-        await wl._publish_worker_launch_heartbeat(
-            workspace_id="ws-1",
-            task_id="task-1",
-            attempt_id=None,
-            root_goal_task_id="root-1",
-            conversation_id="conv-1",
-            actor_user_id="user-1",
-            worker_agent_id="worker-1",
-            leader_agent_id="leader-1",
-        )
-
-        publish.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_publish_worker_launch_progress_emits_wtp_progress(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        publish = AsyncMock(return_value="1-0")
-        monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
-        )
-
-        await wl._publish_worker_launch_progress(
-            workspace_id="ws-1",
-            task_id="task-1",
-            attempt_id="attempt-1",
-            root_goal_task_id="root-1",
-            conversation_id="conv-1",
-            actor_user_id="user-1",
-            worker_agent_id="worker-1",
-            leader_agent_id="leader-1",
-            summary="Worker stream still active; no new visible stream event for 180s",
-            phase="stream_idle",
-        )
-
-        publish.assert_awaited_once()
-        envelope = publish.await_args.args[0]
-        assert envelope.verb is WtpVerb.TASK_PROGRESS
-        assert envelope.workspace_id == "ws-1"
-        assert envelope.task_id == "task-1"
-        assert envelope.attempt_id == "attempt-1"
-        assert envelope.payload == {
-            "summary": "Worker stream still active; no new visible stream event for 180s",
-            "phase": "stream_idle",
-        }
-        assert envelope.extra_metadata["worker_conversation_id"] == "conv-1"
-        assert envelope.extra_metadata["source"] == "workspace_worker_launch"
-
-    @pytest.mark.asyncio
-    async def test_publish_worker_launch_progress_skips_without_attempt_id(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        publish = AsyncMock()
-        monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
-        )
-
-        await wl._publish_worker_launch_progress(
-            workspace_id="ws-1",
-            task_id="task-1",
-            attempt_id=None,
-            root_goal_task_id="root-1",
-            conversation_id="conv-1",
-            actor_user_id="user-1",
-            worker_agent_id="worker-1",
-            leader_agent_id="leader-1",
-            summary="still active",
-            phase="stream_idle",
-        )
-
-        publish.assert_not_awaited()
-
-
-class TestWorkerStreamOrphanDetection:
-    def test_finished_marker_stops_matching_worker_stream(self) -> None:
-        should_stop, reason = wl._should_stop_orphaned_worker_stream(
-            finished_message_id="msg-1",
-            stream_message_id="msg-1",
-            running_exists=False,
-            idle_seconds=1,
-        )
-
-        assert should_stop is True
-        assert reason == "agent_finished_without_terminal_event"
-
-    def test_finished_marker_for_other_message_does_not_stop_stream(self) -> None:
-        should_stop, reason = wl._should_stop_orphaned_worker_stream(
-            finished_message_id="old-msg",
-            stream_message_id="msg-1",
-            running_exists=False,
-            idle_seconds=1,
-        )
-
-        assert should_stop is False
-        assert reason is None
-
-    def test_missing_running_state_stops_only_after_orphan_grace(self) -> None:
-        assert wl._should_stop_orphaned_worker_stream(
-            finished_message_id=None,
-            stream_message_id="msg-1",
-            running_exists=False,
-            idle_seconds=899,
-            orphan_grace_seconds=900,
-        ) == (False, None)
-
-        assert wl._should_stop_orphaned_worker_stream(
-            finished_message_id=None,
-            stream_message_id="msg-1",
-            running_exists=False,
-            idle_seconds=900,
-            orphan_grace_seconds=900,
-        ) == (True, "agent_not_running_stream_idle")
-
-    def test_idle_progress_is_thresholded_and_throttled(self) -> None:
-        assert (
-            wl._should_publish_idle_stream_progress(
-                idle_seconds=179,
-                last_published_at=0,
-                now=1000,
-                interval_seconds=180,
-            )
-            is False
-        )
-        assert (
-            wl._should_publish_idle_stream_progress(
-                idle_seconds=180,
-                last_published_at=0,
-                now=1000,
-                interval_seconds=180,
-            )
-            is True
-        )
-        assert (
-            wl._should_publish_idle_stream_progress(
-                idle_seconds=240,
-                last_published_at=900,
-                now=1000,
-                interval_seconds=180,
-            )
-            is False
-        )
-        assert (
-            wl._should_publish_idle_stream_progress(
-                idle_seconds=360,
-                last_published_at=800,
-                now=1000,
-                interval_seconds=180,
-            )
-            is True
-        )
-
-    def test_idle_progress_summary_uses_objective_stream_state(self) -> None:
-        summary = wl._stream_idle_progress_summary(
-            idle_seconds=185.6,
-            last_stream_event_type="observe",
-            running_exists=True,
-            finished_message_id=None,
-        )
-
-        assert summary == (
-            "Worker stream still active; no new visible stream event for 185s; "
-            "agent:running present; last_event=observe"
-        )
-
-    def test_launch_started_summary_includes_retry_feedback(self) -> None:
-        summary = wl._worker_launch_started_summary(
-            attempt_number=9,
-            repair_brief_prompt=(
-                "verification failed:\n"
-                "  - clean_worktree_after_commit: ?? .playwright-cache/; ?? logs/"
-            ),
-        )
-
-        assert summary == (
-            "Worker attempt #9 started from verifier feedback: verification failed: "
-            "- clean_worktree_after_commit: ?? .playwright-cache/; ?? logs/"
-        )
-
-    def test_launch_started_summary_trims_long_feedback(self) -> None:
-        summary = wl._worker_launch_started_summary(
-            attempt_number="10",
-            repair_brief_prompt="x" * (wl.WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 50),
-        )
-
-        assert summary.startswith("Worker attempt #10 started from verifier feedback: ")
-        assert summary.endswith("...")
-        assert len(summary) < wl.WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 80
-
-
-class TestPreStreamLaunchFailure:
-    @pytest.mark.asyncio
-    async def test_reports_blocked_and_patches_launch_state(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        apply_report = AsyncMock()
-        patch_launch_state = AsyncMock()
-        monkeypatch.setattr(wl, "_patch_task_launch_state", patch_launch_state)
-
-        await wl._report_pre_stream_launch_failure(
-            workspace_id="ws-1",
-            root_goal_task_id="root-1",
-            task_id="task-1",
-            attempt_id="attempt-1",
-            conversation_id=None,
-            actor_user_id="user-1",
-            worker_agent_id="worker-1",
-            leader_agent_id="leader-1",
-            launch_state="setup_failed",
-            summary="worker_launch.setup_failed: boom",
-            apply_fn=apply_report,
-        )
-
-        apply_report.assert_awaited_once()
-        kwargs = apply_report.await_args.kwargs
-        assert kwargs["attempt_id"] == "attempt-1"
-        assert kwargs["report_type"] == "blocked"
-        assert kwargs["summary"] == "worker_launch.setup_failed: boom"
-        patch_launch_state.assert_awaited_once_with(
-            workspace_id="ws-1",
-            task_id="task-1",
-            actor_user_id="user-1",
-            leader_agent_id="leader-1",
-            launch_state="setup_failed",
-        )
-
-    @pytest.mark.asyncio
-    async def test_skips_without_attempt_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        apply_report = AsyncMock()
-        patch_launch_state = AsyncMock()
-        monkeypatch.setattr(wl, "_patch_task_launch_state", patch_launch_state)
-
-        await wl._report_pre_stream_launch_failure(
-            workspace_id="ws-1",
-            root_goal_task_id="root-1",
-            task_id="task-1",
-            attempt_id=None,
-            conversation_id=None,
-            actor_user_id="user-1",
-            worker_agent_id="worker-1",
-            leader_agent_id="leader-1",
-            launch_state="setup_failed",
-            summary="boom",
-            apply_fn=apply_report,
-        )
-
-        apply_report.assert_not_awaited()
-        patch_launch_state.assert_not_awaited()
-
-
 class TestStreamCompletionFallback:
-    @pytest.mark.asyncio
-    async def test_reports_completed_when_stream_finishes_without_terminal_report(
-        self,
-    ) -> None:
-        apply_report = AsyncMock()
-
-        reported = await wl._report_terminal(
-            workspace_id="ws-1",
-            root_goal_task_id="root-1",
-            task_id="task-1",
-            attempt_id="attempt-1",
-            conversation_id="conv-1",
-            actor_user_id="user-1",
-            worker_agent_id="worker-1",
-            leader_agent_id="leader-1",
-            report_type="completed",
-            summary=wl._stream_completion_summary("Finished the implementation.", ""),
-            apply_fn=apply_report,
-        )
-
-        assert reported is True
-        apply_report.assert_awaited_once()
-        kwargs = apply_report.await_args.kwargs
-        assert kwargs["attempt_id"] == "attempt-1"
-        assert kwargs["conversation_id"] == "conv-1"
-        assert kwargs["report_type"] == "completed"
-        assert kwargs["summary"] == "Finished the implementation."
-
-    def test_stream_completion_summary_is_bounded(self) -> None:
-        summary = wl._stream_completion_summary("", "x" * 2500)
-
-        assert len(summary) == 2000
-        assert summary.endswith("...")
-
-    def test_stream_completion_summary_has_default(self) -> None:
-        assert (
-            wl._stream_completion_summary("", "")
-            == "Worker stream completed without an explicit workspace terminal report."
-        )
-
-    def test_terminal_report_tool_denial_disables_text_completion_fallback(self) -> None:
-        event = {
-            "type": "observe",
-            "data": {
-                "tool_name": "workspace_report_complete",
-                "result": (
-                    '{"error": "completion denied: protected test/review node includes '
-                    'failed evidence"}'
-                ),
-                "error": None,
-            },
-        }
-
-        assert wl._terminal_report_tool_observation_status(event) == "denied"
-        assert (
-            wl._should_synthesize_stream_completion_report(terminal_report_tool_observed=True)
-            is False
-        )
-
-    def test_terminal_report_tool_apply_disables_text_completion_fallback(self) -> None:
-        event = {
-            "type": "observe",
-            "data": {
-                "tool_name": "workspace_report_blocked",
-                "result": '{"applied_report": {"applied": true}}',
-                "error": None,
-            },
-        }
-
-        assert wl._terminal_report_tool_observation_status(event) == "applied"
-        assert wl._terminal_report_tool_report_type(event) == "blocked"
-        assert (
-            wl._should_synthesize_stream_completion_report(terminal_report_tool_observed=True)
-            is False
-        )
-
-    def test_supervisor_only_terminal_report_does_not_reconcile_direct_apply(self) -> None:
-        event = {
-            "type": "observe",
-            "data": {
-                "tool_name": "workspace_report_complete",
-                "result": (
-                    '{"ok": true, "applied_report": '
-                    '{"skipped_supervisor_only": true, "reason": "WORKSPACE_WTP_V1_ONLY"}}'
-                ),
-                "error": None,
-            },
-        }
-
-        assert wl._terminal_report_tool_observation_status(event) == "attempted"
-        assert not wl._should_reconcile_terminal_report_tool(
-            terminal_report_tool_applied=False,
-            report_recorded_for_attempt=False,
-        )
-
-    def test_text_completion_fallback_remains_available_without_terminal_tool(self) -> None:
-        event = {
-            "type": "observe",
-            "data": {"tool_name": "bash", "result": "done", "error": None},
-        }
-
-        assert wl._terminal_report_tool_observation_status(event) is None
-        assert (
-            wl._should_synthesize_stream_completion_report(terminal_report_tool_observed=False)
-            is True
-        )
-
     def test_terminal_report_metadata_must_match_current_attempt(self) -> None:
         metadata = {
             "last_worker_report_attempt_id": "attempt-1",
@@ -679,20 +97,6 @@ class TestStreamCompletionFallback:
             metadata,
             attempt_id="attempt-1",
             report_type="blocked",
-        )
-
-    def test_applied_terminal_tool_reconciles_when_metadata_is_stale(self) -> None:
-        assert wl._should_reconcile_terminal_report_tool(
-            terminal_report_tool_applied=True,
-            report_recorded_for_attempt=False,
-        )
-        assert not wl._should_reconcile_terminal_report_tool(
-            terminal_report_tool_applied=True,
-            report_recorded_for_attempt=True,
-        )
-        assert not wl._should_reconcile_terminal_report_tool(
-            terminal_report_tool_applied=False,
-            report_recorded_for_attempt=False,
         )
 
 
@@ -1667,27 +1071,6 @@ services:
         assert plan_node_metadata["allow_verification_script_changes"] is True
         assert "workspace_verification_integrity" not in system_context
 
-    async def test_load_plan_node_metadata_follows_nested_repair_source_chain(self) -> None:
-        class _Db:
-            def __init__(self) -> None:
-                self.calls = 0
-
-            async def execute(self, _stmt: object) -> None:
-                self.calls += 1
-
-        task = _make_task(
-            metadata={
-                "workspace_plan_id": "plan-1",
-                "workspace_plan_node_id": "node-repair-1",
-            },
-        )
-
-        db = _Db()
-        metadata = await wl._load_plan_node_metadata_for_task(db, task)  # type: ignore[arg-type]
-
-        assert metadata == {}
-        assert db.calls == 0
-
     def test_system_context_extracts_repair_brief_verification_script_allowlist(self) -> None:
         task = _make_task()
 
@@ -2113,24 +1496,6 @@ services:
         assert f"test_command={worktree_command}" in system_context["additional_instructions"]
         assert f"command={worktree_command}" in system_context["additional_instructions"]
 
-    def test_code_context_metadata_preserves_digest_and_agents_scope(self) -> None:
-        code_context = WorkspaceCodeContext(
-            sandbox_code_root="/workspace/my-evo",
-            agents_files=(
-                AgentsInstructionFile(
-                    sandbox_path="/workspace/my-evo/AGENTS.md",
-                    content="Always run npm test.",
-                ),
-            ),
-        )
-
-        metadata = wl._code_context_metadata(code_context)
-
-        assert metadata["sandbox_code_root"] == "/workspace/my-evo"
-        assert metadata["loaded_agents_files"] == ["/workspace/my-evo/AGENTS.md"]
-        assert isinstance(metadata["agents_digest"], str)
-        assert "Always run npm test." in str(metadata["agents_excerpt"])
-
 
 class TestLaunchWorkerSession:
     @pytest.mark.asyncio
@@ -2171,38 +1536,56 @@ class TestLaunchWorkerSession:
         assert platform_db_opened is False
 
 
-class TestRepairConversationReuse:
-    @pytest.mark.asyncio
-    async def test_clear_reused_worker_session_markers_deletes_finished_and_cooldown(self) -> None:
-        class _Redis:
-            def __init__(self) -> None:
-                self.deleted: tuple[str, ...] = ()
-
-            async def delete(self, *keys: str) -> None:
-                self.deleted = keys
-
-        redis = _Redis()
-
-        await wl._clear_reused_worker_session_markers(redis, "conv-1")
-
-        assert redis.deleted == (
-            "agent:finished:conv-1",
-            "workspace:worker_launch:cooldown:conv-1",
-        )
-
-
 class TestScheduleWorkerSession:
     @pytest.mark.asyncio
     async def test_schedules_background_task(self, monkeypatch: pytest.MonkeyPatch) -> None:
         called: dict[str, object] = {}
+        lifecycle: list[str] = []
+
+        class _Reservation:
+            def __init__(self) -> None:
+                self.released = False
+
+            @asynccontextmanager
+            async def admit(self, *, operation_id, metadata):
+                assert operation_id == "workspace-worker-launch:task-1"
+                assert metadata == {
+                    "kind": "workspace-worker-launch",
+                    "workspace_id": "w",
+                    "task_id": "task-1",
+                    "worker_agent_id": "agent-X",
+                    "attempt_id": "att-1",
+                }
+                lifecycle.append("operation-entered")
+                try:
+                    yield object()
+                finally:
+                    await self.release()
+
+            async def release(self) -> None:
+                if self.released:
+                    return
+                self.released = True
+                lifecycle.append("generation-released")
+
+        reservation = _Reservation()
+
+        async def _fork_operation() -> _Reservation:
+            lifecycle.append("operation-reserved")
+            return reservation
 
         async def _fake_launch(**kwargs: object) -> dict[str, object]:
+            lifecycle.append("launch-started")
             called.update(kwargs)
             return {"launched": True, "conversation_id": "cid", "reason": "launched"}
 
+        monkeypatch.setattr(
+            "src.infrastructure.plugins.v2.boundary.fork_current_agent_operation_v2",
+            _fork_operation,
+        )
         monkeypatch.setattr(wl, "launch_worker_session", _fake_launch)
         task = _make_task()
-        wl.schedule_worker_session(
+        await wl.schedule_worker_session(
             workspace_id="w",
             task=task,
             worker_agent_id="agent-X",
@@ -2221,3 +1604,54 @@ class TestScheduleWorkerSession:
         assert called["attempt_id"] == "att-1"
         assert called["reuse_conversation_id"] == "conv-reuse"
         assert called["repair_brief_prompt"] == "[repair-turn]{}[/repair-turn]"
+        assert lifecycle == [
+            "operation-reserved",
+            "operation-entered",
+            "launch-started",
+            "generation-released",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_cancelled_unstarted_task_releases_reserved_generation(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        release_calls = 0
+        release_observed = asyncio.Event()
+
+        class _Reservation:
+            @asynccontextmanager
+            async def admit(self, *, operation_id, metadata):
+                del operation_id, metadata
+                yield object()
+
+            async def release(self) -> None:
+                nonlocal release_calls
+                release_calls += 1
+                release_observed.set()
+
+        async def _fork_operation() -> _Reservation:
+            return _Reservation()
+
+        async def _blocked_launch(**_kwargs: object) -> None:
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(
+            "src.infrastructure.plugins.v2.boundary.fork_current_agent_operation_v2",
+            _fork_operation,
+        )
+        monkeypatch.setattr(wl, "launch_worker_session", _blocked_launch)
+        before = set(wl._background_tasks)
+
+        await wl.schedule_worker_session(
+            workspace_id="w",
+            task=_make_task(),
+            worker_agent_id="agent-X",
+            actor_user_id="u1",
+        )
+        scheduled = tuple(set(wl._background_tasks) - before)
+        assert len(scheduled) == 1
+        scheduled[0].cancel()
+        await release_observed.wait()
+
+        assert release_calls == 1

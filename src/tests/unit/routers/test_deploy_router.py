@@ -1,6 +1,7 @@
 """Unit tests for deploy route tenant authorization."""
 
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -21,6 +22,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     InstanceModel,
     Project,
     User,
+)
+from src.infrastructure.plugins.v2.instance_deploy_services import (
+    SqlInstanceDeployServiceFactoryV2,
 )
 
 
@@ -62,6 +66,25 @@ async def deploy_record(
     return record
 
 
+def _authority(
+    *,
+    db: object,
+    user: object,
+    deploy_service: object | None = None,
+) -> SimpleNamespace:
+    if deploy_service is None:
+        operation = SimpleNamespace(require=lambda _service: db)
+        services = SqlInstanceDeployServiceFactoryV2().build(cast(Any, operation))
+    else:
+        services = SimpleNamespace(deploys=deploy_service)
+    return SimpleNamespace(
+        db=db,
+        current_user=user,
+        tenant_id=None,
+        services=services,
+    )
+
+
 @pytest.mark.unit
 class TestDeployRouterAuthorization:
     @pytest.mark.asyncio
@@ -71,7 +94,10 @@ class TestDeployRouterAuthorization:
         deploy_instance: InstanceModel,
         test_user: User,
     ) -> None:
-        tenant_id = await _require_instance_tenant_access(test_db, test_user, deploy_instance.id)
+        tenant_id = await _require_instance_tenant_access(
+            _authority(db=test_db, user=test_user),
+            deploy_instance.id,
+        )
 
         assert tenant_id == deploy_instance.tenant_id
 
@@ -83,7 +109,10 @@ class TestDeployRouterAuthorization:
         another_user: User,
     ) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            await _require_instance_tenant_access(test_db, another_user, deploy_instance.id)
+            await _require_instance_tenant_access(
+                _authority(db=test_db, user=another_user),
+                deploy_instance.id,
+            )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
@@ -94,7 +123,10 @@ class TestDeployRouterAuthorization:
         test_user: User,
     ) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            await _require_instance_tenant_access(test_db, test_user, "missing-instance")
+            await _require_instance_tenant_access(
+                _authority(db=test_db, user=test_user),
+                "missing-instance",
+            )
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
@@ -106,7 +138,10 @@ class TestDeployRouterAuthorization:
         another_user: User,
     ) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            await _require_deploy_tenant_access(test_db, another_user, deploy_record.id)
+            await _require_deploy_tenant_access(
+                _authority(db=test_db, user=another_user),
+                deploy_record.id,
+            )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
@@ -119,7 +154,10 @@ class TestDeployRouterAuthorization:
     ) -> None:
         another_user.is_superuser = True
 
-        await _require_deploy_tenant_access(test_db, another_user, deploy_record.id)
+        await _require_deploy_tenant_access(
+            _authority(db=test_db, user=another_user),
+            deploy_record.id,
+        )
 
     @pytest.mark.asyncio
     async def test_list_deploys_rejects_non_member_before_service_lookup(
@@ -130,10 +168,8 @@ class TestDeployRouterAuthorization:
     ) -> None:
         with pytest.raises(HTTPException) as exc_info:
             await list_deploys(
-                SimpleNamespace(),
                 instance_id=deploy_instance.id,
-                current_user=another_user,
-                db=test_db,
+                authority=_authority(db=test_db, user=another_user),
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -158,21 +194,11 @@ class TestDeployRouterAuthorization:
             )
         await test_db.commit()
 
-        request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(
-                    container=SimpleNamespace(graph_service=None, redis_client=None)
-                )
-            )
-        )
-
         response = await list_deploys(
-            request,
             instance_id=deploy_instance.id,
             page=2,
             page_size=1,
-            current_user=test_user,
-            db=test_db,
+            authority=_authority(db=test_db, user=test_user),
         )
 
         assert len(response.deploys) == 1
@@ -188,23 +214,13 @@ class TestDeployRouterAuthorization:
         test_user: User,
         another_user: User,
     ) -> None:
-        request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(
-                    container=SimpleNamespace(graph_service=None, redis_client=None)
-                )
-            )
-        )
-
         response = await create_deploy(
-            request,
             DeployCreate(
                 instance_id=deploy_instance.id,
                 action="create",
                 triggered_by=another_user.id,
             ),
-            current_user=test_user,
-            db=test_db,
+            authority=_authority(db=test_db, user=test_user),
         )
 
         assert response.triggered_by == test_user.id
@@ -216,20 +232,10 @@ class TestDeployRouterAuthorization:
         deploy_instance: InstanceModel,
         test_user: User,
     ) -> None:
-        request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(
-                    container=SimpleNamespace(graph_service=None, redis_client=None)
-                )
-            )
-        )
-
         with pytest.raises(HTTPException) as exc_info:
             await create_deploy(
-                request,
                 DeployCreate(instance_id=deploy_instance.id, action="invalid"),
-                current_user=test_user,
-                db=test_db,
+                authority=_authority(db=test_db, user=test_user),
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -253,15 +259,6 @@ class _FailingDeployService:
 
     async def cancel_deploy(self, **_kwargs: object) -> object:
         raise ValueError("Deploy deploy-secret is already terminal")
-
-
-class _FailingContainer:
-    def __init__(self) -> None:
-        self.service = _FailingDeployService()
-        self.redis_client = SimpleNamespace()
-
-    def deploy_service(self) -> _FailingDeployService:
-        return self.service
 
 
 @pytest.mark.unit
@@ -321,6 +318,7 @@ class _FailingContainer:
         (
             "stream_deploy_progress",
             {
+                "request": SimpleNamespace(is_disconnected=AsyncMock(return_value=True)),
                 "deploy_id": "deploy-secret",
             },
             status.HTTP_404_NOT_FOUND,
@@ -343,13 +341,14 @@ async def test_deploy_routes_sanitize_missing_resource_errors(
 
     monkeypatch.setattr(deploy_router, "_require_instance_tenant_access", allow_instance_access)
     monkeypatch.setattr(deploy_router, "_require_deploy_tenant_access", allow_deploy_access)
-    monkeypatch.setattr(deploy_router, "get_container_with_db", lambda *_args: _FailingContainer())
 
     with pytest.raises(HTTPException) as exc_info:
         await getattr(deploy_router, call_name)(
-            request=SimpleNamespace(),
-            current_user=SimpleNamespace(id="user-1", is_superuser=False),
-            db=SimpleNamespace(commit=AsyncMock()),
+            authority=_authority(
+                db=SimpleNamespace(commit=AsyncMock()),
+                user=SimpleNamespace(id="user-1", is_superuser=False),
+                deploy_service=_FailingDeployService(),
+            ),
             **call_args,
         )
 

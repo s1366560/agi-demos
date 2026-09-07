@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+
 
 @dataclass
 class RunContext:
@@ -54,6 +56,7 @@ class RunContext:
     start_time: float = field(default_factory=time.time)
     langfuse_context: dict[str, Any] | None = None
     session_factory: async_sessionmaker[AsyncSession] | None = None
+    plugin_generation: PluginGenerationDescriptorV2 | None = None
 
     @classmethod
     def current(cls) -> RunContext | None:

@@ -15,18 +15,15 @@ export type ComposerCatalogClient = {
   listWorkspaceAgents: (signal?: AbortSignal) => Promise<WorkspaceAgentBinding[]>;
   listManagedAgents: (signal?: AbortSignal) => Promise<ManagedAgentDefinition[]>;
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
-  listManagedPlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
-  listManagedSubAgents?: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
-  listPromptTemplates?: (
-    tenantId: string,
-    signal?: AbortSignal,
-  ) => Promise<PromptTemplateRecord[]>;
-  createPromptTemplate?: (
+  listMarketplacePlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
+  listManagedSubAgents: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
+  listPromptTemplates: (tenantId: string, signal?: AbortSignal) => Promise<PromptTemplateRecord[]>;
+  createPromptTemplate: (
     tenantId: string,
     input: PromptTemplateCreateInput,
     signal?: AbortSignal,
   ) => Promise<PromptTemplateRecord>;
-  deletePromptTemplate?: (
+  deletePromptTemplate: (
     templateId: string,
     signal?: AbortSignal,
     expectedRevision?: number,
@@ -57,6 +54,7 @@ export type ComposerCatalogClient = {
   ) => Promise<ConversationMessagesResponse>;
   uploadSandboxFile?: (
     file: Pick<File, 'name' | 'type' | 'size' | 'arrayBuffer'>,
+    signal?: AbortSignal,
   ) => Promise<AgentInputFileMetadata>;
 };
 
@@ -76,19 +74,17 @@ export async function loadComposerCatalog(
     api.listWorkspaceAgents(signal),
     api.listManagedAgents(signal),
     api.listManagedSkills(signal),
-    api.listManagedPlugins(signal),
-    api.listManagedSubAgents?.(signal) ?? Promise.resolve([]),
+    api.listMarketplacePlugins(signal),
+    api.listManagedSubAgents(signal),
   ]);
   return { workspaceAgents, agents, skills, plugins, subagents };
 }
 
-export function unboundComposerCatalogClient(
-  api: ComposerCatalogClient,
-): ComposerCatalogClient {
-  const listManagedSubAgents = api.listManagedSubAgents?.bind(api);
-  const listPromptTemplates = api.listPromptTemplates?.bind(api);
-  const createPromptTemplate = api.createPromptTemplate?.bind(api);
-  const deletePromptTemplate = api.deletePromptTemplate?.bind(api);
+export function unboundComposerCatalogClient(api: ComposerCatalogClient): ComposerCatalogClient {
+  const listManagedSubAgents = api.listManagedSubAgents.bind(api);
+  const listPromptTemplates = api.listPromptTemplates.bind(api);
+  const createPromptTemplate = api.createPromptTemplate.bind(api);
+  const deletePromptTemplate = api.deletePromptTemplate.bind(api);
   const listConversations = api.listConversations?.bind(api);
   const getConversationMessages = api.getConversationMessages?.bind(api);
   const uploadSandboxFile = api.uploadSandboxFile?.bind(api);
@@ -96,11 +92,11 @@ export function unboundComposerCatalogClient(
     listWorkspaceAgents: async () => [],
     listManagedAgents: (signal) => api.listManagedAgents(signal),
     listManagedSkills: (signal) => api.listManagedSkills(signal),
-    listManagedPlugins: (signal) => api.listManagedPlugins(signal),
-    ...(listManagedSubAgents ? { listManagedSubAgents } : {}),
-    ...(listPromptTemplates ? { listPromptTemplates } : {}),
-    ...(createPromptTemplate ? { createPromptTemplate } : {}),
-    ...(deletePromptTemplate ? { deletePromptTemplate } : {}),
+    listMarketplacePlugins: (signal) => api.listMarketplacePlugins(signal),
+    listManagedSubAgents,
+    listPromptTemplates,
+    createPromptTemplate,
+    deletePromptTemplate,
     ...(listConversations ? { listConversations } : {}),
     ...(getConversationMessages ? { getConversationMessages } : {}),
     ...(uploadSandboxFile ? { uploadSandboxFile } : {}),

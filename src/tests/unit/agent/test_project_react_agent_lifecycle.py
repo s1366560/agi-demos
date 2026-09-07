@@ -1,34 +1,82 @@
 """
-Unit tests for ProjectReActAgent WebSocketNotifier integration.
+Unit tests for ProjectReActAgent V2 lifecycle-notifier integration.
 
 Tests TDD: RED phase - These tests should fail before implementation.
 """
 
+import asyncio
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.configuration.config import get_settings
-from src.infrastructure.adapters.secondary.websocket_notifier import (
-    WebSocketNotifier,
-)
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent import core as core_package
+from src.infrastructure.agent.core import project_react_agent as project_react_agent_module
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
 )
+from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
+    AGENT_LIFECYCLE_CHANGED_EVENT_V2,
+    AGENT_SUBAGENT_LIFECYCLE_EVENT_V2,
+    AgentLifecycleNotifierV2,
+)
+from src.infrastructure.plugins.v2.runtime import ContextV2, RuntimeV2Error
 
 # The correct import path for patching is where the module imports these functions
 # For functions imported inside initialize(), we need to patch the full path
 WORKER_STATE_MODULE = "src.infrastructure.agent.state.agent_worker_state"
+WORKER_RUNTIME_MODULE = "src.infrastructure.plugins.v2.agent_worker_runtime"
+
+
+def _worker_runtime_services(
+    graph_service: object | None,
+    redis_client: object,
+    *,
+    unavailable_code: str | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        graph_runtime=SimpleNamespace(
+            graph_service=graph_service,
+            unavailable_code=unavailable_code,
+        ),
+        redis_runtime=SimpleNamespace(client=redis_client),
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "authority_name",
+    (
+        "_project_agent_manager",
+        "_manager_lock",
+        "get_project_agent_manager",
+        "stop_project_agent_manager",
+    ),
+)
+def test_process_global_project_agent_manager_authority_is_retired(
+    authority_name: str,
+) -> None:
+    assert not hasattr(project_react_agent_module, authority_name)
+    if not authority_name.startswith("_"):
+        assert not hasattr(core_package, authority_name)
 
 
 class MockConnectionManager:
     """Mock ConnectionManager for testing."""
 
     def __init__(self) -> None:
-        self.broadcast_calls = []
+        self.broadcast_calls: list[dict[str, Any]] = []
 
-    async def broadcast_to_project(self, tenant_id: str, project_id: str, message: dict) -> int:
+    async def broadcast_to_project(
+        self,
+        tenant_id: str,
+        project_id: str,
+        message: dict[str, Any],
+    ) -> int:
         """Mock broadcast that records calls."""
         self.broadcast_calls.append(
             {
@@ -40,6 +88,50 @@ class MockConnectionManager:
         return 1
 
 
+class _RecordingLifecycleContext:
+    """Minimal event surface used to observe ProjectReActAgent contract calls."""
+
+    def __init__(self, manager: MockConnectionManager) -> None:
+        self.manager = manager
+
+    async def dispatch(self, event: str, payload: object) -> tuple[int, ...]:
+        row = cast("dict[str, Any]", payload)
+        if event == AGENT_LIFECYCLE_CHANGED_EVENT_V2:
+            message = {
+                "type": "lifecycle_state_change",
+                "tenant_id": row["tenant_id"],
+                "project_id": row["project_id"],
+                "data": {
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"tenant_id", "project_id", "timestamp"}
+                },
+                "timestamp": row["timestamp"],
+            }
+        elif event == AGENT_SUBAGENT_LIFECYCLE_EVENT_V2:
+            message = {
+                "type": "subagent_lifecycle",
+                "tenant_id": row["tenant_id"],
+                "project_id": row["project_id"],
+                "data": dict(cast("dict[str, Any]", row["event"])),
+                "timestamp": row["timestamp"],
+            }
+        else:
+            raise AssertionError(f"unexpected lifecycle event {event}")
+        count = await self.manager.broadcast_to_project(
+            tenant_id=cast("str", row["tenant_id"]),
+            project_id=cast("str", row["project_id"]),
+            message=message,
+        )
+        return (count,)
+
+
+class _RecordingAgentLifecycleNotifier(AgentLifecycleNotifierV2):
+    @property
+    def _manager(self) -> MockConnectionManager:
+        return cast("_RecordingLifecycleContext", self.context).manager
+
+
 @pytest.fixture
 def mock_manager():
     """Fixture for mock connection manager."""
@@ -48,8 +140,9 @@ def mock_manager():
 
 @pytest.fixture
 def mock_notifier(mock_manager):
-    """Fixture for mock WebSocketNotifier."""
-    return WebSocketNotifier(mock_manager)
+    """Fixture for the V2 notifier using a recording event context."""
+    context = _RecordingLifecycleContext(mock_manager)
+    return _RecordingAgentLifecycleNotifier(context=cast("ContextV2", context))
 
 
 @pytest.fixture
@@ -100,9 +193,20 @@ def mock_session_context():
     return ctx
 
 
+@pytest.fixture(autouse=True)
+def mock_artifact_lifecycle_projection():
+    """Keep lifecycle tests focused while production resolution stays V2-only."""
+    with patch(
+        "src.infrastructure.agent.core.project_react_agent."
+        "current_artifact_lifecycle_application_service_v2",
+        return_value=MagicMock(artifact=MagicMock()),
+    ):
+        yield
+
+
 class TestProjectReActAgentLifecycleNotifications:
     """
-    Test suite for ProjectReActAgent lifecycle WebSocket notifications.
+    Test suite for ProjectReActAgent generation-owned lifecycle notifications.
 
     Tests that lifecycle state changes are properly broadcast via WebSocket.
     """
@@ -152,6 +256,169 @@ class TestProjectReActAgentLifecycleNotifications:
         constructor_args = react_agent.call_args.kwargs
         assert constructor_args["message_bus"] is message_bus
         assert isinstance(constructor_args["control_channel"], RedisControlChannel)
+        assert (
+            constructor_args["detached_subagent_task_supervisor"]
+            is agent._detached_subagent_task_supervisor
+        )
+
+    @pytest.mark.asyncio
+    async def test_refresh_reuses_project_supervisor_without_stopping_detached_tasks(
+        self,
+        agent_config,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        supervisor = agent._detached_subagent_task_supervisor
+
+        with (
+            patch.object(agent, "stop", new_callable=AsyncMock) as stop,
+            patch.object(
+                agent,
+                "initialize",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as initialize,
+        ):
+            refreshed = await agent.refresh()
+
+        assert refreshed is True
+        stop.assert_not_awaited()
+        initialize.assert_awaited_once_with(force_refresh=True)
+        assert agent._detached_subagent_task_supervisor is supervisor
+
+    @pytest.mark.asyncio
+    async def test_stop_awaits_project_supervisor_before_clearing_react_agent(
+        self,
+        agent_config,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+        react_agent = MagicMock()
+        agent._react_agent = react_agent
+
+        async def _shutdown() -> None:
+            assert agent._react_agent is react_agent
+
+        supervisor = MagicMock()
+        supervisor.shutdown = AsyncMock(side_effect=_shutdown)
+        agent._detached_subagent_task_supervisor = supervisor
+
+        with patch(
+            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            return_value=None,
+        ):
+            assert await agent.stop() is True
+
+        supervisor.shutdown.assert_awaited_once_with()
+        assert agent._react_agent is None
+
+    @pytest.mark.asyncio
+    async def test_stop_can_clear_only_the_retired_generation_without_notification(
+        self,
+        agent_config,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+        descriptor = PluginGenerationDescriptorV2(
+            profile_id="memstack-default-v2",
+            generation=7,
+            digest="a" * 64,
+        )
+
+        with (
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier"
+            ) as notifier,
+            patch(
+                "src.infrastructure.agent.state.agent_session_pool.clear_session_cache",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as clear_session_cache,
+            patch(
+                "src.infrastructure.agent.state.agent_session_pool.invalidate_agent_session"
+            ) as invalidate_agent_session,
+        ):
+            assert (
+                await agent.stop(
+                    generation_descriptor=descriptor,
+                    notify_lifecycle=False,
+                )
+                is True
+            )
+
+        notifier.assert_not_called()
+        clear_session_cache.assert_awaited_once_with(
+            tenant_id="test-tenant",
+            project_id="test-project",
+            agent_mode="default",
+            grace_period_seconds=0,
+            generation_descriptor=descriptor,
+        )
+        invalidate_agent_session.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_and_awaits_active_chat_before_detached_shutdown(
+        self,
+        agent_config,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+        stream_started = asyncio.Event()
+        stream_cleaned = asyncio.Event()
+
+        async def _stream(**_kwargs):
+            stream_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0)
+                stream_cleaned.set()
+            yield {"type": "complete", "data": {"content": "unexpected"}}
+
+        react_agent = MagicMock()
+        react_agent.stream = _stream
+        agent._react_agent = react_agent
+
+        async def _consume_chat() -> None:
+            async for _event in agent.execute_chat(
+                conversation_id="conversation-active",
+                user_message="wait",
+                user_id="user-1",
+            ):
+                pass
+
+        chat_task = asyncio.create_task(_consume_chat())
+        with (
+            patch.object(
+                agent,
+                "_check_and_refresh_sandbox_tools",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch.object(
+                agent,
+                "_check_and_refresh_mcp_tools",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                return_value=None,
+            ),
+        ):
+            await stream_started.wait()
+
+            async def _shutdown() -> None:
+                assert chat_task.done() is True
+                assert stream_cleaned.is_set() is True
+
+            supervisor = MagicMock()
+            supervisor.shutdown = AsyncMock(side_effect=_shutdown)
+            agent._detached_subagent_task_supervisor = supervisor
+            assert await agent.stop() is True
+
+        assert chat_task.cancelled() is True
+        assert agent.get_status().active_chats == 0
+        supervisor.shutdown.assert_awaited_once_with()
 
     @pytest.mark.asyncio
     async def test_initialize_sends_initializing_and_ready_notifications(
@@ -181,13 +448,8 @@ class TestProjectReActAgentLifecycleNotifications:
         # Note: Must use the full import path since they're imported inside the method
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
-                return_value=mock_graph_service,
-            ),
-            patch(
-                f"{WORKER_STATE_MODULE}.get_redis_client",
-                return_value=mock_redis_client,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+                return_value=_worker_runtime_services(mock_graph_service, mock_redis_client),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
@@ -265,8 +527,7 @@ class TestProjectReActAgentLifecycleNotifications:
         # Inject the mock notifier
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
                 side_effect=RuntimeError("graph service init failed"),
             ),
             patch(
@@ -312,13 +573,12 @@ class TestProjectReActAgentLifecycleNotifications:
 
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-            patch(
-                f"{WORKER_STATE_MODULE}.get_redis_client",
-                return_value=mock_redis_client,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+                return_value=_worker_runtime_services(
+                    None,
+                    mock_redis_client,
+                    unavailable_code="no_active_provider",
+                ),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
@@ -383,13 +643,8 @@ class TestProjectReActAgentLifecycleNotifications:
 
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
-                return_value=mock_graph_service,
-            ),
-            patch(
-                f"{WORKER_STATE_MODULE}.get_redis_client",
-                return_value=mock_redis_client,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+                return_value=_worker_runtime_services(mock_graph_service, mock_redis_client),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
@@ -449,10 +704,7 @@ class TestProjectReActAgentLifecycleNotifications:
             mock_react_cls.call_args.kwargs["max_subagent_lane_concurrency"]
             == settings.agent_subagent_lane_concurrency
         )
-        assert (
-            mock_react_cls.call_args.kwargs["subagent_terminal_retention_seconds"]
-            == settings.agent_subagent_terminal_retention_seconds
-        )
+        assert "subagent_terminal_retention_seconds" not in mock_react_cls.call_args.kwargs
         assert (
             mock_react_cls.call_args.kwargs["subagent_announce_max_events"]
             == settings.agent_subagent_announce_max_events
@@ -712,6 +964,45 @@ class TestProjectReActAgentLifecycleNotifications:
         assert len(error_calls) >= 1
         assert "error_message" in error_calls[0]["message"]["data"]
 
+    @pytest.mark.asyncio
+    async def test_execute_chat_preserves_structured_v2_failure_code(
+        self,
+        agent_config,
+        mock_notifier,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+
+        async def missing_service_stream(**_kwargs):
+            if False:
+                yield None
+            raise RuntimeV2Error(
+                "service_not_found",
+                "required agent-loop service is unavailable",
+            )
+
+        mock_react = MagicMock()
+        mock_react.stream = missing_service_stream
+        agent._react_agent = mock_react
+
+        with patch(
+            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            return_value=mock_notifier,
+        ):
+            events = [
+                event
+                async for event in agent.execute_chat(
+                    conversation_id="test-conv",
+                    user_message="Hello",
+                    user_id="test-user",
+                )
+            ]
+
+        assert len(events) == 1
+        assert events[0]["type"] == "error"
+        assert events[0]["data"]["code"] == "service_not_found"
+        assert events[0]["data"]["message"] == "required agent-loop service is unavailable"
+
 
 class TestProjectReActAgentNotificationContent:
     """
@@ -745,13 +1036,8 @@ class TestProjectReActAgentNotificationContent:
 
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
-                return_value=mock_graph_service,
-            ),
-            patch(
-                f"{WORKER_STATE_MODULE}.get_redis_client",
-                return_value=mock_redis_client,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+                return_value=_worker_runtime_services(mock_graph_service, mock_redis_client),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
@@ -869,8 +1155,7 @@ class TestProjectReActAgentNotificationContent:
         # Mock initialization to raise a specific error
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
                 side_effect=RuntimeError("graph service init failed"),
             ),
             # Inject the mock notifier

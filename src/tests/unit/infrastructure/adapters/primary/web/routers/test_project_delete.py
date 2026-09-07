@@ -104,12 +104,16 @@ async def test_project_dependent_delete_preserves_receipts_until_root_cleanup(
 
 
 @pytest.mark.unit
-async def test_project_delete_purges_external_sandbox_resources() -> None:
+async def test_project_delete_purges_external_sandbox_resources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     adapter = MagicMock()
     adapter.purge_project_resources = AsyncMock()
-    container = MagicMock()
-    container.sandbox_adapter.return_value = adapter
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=container)))
+    from src.infrastructure.plugins.v2 import sandbox_projection
+
+    projection = MagicMock(return_value=SimpleNamespace(adapter=adapter))
+    monkeypatch.setattr(sandbox_projection, "current_sandbox_application_services_v2", projection)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
 
     await projects._purge_project_sandbox_resources(
         request,  # type: ignore[arg-type]
@@ -121,12 +125,16 @@ async def test_project_delete_purges_external_sandbox_resources() -> None:
 
 
 @pytest.mark.unit
-async def test_project_delete_returns_503_when_external_resource_purge_fails() -> None:
+async def test_project_delete_returns_503_when_external_resource_purge_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     adapter = MagicMock()
     adapter.purge_project_resources = AsyncMock(side_effect=RuntimeError("docker unavailable"))
-    container = MagicMock()
-    container.sandbox_adapter.return_value = adapter
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=container)))
+    from src.infrastructure.plugins.v2 import sandbox_projection
+
+    projection = MagicMock(return_value=SimpleNamespace(adapter=adapter))
+    monkeypatch.setattr(sandbox_projection, "current_sandbox_application_services_v2", projection)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
 
     with pytest.raises(HTTPException) as exc_info:
         await projects._purge_project_sandbox_resources(
@@ -137,3 +145,66 @@ async def test_project_delete_returns_503_when_external_resource_purge_fails() -
 
     assert exc_info.value.status_code == 503
     assert "docker unavailable" not in str(exc_info.value.detail)
+
+
+@pytest.mark.unit
+async def test_project_delete_uses_pinned_sandbox_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+    from src.infrastructure.plugins.v2 import sandbox_projection
+    from src.infrastructure.plugins.v2.sandbox_runtime import (
+        SANDBOX_APPLICATION_SERVICE_V2,
+        SandboxApplicationResolverV2,
+        SandboxRuntimeServiceV2,
+    )
+
+    adapter = SimpleNamespace(purge_project_resources=AsyncMock())
+    resolver = SandboxApplicationResolverV2(
+        runtime=SandboxRuntimeServiceV2(services=SimpleNamespace(adapter=adapter))
+    )
+    generation = MagicMock()
+    generation.resolve.return_value = resolver
+    monkeypatch.setattr(sandbox_projection, "current_generation_v2", lambda: generation)
+    await projects._purge_project_sandbox_resources(
+        SimpleNamespace(), tenant_id="tenant-1", project_id="project-1"
+    )
+    generation.resolve.assert_called_once_with(
+        SANDBOX_APPLICATION_SERVICE_V2, ScopeV2(kind=ScopeKindV2.ROOT)
+    )
+    adapter.purge_project_resources.assert_awaited_once_with("tenant-1", "project-1")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("authorized", [False, True])
+async def test_project_delete_authorization_and_unavailable_runtime_never_commit(
+    monkeypatch: pytest.MonkeyPatch, authorized: bool
+) -> None:
+    from src.infrastructure.plugins.v2 import sandbox_projection
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    db = SimpleNamespace(
+        execute=AsyncMock(return_value=_Result(["tenant-1"] if authorized else [])),
+        commit=AsyncMock(),
+    )
+    lock = AsyncMock(return_value=True)
+    dependents = AsyncMock()
+    projection = MagicMock(side_effect=RuntimeV2Error("sandbox_runtime_unavailable", "unavailable"))
+    monkeypatch.setattr(projects, "_lock_project_delete_scope", lock)
+    monkeypatch.setattr(projects, "_delete_project_dependents", dependents)
+    monkeypatch.setattr(sandbox_projection, "current_sandbox_application_services_v2", projection)
+    with pytest.raises(HTTPException) as failure:
+        await projects.delete_project(
+            "project-1",
+            SimpleNamespace(),
+            current_user=SimpleNamespace(id="owner-1"),
+            project_tenant=SimpleNamespace(db=db),
+        )
+    assert failure.value.status_code == (503 if authorized else 403)
+    assert db.execute.await_count == 1
+    db.commit.assert_not_awaited()
+    dependents.assert_not_awaited()
+    if authorized:
+        lock.assert_awaited_once_with(db, "project-1")
+        projection.assert_called_once_with()
+    else:
+        lock.assert_not_awaited()
+        projection.assert_not_called()

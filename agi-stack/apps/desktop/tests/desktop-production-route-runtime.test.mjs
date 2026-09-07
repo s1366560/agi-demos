@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
@@ -10,6 +16,7 @@ const {
   createRuntimeDeploymentsRouteBindingForRuntime,
   createRuntimeInstancesRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
+  createTenantTasksRouteBindingForRuntime,
   createUnifiedRuntimesRouteBindingForRuntime,
   desktopRouteBasePermissionsForAuth,
   desktopRoutePermissionsForContext,
@@ -17,6 +24,9 @@ const {
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRuntime.js'
 );
+const {
+  RuntimePoolUnavailableError,
+} = require('/tmp/agistack-desktop-test-dist/src/features/runtime-pool/runtimePoolClient.js');
 
 const tenantId = 'tenant-1';
 const projectId = 'project-1';
@@ -165,23 +175,21 @@ test('deployment capability resolution binds the optional instance route context
   assert.equal(entry.scope.instance_id, null);
 });
 
-test('cloud project overview binding constructs only cloud authority', () => {
+test('cloud project overview binding injects the V2 authority client', () => {
   const calls = [];
   const cloudClient = Object.freeze({ kind: 'cloud-client' });
   const controller = Object.freeze({ kind: 'controller' });
   const config = runtimeConfig('cloud');
+  const operations = projectOverviewOperationsV2Fixture();
 
   const binding = createProjectOverviewRouteBindingForRuntime(
     config,
     routeContext,
+    operations,
     {
-      createCloudClient(receivedConfig) {
-        calls.push(['cloud', receivedConfig]);
+      createClient(receivedOperations, receivedConfig) {
+        calls.push(['client', receivedOperations, receivedConfig]);
         return cloudClient;
-      },
-      createLocalClient() {
-        calls.push(['local']);
-        throw new Error('local adapter must not be constructed');
       },
       createController(options) {
         calls.push(['controller', options]);
@@ -197,34 +205,32 @@ test('cloud project overview binding constructs only cloud authority', () => {
     projectId,
   });
   assert.deepEqual(calls, [
-    ['cloud', config],
+    ['client', operations, config],
     [
       'controller',
       {
         authority: 'cloud',
-        cloudClient,
+        client: cloudClient,
         initialScope: binding.scope,
       },
     ],
   ]);
 });
 
-test('local project overview binding constructs only local authority', () => {
+test('local project overview binding injects the V2 authority client', () => {
   const calls = [];
   const localClient = Object.freeze({ kind: 'local-client' });
   const controller = Object.freeze({ kind: 'controller' });
   const config = runtimeConfig('local');
+  const operations = projectOverviewOperationsV2Fixture();
 
   const binding = createProjectOverviewRouteBindingForRuntime(
     config,
     routeContext,
+    operations,
     {
-      createCloudClient() {
-        calls.push(['cloud']);
-        throw new Error('cloud adapter must not be constructed');
-      },
-      createLocalClient(receivedConfig) {
-        calls.push(['local', receivedConfig]);
+      createClient(receivedOperations, receivedConfig) {
+        calls.push(['client', receivedOperations, receivedConfig]);
         return localClient;
       },
       createController(options) {
@@ -241,12 +247,12 @@ test('local project overview binding constructs only local authority', () => {
     projectId,
   });
   assert.deepEqual(calls, [
-    ['local', config],
+    ['client', operations, config],
     [
       'controller',
       {
         authority: 'local',
-        localClient,
+        client: localClient,
         initialScope: binding.scope,
       },
     ],
@@ -263,30 +269,92 @@ test('project overview scope mismatch fails before constructing any authority', 
     const calls = [];
     assert.throws(
       () =>
-        createProjectOverviewRouteBindingForRuntime(config, context, {
-          createCloudClient() {
-            calls.push('cloud');
-            return {};
-          },
-          createLocalClient() {
-            calls.push('local');
+        createProjectOverviewRouteBindingForRuntime(
+          config,
+          context,
+          projectOverviewOperationsV2Fixture(),
+          {
+          createClient() {
+            calls.push('client');
             return {};
           },
           createController() {
             calls.push('controller');
             return {};
           },
-        }),
+          },
+        ),
       /project_overview_runtime_scope_mismatch/u,
     );
     assert.deepEqual(calls, []);
   }
 });
 
+test('project overview binding fails closed without the V2 authority', () => {
+  assert.throws(
+    () =>
+      createProjectOverviewRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        routeContext,
+        undefined,
+      ),
+    /desktop_project_overview_authority_required/u,
+  );
+});
+
+test('Tenant Tasks binding keeps Cloud tenant-wide and Local project-scoped', () => {
+  const cloud = createTenantTasksRouteBindingForRuntime(
+    runtimeConfig('cloud', { projectId: '' }),
+    { tenantId },
+    tenantTasksOperationsV2Fixture(),
+  );
+  assert.deepEqual(cloud.scope, {
+    authority: 'cloud',
+    tenantId,
+    projectId: null,
+  });
+  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
+
+  const local = createTenantTasksRouteBindingForRuntime(
+    runtimeConfig('local'),
+    { tenantId },
+    tenantTasksOperationsV2Fixture(),
+  );
+  assert.deepEqual(local.scope, {
+    authority: 'local',
+    tenantId,
+    projectId,
+  });
+  assert.equal(local.controller.getSnapshot().authority, 'local');
+});
+
+test('Tenant Tasks binding rejects tenant drift and missing Local project scope', () => {
+  const operations = tenantTasksOperationsV2Fixture();
+  assert.throws(
+    () =>
+      createTenantTasksRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId: 'tenant-other' },
+        operations,
+      ),
+    /tenant_tasks_runtime_scope_mismatch/u,
+  );
+  assert.throws(
+    () =>
+      createTenantTasksRouteBindingForRuntime(
+        runtimeConfig('local', { projectId: '' }),
+        { tenantId },
+        operations,
+      ),
+    /tenant_tasks_runtime_scope_mismatch/u,
+  );
+});
+
 test('Runtime Pool binding preserves exact Cloud and Local tenant authority', async () => {
   const cloud = createRuntimePoolRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimePoolOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
   assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
@@ -294,6 +362,7 @@ test('Runtime Pool binding preserves exact Cloud and Local tenant authority', as
   const local = createRuntimePoolRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
+    runtimePoolOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, { authority: 'local', tenantId });
   await local.controller.load(local.scope);
@@ -307,9 +376,11 @@ test('Runtime Pool binding preserves exact Cloud and Local tenant authority', as
 test('Runtime Pool binding rejects tenant scope drift before client authority', () => {
   assert.throws(
     () =>
-      createRuntimePoolRouteBindingForRuntime(runtimeConfig('cloud'), {
-        tenantId: 'tenant-other',
-      }),
+      createRuntimePoolRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId: 'tenant-other' },
+        runtimePoolOperationsV2Fixture(),
+      ),
     /runtime_pool_runtime_scope_mismatch/u,
   );
 });
@@ -318,6 +389,7 @@ test('Runtime Instances binding preserves exact Cloud and Local tenant authority
   const cloud = createRuntimeInstancesRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimeInstancesOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
   assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
@@ -325,6 +397,7 @@ test('Runtime Instances binding preserves exact Cloud and Local tenant authority
   const local = createRuntimeInstancesRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
+    runtimeInstancesOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, { authority: 'local', tenantId });
   assert.equal(local.controller.getSnapshot().authority, 'local');
@@ -344,6 +417,7 @@ test('Runtime Clusters binding preserves Cloud and Local tenant authority', asyn
   const cloud = createRuntimeClustersRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimeClustersOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
   assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
@@ -351,6 +425,7 @@ test('Runtime Clusters binding preserves Cloud and Local tenant authority', asyn
   const local = createRuntimeClustersRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
+    runtimeClustersOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, { authority: 'local', tenantId });
   await local.controller.load(local.scope);
@@ -364,10 +439,24 @@ test('Runtime Clusters binding preserves Cloud and Local tenant authority', asyn
 test('Runtime Clusters binding rejects tenant scope drift before client authority', () => {
   assert.throws(
     () =>
-      createRuntimeClustersRouteBindingForRuntime(runtimeConfig('cloud'), {
-        tenantId: 'tenant-other',
-      }),
+      createRuntimeClustersRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId: 'tenant-other' },
+        runtimeClustersOperationsV2Fixture(),
+      ),
     /runtime_clusters_runtime_scope_mismatch/u,
+  );
+});
+
+test('Runtime Clusters binding requires the complete V2 operations facade', () => {
+  assert.throws(
+    () =>
+      createRuntimeClustersRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId },
+        {},
+      ),
+    /desktop_runtime_clusters_authority_required/u,
   );
 });
 
@@ -375,6 +464,7 @@ test('Runtime Deployments binding preserves instance scope and keeps Local cloud
   const cloud = createRuntimeDeploymentsRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId, instanceId: 'instance-1' },
+    runtimeDeploymentsOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, {
     authority: 'cloud',
@@ -386,6 +476,7 @@ test('Runtime Deployments binding preserves instance scope and keeps Local cloud
   const local = createRuntimeDeploymentsRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId, instanceId: 'instance-1' },
+    runtimeDeploymentsOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, {
     authority: 'local',
@@ -406,12 +497,14 @@ test('Runtime Deployments binding rejects tenant drift and preserves missing ins
       createRuntimeDeploymentsRouteBindingForRuntime(
         runtimeConfig('cloud'),
         { tenantId: 'tenant-other', instanceId: 'instance-1' },
+        runtimeDeploymentsOperationsV2Fixture(),
       ),
     /runtime_deployments_runtime_scope_mismatch/u,
   );
   const missing = createRuntimeDeploymentsRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimeDeploymentsOperationsV2Fixture(),
   );
   assert.equal(missing.scope.instanceId, null);
   assert.equal(missing.controller.getSnapshot().state, 'loading');
@@ -452,6 +545,7 @@ test('Unified Runtimes binding preserves exact Cloud and Local scope authority',
   const cloud = createUnifiedRuntimesRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    unifiedRuntimesOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, {
     authority: 'cloud',
@@ -463,6 +557,7 @@ test('Unified Runtimes binding preserves exact Cloud and Local scope authority',
   const local = createUnifiedRuntimesRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
+    unifiedRuntimesOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, {
     authority: 'local',
@@ -483,6 +578,7 @@ test('Unified Runtimes binding rejects tenant and project scope drift', () => {
       createUnifiedRuntimesRouteBindingForRuntime(
         runtimeConfig('cloud', { tenantId: 'tenant-other' }),
         { tenantId },
+        unifiedRuntimesOperationsV2Fixture(),
       ),
     /unified_runtimes_runtime_scope_mismatch/u,
   );
@@ -491,6 +587,7 @@ test('Unified Runtimes binding rejects tenant and project scope drift', () => {
       createUnifiedRuntimesRouteBindingForRuntime(
         runtimeConfig('local', { projectId: ' ' }),
         { tenantId },
+        unifiedRuntimesOperationsV2Fixture(),
       ),
     /unified_runtimes_runtime_scope_mismatch/u,
   );
@@ -560,5 +657,84 @@ function runtimeConfig(mode, overrides = {}) {
     mode,
     workspaceRoot: '/workspace',
     ...overrides,
+  };
+}
+
+function runtimePoolOperationsV2Fixture() {
+  const localUnavailable = (input) => {
+    if (input.scope.authority === 'local') {
+      throw new RuntimePoolUnavailableError('cloud_runtime_pool_not_applicable');
+    }
+  };
+  return {
+    async getRuntimePoolStatus(input) {
+      localUnavailable(input);
+      return {
+        enabled: true,
+        status: 'running',
+        totalInstances: 0,
+        hotInstances: 0,
+        warmInstances: 0,
+        coldInstances: 0,
+        readyInstances: 0,
+        executingInstances: 0,
+        unhealthyInstances: 0,
+        prewarmPool: null,
+        resourceUsage: null,
+        reasonCode: 'global_pool_capacity_not_available_in_tenant_scope',
+      };
+    },
+    async listRuntimePoolInstances(input) {
+      localUnavailable(input);
+      return { instances: [], total: 0, page: 1, pageSize: 20 };
+    },
+    async getRuntimePoolMetrics(input) {
+      localUnavailable(input);
+      return {
+        instances: {
+          total: 0,
+          byTier: { hot: 0, warm: 0, cold: 0 },
+          byStatus: { ready: 0, executing: 0, unhealthy: 0 },
+        },
+        unhealthyCount: 0,
+        prewarm: null,
+        reasonCode: 'global_pool_capacity_not_available_in_tenant_scope',
+      };
+    },
+    pauseRuntimePoolInstance: async () => undefined,
+    resumeRuntimePoolInstance: async () => undefined,
+    terminateRuntimePoolInstance: async () => undefined,
+    probeRuntimePool: async (input) => ({
+      availability: input.scope.authority === 'local' ? 'not_applicable' : 'degraded',
+      reason_code:
+        input.scope.authority === 'local'
+          ? 'cloud_runtime_pool_not_applicable'
+          : 'global_pool_capacity_not_available_in_tenant_scope',
+      service_version: input.scope.authority === 'local' ? null : '0.1.0',
+      contract_version: input.scope.authority === 'local' ? null : '3.0.0',
+      allowed_actions: [],
+      scope: {
+        tenant_id: input.scope.tenantId,
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    }),
+  };
+}
+
+function unifiedRuntimesOperationsV2Fixture() {
+  return {
+    async getPoolStatus() { return {}; },
+    async listPoolInstances() { return { instances: [], total: 0, page: 1, pageSize: 100 }; },
+    async listSandboxes() { return []; },
+    async getSandboxStats() { return null; },
+    async getLocalSidecar() { return { running: true, toolCount: 0, providerCount: 0 }; },
+    async getSandboxCapabilities() {
+      const unavailable = { availability: 'unavailable', reasonCode: 'sandbox_capability_unavailable' };
+      return { serviceVersion: '1.0.0', contractVersion: '1.0.0', terminalInteractive: unavailable, terminalResume: unavailable, files: unavailable, kasmVnc: unavailable };
+    },
+    async probe() { throw new Error('not used'); },
   };
 }

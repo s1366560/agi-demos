@@ -1,10 +1,38 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
+import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
+import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
+import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
+import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const {
-  createDesktopWorkbenchCapabilityClient,
+  createDesktopWorkbenchCapabilityClient: createDesktopWorkbenchCapabilityClientRaw,
   normalizeAutomationCapabilityContract,
   normalizeLocalSearchCapabilityContract,
   normalizeSearchCapabilityContract,
@@ -12,6 +40,20 @@ const {
   normalizeWorkspaceCollaborationCapabilityContract,
 } = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+
+function createDesktopWorkbenchCapabilityClient(automationApi, config, options) {
+  return createDesktopWorkbenchCapabilityClientRaw(automationApi, config, {
+    ...options,
+    projectMcpServersOperationsV2:
+      options?.projectMcpServersOperationsV2 ?? projectMcpServersOperationsV2Fixture(),
+    tenantProvidersOperationsV2:
+      options?.tenantProvidersOperationsV2 ?? tenantProvidersOperationsV2Fixture(),
+    tenantSkillDefinitionsOperationsV2:
+      options?.tenantSkillDefinitionsOperationsV2 ?? tenantSkillDefinitionsOperationsV2Fixture(),
+    tenantAgentDefinitionsOperationsV2:
+      options?.tenantAgentDefinitionsOperationsV2 ?? tenantAgentDefinitionsOperationsV2Fixture(),
+  });
+}
 
 const searchContract = {
   service_version: '0.1.0',
@@ -78,6 +120,1235 @@ const automationContract = {
   run_now: { allowed: true },
   delete: { allowed: true },
 };
+
+test('workbench capability client requires the Tenant Agent Bindings V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        undefined,
+      ),
+    /desktop_tenant_agent_bindings_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Analytics V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        { tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture() },
+      ),
+    /desktop_tenant_analytics_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Agent Dashboard V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+        },
+      ),
+    /desktop_tenant_agent_dashboard_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Agent Definitions V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClientRaw(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        },
+      ),
+    /desktop_tenant_agent_definitions_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Projects V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        },
+      ),
+    /desktop_tenant_projects_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Tasks V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+        },
+      ),
+    /desktop_tenant_tasks_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Project Overview V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_overview_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Runtime Pool V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_runtime_pool_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Runtime Clusters V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_runtime_clusters_authority_required/u,
+  );
+});
+
+test('workbench capability client requires an injected Project Workspaces V2 client', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+          runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          backendStoresOperationsV2: {
+            async probeBackendStores() {
+              throw new Error('backend_stores_not_exercised');
+            },
+          },
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_workspaces_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Project Blackboard V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+          runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          backendStoresOperationsV2: {
+            async probeBackendStores({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
+            },
+          },
+          projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_blackboard_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Project Agent Dashboard V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+          runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          backendStoresOperationsV2: {
+            async probeBackendStores({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
+            },
+          },
+          projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+          projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_agent_dashboard_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Project Agent Logs V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+          runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          backendStoresOperationsV2: {
+            async probeBackendStores({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
+            },
+          },
+          projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+          projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+          projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_agent_logs_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Project Agent Patterns V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+          runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          backendStoresOperationsV2: {
+            async probeBackendStores({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
+            },
+          },
+          projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+          projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+          projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+          projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_agent_patterns_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Project Communities V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectCommunitiesOperationsV2 of [undefined, {}]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectCommunitiesOperationsV2 },
+        ),
+      /desktop_project_communities_authority_required/u,
+    );
+  }
+});
+
+test('workbench capability client requires the Project Memories V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectMemoriesOperationsV2 of [undefined, {}]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectMemoriesOperationsV2 },
+        ),
+      /desktop_project_memories_authority_required/u,
+    );
+  }
+});
+
+test('workbench capability client requires the Project Team V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectTeamOperationsV2 of [undefined, {}]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectTeamOperationsV2 },
+        ),
+      /desktop_project_team_authority_required/u,
+    );
+  }
+});
+
+test('workbench capability client requires the Project Schema V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectSchemaOperationsV2 of [undefined, {}]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectSchemaOperationsV2 },
+        ),
+      /desktop_project_schema_authority_required/u,
+    );
+  }
+});
+
+test('workbench capability client requires the Project Maintenance V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectMaintenanceOperationsV2 of [undefined, {}]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectMaintenanceOperationsV2 },
+        ),
+      /desktop_project_maintenance_authority_required/u,
+    );
+  }
+});
+
+test('workbench capability client requires the Project Settings V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectSettingsOperationsV2 of [undefined, {}]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectSettingsOperationsV2 },
+        ),
+      /desktop_project_settings_authority_required/u,
+    );
+  }
+});
+
+test('workbench capability client requires the Project Graph V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        requiredOptions,
+      ),
+    /desktop_project_graph_authority_required/u,
+  );
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        { ...requiredOptions, projectGraphOperationsV2: {} },
+      ),
+    /desktop_project_graph_authority_required/u,
+  );
+});
+
+test('workbench capability client requires both Project Entities V2 operations', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectEntitiesOperationsV2 of [
+    undefined,
+    {},
+    { loadProjectEntities: async () => ({}) },
+  ]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectEntitiesOperationsV2 },
+        ),
+      /desktop_project_entities_authority_required/u,
+    );
+  }
+});
 
 const workspaceCollaborationContract = {
   service_version: '0.1.0',
@@ -256,7 +1527,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
   };
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => automationContract,
       },
@@ -343,165 +1614,130 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-tasks'],
-      withDeclaredAuthority({
-        availability: 'available',
-        reason_code: null,
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'search',
-          'filter',
-          'paginate',
-          'refresh',
-          'retry-task',
-          'stop-task',
-          'retry-pending',
-          'navigate-dead-letter-queue',
-        ],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-pool'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'global_pool_capacity_not_available_in_tenant_scope',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'refresh',
-          'toggle-auto-refresh',
-          'list-instances',
-          'search-current-page',
-          'filter-by-tier',
-          'paginate-instances',
-          'pause-instance',
-          'resume-instance',
-          'terminate-instance',
-          'retry-list-instances',
-          'inspect-pool-status',
-        ],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-instances'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'runtime_instances_nested_routes_partial',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'refresh',
-          'search',
-          'filter-status',
-          'paginate',
-          'restart',
-          'delete',
-        ],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-clusters'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'runtime_clusters_detail_and_mutations_partial',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'refresh',
-          'search-current-page',
-          'filter-status-current-page',
-          'paginate',
-          'inspect-health',
-        ],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-deploy'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'runtime_deployments_mutations_and_instance_discovery_partial',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'refresh',
-          'paginate',
-          'inspect-progress',
-          'reconnect-progress',
-        ],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
-        },
-        authority_revision: null,
-      }),
+      withObservedAuthority(
+        withoutAuthorityRevision({
+          availability: 'degraded',
+          reason_code: 'runtime_deployments_mutations_and_instance_discovery_partial',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [
+            'view',
+            'list',
+            'refresh',
+            'paginate',
+            'inspect-progress',
+            'reconnect-progress',
+          ],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
+        }),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-dead-letter-queue'],
-      withDeclaredAuthority({
-        availability: 'available',
-        reason_code: null,
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'inspect-stats',
-          'inspect-message',
-          'filter',
-          'paginate',
-          'refresh',
-          'retry-message',
-          'retry-batch',
-          'discard',
-          'cleanup',
-        ],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '1.0.0',
+          contract_version: '4.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['project-support'],
@@ -527,7 +1763,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
           {
             availability: 'available',
             reason_code: null,
-            service_version: '0.1.0',
+            service_version: '1.0.0',
             contract_version: '4.0.0',
             allowed_actions: ['view', 'list', 'create', 'update', 'delete', 'test'],
             scope: emptyScope,
@@ -589,12 +1825,24 @@ test('management routes become observed only after their typed clients read curr
         projectId: mode === 'local' ? 'local-project' : 'project-1',
         localApiToken: 'launch-capability',
       };
-      const client = createDesktopWorkbenchCapabilityClient(
+      const client = createWorkbenchCapabilityClient(
         {
           getAutomationCapabilities: async () => automationContract,
         },
         config,
         {
+          projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture({
+            listMCPServers: async () => [{ id: 'server-1' }, { id: 'server-2' }],
+          }),
+          tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture({
+            listLlmProviders: async () => [{ id: 'provider-1' }, { id: 'provider-2' }],
+          }),
+          tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture({
+            loadTenantSkillDefinitions: async () => [{ id: 'skill-1' }, { id: 'skill-2' }],
+          }),
+          tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture({
+            loadTenantAgentDefinitions: async () => [{ id: 'agent-1' }, { id: 'agent-2' }],
+          }),
           managementRouteClients: managementRouteClients(async (scope) => ({
             scope,
             itemCount: 2,
@@ -638,7 +1886,7 @@ test('management route observation failures stay unavailable and never promote r
     });
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => automationContract,
       },
@@ -649,6 +1897,20 @@ test('management route observation failures stay unavailable and never promote r
         projectId: 'project-1',
       },
       {
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture({
+          listMCPServers: async () => { throw new Error('authority unavailable'); },
+        }),
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture({
+          listLlmProviders: async () => { throw new Error('authority unavailable'); },
+        }),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture({
+          loadTenantSkillDefinitions: async () => { throw new Error('authority unavailable'); },
+        }),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture({
+          loadTenantAgentDefinitions: async () => {
+            throw new Error('authority unavailable');
+          },
+        }),
         managementRouteClients: managementRouteClients(async () => {
           throw new Error('authority unavailable');
         }),
@@ -707,7 +1969,7 @@ test('local workbench capability client consumes the scoped degraded Search cont
   };
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => ({
           ...automationContract,
@@ -771,8 +2033,14 @@ test('local workbench capability client consumes the scoped degraded Search cont
       withDeclaredAuthority(
         withScope(
           {
-            ...unavailableCapability('local_backend_stores_cloud_authority_unavailable'),
-            retryable: true,
+            availability: 'not_applicable',
+            reason_code: 'local_backend_stores_cloud_authority_unavailable',
+            service_version: null,
+            contract_version: null,
+            allowed_actions: [],
+            scope: emptyScope,
+            authority_revision: null,
+            retryable: false,
           },
           {
             tenant_id: 'local',
@@ -847,28 +2115,23 @@ test('local workbench capability client consumes the scoped degraded Search cont
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-tasks'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'local_task_dashboard_partial',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'search',
-          'filter',
-          'paginate',
-          'refresh',
-          'open-workspace',
-        ],
-        scope: {
-          tenant_id: 'local',
-          project_id: 'local-project',
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }),
+        'sidecar',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities.sandbox_isolation,
@@ -906,7 +2169,7 @@ test('local-online snapshot requires observed cloud scope and preserves compound
     );
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => ({
           ...automationContract,
@@ -942,21 +2205,21 @@ test('local-online snapshot requires observed cloud scope and preserves compound
 
     assert.equal(snapshot.runtime_state, 'local_online');
     assert.deepEqual(snapshot.capabilities['backend-stores'], {
-      availability: 'available',
-      reason_code: null,
-      service_version: '0.1.0',
-      contract_version: '4.0.0',
-      allowed_actions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+      availability: 'not_applicable',
+      reason_code: 'local_backend_stores_cloud_authority_unavailable',
+      service_version: null,
+      contract_version: null,
+      allowed_actions: [],
       scope: {
         tenant_id: 'tenant-1',
         project_id: null,
         workspace_id: null,
         instance_id: null,
       },
-      authority_revision: 41,
+      authority_revision: null,
       retryable: false,
       authority_source: 'cloud_service',
-      supporting_authority_sources: ['sidecar', 'electron'],
+      supporting_authority_sources: [],
       provenance: 'observed',
     });
     assert.deepEqual(snapshot.capabilities['project-playbooks'], {
@@ -1045,7 +2308,7 @@ test('legacy capability authorities fail closed before payload inference', async
       headers: { 'content-type': 'application/json' },
     });
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => {
           throw new Error('capability authority unavailable');
@@ -1144,7 +2407,7 @@ test('cloud client loads the scoped degraded Workspace Collaboration authority',
   };
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => automationContract,
       },
@@ -1307,7 +2570,7 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
   };
 
   try {
-    const cloudClient = createDesktopWorkbenchCapabilityClient(
+    const cloudClient = createWorkbenchCapabilityClient(
       { getAutomationCapabilities: async () => automationContract },
       {
         ...DEFAULT_CONFIG,
@@ -1336,7 +2599,7 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
     );
     assert.equal(capabilityFetchCalls, 1);
 
-    const localClient = createDesktopWorkbenchCapabilityClient(
+    const localClient = createWorkbenchCapabilityClient(
       { getAutomationCapabilities: async () => automationContract },
       {
         ...DEFAULT_CONFIG,
@@ -1357,10 +2620,10 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
             7,
           ),
           {
-          tenant_id: 'local',
-          project_id: 'local-project',
-          workspace_id: 'local-workspace',
-          instance_id: null,
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: 'local-workspace',
+            instance_id: null,
           },
         ),
         'sidecar',
@@ -1385,20 +2648,23 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
     );
     assert.deepEqual(
       local.capabilities['tenant-tenant-instances'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'local_instance_sidecar_projection_partial',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: ['view', 'list', 'refresh', 'search', 'filter-status'],
-        scope: {
-          tenant_id: 'local',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'local',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }),
+        'sidecar',
+      ),
     );
     assert.deepEqual(
       local.capabilities['tenant-tenant-clusters'],
@@ -1419,20 +2685,23 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
     );
     assert.deepEqual(
       local.capabilities['tenant-tenant-deploy'],
-      withDeclaredAuthority({
-        availability: 'not_applicable',
-        reason_code: 'cloud_deployment_authority_not_applicable',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'local',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'not_applicable',
+          reason_code: 'cloud_deployment_authority_not_applicable',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'local',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }),
+        'sidecar',
+      ),
     );
     assert.equal(capabilityFetchCalls, 2);
   } finally {
@@ -1471,7 +2740,7 @@ test('local Electron Workspace Collaboration reports permanent Core cutover outa
   };
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       { getAutomationCapabilities: async () => automationContract },
       {
         ...DEFAULT_CONFIG,
@@ -1493,3 +2762,84 @@ test('local Electron Workspace Collaboration reports permanent Core cutover outa
     else globalThis.window = originalWindow;
   }
 });
+
+function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
+  return createDesktopWorkbenchCapabilityClient(automationApi, config, {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
+      },
+    },
+    backendStoresOperationsV2: {
+      async probeBackendStores({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
+      },
+    },
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    ...options,
+  });
+}

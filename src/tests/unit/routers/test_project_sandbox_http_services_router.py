@@ -2,6 +2,7 @@
 
 import logging
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, Mock
 from urllib.parse import parse_qs, urlparse
 
@@ -12,6 +13,10 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 
 from src.infrastructure.adapters.primary.web.routers import project_sandbox as router_mod
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
+from src.infrastructure.plugins.v2.sandbox_http_service_registry import (
+    SandboxHttpServiceRegistryV2,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +36,8 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.include_router(router_mod.router)
     app.include_router(router_mod.preview_router)
 
-    router_mod._http_service_registry.clear()
+    http_service_registry = _TestHttpServiceRegistry()
+    app.state.test_http_service_registry = http_service_registry
 
     async def _current_user():
         return SimpleNamespace(id="user-1")
@@ -56,9 +62,11 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides[router_mod.get_current_user_tenant] = _tenant_id
     app.dependency_overrides[router_mod.get_db] = _db
     app.dependency_overrides[router_mod.get_lifecycle_service] = lambda: lifecycle_service
+    app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = lambda: lifecycle_service
     app.dependency_overrides[router_mod.get_sandbox_adapter] = lambda: SimpleNamespace(_docker=None)
     app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     app.dependency_overrides[router_mod.get_event_publisher] = lambda: None
+    app.dependency_overrides[router_mod.get_http_service_registry] = lambda: http_service_registry
 
     manager = AsyncMock()
     manager.broadcast_sandbox_state = AsyncMock()
@@ -67,6 +75,46 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         lambda: manager,
     )
     return TestClient(app)
+
+
+class _TestHttpServiceRegistry:
+    def __init__(self) -> None:
+        self.payloads: dict[str, dict[str, str]] = {}
+
+    def seed(self, project_id: str, info: router_mod.HttpServiceProxyInfo) -> None:
+        self.payloads.setdefault(project_id, {})[info.service_id] = info.model_dump_json()
+
+    async def upsert_payload(self, project_id: str, service_id: str, payload: str) -> bool:
+        project_services = self.payloads.setdefault(project_id, {})
+        existed = service_id in project_services
+        project_services[service_id] = payload
+        return existed
+
+    async def list_payloads(self, project_id: str) -> dict[str, str]:
+        return dict(self.payloads.get(project_id, {}))
+
+    async def get_payload(self, project_id: str, service_id: str) -> str | None:
+        return self.payloads.get(project_id, {}).get(service_id)
+
+    async def pop_payload(self, project_id: str, service_id: str) -> str | None:
+        project_services = self.payloads.get(project_id, {})
+        payload = project_services.pop(service_id, None)
+        if not project_services:
+            self.payloads.pop(project_id, None)
+        return payload
+
+
+def _http_service_registry_for(client: TestClient) -> _TestHttpServiceRegistry:
+    return cast(_TestHttpServiceRegistry, client.app.state.test_http_service_registry)
+
+
+def _seed_http_service(
+    client: TestClient,
+    info: router_mod.HttpServiceProxyInfo,
+    *,
+    project_id: str = "proj-1",
+) -> None:
+    _http_service_registry_for(client).seed(project_id, info)
 
 
 class _FakeWebSocket:
@@ -121,12 +169,6 @@ class _SandboxService:
 class _FailingEventPublisherContainer:
     def sandbox_event_publisher(self) -> object:
         raise RuntimeError("event publisher secret")
-
-
-class _FailingRedisClientContainer:
-    @property
-    def redis_client(self) -> object:
-        raise RuntimeError("redis client secret")
 
 
 class _FailingSandboxLifecycleEventPublisher:
@@ -201,11 +243,11 @@ def test_get_event_publisher_error_log_omits_exception_text(
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
     )
 
-    result = router_mod.get_event_publisher(request)
+    with pytest.raises(RuntimeV2Error) as error:
+        router_mod.get_event_publisher(request)
 
-    assert result is None
-    assert "Could not create event publisher" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
+    assert error.value.code == "generation_not_pinned"
+    assert "Could not create event publisher" not in caplog.text
     assert "event publisher secret" not in caplog.text
 
 
@@ -221,52 +263,20 @@ def test_get_event_publisher_for_websocket_error_log_omits_exception_text(
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
     )
 
-    result = router_mod.get_event_publisher_for_websocket(websocket)
+    with pytest.raises(RuntimeV2Error) as error:
+        router_mod.get_event_publisher_for_websocket(websocket)
 
-    assert result is None
-    assert "Could not create websocket event publisher" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
+    assert error.value.code == "generation_not_pinned"
+    assert "Could not create websocket event publisher" not in caplog.text
     assert "event publisher secret" not in caplog.text
 
 
 @pytest.mark.unit
-def test_get_http_service_redis_client_error_log_omits_exception_text(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(container=_FailingRedisClientContainer()))
-    )
-    caplog.set_level(
-        logging.DEBUG,
-        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
-    )
+def test_get_http_service_registry_fails_closed_without_pinned_generation() -> None:
+    with pytest.raises(RuntimeV2Error) as error:
+        router_mod.get_http_service_registry()
 
-    result = router_mod.get_http_service_redis_client(request)
-
-    assert result is None
-    assert "Could not get Redis client for HTTP service routes" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
-    assert "redis client secret" not in caplog.text
-
-
-@pytest.mark.unit
-def test_get_http_service_redis_client_for_websocket_error_log_omits_exception_text(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    websocket = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(container=_FailingRedisClientContainer()))
-    )
-    caplog.set_level(
-        logging.DEBUG,
-        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
-    )
-
-    result = router_mod.get_http_service_redis_client_for_websocket(websocket)
-
-    assert result is None
-    assert "Could not get Redis client for HTTP service websocket routes" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
-    assert "redis client secret" not in caplog.text
+    assert error.value.code == "generation_not_pinned"
 
 
 @pytest.mark.unit
@@ -1267,7 +1277,7 @@ def test_desktop_http_proxy_requires_project_access(
 ) -> None:
     lifecycle_service = AsyncMock()
     lifecycle_service.get_project_sandbox = AsyncMock()
-    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = (
         lambda: lifecycle_service
     )
 
@@ -1295,7 +1305,7 @@ def test_desktop_http_proxy_authenticates_to_kasmvnc(
             runtime_auth_token="sandbox-runtime-secret",
         )
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = (
         lambda: lifecycle_service
     )
     captured: dict[str, object] = {}
@@ -1340,7 +1350,7 @@ def test_desktop_http_proxy_fails_closed_without_runtime_auth_token(
             runtime_auth_token=None,
         )
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = (
         lambda: lifecycle_service
     )
 
@@ -1364,7 +1374,7 @@ def test_desktop_http_proxy_sanitizes_upstream_connection_errors(
             runtime_auth_token="sandbox-runtime-secret",
         )
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = (
         lambda: lifecycle_service
     )
 
@@ -1687,8 +1697,9 @@ async def test_http_service_websocket_proxy_sanitizes_internal_errors(
     event_publisher = AsyncMock()
     event_publisher.publish_http_service_error = AsyncMock()
 
-    router_mod._http_service_registry.clear()
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+    http_service_registry = _TestHttpServiceRegistry()
+    http_service_registry.seed(
+        "proj-1",
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
@@ -1700,7 +1711,7 @@ async def test_http_service_websocket_proxy_sanitizes_internal_errors(
             status="running",
             preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/",
             updated_at="2026-01-01T00:00:00Z",
-        )
+        ),
     )
 
     async def allow_access(*_args, **_kwargs) -> None:
@@ -1723,7 +1734,7 @@ async def test_http_service_websocket_proxy_sanitizes_internal_errors(
         path="ws",
         current_user=SimpleNamespace(id="user-1"),
         event_publisher=event_publisher,
-        redis_client=None,
+        http_service_registry=http_service_registry,
         db=SimpleNamespace(),
     )
 
@@ -1943,8 +1954,9 @@ def test_http_services_list_and_proxy_load_from_redis_when_memory_empty(
             return self._hashes.get(key, {}).copy()
 
     fake_redis = _FakeRedisClient()
-    sandbox_http_client.app.dependency_overrides[router_mod.get_http_service_redis_client] = (
-        lambda: fake_redis
+    writer = SandboxHttpServiceRegistryV2(redis_client=fake_redis)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_http_service_registry] = (
+        lambda: writer
     )
 
     register_response = sandbox_http_client.post(
@@ -1958,20 +1970,34 @@ def test_http_services_list_and_proxy_load_from_redis_when_memory_empty(
     )
     assert register_response.status_code == status.HTTP_200_OK
 
-    router_mod._http_service_registry.clear()
+    reader = SandboxHttpServiceRegistryV2(redis_client=fake_redis)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_http_service_registry] = (
+        lambda: reader
+    )
 
     list_response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/http-services")
     assert list_response.status_code == status.HTTP_200_OK
     assert list_response.json()["total"] == 1
     assert list_response.json()["services"][0]["service_id"] == "svc-redis"
 
-    router_mod._http_service_registry.clear()
-
     proxy_response = sandbox_http_client.get(
         "/api/v1/projects/proj-1/sandbox/http-services/svc-redis/proxy/"
     )
     assert proxy_response.status_code == status.HTTP_400_BAD_REQUEST
     assert "only available for sandbox_internal services" in proxy_response.json()["detail"]
+
+
+@pytest.mark.unit
+def test_http_services_list_discards_malformed_registry_payload(
+    sandbox_http_client: TestClient,
+) -> None:
+    registry = _http_service_registry_for(sandbox_http_client)
+    registry.payloads.setdefault("proj-1", {})["malformed"] = "not-json"
+
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/http-services")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {"services": [], "total": 0}
 
 
 @pytest.mark.unit
@@ -2129,7 +2155,8 @@ def test_http_proxy_returns_502_when_upstream_fails(
         lambda: event_publisher
     )
 
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+    _seed_http_service(
+        sandbox_http_client,
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
@@ -2142,7 +2169,7 @@ def test_http_proxy_returns_502_when_upstream_fails(
             auto_open=True,
             restart_token="r1",
             updated_at="2025-01-01T00:00:00+00:00",
-        )
+        ),
     )
 
     class _FailingAsyncClient:
@@ -2197,7 +2224,8 @@ def test_http_proxy_rewrites_root_relative_assets(
     sandbox_http_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """HTML content from upstream should be rewritten to use proxy paths."""
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+    _seed_http_service(
+        sandbox_http_client,
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
@@ -2210,7 +2238,7 @@ def test_http_proxy_rewrites_root_relative_assets(
             auto_open=True,
             restart_token="r1",
             updated_at="2025-01-01T00:00:00+00:00",
-        )
+        ),
     )
 
     class _SuccessAsyncClient:
@@ -2247,7 +2275,8 @@ def test_create_preview_session_returns_host_based_launch_url(
     sandbox_http_client: TestClient,
 ) -> None:
     """Preview launch URL should use a root host instead of a path-prefixed proxy."""
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+    _seed_http_service(
+        sandbox_http_client,
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
@@ -2260,7 +2289,7 @@ def test_create_preview_session_returns_host_based_launch_url(
             auto_open=True,
             restart_token="r1",
             updated_at="2025-01-01T00:00:00+00:00",
-        )
+        ),
     )
 
     response = sandbox_http_client.post(
@@ -2295,7 +2324,8 @@ def test_host_preview_proxy_redirects_session_token_to_clean_url(
 ) -> None:
     """One-time preview launch token should be moved into a host cookie."""
     token = router_mod._create_preview_session_token("proj-1", "svc-int", "user-1")
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+    _seed_http_service(
+        sandbox_http_client,
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
@@ -2308,7 +2338,7 @@ def test_host_preview_proxy_redirects_session_token_to_clean_url(
             auto_open=True,
             restart_token="r1",
             updated_at="2025-01-01T00:00:00+00:00",
-        )
+        ),
     )
 
     response = sandbox_http_client.get(
@@ -2345,7 +2375,8 @@ def test_host_preview_proxy_keeps_root_relative_assets_unmodified(
 ) -> None:
     """Host-based preview should preserve normal root-relative app URLs."""
     token = router_mod._create_preview_session_token("proj-1", "svc-int", "user-1")
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+    _seed_http_service(
+        sandbox_http_client,
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
@@ -2358,7 +2389,7 @@ def test_host_preview_proxy_keeps_root_relative_assets_unmodified(
             auto_open=True,
             restart_token="r1",
             updated_at="2025-01-01T00:00:00+00:00",
-        )
+        ),
     )
 
     class _SuccessAsyncClient:
@@ -2407,7 +2438,8 @@ def test_host_preview_proxy_sanitizes_upstream_connection_errors(
     )
 
     token = router_mod._create_preview_session_token("proj-1", "svc-int", "user-1")
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+    _seed_http_service(
+        sandbox_http_client,
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
@@ -2420,7 +2452,7 @@ def test_host_preview_proxy_sanitizes_upstream_connection_errors(
             auto_open=True,
             restart_token="r1",
             updated_at="2025-01-01T00:00:00+00:00",
-        )
+        ),
     )
 
     class _FailingAsyncClient:
@@ -2492,7 +2524,7 @@ async def test_http_service_websocket_missing_service_reason_is_sanitized(
         path="ws",
         current_user=SimpleNamespace(id="user-1"),
         event_publisher=None,
-        redis_client=None,
+        http_service_registry=_TestHttpServiceRegistry(),
         db=SimpleNamespace(),
     )
 
@@ -2516,8 +2548,9 @@ async def test_host_preview_websocket_sanitizes_upstream_connection_errors(
     event_publisher = AsyncMock()
     event_publisher.publish_http_service_error = AsyncMock()
 
-    router_mod._http_service_registry.clear()
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+    http_service_registry = _TestHttpServiceRegistry()
+    http_service_registry.seed(
+        "proj-1",
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
@@ -2530,7 +2563,7 @@ async def test_host_preview_websocket_sanitizes_upstream_connection_errors(
             auto_open=True,
             restart_token="r1",
             updated_at="2025-01-01T00:00:00+00:00",
-        )
+        ),
     )
 
     async def fail_connect(*_args, **_kwargs):
@@ -2546,7 +2579,7 @@ async def test_host_preview_websocket_sanitizes_upstream_connection_errors(
         websocket=websocket,
         path="socket",
         event_publisher=event_publisher,
-        redis_client=None,
+        http_service_registry=http_service_registry,
     )
 
     assert websocket.accepted is True
@@ -2579,7 +2612,7 @@ async def test_host_preview_websocket_missing_service_reason_is_sanitized() -> N
         websocket=websocket,
         path="ws",
         event_publisher=None,
-        redis_client=None,
+        http_service_registry=_TestHttpServiceRegistry(),
     )
 
     assert websocket.closed is True

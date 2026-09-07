@@ -40,6 +40,11 @@ const UPDATE_RESTART_TO_APPLY_CHANNEL = 'agistack:update-restart-to-apply';
 const UPDATE_STATE_CHANGED_CHANNEL = 'agistack:update-state-changed';
 const allowedCommands = new Set([
   'frontend_ready',
+  'platform_plugin_authority_select_v2',
+  'platform_plugin_renderer_distribution_current_v2',
+  'platform_plugin_renderer_delivery_current_v2',
+  'platform_plugin_renderer_receipt_submit_v2',
+  'platform_plugin_renderer_owner_retire_v2',
   'trusted_session_clear',
   'local_trusted_session_save',
   'local_trusted_session_load',
@@ -53,6 +58,8 @@ const allowedCommands = new Set([
   'cloud_socket_open',
   'cloud_socket_send',
   'cloud_socket_close',
+  'sandbox_desktop_grant_open',
+  'sandbox_desktop_grant_close',
   'cloud_auth_password',
   'cloud_auth_force_password_change',
   'cloud_auth_device_begin',

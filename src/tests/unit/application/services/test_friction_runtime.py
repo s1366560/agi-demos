@@ -1,115 +1,69 @@
-"""Unit tests for ``src.application.services.friction_runtime``."""
+"""Tests for the generation-pinned friction application facade."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
-from src.application.services.friction_runtime import (
-    configure_friction_ingest,
-    record_lane_change,
-    reset_friction_ingest,
-)
-from src.domain.model.flow.friction_signal import FrictionKind
-from src.infrastructure.adapters.secondary.in_memory.friction_loop import (
-    InMemoryFrictionLedger,
-)
+from src.application.services.friction_runtime import record_lane_change
+from src.domain.model.flow.friction_signal import FrictionKind, FrictionSignal
+from src.infrastructure.plugins.v2 import reflection_runtime as runtime_module
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+pytestmark = pytest.mark.unit
 
 
-@pytest.fixture(autouse=True)
-def _reset() -> None:
-    reset_friction_ingest()
-    yield
-    reset_friction_ingest()
+async def test_record_lane_change_delegates_to_pinned_v2_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signal = FrictionSignal(
+        project_id="p1",
+        task_id="t1",
+        kind=FrictionKind.BOUNCE,
+        source_lane="executing",
+        target_lane="todo",
+    )
+    record = AsyncMock(return_value=signal)
+    monkeypatch.setattr(
+        runtime_module,
+        "current_reflection_runtime_v2",
+        lambda: SimpleNamespace(record_lane_change=record),
+    )
 
-
-@pytest.mark.unit
-async def test_record_lane_change_noop_without_configuration() -> None:
-    sig = await record_lane_change(
+    result = await record_lane_change(
         project_id="p1",
         task_id="t1",
         from_lane="executing",
         to_lane="todo",
-    )
-    assert sig is None
-
-
-@pytest.mark.unit
-async def test_record_lane_change_emits_bounce_on_backward_move() -> None:
-    ledger = InMemoryFrictionLedger()
-    configure_friction_ingest(
-        ledger,
-        lane_order=("todo", "dispatched", "executing", "done"),
+        metadata={"workspace_id": "w1"},
     )
 
-    sig = await record_lane_change(
+    assert result is signal
+    record.assert_awaited_once_with(
         project_id="p1",
         task_id="t1",
         from_lane="executing",
         to_lane="todo",
+        metadata={"workspace_id": "w1"},
     )
 
-    assert sig is not None
-    assert sig.kind is FrictionKind.BOUNCE
-    assert sig.source_lane == "executing"
-    assert sig.target_lane == "todo"
-    assert sig.project_id == "p1"
 
+async def test_record_lane_change_fails_closed_without_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _missing():
+        raise RuntimeV2Error("generation_not_pinned", "plugin generation is not pinned")
 
-@pytest.mark.unit
-async def test_record_lane_change_silent_on_forward_move() -> None:
-    ledger = InMemoryFrictionLedger()
-    configure_friction_ingest(
-        ledger,
-        lane_order=("todo", "dispatched", "executing", "done"),
-    )
+    monkeypatch.setattr(runtime_module, "current_reflection_runtime_v2", _missing)
 
-    sig = await record_lane_change(
-        project_id="p1",
-        task_id="t1",
-        from_lane="todo",
-        to_lane="executing",
-    )
+    with pytest.raises(RuntimeV2Error) as error:
+        await record_lane_change(
+            project_id="p1",
+            task_id="t1",
+            from_lane="executing",
+            to_lane="todo",
+        )
 
-    assert sig is None
-
-
-@pytest.mark.unit
-async def test_record_lane_change_silent_on_unknown_lane() -> None:
-    ledger = InMemoryFrictionLedger()
-    configure_friction_ingest(
-        ledger,
-        lane_order=("todo", "done"),
-    )
-
-    sig = await record_lane_change(
-        project_id="p1",
-        task_id="t1",
-        from_lane="executing",  # not in lane_order
-        to_lane="todo",
-    )
-
-    assert sig is None
-
-
-@pytest.mark.unit
-async def test_record_lane_change_swallows_ledger_failure() -> None:
-    class _FailingLedger:
-        async def append(self, _signal: object) -> None:
-            raise RuntimeError("boom")
-
-        async def query_window(self, *_args: object, **_kwargs: object) -> list[object]:
-            return []
-
-    configure_friction_ingest(
-        _FailingLedger(),  # type: ignore[arg-type]
-        lane_order=("todo", "dispatched", "executing", "done"),
-    )
-
-    # Must not raise, must return None.
-    sig = await record_lane_change(
-        project_id="p1",
-        task_id="t1",
-        from_lane="executing",
-        to_lane="todo",
-    )
-    assert sig is None
+    assert error.value.code == "generation_not_pinned"

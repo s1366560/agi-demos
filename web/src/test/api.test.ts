@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { installHttpAdmissionFixtureV2 } from './services/webHttpAdmissionFixtureV2';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { authAPI, tenantAPI, projectAPI, memoryAPI, taskAPI } from '../services/api';
 
@@ -29,6 +30,13 @@ vi.mock('axios', () => ({
 }));
 
 describe('API Services', () => {
+  let cleanup: () => Promise<void>;
+  beforeEach(() => {
+    cleanup = installHttpAdmissionFixtureV2();
+  });
+  afterEach(async () => {
+    await cleanup();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -122,7 +130,9 @@ describe('API Services', () => {
 
       const result = await authAPI.updateProfile(payload);
 
-      expect(mockApiInstance.put).toHaveBeenCalledWith('/users/me', payload, undefined);
+      expect(mockApiInstance.put).toHaveBeenCalledWith('/users/me', payload, {
+        signal: expect.any(AbortSignal),
+      });
       expect(result).toEqual({
         id: 'user-1',
         email: 'updated@example.com',
@@ -146,7 +156,10 @@ describe('API Services', () => {
 
       const result = await tenantAPI.list();
 
-      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/', { params: {} });
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/', {
+        signal: expect.any(AbortSignal),
+        params: {},
+      });
       expect(result).toEqual(mockData);
     });
 
@@ -154,7 +167,11 @@ describe('API Services', () => {
       const mockData = { id: '1' };
       mockApiInstance.post.mockResolvedValue({ data: mockData });
       const result = await tenantAPI.create({ name: 'T1' } as any);
-      expect(mockApiInstance.post).toHaveBeenCalledWith('/tenants/', { name: 'T1' }, undefined);
+      expect(mockApiInstance.post).toHaveBeenCalledWith(
+        '/tenants/',
+        { name: 'T1' },
+        { signal: expect.any(AbortSignal) }
+      );
       expect(result).toEqual(mockData);
     });
 
@@ -162,21 +179,29 @@ describe('API Services', () => {
       const mockData = { id: '1' };
       mockApiInstance.put.mockResolvedValue({ data: mockData });
       const result = await tenantAPI.update('1', { name: 'T2' });
-      expect(mockApiInstance.put).toHaveBeenCalledWith('/tenants/1', { name: 'T2' }, undefined);
+      expect(mockApiInstance.put).toHaveBeenCalledWith(
+        '/tenants/1',
+        { name: 'T2' },
+        { signal: expect.any(AbortSignal) }
+      );
       expect(result).toEqual(mockData);
     });
 
     it('delete should delete tenant', async () => {
       mockApiInstance.delete.mockResolvedValue({});
       await tenantAPI.delete('1');
-      expect(mockApiInstance.delete).toHaveBeenCalledWith('/tenants/1', undefined);
+      expect(mockApiInstance.delete).toHaveBeenCalledWith('/tenants/1', {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('get should get tenant', async () => {
       const mockData = { id: '1' };
       mockApiInstance.get.mockResolvedValue({ data: mockData });
       const result = await tenantAPI.get('1');
-      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/1', undefined);
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/1', {
+        signal: expect.any(AbortSignal),
+      });
       expect(result).toEqual(mockData);
     });
 
@@ -186,21 +211,25 @@ describe('API Services', () => {
       expect(mockApiInstance.post).toHaveBeenCalledWith(
         '/tenants/t1/members',
         { user_id: 'u1', role: 'admin' },
-        undefined
+        { signal: expect.any(AbortSignal) }
       );
     });
 
     it('removeMember should remove member', async () => {
       mockApiInstance.delete.mockResolvedValue({});
       await tenantAPI.removeMember('t1', 'u1');
-      expect(mockApiInstance.delete).toHaveBeenCalledWith('/tenants/t1/members/u1', undefined);
+      expect(mockApiInstance.delete).toHaveBeenCalledWith('/tenants/t1/members/u1', {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('listMembers should list members', async () => {
       const mockData = [{ user_id: 'u1' }];
       mockApiInstance.get.mockResolvedValue({ data: mockData });
       const result = await tenantAPI.listMembers('t1');
-      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/t1/members', undefined);
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/t1/members', {
+        signal: expect.any(AbortSignal),
+      });
       expect(result).toEqual(mockData);
     });
 
@@ -208,7 +237,9 @@ describe('API Services', () => {
       const mockData = [{ user_id: 'u1' }];
       mockApiInstance.get.mockResolvedValue({ data: { members: mockData, total: 1 } });
       const result = await tenantAPI.listMembers('t1');
-      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/t1/members', undefined);
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/t1/members', {
+        signal: expect.any(AbortSignal),
+      });
       expect(result).toEqual(mockData);
     });
   });
@@ -224,6 +255,7 @@ describe('API Services', () => {
       const result = await projectAPI.list('tenant-1');
 
       expect(mockApiInstance.get).toHaveBeenCalledWith('/projects/', {
+        signal: expect.any(AbortSignal),
         params: { tenant_id: 'tenant-1' },
       });
       expect(result).toEqual(mockData);
@@ -236,7 +268,7 @@ describe('API Services', () => {
       expect(mockApiInstance.post).toHaveBeenCalledWith(
         '/projects/',
         { name: 'P1', tenant_id: 't1' },
-        undefined
+        { signal: expect.any(AbortSignal) }
       );
       expect(result).toEqual(mockData);
     });
@@ -245,14 +277,20 @@ describe('API Services', () => {
       const mockData = { id: '1' };
       mockApiInstance.put.mockResolvedValue({ data: mockData });
       const result = await projectAPI.update('t1', 'p1', { name: 'P2' } as any);
-      expect(mockApiInstance.put).toHaveBeenCalledWith('/projects/p1', { name: 'P2' }, undefined);
+      expect(mockApiInstance.put).toHaveBeenCalledWith(
+        '/projects/p1',
+        { name: 'P2' },
+        { signal: expect.any(AbortSignal) }
+      );
       expect(result).toEqual(mockData);
     });
 
     it('delete should delete project', async () => {
       mockApiInstance.delete.mockResolvedValue({});
       await projectAPI.delete('t1', 'p1');
-      expect(mockApiInstance.delete).toHaveBeenCalledWith('/projects/p1', undefined);
+      expect(mockApiInstance.delete).toHaveBeenCalledWith('/projects/p1', {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('get should get project', async () => {
@@ -260,6 +298,7 @@ describe('API Services', () => {
       mockApiInstance.get.mockResolvedValue({ data: mockData });
       const result = await projectAPI.get('t1', 'p1');
       expect(mockApiInstance.get).toHaveBeenCalledWith('/projects/p1', {
+        signal: expect.any(AbortSignal),
         params: { tenant_id: 't1' },
       });
       expect(result).toEqual(mockData);
@@ -272,6 +311,7 @@ describe('API Services', () => {
       mockApiInstance.get.mockResolvedValue({ data: mockData });
       await memoryAPI.list('p1');
       expect(mockApiInstance.get).toHaveBeenCalledWith('/memories/', {
+        signal: expect.any(AbortSignal),
         params: { project_id: 'p1' },
       });
     });
@@ -283,7 +323,7 @@ describe('API Services', () => {
       expect(mockApiInstance.post).toHaveBeenCalledWith(
         '/memories/',
         { title: 'M1', project_id: 'p1' },
-        undefined
+        { signal: expect.any(AbortSignal) }
       );
     });
 
@@ -294,21 +334,25 @@ describe('API Services', () => {
       expect(mockApiInstance.patch).toHaveBeenCalledWith(
         '/memories/m1',
         { title: 'M2' },
-        undefined
+        { signal: expect.any(AbortSignal) }
       );
     });
 
     it('delete should delete memory', async () => {
       mockApiInstance.delete.mockResolvedValue({});
       await memoryAPI.delete('p1', 'm1');
-      expect(mockApiInstance.delete).toHaveBeenCalledWith('/memories/m1', undefined);
+      expect(mockApiInstance.delete).toHaveBeenCalledWith('/memories/m1', {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('get should get memory', async () => {
       const mockData = { id: '1' };
       mockApiInstance.get.mockResolvedValue({ data: mockData });
       await memoryAPI.get('p1', 'm1');
-      expect(mockApiInstance.get).toHaveBeenCalledWith('/memories/m1', undefined);
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/memories/m1', {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('search should return results', async () => {
@@ -323,7 +367,7 @@ describe('API Services', () => {
       expect(mockApiInstance.post).toHaveBeenCalledWith(
         '/memory/search',
         { query: 'test', project_id: 'project-1' },
-        undefined
+        { signal: expect.any(AbortSignal) }
       );
       expect(result).toEqual(mockData);
     });
@@ -333,6 +377,7 @@ describe('API Services', () => {
       mockApiInstance.get.mockResolvedValue({ data: mockData });
       await memoryAPI.getGraphData('p1');
       expect(mockApiInstance.get).toHaveBeenCalledWith('/graph/memory/graph', {
+        signal: expect.any(AbortSignal),
         params: { project_id: 'p1' },
       });
     });
@@ -344,7 +389,7 @@ describe('API Services', () => {
       expect(mockApiInstance.post).toHaveBeenCalledWith(
         '/memories/extract-entities',
         { text: 'text', project_id: 'p1' },
-        undefined
+        { signal: expect.any(AbortSignal) }
       );
     });
 
@@ -355,7 +400,7 @@ describe('API Services', () => {
       expect(mockApiInstance.post).toHaveBeenCalledWith(
         '/memories/extract-relationships',
         { text: 'text', project_id: 'p1' },
-        undefined
+        { signal: expect.any(AbortSignal) }
       );
     });
   });
@@ -374,6 +419,7 @@ describe('API Services', () => {
       });
 
       expect(mockApiInstance.get).toHaveBeenCalledWith('/tasks/recent', {
+        signal: expect.any(AbortSignal),
         params: { entity_id: 'entity-1', entity_type: 'memory', limit: 25 },
       });
       expect(result).toEqual({
@@ -413,6 +459,7 @@ describe('API Services', () => {
       });
 
       expect(mockApiInstance.post).toHaveBeenCalledWith('/tasks/retry-pending', undefined, {
+        signal: expect.any(AbortSignal),
         params: { limit: 25, task_type: 'add_episode', include_failed: true },
       });
       expect(result).toEqual(response);

@@ -40,51 +40,45 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
+    AgentLifecycleNotifierProtocolV2,
+)
+from src.infrastructure.plugins.v2.agent_loop import (
+    AGENT_LOOP_RESOLVER_SERVICE_V2,
+    AgentLoopResolverProtocolV2,
+)
+from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
+    current_artifact_lifecycle_application_service_v2,
+)
+from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
+
+from .detached_subagent_task_supervisor import DetachedSubAgentTaskSupervisor
 
 logger = logging.getLogger(__name__)
 
-# Global reference to the WebSocket connection manager
-# Set by the web application on startup
-_websocket_manager: Any | None = None
 
+def get_websocket_notifier() -> AgentLifecycleNotifierProtocolV2 | None:
+    """Resolve the notifier injected into the Agent loop for this pinned operation."""
+    try:
+        operation = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code == "operation_context_not_pinned":
+            return None
+        raise
 
-def get_websocket_notifier() -> Any | None:
-    """
-    Get the global WebSocket notifier.
-
-    Returns the WebSocketNotifier instance if the connection manager
-    has been registered, otherwise returns None.
-
-    Returns:
-        WebSocketNotifier instance or None
-    """
-    if _websocket_manager is None:
-        return None
-
-    from src.infrastructure.adapters.secondary.websocket_notifier import (
-        WebSocketNotifier,
-    )
-
-    return WebSocketNotifier(_websocket_manager)
-
-
-def register_websocket_manager(manager: Any) -> None:
-    """
-    Register the WebSocket connection manager globally.
-
-    This should be called during application startup to enable
-    lifecycle state notifications.
-
-    Args:
-        manager: ConnectionManager instance from agent_websocket.py
-    """
-    global _websocket_manager
-    _websocket_manager = manager
-    logger.info("[ProjectReActAgent] WebSocket manager registered for lifecycle notifications")
+    resolver = operation.require(AGENT_LOOP_RESOLVER_SERVICE_V2)
+    if not isinstance(resolver, AgentLoopResolverProtocolV2):
+        raise RuntimeV2Error(
+            "agent_loop_resolver_invalid",
+            "pinned agent-loop resolver does not implement the V2 service contract",
+        )
+    return resolver.lifecycle_notifier
 
 
 @dataclass
@@ -222,9 +216,11 @@ class ProjectReActAgent:
         self._subagents: list[SubAgent] | None = None
         self._session_context: Any | None = None
         self._react_agent: Any | None = None
+        self._detached_subagent_task_supervisor = DetachedSubAgentTaskSupervisor()
 
         # Execution tracking
         self._execution_lock = asyncio.Lock()
+        self._active_chat_tasks: set[asyncio.Task[Any]] = set()
         self._is_shutting_down = False
         self._initialized = False
 
@@ -277,12 +273,16 @@ class ProjectReActAgent:
             logger.debug(f"ProjectReActAgent[{self.project_key}]: Already initialized")
             return True
 
+        if not self._initialized and self._detached_subagent_task_supervisor.is_closed:
+            self._detached_subagent_task_supervisor = DetachedSubAgentTaskSupervisor()
+            self._is_shutting_down = False
+
         start_time = time.time()
         notifier = get_websocket_notifier()
 
         # Notify initialization started
         if notifier:
-            await notifier.notify_initializing(
+            _ = await notifier.notify_initializing(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
             )
@@ -333,7 +333,7 @@ class ProjectReActAgent:
 
             # Notify error state
             if notifier:
-                await notifier.notify_error(
+                _ = await notifier.notify_error(
                     tenant_id=self.config.tenant_id,
                     project_id=self.config.project_id,
                     error_message=error_message,
@@ -347,39 +347,44 @@ class ProjectReActAgent:
         Returns:
             Tuple of (graph_service, redis_client, artifact_service, provider_config, llm_client)
         """
-        from src.configuration.di_container import DIContainer as Container
         from src.infrastructure.agent.state.agent_worker_state import (
-            get_or_create_agent_graph_service,
             get_or_create_llm_client,
             get_or_create_provider_config,
-            get_redis_client,
+        )
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_worker_runtime_services_v2,
         )
 
-        graph_service = await get_or_create_agent_graph_service(tenant_id=self.config.tenant_id)
+        worker_services = current_agent_worker_runtime_services_v2()
+        graph_runtime = worker_services.graph_runtime
+        graph_service = graph_runtime.graph_service
         if not graph_service:
             logger.warning(
                 f"ProjectReActAgent[{self.project_key}]: Graph service not available; "
-                "knowledge-graph features are disabled for this agent"
+                "knowledge-graph features are disabled for this agent "
+                f"(reason={graph_runtime.unavailable_code or 'unavailable'})"
             )
 
-        redis_client = await get_redis_client()
+        redis_client = worker_services.redis_runtime.client
+        if redis_client is None:
+            raise RuntimeV2Error(
+                "agent_worker_redis_unavailable",
+                "Agent Worker requires the generation Redis runtime",
+            )
 
         try:
+            from redis.asyncio import Redis
+
             from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
                 RedisAgentMessageBusAdapter,
             )
 
-            self._message_bus = RedisAgentMessageBusAdapter(redis_client)
+            self._message_bus = RedisAgentMessageBusAdapter(cast(Redis, redis_client))
         except Exception as e:
             logger.warning(f"Could not initialize agent message bus: {e}")
             self._message_bus = None
 
-        try:
-            container = Container(redis_client=redis_client)
-            artifact_service = container.artifact_service()
-        except Exception as e:
-            logger.warning(f"Could not initialize artifact service: {e}")
-            artifact_service = None
+        artifact_service = current_artifact_lifecycle_application_service_v2().artifact
 
         provider_config = await get_or_create_provider_config(
             tenant_id=self.config.tenant_id, force_refresh=force_refresh
@@ -568,7 +573,7 @@ class ProjectReActAgent:
         async def _subagent_lifecycle_hook(event: dict[str, Any]) -> None:
             if not notifier:
                 return
-            await notifier.notify_subagent_lifecycle_event(
+            _ = await notifier.notify_subagent_lifecycle_event(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 event=event,
@@ -607,9 +612,6 @@ class ProjectReActAgent:
                 app_settings.agent_subagent_max_children_per_requester
             ),
             max_subagent_lane_concurrency=app_settings.agent_subagent_lane_concurrency,
-            subagent_terminal_retention_seconds=(
-                app_settings.agent_subagent_terminal_retention_seconds
-            ),
             subagent_announce_max_events=app_settings.agent_subagent_announce_max_events,
             subagent_announce_max_retries=app_settings.agent_subagent_announce_max_retries,
             subagent_announce_retry_delay_ms=(app_settings.agent_subagent_announce_retry_delay_ms),
@@ -622,6 +624,7 @@ class ProjectReActAgent:
             workspace_manager=workspace_manager,
             message_bus=self._message_bus,
             control_channel=control_channel,
+            detached_subagent_task_supervisor=self._detached_subagent_task_supervisor,
         )
 
     def _build_context_window_config(
@@ -668,6 +671,7 @@ class ProjectReActAgent:
         total_skill_count = loaded_skill_count
 
         self._initialized = True
+        self._is_shutting_down = False
         self._status.is_initialized = True
         self._status.is_active = True
         self._status.tool_count = len(self._tools or {})
@@ -683,7 +687,7 @@ class ProjectReActAgent:
 
         notifier = get_websocket_notifier()
         if notifier:
-            await notifier.notify_ready(
+            _ = await notifier.notify_ready(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 tool_count=self._status.tool_count,
@@ -761,10 +765,10 @@ class ProjectReActAgent:
 
         try:
             from src.infrastructure.agent.state.agent_worker_state import (
-                get_mcp_sandbox_adapter,
+                current_mcp_sandbox_adapter_v2,
             )
 
-            sandbox_adapter = get_mcp_sandbox_adapter()
+            sandbox_adapter = current_mcp_sandbox_adapter_v2()
             if not sandbox_adapter:
                 return False
 
@@ -819,6 +823,8 @@ class ProjectReActAgent:
             success = await self.initialize(force_refresh=True)
             return success
 
+        except RuntimeV2Error:
+            raise
         except Exception as e:
             logger.warning(
                 f"ProjectReActAgent[{self.project_key}]: Error checking sandbox tools: {e}"
@@ -905,6 +911,7 @@ class ProjectReActAgent:
         preferred_language: str | None = None,
         api_auth_token: str | None = None,
         canonical_run_id: str | None = None,
+        plugin_generation: dict[str, str | int] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -938,6 +945,9 @@ class ProjectReActAgent:
             return
 
         start_time = time.time()
+        current_chat_task = asyncio.current_task()
+        if current_chat_task is not None:
+            self._active_chat_tasks.add(current_chat_task)
         effective_tenant_id = tenant_id or self.config.tenant_id
         notifier = get_websocket_notifier()
 
@@ -948,7 +958,7 @@ class ProjectReActAgent:
 
         # Notify executing state
         if notifier:
-            await notifier.notify_executing(
+            _ = await notifier.notify_executing(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 conversation_id=conversation_id,
@@ -984,6 +994,7 @@ class ProjectReActAgent:
                 tenant_agent_config_data=tenant_agent_config_data,
                 preferred_language=preferred_language,
                 api_auth_token=api_auth_token,
+                plugin_generation=plugin_generation,
                 attachment_content=(
                     [
                         {
@@ -1015,22 +1026,25 @@ class ProjectReActAgent:
                 f"ProjectReActAgent[{self.project_key}]: Chat execution error: {e}", exc_info=True
             )
 
-            yield self._make_error_event(error_message, "CHAT_EXECUTION_ERROR")
+            error_code = e.code if isinstance(e, RuntimeV2Error) else "CHAT_EXECUTION_ERROR"
+            yield self._make_error_event(error_message, error_code)
 
         finally:
+            if current_chat_task is not None:
+                self._active_chat_tasks.discard(current_chat_task)
             self._status.active_chats -= 1
             self._status.is_executing = self._status.active_chats > 0
 
             # Notify ready state after completion (or error)
             if notifier:
                 if is_error and error_message:
-                    await notifier.notify_error(
+                    _ = await notifier.notify_error(
                         tenant_id=self.config.tenant_id,
                         project_id=self.config.project_id,
                         error_message=error_message,
                     )
                 else:
-                    await notifier.notify_ready(
+                    _ = await notifier.notify_ready(
                         tenant_id=self.config.tenant_id,
                         project_id=self.config.project_id,
                         tool_count=self._status.tool_count,
@@ -1055,7 +1069,7 @@ class ProjectReActAgent:
         # Notify paused state
         notifier = get_websocket_notifier()
         if notifier:
-            await notifier.notify_paused(
+            _ = await notifier.notify_paused(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
             )
@@ -1080,7 +1094,7 @@ class ProjectReActAgent:
         # Notify ready state
         notifier = get_websocket_notifier()
         if notifier:
-            await notifier.notify_ready(
+            _ = await notifier.notify_ready(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 tool_count=self._status.tool_count,
@@ -1091,60 +1105,77 @@ class ProjectReActAgent:
         logger.info(f"ProjectReActAgent[{self.project_key}]: Resumed")
         return True
 
-    async def stop(self) -> bool:
+    async def stop(
+        self,
+        *,
+        generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+        notify_lifecycle: bool = True,
+    ) -> bool:
         """
         Stop the agent and clean up resources.
 
         This method:
-        1. Sends 'shutting_down' lifecycle notification
-        2. Sets shutdown flag (prevents new chats)
-        3. Waits for current chats to complete (with timeout)
-        4. Clears caches
-        5. Updates status
+        1. Sets the shutdown flag so new chats and detached runs are rejected
+        2. Cancels and awaits active chat tasks
+        3. Cancels and awaits all project-owned detached SubAgent tasks
+        4. Clears the exact generation cache when a descriptor is provided
+        5. Clears runtime references after task cleanup
+        6. Updates status
 
         Returns:
             True if stopped successfully
         """
-        if not self._initialized:
-            return True
-
-        logger.info(f"ProjectReActAgent[{self.project_key}]: Stopping...")
         self._is_shutting_down = True
+        was_initialized = self._initialized
+        if was_initialized:
+            logger.info(f"ProjectReActAgent[{self.project_key}]: Stopping...")
 
         # Notify shutting down state
-        notifier = get_websocket_notifier()
-        if notifier:
-            await notifier.notify_shutting_down(
+        notifier = get_websocket_notifier() if was_initialized and notify_lifecycle else None
+        if notifier is not None:
+            _ = await notifier.notify_shutting_down(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
             )
 
-        # Wait for current executions to complete
-        wait_start = time.time()
-        timeout = 30.0  # 30 seconds timeout
+        current_task = asyncio.current_task()
+        active_chat_tasks = tuple(
+            task for task in self._active_chat_tasks if task is not current_task and not task.done()
+        )
+        for task in active_chat_tasks:
+            _ = task.cancel()
+        if active_chat_tasks:
+            _ = await asyncio.gather(*active_chat_tasks, return_exceptions=True)
 
-        while self._status.active_chats > 0 and (time.time() - wait_start) < timeout:
-            await asyncio.sleep(0.1)
-
-        if self._status.active_chats > 0:
-            logger.warning(
-                f"ProjectReActAgent[{self.project_key}]: Timeout waiting for "
-                f"{self._status.active_chats} active chats"
-            )
+        await self._detached_subagent_task_supervisor.shutdown()
 
         # Clear session cache
-        try:
-            from src.infrastructure.agent.state.agent_session_pool import (
-                invalidate_agent_session,
-            )
+        if was_initialized:
+            try:
+                if generation_descriptor is None:
+                    from src.infrastructure.agent.state.agent_session_pool import (
+                        invalidate_agent_session,
+                    )
 
-            invalidate_agent_session(
-                tenant_id=self.config.tenant_id,
-                project_id=self.config.project_id,
-                agent_mode=self.config.agent_mode,
-            )
-        except Exception as e:
-            logger.warning(f"ProjectReActAgent[{self.project_key}]: Failed to clear cache: {e}")
+                    _ = invalidate_agent_session(
+                        tenant_id=self.config.tenant_id,
+                        project_id=self.config.project_id,
+                        agent_mode=self.config.agent_mode,
+                    )
+                else:
+                    from src.infrastructure.agent.state.agent_session_pool import (
+                        clear_session_cache,
+                    )
+
+                    _ = await clear_session_cache(
+                        tenant_id=self.config.tenant_id,
+                        project_id=self.config.project_id,
+                        agent_mode=self.config.agent_mode,
+                        grace_period_seconds=0,
+                        generation_descriptor=generation_descriptor,
+                    )
+            except Exception as e:
+                logger.warning(f"ProjectReActAgent[{self.project_key}]: Failed to clear cache: {e}")
 
         # Update status
         self._initialized = False
@@ -1171,10 +1202,7 @@ class ProjectReActAgent:
         """
         logger.info(f"ProjectReActAgent[{self.project_key}]: Refreshing...")
 
-        # Stop current instance
-        await self.stop()
-
-        # Re-initialize with force refresh
+        # Rebuild the ReActAgent while retaining Project-owned detached tasks.
         return await self.initialize(force_refresh=True)
 
     def get_status(self) -> ProjectAgentStatus:
@@ -1557,37 +1585,3 @@ class ProjectAgentManager:
             logger.info(f"ProjectAgentManager: Cleaned up {len(agents_to_stop)} idle agents")
 
         return len(agents_to_stop)
-
-
-# Global manager instance
-_project_agent_manager: ProjectAgentManager | None = None
-_manager_lock = asyncio.Lock()
-
-
-async def get_project_agent_manager() -> ProjectAgentManager:
-    """
-    Get the global ProjectAgentManager instance.
-
-    Returns:
-        ProjectAgentManager singleton
-    """
-    global _project_agent_manager
-
-    if _project_agent_manager is None:
-        async with _manager_lock:
-            if _project_agent_manager is None:
-                _project_agent_manager = ProjectAgentManager()
-                await _project_agent_manager.start()
-                logger.info("ProjectAgentManager: Global instance created")
-
-    return _project_agent_manager
-
-
-async def stop_project_agent_manager() -> None:
-    """Stop the global ProjectAgentManager."""
-    global _project_agent_manager
-
-    if _project_agent_manager:
-        await _project_agent_manager.stop()
-        _project_agent_manager = None
-        logger.info("ProjectAgentManager: Global instance stopped")

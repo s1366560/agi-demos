@@ -3,8 +3,8 @@ import { createRequire } from 'node:module';
 import { afterEach, test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { createTenantGenesClient } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant-admin/tenantGenesClient.js',
+const { createDesktopTenantGenesHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantGenesHttpProjectionV2.js',
 );
 
 const config = Object.freeze({
@@ -48,7 +48,7 @@ test('gene subresource actions keep tenant authority in a valid query string', a
     return json(genePayload());
   };
 
-  const client = createTenantGenesClient(config);
+  const client = createDesktopTenantGenesHttpProjectionV2(config);
   await client.createGene(scope, { name: 'Review', slug: 'review' });
   await client.updateGene(scope, 'gene-1', { name: 'Review two' });
   await client.deleteGene(scope, 'gene-1');

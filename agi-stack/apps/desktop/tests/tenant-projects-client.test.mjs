@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const {
-  createTenantProjectsHttpClient,
+  applyDesktopTenantProjectsAuthorityV2,
+  createDesktopTenantProjectsClientV2,
+  createDesktopTenantProjectsOperationsV2,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantProjectsHttpClient.js'
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantProjectsAuthorityModuleV2.js'
 );
 const {
   loadTenantProjectsCapability,
@@ -13,9 +15,12 @@ const {
 );
 
 const originalFetch = globalThis.fetch;
+const originalWindow = globalThis.window;
 
 test.afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalWindow === undefined) delete globalThis.window;
+  else globalThis.window = originalWindow;
 });
 
 test('Cloud Projects client binds list, detail, create, update and delete to the tenant scope', async () => {
@@ -63,7 +68,7 @@ test('Cloud Projects client binds list, detail, create, update and delete to the
     });
   };
 
-  const client = createTenantProjectsHttpClient(runtimeConfig());
+  const client = tenantProjectsClient(runtimeConfig());
   const scope = { authority: 'cloud', tenantId: 'tenant-1' };
   const list = await client.list(scope, {
     page: 1,
@@ -122,6 +127,63 @@ test('Cloud Projects client binds list, detail, create, update and delete to the
   );
 });
 
+test('Cloud Projects client uses the vault broker without a renderer bearer', async () => {
+  const commands = [];
+  globalThis.fetch = async () => assert.fail('vault-backed Cloud requests must not use fetch');
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      core: {
+        async invoke(command, args) {
+          commands.push({ command, args });
+          const path = new URL(args.request.path, 'https://desktop.invalid').pathname;
+          if (path === '/api/v1/projects/') {
+            return {
+              status: 200,
+              body: {
+                projects: [project()],
+                total: 1,
+                page: 1,
+                page_size: 20,
+              },
+            };
+          }
+          if (path === '/api/v1/auth/me') {
+            return { status: 200, body: { user_id: 'user-1' } };
+          }
+          if (path === '/api/v1/workspace-context') {
+            return {
+              status: 200,
+              body: {
+                context: { tenant_id: 'tenant-1', revision: 9 },
+                membership_role: 'admin',
+              },
+            };
+          }
+          if (path === '/api/v1/projects/project-1/members') {
+            return {
+              status: 200,
+              body: { members: [{ user_id: 'user-1', role: 'owner' }], total: 1 },
+            };
+          }
+          assert.fail(`Unexpected vault request ${args.request.path}`);
+        },
+      },
+    },
+  };
+
+  const snapshot = await tenantProjectsClient(
+    runtimeConfig({ apiKey: '', localApiToken: '' }),
+  ).list({ authority: 'cloud', tenantId: 'tenant-1' });
+
+  assert.equal(snapshot.projects[0].id, 'project-1');
+  assert.equal(commands.length, 4);
+  assert.ok(commands.every(({ command }) => command === 'cloud_request'));
+  assert.doesNotMatch(
+    JSON.stringify(commands),
+    /Authorization|Bearer|cloud-token|launch-capability/u,
+  );
+});
+
 test('Projects client preserves a caller-owned idempotency key across transport retries', async () => {
   const requests = [];
   globalThis.fetch = async (url, init) => {
@@ -134,7 +196,7 @@ test('Projects client preserves a caller-owned idempotency key across transport 
       }),
     );
   };
-  const client = createTenantProjectsHttpClient(
+  const client = tenantProjectsClient(
     runtimeConfig({
       mode: 'local',
       tenantId: 'tenant-local',
@@ -188,7 +250,7 @@ test('Cloud Projects exposes only authority-backed actions for an ordinary membe
     });
   };
 
-  const result = await createTenantProjectsHttpClient(runtimeConfig()).list({
+  const result = await tenantProjectsClient(runtimeConfig()).list({
     authority: 'cloud',
     tenantId: 'tenant-1',
   });
@@ -232,7 +294,7 @@ test('Cloud Projects client normalizes nullable optional ProjectResponse fields'
     });
   };
 
-  const result = await createTenantProjectsHttpClient(runtimeConfig()).list({
+  const result = await tenantProjectsClient(runtimeConfig()).list({
     authority: 'cloud',
     tenantId: 'tenant-1',
   });
@@ -264,7 +326,7 @@ test('Local Projects client requires the exact sidecar scope and never accepts c
       },
     });
 
-  const client = createTenantProjectsHttpClient(
+  const client = tenantProjectsClient(
     runtimeConfig({
       mode: 'local',
       tenantId: 'tenant-local',
@@ -322,6 +384,7 @@ test('Tenant Projects capability accepts an ordered safe action subset for Local
       tenantId: 'tenant-local',
       apiBaseUrl: 'http://127.0.0.1:4777',
     }),
+    tenantProjectsOperations(),
   );
 
   assert.equal(capability.availability, 'degraded');
@@ -334,11 +397,11 @@ test('Projects client fails closed before fetch on runtime scope drift', async (
     calls += 1;
     return jsonResponse({});
   };
-  const client = createTenantProjectsHttpClient(runtimeConfig());
+  const client = tenantProjectsClient(runtimeConfig());
 
   await assert.rejects(
     client.list({ authority: 'cloud', tenantId: 'other-tenant' }),
-    /tenant_projects_runtime_scope_mismatch/u,
+    (error) => error.code === 'desktop_tenant_projects_operation_input_invalid',
   );
   assert.equal(calls, 0);
 });
@@ -386,6 +449,38 @@ function runtimeConfig(overrides = {}) {
     workspaceRoot: '',
     ...overrides,
   };
+}
+
+function tenantProjectsOperations() {
+  let service = null;
+  applyDesktopTenantProjectsAuthorityV2(
+    {
+      provide(_serviceKey, candidate) {
+        service = candidate;
+      },
+    },
+    { strategy: 'desktop-api-fetch' },
+  );
+  return createDesktopTenantProjectsOperationsV2(() => ({
+    async acquireServiceOperationLease() {
+      let released = false;
+      return {
+        status: 'accepted',
+        digest: 'tenant-projects-test',
+        useService(operation) {
+          if (released) throw new Error('lease_released');
+          return operation(service);
+        },
+        async release() {
+          released = true;
+        },
+      };
+    },
+  }));
+}
+
+function tenantProjectsClient(config) {
+  return createDesktopTenantProjectsClientV2(tenantProjectsOperations(), config);
 }
 
 function jsonResponse(payload, status = 200) {

@@ -38,7 +38,10 @@ from .react_agent_workspace_context import (
 )
 
 if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+
     from .processor import ToolDefinition
+    from .subagent_tool_set_v2 import InheritedToolSetV2, SubAgentToolSetBindingV2
 
 logger = logging.getLogger(__name__)
 
@@ -160,33 +163,44 @@ class CompositionMixin:
     def _subagent_filter_tools(
         self: _CompositionAgent,
         subagent: SubAgent,
+        *,
+        inherited_tool_set: InheritedToolSetV2,
     ) -> tuple[list[ToolDefinition], set[str]]:
         """Filter tools for SubAgent permissions and return mutable collections."""
-        filtered = self._tool_builder.filter_tools(subagent)
+        filtered = self._tool_builder.filter_tools(
+            subagent,
+            inherited_tool_set=inherited_tool_set,
+        )
         return cast("tuple[list[ToolDefinition], set[str]]", filtered)
 
     def _subagent_inject_nested_tools(
         self: _CompositionAgent,
         *,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
         conversation_id: str,
         abort_signal: asyncio.Event | None,
         delegation_depth: int,
+        tool_set_binding: SubAgentToolSetBindingV2,
+        allowed_tool_names: frozenset[str],
         filtered_tools: list[ToolDefinition],
         existing_tool_names: set[str],
     ) -> None:
         """Inject SubAgent delegation tools for nested orchestration (bounded depth)."""
         self._tool_builder.inject_nested_tools(
             subagent=subagent,
+            available_subagents=available_subagents,
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,
             conversation_id=conversation_id,
             abort_signal=abort_signal,
             delegation_depth=delegation_depth,
+            tool_set_binding=tool_set_binding,
+            allowed_tool_names=allowed_tool_names,
             filtered_tools=filtered_tools,
             existing_tool_names=existing_tool_names,
         )
@@ -271,10 +285,13 @@ class CompositionMixin:
         ):
             append_fn(td)
 
-    def _extract_sandbox_id_from_tools(self: _CompositionAgent) -> str | None:
-        """Extract sandbox_id from any available sandbox tool wrapper."""
-        current_tools, _ = self._get_current_tools()
-        for tool in current_tools.values():
+    def _extract_sandbox_id_from_tools(
+        self: _CompositionAgent,
+        *,
+        tool_set: ToolSetV2,
+    ) -> str | None:
+        """Extract sandbox_id only from the pinned turn ToolSet."""
+        for tool in tool_set.tools.values():
             if hasattr(tool, "sandbox_id") and tool.sandbox_id:
                 return cast(str | None, tool.sandbox_id)
         return None

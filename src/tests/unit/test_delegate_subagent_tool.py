@@ -3,18 +3,34 @@
 Tests the delegate_subagent_tool, parallel_delegate_subagent_tool, and integration.
 """
 
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 
 from src.domain.model.agent.subagent import AgentTrigger, SubAgent
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+from src.infrastructure.agent.tools import delegate_subagent as delegate_subagent_module
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.delegate_subagent import (
-    configure_delegate_subagent,
     delegate_subagent_tool,
     parallel_delegate_subagent_tool,
 )
+
+
+def configure_delegate_subagent(**kwargs: Any) -> None:
+    """Bind a runtime through the test-only ContextVar harness."""
+    runtime = delegate_subagent_module._delegate_runtime_from_dependencies(  # pyright: ignore[reportPrivateUsage]
+        execute_callback=kwargs.get("execute_callback"),
+        run_registry=kwargs.get("run_registry"),
+        conversation_id=kwargs.get("conversation_id"),
+        subagent_names=kwargs.get("subagent_names"),
+        subagent_descriptions=kwargs.get("subagent_descriptions"),
+        delegation_depth=kwargs.get("delegation_depth", 0),
+        max_active_runs=kwargs.get("max_active_runs"),
+        max_concurrency=kwargs.get("max_concurrency", 5),
+    )
+    _ = delegate_subagent_module._delegate_runtime.set(runtime)  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.fixture
@@ -32,23 +48,9 @@ def tool_ctx():
 def _reset_delegate_state():
     from src.infrastructure.agent.tools import delegate_subagent as mod
 
-    mod._delegate_execute_callback = None
-    mod._delegate_run_registry = None
-    mod._delegate_conversation_id = None
-    mod._delegate_subagent_names = []
-    mod._delegate_subagent_descriptions = {}
-    mod._delegate_delegation_depth = 0
-    mod._delegate_max_active_runs = None
-    mod._delegate_max_concurrency = 5
+    token = mod._delegate_runtime.set(None)  # pyright: ignore[reportPrivateUsage]
     yield
-    mod._delegate_execute_callback = None
-    mod._delegate_run_registry = None
-    mod._delegate_conversation_id = None
-    mod._delegate_subagent_names = []
-    mod._delegate_subagent_descriptions = {}
-    mod._delegate_delegation_depth = 0
-    mod._delegate_max_active_runs = None
-    mod._delegate_max_concurrency = 5
+    mod._delegate_runtime.reset(token)  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.unit

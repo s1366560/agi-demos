@@ -8,6 +8,9 @@
  */
 
 declare module '@/vendor/kasmvnc/core/rfb.js' {
+  export class RfbInitializationError extends Error {
+    readonly disposal: Promise<void>;
+  }
   export interface RFBOptions {
     wsProtocols?: string[];
     shared?: boolean;
@@ -64,7 +67,7 @@ declare module '@/vendor/kasmvnc/core/rfb.js' {
     constructor(
       target: HTMLElement,
       touchInput: HTMLTextAreaElement,
-      url: string,
+      url: string | WebSocket,
       options?: RFBOptions
     );
 
@@ -82,6 +85,8 @@ declare module '@/vendor/kasmvnc/core/rfb.js' {
 
     // Public methods
     disconnect(): void;
+    dispose(): Promise<void>;
+    removeEventListener(event: string, handler: (e: RFBEventDetail) => void): void;
     sendCredentials(credentials: Credentials): void;
     addEventListener(event: 'connect', handler: (e: ConnectEvent) => void): void;
     addEventListener(event: 'disconnect', handler: (e: DisconnectEvent) => void): void;

@@ -552,6 +552,7 @@ fn composer_context_authority_scopes_structured_subagent_slots() {
             &authenticated,
             "local-workspace",
             &context(id),
+            None,
         )
         .is_ok());
     }
@@ -561,6 +562,7 @@ fn composer_context_authority_scopes_structured_subagent_slots() {
             &authenticated,
             "local-workspace",
             &context(id),
+            None,
         )
         .is_err());
     }
@@ -614,6 +616,7 @@ fn composer_context_authority_accepts_active_tenant_and_project_skills() {
         &authenticated,
         "local-workspace",
         &tenant_context,
+        None,
     )
     .is_ok());
 
@@ -628,6 +631,7 @@ fn composer_context_authority_accepts_active_tenant_and_project_skills() {
         &authenticated,
         "local-workspace",
         &disabled_project_context,
+        None,
     )
     .is_err());
 
@@ -642,6 +646,137 @@ fn composer_context_authority_accepts_active_tenant_and_project_skills() {
         &authenticated,
         "local-workspace",
         &project_context,
+        None,
     )
     .is_ok());
+}
+
+#[test]
+fn composer_plugin_context_ignores_legacy_registry_without_active_v2_generation() {
+    let state = test_state("composer-plugin-v2-secret");
+    let authenticated = state
+        .session_store
+        .validate_session_credential("composer-plugin-v2-secret", Utc::now().timestamp_millis())
+        .expect("validate session credential")
+        .expect("authenticated context");
+    state
+        .session_store
+        .connection()
+        .expect("legacy plugin registry connection")
+        .execute(
+            "INSERT INTO desktop_managed_resources(
+               kind, scope_kind, scope_id, id, status, revision,
+               created_at_ms, updated_at_ms, value_json, vault_refs_json
+             ) VALUES (
+               'plugin', 'tenant', 'local', 'legacy-plugin', 'active', 0,
+               1752384000000, 1752384000000,
+               '{\"id\":\"legacy-plugin\",\"enabled\":true,\"discovered\":true}', '[]'
+             )",
+            [],
+        )
+        .expect("seed inert legacy plugin row");
+    let context = [ComposerContextItem {
+        kind: ComposerContextKind::Plugin,
+        resource_id: "legacy-plugin".to_string(),
+        label: "Legacy plugin".to_string(),
+        metadata: Some(json!({ "execution_slot": "plugin" })),
+    }];
+
+    let (status, Json(payload)) = validate_composer_context_authority(
+        &state,
+        &authenticated,
+        "local-workspace",
+        &context,
+        None,
+    )
+    .expect_err("legacy registry row must not restore plugin authority");
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        payload["detail"]["code"],
+        "plugin_generation_v2_unavailable"
+    );
+    assert_eq!(payload["detail"]["target"], "desktop-sidecar");
+    assert_eq!(payload["detail"]["generation"], Value::Null);
+}
+
+#[tokio::test]
+async fn composer_plugin_context_consumes_the_request_pinned_runtime_generation() {
+    const BOOTSTRAP: &str =
+        include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
+    let state = test_state("composer-plugin-runtime-v2-secret");
+    let authenticated = state
+        .session_store
+        .validate_session_credential(
+            "composer-plugin-runtime-v2-secret",
+            Utc::now().timestamp_millis(),
+        )
+        .expect("validate session credential")
+        .expect("authenticated context");
+    let snapshot: Value = serde_json::from_str(BOOTSTRAP).expect("bootstrap must parse");
+    let digest = snapshot["digest"].as_str().expect("snapshot digest");
+    let distribution = agistack_plugin_host::parse_control_plane_distribution_v2(
+        &json!({
+            "schema_version": 2,
+            "descriptor": {
+                "profile_id": snapshot["profile_id"],
+                "generation": snapshot["generation"],
+                "digest": digest,
+            },
+            "snapshot": snapshot,
+            "envelope": {
+                "version": 77,
+                "nonce": "composer-plugin-runtime-v2",
+                "snapshot_digest": digest,
+                "type_url": "types.memstack.ai/plugin.profile.v2",
+            },
+        })
+        .to_string(),
+    )
+    .expect("distribution must parse");
+    let reconciler = agistack_plugin_host::PluginSnapshotReconcilerV2::new_with_manager(
+        agistack_plugin_host::LoaderV2::for_target(
+            agistack_plugin_host::DataPlaneTargetV2::DesktopSidecar,
+            [
+                agistack_plugin_host::desktop_sidecar_http_routes_definition_v2(),
+                agistack_plugin_host::desktop_sidecar_host_definition_v2(),
+            ],
+        ),
+        state.platform_plugin_authority_v2.manager(),
+    );
+    let generation = reconciler
+        .stage_snapshot(distribution.snapshot.clone())
+        .await
+        .expect("generation must stage");
+    state
+        .platform_plugin_authority_v2
+        .publish(&distribution, generation)
+        .await;
+    let lease = Arc::new(
+        state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .expect("request generation must be available"),
+    );
+    state.platform_plugin_authority_v2.deactivate().await;
+    let context = [ComposerContextItem {
+        kind: ComposerContextKind::Plugin,
+        resource_id: "memstack-native-target-hosts@2.0.0".to_string(),
+        label: "Native target hosts".to_string(),
+        metadata: Some(json!({ "execution_slot": "plugin" })),
+    }];
+
+    validate_composer_context_authority(
+        &state,
+        &authenticated,
+        "local-workspace",
+        &context,
+        Some(lease.as_ref()),
+    )
+    .expect("plugin context must use the request-pinned generation after authority retirement");
+
+    assert_eq!(lease.descriptor().publication_version, Some(77));
+    assert_eq!(lease.descriptor().digest, distribution.snapshot.digest);
+    drop(lease);
+    reconciler.close().await;
 }

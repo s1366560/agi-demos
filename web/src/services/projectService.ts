@@ -105,8 +105,9 @@ export const projectService = {
    * ```
    */
   listMembers: async (projectId: string): Promise<{ users: User[] }> => {
-    const response = await apiFetch.get(`/projects/${projectId}/members`);
-    return (await response.json()) as { users: User[] };
+    return apiFetch.get(`/projects/${projectId}/members`, async (response) => {
+      return (await response.json()) as { users: User[] };
+    });
   },
 
   /**
@@ -127,7 +128,11 @@ export const projectService = {
    * ```
    */
   addMember: async (projectId: string, userId: string, role: string): Promise<void> => {
-    await apiFetch.post(`/projects/${projectId}/members`, { user_id: userId, role });
+    await apiFetch.post(
+      `/projects/${projectId}/members`,
+      { user_id: userId, role },
+      () => undefined
+    );
   },
 
   /**
@@ -147,7 +152,7 @@ export const projectService = {
    * ```
    */
   removeMember: async (projectId: string, userId: string): Promise<void> => {
-    await apiFetch.delete(`/projects/${projectId}/members/${userId}`);
+    await apiFetch.delete(`/projects/${projectId}/members/${userId}`, () => undefined);
   },
 
   /**
@@ -168,7 +173,7 @@ export const projectService = {
    * ```
    */
   updateMemberRole: async (projectId: string, userId: string, role: string): Promise<void> => {
-    await apiFetch.patch(`/projects/${projectId}/members/${userId}`, { role });
+    await apiFetch.patch(`/projects/${projectId}/members/${userId}`, { role }, () => undefined);
   },
 
   /**
@@ -187,8 +192,9 @@ export const projectService = {
    * ```
    */
   getProject: async (projectId: string): Promise<Project> => {
-    const response = await apiFetch.get(`/projects/${projectId}`);
-    return (await response.json()) as Project;
+    return apiFetch.get(`/projects/${projectId}`, async (response) => {
+      return (await response.json()) as Project;
+    });
   },
 
   /**
@@ -210,8 +216,9 @@ export const projectService = {
    * ```
    */
   updateProject: async (projectId: string, updates: Partial<Project>): Promise<Project> => {
-    const response = await apiFetch.put(`/projects/${projectId}`, updates);
-    return (await response.json()) as Project;
+    return apiFetch.put(`/projects/${projectId}`, updates, async (response) => {
+      return (await response.json()) as Project;
+    });
   },
 
   /**
@@ -231,7 +238,7 @@ export const projectService = {
    * ```
    */
   deleteProject: async (projectId: string): Promise<void> => {
-    await apiFetch.delete(`/projects/${projectId}`);
+    await apiFetch.delete(`/projects/${projectId}`, () => undefined);
   },
 
   /**
@@ -251,8 +258,9 @@ export const projectService = {
    */
   listProjects: async (tenantId: string): Promise<Project[]> => {
     const query = new URLSearchParams({ tenant_id: tenantId });
-    const response = await apiFetch.get(`/projects/?${query.toString()}`);
-    const data = (await response.json()) as { projects?: Project[] | undefined };
-    return data.projects ?? [];
+    return apiFetch.get(`/projects/?${query.toString()}`, async (response) => {
+      const data = (await response.json()) as { projects?: Project[] | undefined };
+      return data.projects ?? [];
+    });
   },
 };

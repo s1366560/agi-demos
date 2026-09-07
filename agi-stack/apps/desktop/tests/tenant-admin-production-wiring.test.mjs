@@ -1,7 +1,35 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
+import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
+import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
+import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
+import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 require.extensions['.css'] = () => {};
@@ -19,6 +47,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 
 const ROUTE_IDS = Object.freeze([
   'tenant-tenant-users',
@@ -39,7 +71,7 @@ const cloudConfig = Object.freeze({
   workspaceRoot: '/workspace',
 });
 
-test('tenant governance routes have real production loader and App bindings', () => {
+test('tenant governance routes have real production route registry bindings', () => {
   assert.deepEqual(
     [
       TENANT_USERS_ROUTE_ID,
@@ -55,9 +87,7 @@ test('tenant governance routes have real production loader and App bindings', ()
 
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders(
-      Object.fromEntries(
-        ROUTE_IDS.map((routeId) => [routeId, implementedLoader(routeId)]),
-      ),
+      Object.fromEntries(ROUTE_IDS.map((routeId) => [routeId, implementedLoader(routeId)])),
     ),
   });
   for (const routeId of ROUTE_IDS) {
@@ -66,14 +96,14 @@ test('tenant governance routes have real production loader and App bindings', ()
     });
   }
 
-  assert.match(appSource, /createTenantGovernanceRouteModuleLoader/u);
-  assert.match(appSource, /createTenantBillingRouteModuleLoader/u);
-  assert.match(appSource, /createTenantAuditRouteModuleLoader/u);
-  assert.match(appSource, /createTenantTrustRouteModuleLoader/u);
-  assert.match(appSource, /createTenantGovernanceRouteBindingForRuntime/u);
-  assert.match(appSource, /createTenantBillingRouteBindingForRuntime/u);
-  assert.match(appSource, /createTenantAuditRouteBindingForRuntime/u);
-  assert.match(appSource, /createTenantTrustRouteBindingForRuntime/u);
+  assert.match(registrySource, /createTenantGovernanceRouteModuleLoader/u);
+  assert.match(registrySource, /createTenantBillingRouteModuleLoader/u);
+  assert.match(registrySource, /createTenantAuditRouteModuleLoader/u);
+  assert.match(registrySource, /createTenantTrustRouteModuleLoader/u);
+  assert.match(registrySource, /createTenantGovernanceRouteBindingForRuntime/u);
+  assert.match(registrySource, /createTenantBillingRouteBindingForRuntime/u);
+  assert.match(registrySource, /createTenantAuditRouteBindingForRuntime/u);
+  assert.match(registrySource, /createTenantTrustRouteBindingForRuntime/u);
   assert.doesNotMatch(
     appSource,
     /tenant-admin[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
@@ -88,25 +118,91 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
       headers: { 'content-type': 'application/json' },
     });
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
-      unavailableAutomation,
-      cloudConfig,
-      {
-        tenantGovernanceClient: probe('available', null, ['view', 'list', 'invite']),
-        tenantBillingClient: probe(
-          'degraded',
-          'tenant_billing_invoice_download_file_ipc_unavailable',
-          ['view', 'inspect-usage', 'list-invoices', 'upgrade-plan'],
-        ),
-        tenantAuditClient: probe(
-          'available',
-          null,
-          ['view', 'filter', 'inspect-runtime-hooks', 'export'],
-          17,
-        ),
-        tenantTrustClient: probe('available', null, ['view', 'list', 'create', 'revoke']),
+    const client = createDesktopWorkbenchCapabilityClient(unavailableAutomation, cloudConfig, {
+      projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
+      tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
+      tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+      projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+      projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+      projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+      projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+      projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+      projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+      projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+      projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+      projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+      projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+      projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+      projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+      runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+      runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+      runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+      runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+      instanceTemplatesOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'local_instance_template_authority_unavailable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                authorityRevision: null,
+              };
+        },
       },
-    );
+      deadLetterQueueOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: null,
+                allowedActions: ['view', 'list'],
+                authorityRevision: null,
+              };
+        },
+      },
+      backendStoresOperationsV2: {
+        async probeBackendStores({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: null,
+                allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                authorityRevision: 23,
+              };
+        },
+      },
+      projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+      tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+      tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+      tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+      tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+      tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      tenantGovernanceOperationsV2: tenantGovernanceOperationsV2Fixture(),
+      tenantBillingOperationsV2: tenantBillingOperationsV2Fixture(),
+      tenantAuditOperationsV2: tenantAuditOperationsV2Fixture(),
+      tenantTrustOperationsV2: tenantTrustOperationsV2Fixture(),
+    });
 
     const snapshot = await client.loadSnapshot();
     for (const routeId of ROUTE_IDS) {
@@ -131,18 +227,12 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
         routeId,
       );
     }
-    assert.deepEqual(
-      pickCapability(snapshot.capabilities['tenant-tenant-audit-logs']),
-      {
-        availability: 'available',
-        reason_code: null,
-        allowed_actions: ['view', 'filter', 'inspect-runtime-hooks', 'export'],
-      },
-    );
-    assert.equal(
-      snapshot.capabilities['tenant-tenant-audit-logs'].authority_revision,
-      17,
-    );
+    assert.deepEqual(pickCapability(snapshot.capabilities['tenant-tenant-audit-logs']), {
+      availability: 'available',
+      reason_code: null,
+      allowed_actions: ['view', 'filter', 'inspect-runtime-hooks', 'export'],
+    });
+    assert.equal(snapshot.capabilities['tenant-tenant-audit-logs'].authority_revision, 17);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -167,8 +257,87 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
       unavailableAutomation,
       { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
       {
-        tenantGovernanceClient: neverProbe,
-        tenantBillingClient: neverProbe,
+        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+        projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+        projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+        projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+        projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+        projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+        runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+        runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+        runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        deadLetterQueueOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        backendStoresOperationsV2: {
+          async probeBackendStores({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  authorityRevision: 23,
+                };
+          },
+        },
+        projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+        tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+        tenantGovernanceOperationsV2: { loadTenantGovernance: neverProbe.load },
+        tenantBillingOperationsV2: { loadTenantBilling: neverProbe.load },
         tenantAuditClient: neverProbe,
         tenantTrustClient: neverProbe,
       },
@@ -217,6 +386,83 @@ function probe(availability, reasonCode, allowedActions, authorityRevision = und
         contractVersion: '4.0.0',
         allowedActions,
         ...(authorityRevision === undefined ? {} : { authorityRevision }),
+      };
+    },
+  };
+}
+
+function tenantBillingOperationsV2Fixture() {
+  return {
+    async loadTenantBilling({ scope }) {
+      const data = {
+        membershipRole: 'owner',
+        tenant: { id: scope.tenantId, name: 'Tenant', plan: 'pro', storageLimit: 10 },
+        usage: { projects: 1, memories: 2, users: 3, storage: 4 },
+        invoices: [],
+      };
+      return {
+        scope,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'tenant_billing_invoice_download_file_ipc_unavailable',
+        contractVersion: '4.0.0',
+        allowedActions: ['view', 'inspect-usage', 'list-invoices', 'upgrade-plan'],
+        data,
+        ...data,
+      };
+    },
+  };
+}
+
+function tenantAuditOperationsV2Fixture() {
+  return {
+    async loadTenantAudit({ scope }) {
+      const data = {
+        membershipRole: 'owner', entries: [], total: 17, limit: 20, offset: 0,
+        runtimeSummary: { total: 0, actionCounts: {}, executorCounts: {}, familyCounts: {}, isolationModeCounts: {}, latestTimestamp: null },
+        query: { limit: 20, offset: 0 },
+      };
+      return { scope, authority: 'cloud', availability: 'available', reasonCode: null, contractVersion: '4.0.0', allowedActions: ['view', 'filter', 'inspect-runtime-hooks', 'export'], authorityRevision: 17, data, ...data };
+    },
+  };
+}
+
+function tenantGovernanceOperationsV2Fixture() {
+  return {
+    async loadTenantGovernance({ scope }) {
+      const data = {
+        membershipRole: 'owner',
+        members: [],
+        invitations: [],
+        pendingInvitationTotal: 0,
+      };
+      return {
+        scope,
+        authority: 'cloud',
+        availability: 'available',
+        reasonCode: null,
+        contractVersion: '4.0.0',
+        allowedActions: ['view', 'list', 'invite'],
+        data,
+        ...data,
+      };
+    },
+  };
+}
+
+function tenantTrustOperationsV2Fixture() {
+  return {
+    async loadTenantTrustPolicies({ scope }) {
+      const data = { membershipRole: 'owner', policies: [] };
+      return {
+        scope,
+        authority: 'cloud',
+        availability: 'available',
+        reasonCode: null,
+        contractVersion: '4.0.0',
+        allowedActions: ['view', 'list', 'create', 'revoke'],
+        data,
+        ...data,
       };
     },
   };

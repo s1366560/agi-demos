@@ -31,6 +31,13 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REMEDIATION_STATUS,
     ROOT_GOAL_TASK_ID,
 )
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +123,6 @@ class WorkspaceMentionRouter:
         self,
         agent_repo_factory: Callable[..., WorkspaceAgentRepository],
         member_repo_factory: Callable[..., WorkspaceMemberRepository],
-        agent_service_factory: Callable[..., Any],
         message_service_factory: Callable[..., Any],
         conversation_repo_factory: Callable[..., Any],
         db_session_factory: Callable[..., Any],
@@ -124,7 +130,6 @@ class WorkspaceMentionRouter:
     ) -> None:
         self._agent_repo_factory = agent_repo_factory
         self._member_repo_factory = member_repo_factory
-        self._agent_service_factory = agent_service_factory
         self._message_service_factory = message_service_factory
         self._conversation_repo_factory = conversation_repo_factory
         self._workspace_repo_factory = workspace_repo_factory or conversation_repo_factory
@@ -243,8 +248,6 @@ class WorkspaceMentionRouter:
         chain_depth: int = 0,
     ) -> None:
         """Trigger a single agent and post its response back to workspace chat."""
-        from src.configuration.factories import create_llm_client
-
         agent_name = agent.display_name or agent.agent_id
 
         logger.info(
@@ -307,16 +310,36 @@ class WorkspaceMentionRouter:
             workspace_llm_stage=conversation_stage,
         )
 
-        llm = await create_llm_client(tenant_id)
-
-        async with self._db_session_factory() as db:
-            container = self._agent_service_factory(db, llm)
-            agent_service = container
-
-            final_content = ""
-            accumulated_text = ""
-            has_error = False
-
+        final_content = ""
+        accumulated_text = ""
+        has_error = False
+        async with (
+            self._db_session_factory() as db,
+            pin_agent_turn_operation_v2(
+                operation_id=f"workspace-mention-turn:{message.id}:{agent.agent_id}",
+                tenant_id=tenant_id,
+                project_id=project_id,
+                session_id=conversation_id,
+                services={
+                    OPERATION_DB_SESSION_SERVICE_V2: db,
+                    OPERATION_IDENTITY_SERVICE_V2: {
+                        "tenant_id": tenant_id,
+                        "user_id": user_id,
+                        "project_id": project_id,
+                    },
+                    OPERATION_METADATA_SERVICE_V2: {
+                        "kind": "workspace-mention-agent-turn",
+                        "workspace_id": workspace_id,
+                        "conversation_id": conversation_id,
+                        "message_id": message.id,
+                        "agent_id": agent.agent_id,
+                        "chain_depth": chain_depth,
+                    },
+                },
+                force_process_host_lease=True,
+            ),
+        ):
+            agent_service = await current_agent_turn_service_v2()
             async for event in agent_service.stream_chat_v2(
                 conversation_id=conversation_id,
                 user_message=user_prompt,

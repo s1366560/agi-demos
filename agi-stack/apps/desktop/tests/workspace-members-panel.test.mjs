@@ -16,11 +16,11 @@ test('workspace settings owns a separate authoritative member-management panel',
   assert.match(dialogSource, /<WorkspaceMembersPanel/);
   assert.match(dialogSource, /members=\{members\}/);
   assert.match(dialogSource, /actorUserId=\{actorUserId\}/);
-  assert.match(appSource, /members=\{dataset\.workspaceMembers\}/);
-  assert.match(appSource, /actorUserId=\{auth\.user\?\.user_id \?\? ''\}/);
-  assert.match(appSource, /onAddMember=\{addWorkspaceMemberFromDialog\}/);
-  assert.match(appSource, /onUpdateMemberRole=\{updateWorkspaceMemberRoleFromDialog\}/);
-  assert.match(appSource, /onRemoveMember=\{removeWorkspaceMemberFromDialog\}/);
+  assert.match(appSource, /members:\s*dataset\.workspaceMembers/);
+  assert.match(appSource, /actorUserId:\s*auth\.user\?\.user_id \?\? ''/);
+  assert.match(appSource, /onAddMember:\s*addWorkspaceMemberFromDialog/);
+  assert.match(appSource, /onUpdateMemberRole:\s*updateWorkspaceMemberRoleFromDialog/);
+  assert.match(appSource, /onRemoveMember:\s*removeWorkspaceMemberFromDialog/);
 });
 
 test('workspace member controls preserve scope, user-id routing, confirmation, and feedback', () => {

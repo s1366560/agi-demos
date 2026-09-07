@@ -4,7 +4,7 @@ Tests that tools can be added/removed dynamically at runtime
 without restarting the agent.
 """
 
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -12,6 +12,10 @@ import pytest
 
 import src.infrastructure.agent.core.react_agent as react_agent_module
 from src.infrastructure.agent.core.react_agent import ReActAgent
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+
+_EMPTY_TOOL_SET = ToolSetV2(tools=MappingProxyType({}), definitions=())
 
 
 class MockTool:
@@ -33,11 +37,10 @@ class TestReActAgentHotPlug:
 
     @pytest.mark.asyncio
     async def test_register_selected_agent_session_uses_resolved_agent_id(self):
-        session_registry = SimpleNamespace(register=AsyncMock())
-        orchestrator = SimpleNamespace(_session_registry=session_registry)
+        orchestrator = SimpleNamespace(register_agent_session=AsyncMock())
 
         with patch(
-            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
             return_value=orchestrator,
         ):
             await react_agent_module._register_selected_agent_session(
@@ -46,11 +49,30 @@ class TestReActAgentHotPlug:
                 selected_agent_id="builtin:sisyphus",
             )
 
-        session_registry.register.assert_awaited_once_with(
+        orchestrator.register_agent_session.assert_awaited_once_with(
             agent_id="builtin:sisyphus",
             conversation_id="conv-1",
             project_id="proj-1",
         )
+
+    @pytest.mark.asyncio
+    async def test_register_selected_agent_session_propagates_generation_errors(self):
+        error = RuntimeV2Error("missing_service", "operation orchestrator is unavailable")
+
+        with (
+            patch(
+                "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+                side_effect=error,
+            ),
+            pytest.raises(RuntimeV2Error) as raised,
+        ):
+            await react_agent_module._register_selected_agent_session(
+                conversation_id="conv-1",
+                project_id="proj-1",
+                selected_agent_id="builtin:sisyphus",
+            )
+
+        assert raised.value is error
 
     def test_agent_with_static_tools(self):
         """Should work with static tools dict (backward compatibility)."""
@@ -287,16 +309,89 @@ class TestRequestScopedConfigSeamForwarding:
     def test_provider_id_and_loop_resolver_forwarded(self):
         """_stream_create_processor_config must forward provider_id/loop_resolver."""
         from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+        from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+            PinnedAgentRuntimeDispatcherV2,
+        )
 
         resolver = object()
         agent = ReActAgent(model="test-model", tools={})
         agent.config.provider_id = "zai_coding"
         agent.config.loop_resolver = resolver
+        operation = SimpleNamespace(require=lambda service: PinnedAgentRuntimeDispatcherV2())
 
-        new_config = agent._stream_create_processor_config(
-            agent.config,
-            ToolSelectionContext(),
-        )
+        with patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ):
+            new_config = agent._stream_create_processor_config(
+                agent.config,
+                ToolSelectionContext(),
+                tool_set=_EMPTY_TOOL_SET,
+            )
 
         assert new_config.provider_id == "zai_coding"
         assert new_config.loop_resolver is resolver
+
+    def test_migrated_processor_hooks_use_pinned_v2_dispatcher(self):
+        """The request copy must not expose the V1 registry to the main processor."""
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+        from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+            AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
+            PinnedAgentRuntimeDispatcherV2,
+        )
+
+        agent = ReActAgent(model="test-model", tools={})
+        dispatcher = PinnedAgentRuntimeDispatcherV2()
+        operation = SimpleNamespace(require=lambda service: dispatcher)
+
+        with patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ):
+            new_config = agent._stream_create_processor_config(
+                agent.config,
+                ToolSelectionContext(),
+                tool_set=_EMPTY_TOOL_SET,
+            )
+
+        assert not hasattr(new_config, "plugin_registry")
+        assert new_config.plugin_event_dispatcher is dispatcher
+        assert not hasattr(new_config, "runtime_hook_overrides")
+        assert operation.require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2) is dispatcher
+
+    def test_processor_config_requires_a_pinned_v2_operation(self):
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        agent = ReActAgent(model="test-model", tools={})
+
+        with pytest.raises(RuntimeV2Error) as error:
+            agent._stream_create_processor_config(
+                agent.config,
+                ToolSelectionContext(),
+                tool_set=_EMPTY_TOOL_SET,
+            )
+
+        assert error.value.code == "operation_context_not_pinned"
+
+    def test_processor_config_rejects_invalid_v2_dispatcher_service(self):
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        agent = ReActAgent(model="test-model", tools={})
+        operation = SimpleNamespace(require=lambda service: object())
+
+        with (
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=operation,
+            ),
+            pytest.raises(RuntimeV2Error) as error,
+        ):
+            agent._stream_create_processor_config(
+                agent.config,
+                ToolSelectionContext(),
+                tool_set=_EMPTY_TOOL_SET,
+            )
+
+        assert error.value.code == "invalid_agent_runtime_dispatcher"

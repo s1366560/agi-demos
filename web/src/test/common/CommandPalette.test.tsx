@@ -38,7 +38,8 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (_key: string, fallback?: string | { defaultValue?: string }) => {
       if (typeof fallback === 'string') return fallback;
-      if (fallback && typeof fallback === 'object' && fallback.defaultValue) return fallback.defaultValue;
+      if (fallback && typeof fallback === 'object' && fallback.defaultValue)
+        return fallback.defaultValue;
       return _key;
     },
     i18n: {
@@ -56,14 +57,23 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+vi.mock('@/routes/v2/webNavigationAuthorityStateV2', async () => {
+  const navigation =
+    await vi.importActual<typeof import('@/config/navigation')>('@/config/navigation');
+  return {
+    useWebTopNavigationItemsV2: navigation.deriveTopNavigationItems,
+  };
+});
+
 vi.mock('@/stores/agent/conversationsStore', () => ({
   useConversationsStore: (selector: (state: typeof conversationsState) => unknown) =>
     selector(conversationsState),
 }));
 
 vi.mock('@/stores/theme', () => ({
-  useThemeStore: (selector: (state: { computedTheme: string; setTheme: typeof mockSetTheme }) => unknown) =>
-    selector({ computedTheme: 'dark', setTheme: mockSetTheme }),
+  useThemeStore: (
+    selector: (state: { computedTheme: string; setTheme: typeof mockSetTheme }) => unknown
+  ) => selector({ computedTheme: 'dark', setTheme: mockSetTheme }),
 }));
 
 describe('CommandPalette', () => {

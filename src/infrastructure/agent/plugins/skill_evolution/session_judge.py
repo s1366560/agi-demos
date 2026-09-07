@@ -9,15 +9,17 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.skill_evolution_repository_services import (
+        SkillEvolutionRepositoryProtocolV2,
+    )
 
 from src.domain.llm_providers.llm_types import LLMClient, Message
 from src.infrastructure.agent.plugins.skill_evolution.config import SkillEvolutionConfig
 from src.infrastructure.agent.plugins.skill_evolution.models import (
     SkillEvolutionSession,
-)
-from src.infrastructure.agent.plugins.skill_evolution.repository import (
-    SkillEvolutionRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,13 +58,16 @@ class SessionJudge:
         self,
         sessions: list[SkillEvolutionSession],
         llm_client: LLMClient,
-        repo: SkillEvolutionRepository,
+        repo: SkillEvolutionRepositoryProtocolV2,
     ) -> int:
         """Score a batch of sessions.
 
         Returns the number of sessions successfully scored.
         """
-        async def judge_one(session: SkillEvolutionSession) -> tuple[str, dict[str, Any], float] | None:
+
+        async def judge_one(
+            session: SkillEvolutionSession,
+        ) -> tuple[str, dict[str, Any], float] | None:
             try:
                 scores, overall = await self._judge_one(session, llm_client)
                 return session.id, scores, overall

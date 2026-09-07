@@ -79,9 +79,10 @@ async def _verify_existing_providers(
 
     Returns:
         True if existing providers are accessible (skip initialization).
-        None if providers need recreation (encryption key changed).
+        False if existing providers cannot be verified (preserve their records).
+        None only when no providers are stored.
     """
-    existing_providers = await provider_service.list_providers(include_inactive=False)
+    existing_providers = await provider_service.list_providers(include_inactive=True)
     if not existing_providers:
         return None
 
@@ -95,12 +96,11 @@ async def _verify_existing_providers(
             f"Existing provider {test_provider.name} is accessible, skipping initialization"
         )
         return True
-    except Exception as e:
+    except Exception:
         logger.warning(
-            f"Existing provider {existing_providers[0].name} is not accessible: {e}. "
-            f"This usually means the encryption key has changed. Will recreate providers..."
+            "Existing LLM providers could not be verified; preserving stored configurations."
         )
-        return None
+        return False
 
 
 async def _create_and_verify_provider(
@@ -162,10 +162,9 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
         logger.info(f"Cleared {cleared_count} existing providers")
     else:
         verify_result = await _verify_existing_providers(provider_service)
-        if verify_result is True:
+        if verify_result is not None:
+            # Verification failure is not authorization to destroy persisted configuration.
             return False
-        if verify_result is None and await provider_service.list_providers(include_inactive=False):
-            return await initialize_default_llm_providers(force_recreate=True)
 
     logger.info("Creating default LLM provider from environment...")
 

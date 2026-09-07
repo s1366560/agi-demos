@@ -18,13 +18,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
 
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
 
-def configure_agent_stop(orchestrator: AgentOrchestrator) -> None:
-    """Inject orchestrator at agent startup."""
-    global _orchestrator
-    _orchestrator = orchestrator
+    return current_agent_orchestrator_v2()
 
 
 @tool_define(
@@ -55,13 +56,9 @@ async def agent_stop_tool(
     cascade: bool = True,
 ) -> ToolResult:
     """Stop a spawned agent session."""
-    if _orchestrator is None:
-        return ToolResult(
-            output=json.dumps({"error": "Multi-agent not configured"}),
-            is_error=True,
-        )
+    orchestrator = _current_agent_orchestrator_v2()
     try:
-        stopped = await _orchestrator.stop_agent(
+        stopped = await orchestrator.stop_agent(
             agent_id=ctx.agent_name,
             session_id=session_id,
             project_id=ctx.project_id,

@@ -14,8 +14,34 @@ Solution:
 - This avoids the 307 redirect and preserves the Authorization header
 """
 
+from collections.abc import AsyncIterator
+
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from fastapi import FastAPI
+
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+
+
+class _SandboxAdapter(MCPSandboxAdapter):
+    async def sync_from_docker(self) -> int:
+        return 0
+
+    async def close(self) -> None:
+        return None
+
+
+@pytest.fixture(autouse=True)
+async def _sandbox_v2_runtime(test_app: FastAPI) -> AsyncIterator[None]:
+    try:
+        await initialize_plugin_runtime_v2(test_app, sandbox_runtime_factory=_SandboxAdapter)
+        assert "sandbox" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 @pytest.mark.integration
@@ -94,10 +120,10 @@ class TestSandboxAPIRedirect:
         test_engine,
         mock_neo4j_client,
         mock_graph_service,
-        mock_workflow_engine,
     ):
         """Test that unauthenticated requests still return 401."""
         from httpx import ASGITransport, AsyncClient
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
         from src.configuration.di_container import DIContainer
         from src.infrastructure.adapters.primary.web.dependencies import (
@@ -105,23 +131,12 @@ class TestSandboxAPIRedirect:
             get_neo4j_client,
         )
         from src.infrastructure.adapters.primary.web.main import create_app
-        from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-            MCPSandboxAdapter,
-        )
+        from src.infrastructure.adapters.secondary.persistence.database import get_db
 
-        # Create fresh app without get_current_user override
         app = create_app()
-
-        # Add necessary app state
-        app.state.workflow_engine = mock_workflow_engine
         app.state.graph_service = mock_graph_service
-        app.state.container = DIContainer(
-            redis_client=None,
-            graph_service=mock_graph_service,
-            workflow_engine=mock_workflow_engine,
-        )
+        app.state.container = DIContainer(redis_client=None)
 
-        # Override only DB dependencies (keep auth intact)
         async_session = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
         async def override_get_db():
@@ -134,12 +149,9 @@ class TestSandboxAPIRedirect:
         async def override_get_graph_service():
             return mock_graph_service
 
-        from src.infrastructure.adapters.secondary.persistence.database import get_db
-
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_neo4j_client] = override_get_neo4j_client
         app.dependency_overrides[get_graph_service] = override_get_graph_service
-        # Note: NOT overriding get_current_user - so auth is enforced
 
         # Mock list_sandboxes
         async def mock_list_sandboxes(self, status=None):
@@ -147,13 +159,17 @@ class TestSandboxAPIRedirect:
 
         monkeypatch.setattr(MCPSandboxAdapter, "list_sandboxes", mock_list_sandboxes)
 
-        # Create unauthenticated client (no Authorization header)
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-            # No Authorization header
-        ) as client:
-            response = await client.get("/api/v1/sandbox")
+        try:
+            await initialize_plugin_runtime_v2(app, sandbox_runtime_factory=_SandboxAdapter)
+            # Create unauthenticated client (no Authorization header)
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+                # No Authorization header
+            ) as client:
+                response = await client.get("/api/v1/sandbox")
+        finally:
+            await shutdown_plugin_runtime_v2(app)
 
         # Should return 401 for unauthenticated requests
         assert response.status_code == 401

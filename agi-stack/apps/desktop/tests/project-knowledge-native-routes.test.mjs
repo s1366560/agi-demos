@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import Module, { createRequire } from 'node:module';
+import { delimiter } from 'node:path';
 import { test } from 'node:test';
 
-process.env.NODE_PATH = new URL('../node_modules', import.meta.url).pathname;
+process.env.NODE_PATH = [
+  '/tmp/agistack-desktop-test-dist/test-node-modules',
+  new URL('../node_modules', import.meta.url).pathname,
+].join(delimiter);
 Module._initPaths();
 
 const require = createRequire(import.meta.url);
@@ -14,18 +18,13 @@ const {
   I18nProvider,
 } = require('/tmp/agistack-project-knowledge-test-dist/src/i18n.js');
 
-const { createProjectTeamClient } = require(`${compiled}/projectTeamClient.js`);
-const { createProjectMemoriesClient } = require(
-  `${compiled}/projectMemoriesClient.js`,
+const { createDesktopProjectTeamHttpAuthorityV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/' +
+    'desktopProjectTeamHttpProjectionV2.js',
 );
-const { createProjectEntitiesClient } = require(
-  `${compiled}/projectEntitiesClient.js`,
-);
-const { createProjectCommunitiesClient } = require(
-  `${compiled}/projectCommunitiesClient.js`,
-);
-const { createProjectGraphClient } = require(
-  `${compiled}/projectGraphClient.js`,
+const { createDesktopProjectMemoriesHttpAuthorityV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/' +
+    'desktopProjectMemoriesHttpProjectionV2.js',
 );
 const {
   createProjectKnowledgeCapabilityClients,
@@ -123,15 +122,6 @@ test('project knowledge cloud clients use trusted-session transport and validate
     if (path === '/api/v1/memories/') {
       return jsonResponse({ memories: [], total: 0, page: 1, page_size: 50 });
     }
-    if (path === '/api/v1/graph/entities/') {
-      return jsonResponse({ entities: [], total: 0, limit: 50, offset: 0 });
-    }
-    if (path === '/api/v1/graph/entities/types') {
-      return jsonResponse({ entity_types: [], total: 0 });
-    }
-    if (path === '/api/v1/graph/communities/') {
-      return jsonResponse({ communities: [], total: 0, limit: 50, offset: 0 });
-    }
     if (path === '/api/v1/graph/memory/graph') {
       return jsonResponse({ elements: { nodes: [], edges: [] } });
     }
@@ -139,21 +129,19 @@ test('project knowledge cloud clients use trusted-session transport and validate
   };
   try {
     const snapshots = await Promise.all([
-      createProjectTeamClient(cloudConfig).load(cloudScope),
-      createProjectMemoriesClient(cloudConfig).load(cloudScope),
-      createProjectEntitiesClient(cloudConfig).load(cloudScope),
-      createProjectCommunitiesClient(cloudConfig).load(cloudScope),
-      createProjectGraphClient(cloudConfig).load(cloudScope),
+      createDesktopProjectTeamHttpAuthorityV2(cloudConfig, cloudScope).load(),
     ]);
     assert.deepEqual(
       snapshots.map((snapshot) => snapshot.scopeRevision),
-      [7, 7, 7, 7, 7],
+      [7],
     );
-    assert.equal(snapshots[0].allowedActions.includes('update-role'), true);
-    assert.equal(snapshots[1].availability, 'degraded');
-    assert.equal(snapshots[2].availability, 'available');
-    assert.equal(snapshots[3].availability, 'degraded');
-    assert.equal(snapshots[4].availability, 'degraded');
+    assert.equal(snapshots[0].availability, 'degraded');
+    assert.equal(snapshots[0].reasonCode, 'desktop_project_team_actions_partial');
+    assert.deepEqual(snapshots[0].allowedActions, [
+      'view',
+      'list-members',
+      'list-agent-teammates',
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -175,28 +163,12 @@ test('project knowledge local clients fail closed with stable reason codes befor
   try {
     const cases = [
       [
-        createProjectTeamClient(localConfig),
+        createDesktopProjectTeamHttpAuthorityV2(localConfig, localScope),
         'local_project_team_authority_unavailable',
-      ],
-      [
-        createProjectMemoriesClient(localConfig),
-        'local_project_memories_authority_unavailable',
-      ],
-      [
-        createProjectEntitiesClient(localConfig),
-        'local_project_entities_authority_unavailable',
-      ],
-      [
-        createProjectCommunitiesClient(localConfig),
-        'local_project_communities_authority_unavailable',
-      ],
-      [
-        createProjectGraphClient(localConfig),
-        'local_project_graph_authority_unavailable',
       ],
     ];
     for (const [client, reasonCode] of cases) {
-      await assert.rejects(client.load(localScope), (error) => {
+      await assert.rejects(client.load(), (error) => {
         assert.equal(error.status, 501);
         assert.equal(error.payload.reason_code, reasonCode);
         return true;
@@ -208,7 +180,7 @@ test('project knowledge local clients fail closed with stable reason codes befor
   assert.equal(fetchCalls, 0);
 });
 
-test('project knowledge capability authority observes Cloud and never probes static clients in Local', async () => {
+test('project knowledge capability authority uses injected Cloud clients and never probes Local', async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (url, init = {}) => {
@@ -252,15 +224,6 @@ test('project knowledge capability authority observes Cloud and never probes sta
     if (path === '/api/v1/memories/') {
       return jsonResponse({ memories: [], total: 0, page: 1, page_size: 50 });
     }
-    if (path === '/api/v1/graph/entities/') {
-      return jsonResponse({ entities: [], total: 0, limit: 50, offset: 0 });
-    }
-    if (path === '/api/v1/graph/entities/types') {
-      return jsonResponse({ entity_types: [], total: 0 });
-    }
-    if (path === '/api/v1/graph/communities/') {
-      return jsonResponse({ communities: [], total: 0, limit: 50, offset: 0 });
-    }
     if (path === '/api/v1/graph/memory/graph') {
       return jsonResponse({ elements: { nodes: [], edges: [] } });
     }
@@ -268,10 +231,16 @@ test('project knowledge capability authority observes Cloud and never probes sta
   };
   try {
     const cloud = await loadProjectKnowledgeCapabilities(
-      createProjectKnowledgeCapabilityClients(cloudConfig),
+      createProjectKnowledgeCapabilityClients(
+        injectedProjectTeamClient(11),
+        injectedProjectMemoriesClient(11),
+        injectedProjectEntitiesClient(11),
+        injectedProjectCommunitiesClient(11),
+        injectedProjectGraphClient(11),
+      ),
       cloudConfig,
     );
-    assert.equal(cloud['project-project-team'].availability, 'available');
+    assert.equal(cloud['project-project-team'].availability, 'degraded');
     assert.equal(cloud['project-project-memories'].availability, 'degraded');
     assert.equal(cloud['project-project-graph'].authority_revision, 11);
 
@@ -308,7 +277,28 @@ test('project knowledge capability authority observes Cloud and never probes sta
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assert.ok(requests.length > 0);
+  assert.equal(requests.length, 0);
+});
+
+test('project knowledge capability clients require and preserve injected V2 authorities', () => {
+  const teamClient = injectedProjectTeamClient(13);
+  const memoriesClient = injectedProjectMemoriesClient(13);
+  const entitiesClient = injectedProjectEntitiesClient(13);
+  const communitiesClient = injectedProjectCommunitiesClient(13);
+  const graphClient = injectedProjectGraphClient(13);
+  const clients = createProjectKnowledgeCapabilityClients(
+    teamClient,
+    memoriesClient,
+    entitiesClient,
+    communitiesClient,
+    graphClient,
+  );
+
+  assert.equal(clients['project-project-team'], teamClient);
+  assert.equal(clients['project-project-memories'], memoriesClient);
+  assert.equal(clients['project-project-entities'], entitiesClient);
+  assert.equal(clients['project-project-communities'], communitiesClient);
+  assert.equal(clients['project-project-graph'], graphClient);
 });
 
 test('project knowledge clients reject stale observed scope and accept only structured reason codes', async () => {
@@ -334,7 +324,7 @@ test('project knowledge clients reject stale observed scope and accept only stru
   };
   try {
     await assert.rejects(
-      createProjectMemoriesClient(cloudConfig).load(cloudScope),
+      createDesktopProjectMemoriesHttpAuthorityV2(cloudConfig, cloudScope).load(),
       (error) =>
         error.payload.reason_code === 'project_knowledge_scope_conflict',
     );
@@ -358,7 +348,7 @@ test('project knowledge clients reject stale observed scope and accept only stru
       );
     };
     await assert.rejects(
-      createProjectMemoriesClient(cloudConfig).load(cloudScope),
+      createDesktopProjectMemoriesHttpAuthorityV2(cloudConfig, cloudScope).load(),
       (error) => error.message === 'project_memories_forbidden',
     );
   } finally {
@@ -451,8 +441,8 @@ function memorySnapshot(scope, title) {
     scopeRevision: 1,
     authority: 'cloud',
     availability: 'degraded',
-    reasonCode: 'project_memories_export_file_ipc_unavailable',
-    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'reprocess'],
+    reasonCode: 'desktop_project_memories_actions_partial',
+    allowedActions: ['view', 'list'],
     memories: [
       {
         id: `memory-${title}`,
@@ -469,6 +459,101 @@ function memorySnapshot(scope, title) {
     ],
     total: 1,
   };
+}
+
+function injectedProjectGraphClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_graph_actions_partial',
+        allowedActions: Object.freeze(['view']),
+        nodes: Object.freeze([]),
+        edges: Object.freeze([]),
+      });
+    },
+  });
+}
+
+function injectedProjectTeamClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_team_actions_partial',
+        allowedActions: Object.freeze(['view', 'list-members', 'list-agent-teammates']),
+        members: Object.freeze([]),
+        agents: Object.freeze([]),
+        currentUserRole: 'member',
+      });
+    },
+  });
+}
+
+function injectedProjectMemoriesClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_memories_actions_partial',
+        allowedActions: Object.freeze(['view', 'list']),
+        memories: Object.freeze([]),
+        total: 0,
+      });
+    },
+  });
+}
+
+function injectedProjectEntitiesClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_entities_actions_partial',
+        allowedActions: Object.freeze(['view', 'list']),
+        entities: Object.freeze([]),
+        total: 0,
+        entityTypes: Object.freeze([]),
+      });
+    },
+    async relationships() {
+      return Object.freeze([]);
+    },
+  });
+}
+
+function injectedProjectCommunitiesClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_communities_actions_partial',
+        allowedActions: Object.freeze(['view', 'list']),
+        communities: Object.freeze([]),
+        total: 0,
+      });
+    },
+  });
 }
 
 function readyController(scope, routeId) {

@@ -5,16 +5,138 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+from contextlib import asynccontextmanager
+from inspect import getsource
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.infrastructure.agent.plugins import skill_evolution as skill_evolution_package
+from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
 from src.infrastructure.agent.plugins.skill_evolution.aggregation import (
     SkillSessionAggregator,
     SkillSessionGroup,
 )
 from src.infrastructure.agent.plugins.skill_evolution.config import SkillEvolutionConfig
+from src.infrastructure.agent.plugins.skill_evolution.plugin import SkillEvolutionPlugin
+
+
+class _EmptyPluginConfigRepository:
+    async def get_by_tenant_and_plugin(
+        self,
+        tenant_id: str,
+        plugin_name: str,
+    ) -> None:
+        del tenant_id, plugin_name
+        return None
+
+
+@asynccontextmanager
+async def _empty_plugin_config_repository_lease(**_kwargs: object):
+    yield SimpleNamespace(repository=_EmptyPluginConfigRepository())
+
+
+@asynccontextmanager
+async def _empty_skill_evolution_repository_lease(**_kwargs: object):
+    yield SimpleNamespace(
+        repository=MagicMock(),
+        skill_repository=MagicMock(),
+        skill_version_repository=MagicMock(),
+    )
+
+
+def _skill_evolution_repository_lease(repository: object):
+    @asynccontextmanager
+    async def lease(**_kwargs: object):
+        yield SimpleNamespace(repository=repository)
+
+    return lease
+
+
+@asynccontextmanager
+async def _direct_skill_evolution_repository_lease(*, db: object, **_kwargs: object):
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+        SqlSkillRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
+        SqlSkillVersionRepository,
+    )
+    from src.infrastructure.agent.plugins.skill_evolution.repository import (
+        SkillEvolutionRepository,
+    )
+
+    yield SimpleNamespace(
+        repository=SkillEvolutionRepository(db),
+        skill_repository=SqlSkillRepository(db),
+        skill_version_repository=SqlSkillVersionRepository(db),
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "authority_name",
+    (
+        "_collector",
+        "_config",
+        "_session_factory",
+        "_scheduler",
+        "_loaded_skill_names_by_turn",
+        "_tool_events_by_turn",
+        "capture_skill_evolution_turn",
+        "record_skill_evolution_tool_event",
+        "configure_skill_evolution_capture",
+    ),
+)
+def test_process_global_skill_evolution_capture_authority_is_retired(
+    authority_name: str,
+) -> None:
+    assert not hasattr(plugin_module, authority_name)
+    if not authority_name.startswith("_"):
+        assert not hasattr(skill_evolution_package, authority_name)
+
+
+@pytest.mark.unit
+async def test_turn_capture_state_is_owned_by_each_plugin_instance() -> None:
+    plugin_a = SkillEvolutionPlugin(
+        config=SkillEvolutionConfig(enabled=False),
+        skill_service=MagicMock(),
+        llm_client_lease=MagicMock(),
+        plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+        skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
+        session_factory="session-factory-a",
+    )
+    plugin_b = SkillEvolutionPlugin(
+        config=SkillEvolutionConfig(enabled=False),
+        skill_service=MagicMock(),
+        llm_client_lease=MagicMock(),
+        plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+        skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
+        session_factory="session-factory-b",
+    )
+    plugin_a.collector.capture_from_hook = AsyncMock(return_value=[])
+    plugin_b.collector.capture_from_hook = AsyncMock(return_value=[])
+
+    await plugin_a.record_tool_event(
+        {
+            "conversation_id": "conversation-a",
+            "tool_name": "skill_loader",
+            "call_id": "call-a",
+            "result": "loaded",
+            "result_metadata": {"name": "review"},
+        }
+    )
+
+    await plugin_b.capture_turn({"conversation_id": "conversation-a"})
+    plugin_b_payload = plugin_b.collector.capture_from_hook.await_args.args[0]
+    assert "loaded_skill_names" not in plugin_b_payload
+    assert "tool_events" not in plugin_b_payload
+
+    await plugin_a.capture_turn({"conversation_id": "conversation-a"})
+    plugin_a_payload = plugin_a.collector.capture_from_hook.await_args.args[0]
+    assert plugin_a_payload["loaded_skill_names"] == ["review"]
+    assert plugin_a_payload["tool_events"][0]["tool_name"] == "skill_loader"
 
 
 class TestSkillEvolutionConfig:
@@ -126,6 +248,15 @@ class TestSkillSessionGroup:
 
 
 class TestSessionCollector:
+    def test_capture_requires_generation_owned_repository_lease(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
+            SessionCollector,
+        )
+
+        source = getsource(SessionCollector.capture_from_hook)
+        assert "repository_lease" in source
+        assert "_get_repo(" not in source
+
     def test_build_session_with_skill(self) -> None:
         from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
             SessionCollector,
@@ -203,10 +334,7 @@ class TestSessionCollector:
         assert trajectory["user_query"] == "read the file"
 
     @pytest.mark.asyncio
-    async def test_capture_from_hook_records_loaded_skill_names(self, monkeypatch) -> None:
-        from src.infrastructure.agent.plugins.skill_evolution import (
-            session_collector as collector_module,
-        )
+    async def test_capture_from_hook_records_loaded_skill_names(self) -> None:
         from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
             SessionCollector,
         )
@@ -223,7 +351,6 @@ class TestSessionCollector:
 
         repo = MagicMock()
         repo.save_session = AsyncMock()
-        monkeypatch.setattr(collector_module, "_get_repo", lambda _db: repo)
 
         await SessionCollector(SkillEvolutionConfig()).capture_from_hook(
             {
@@ -243,6 +370,7 @@ class TestSessionCollector:
                 "conversation_context": [{"role": "assistant", "content": "done"}],
                 "success": True,
             },
+            repository_lease=_skill_evolution_repository_lease(repo),
             session_factory=lambda: FakeSessionContext(),
         )
 
@@ -255,11 +383,8 @@ class TestSessionCollector:
 
     @pytest.mark.asyncio
     async def test_matched_skill_takes_precedence_over_loaded_skill_names(
-        self, monkeypatch
+        self,
     ) -> None:
-        from src.infrastructure.agent.plugins.skill_evolution import (
-            session_collector as collector_module,
-        )
         from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
             SessionCollector,
         )
@@ -276,7 +401,6 @@ class TestSessionCollector:
 
         repo = MagicMock()
         repo.save_session = AsyncMock()
-        monkeypatch.setattr(collector_module, "_get_repo", lambda _db: repo)
 
         await SessionCollector(SkillEvolutionConfig()).capture_from_hook(
             {
@@ -289,6 +413,7 @@ class TestSessionCollector:
                 "conversation_context": [],
                 "success": True,
             },
+            repository_lease=_skill_evolution_repository_lease(repo),
             session_factory=lambda: FakeSessionContext(),
         )
 
@@ -983,96 +1108,68 @@ class TestSkillMerger:
         assert "# Body" in skill.full_content
 
 
-class TestHookRegistration:
-    """Verify the hook is registered in the global plugin registry."""
+class TestV2LifecycleRegistration:
+    """Verify skill evolution is owned by the V2 lifecycle definition."""
 
-    def test_hook_registered_in_registry(self) -> None:
-        from src.infrastructure.agent.plugins.registry import (
-            AgentPluginRegistry,
+    def test_skill_evolution_lifecycle_definition_is_declared(self) -> None:
+        from src.infrastructure.plugins.v2.agent_lifecycle_runtime import (
+            SKILL_EVOLUTION_LIFECYCLE_MODULE_V2,
+            agent_lifecycle_definitions_v2,
         )
+
+        definitions = agent_lifecycle_definitions_v2()
+
+        assert SKILL_EVOLUTION_LIFECYCLE_MODULE_V2 in {
+            definition.module_ref for definition in definitions
+        }
+
+    def test_plugin_runtime_retains_disabled_config(self) -> None:
         from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            register_builtin_skill_evolution_plugin,
+            SkillEvolutionPlugin,
         )
 
-        registry = AgentPluginRegistry()
-        plugin = register_builtin_skill_evolution_plugin(
-            registry,
-            config=SkillEvolutionConfig(enabled=True),
-            skill_service=MagicMock(),
-            llm_provider_manager=MagicMock(),
-            session_factory=None,
-        )
-        assert plugin is not None
-        assert plugin.config.enabled is True
-
-    def test_plugin_disabled_when_config_disabled(self) -> None:
-        from src.infrastructure.agent.plugins.registry import (
-            AgentPluginRegistry,
-        )
-        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            register_builtin_skill_evolution_plugin,
-        )
-
-        registry = AgentPluginRegistry()
-        plugin = register_builtin_skill_evolution_plugin(
-            registry,
+        plugin = SkillEvolutionPlugin(
             config=SkillEvolutionConfig(enabled=False),
             skill_service=MagicMock(),
-            llm_provider_manager=MagicMock(),
+            llm_client_lease=MagicMock(),
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
             session_factory=None,
         )
         assert plugin.config.enabled is False
 
     @pytest.mark.asyncio
     async def test_skill_loader_hook_attributes_next_turn_capture(self) -> None:
-        from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
-        from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
-        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
-        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            _after_tool_execution,
-            _after_turn_complete,
-        )
-
         collector = MagicMock()
         collector.capture_from_hook = AsyncMock()
-        previous_collector = plugin_module._collector
-        previous_session_factory = plugin_module._session_factory
-        plugin_module._collector = collector
-        plugin_module._session_factory = object()
-        plugin_module._loaded_skill_names_by_turn.clear()
-        plugin_module._tool_events_by_turn.clear()
+        plugin = SkillEvolutionPlugin(
+            config=SkillEvolutionConfig(enabled=False),
+            skill_service=MagicMock(),
+            llm_client_lease=MagicMock(),
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
+            session_factory=object(),
+        )
+        plugin.collector = collector
 
-        registry = AgentPluginRegistry()
-        api = PluginRuntimeApi("skill-evolution", registry=registry)
-        api.register_hook("after_tool_execution", _after_tool_execution)
-        api.register_hook("after_turn_complete", _after_turn_complete)
-
-        try:
-            await registry.apply_hook(
-                "after_tool_execution",
-                payload={
-                    "tool_name": "skill_loader",
-                    "conversation_id": "conv-1",
-                    "result_metadata": {"name": "dynamic-skill"},
-                    "result": "Loaded skill: dynamic-skill",
-                },
-            )
-            await registry.apply_hook(
-                "after_turn_complete",
-                payload={
-                    "tenant_id": "t1",
-                    "conversation_id": "conv-1",
-                    "user_message": "use the dynamic skill",
-                    "final_content": "done",
-                    "conversation_context": [],
-                    "success": True,
-                },
-            )
-        finally:
-            plugin_module._collector = previous_collector
-            plugin_module._session_factory = previous_session_factory
-            plugin_module._loaded_skill_names_by_turn.clear()
-            plugin_module._tool_events_by_turn.clear()
+        await plugin.record_tool_event(
+            {
+                "tool_name": "skill_loader",
+                "conversation_id": "conv-1",
+                "result_metadata": {"name": "dynamic-skill"},
+                "result": "Loaded skill: dynamic-skill",
+            }
+        )
+        await plugin.capture_turn(
+            {
+                "tenant_id": "t1",
+                "conversation_id": "conv-1",
+                "user_message": "use the dynamic skill",
+                "final_content": "done",
+                "conversation_context": [],
+                "success": True,
+            }
+        )
 
         captured_payload = collector.capture_from_hook.await_args.args[0]
         assert captured_payload["loaded_skill_names"] == ["dynamic-skill"]
@@ -1080,12 +1177,8 @@ class TestHookRegistration:
 
     @pytest.mark.asyncio
     async def test_after_turn_capture_schedules_autonomous_evolution(self) -> None:
-        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
         from src.infrastructure.agent.plugins.skill_evolution.models import (
             SkillEvolutionSession,
-        )
-        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            _after_turn_complete,
         )
 
         collector = MagicMock()
@@ -1109,28 +1202,27 @@ class TestHookRegistration:
             ]
         )
         scheduler = MagicMock()
-        previous_collector = plugin_module._collector
-        previous_session_factory = plugin_module._session_factory
-        previous_scheduler = plugin_module._scheduler
-        plugin_module._collector = collector
-        plugin_module._session_factory = object()
-        plugin_module._scheduler = scheduler
+        plugin = SkillEvolutionPlugin(
+            config=SkillEvolutionConfig(enabled=False),
+            skill_service=MagicMock(),
+            llm_client_lease=MagicMock(),
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
+            session_factory=object(),
+        )
+        plugin.collector = collector
+        plugin._scheduler_instance = scheduler
 
-        try:
-            await _after_turn_complete(
-                {
-                    "tenant_id": "tenant-1",
-                    "conversation_id": "conv-1",
-                    "user_message": "use skill",
-                    "final_content": "done",
-                    "conversation_context": [],
-                    "success": True,
-                }
-            )
-        finally:
-            plugin_module._collector = previous_collector
-            plugin_module._session_factory = previous_session_factory
-            plugin_module._scheduler = previous_scheduler
+        await plugin.capture_turn(
+            {
+                "tenant_id": "tenant-1",
+                "conversation_id": "conv-1",
+                "user_message": "use skill",
+                "final_content": "done",
+                "conversation_context": [],
+                "success": True,
+            }
+        )
 
         scheduler.schedule_run.assert_called_once_with(
             tenant_id="tenant-1",
@@ -1152,9 +1244,88 @@ class TestEvolutionScheduler:
             judge=MagicMock(),
             aggregator=MagicMock(),
             engine=MagicMock(),
-            llm_provider_manager=MagicMock(),
+            llm_client_lease=MagicMock(),
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
             session_factory=session_factory or MagicMock(),
         )
+
+    @pytest.mark.asyncio
+    async def test_cycle_uses_one_v2_repository_authority_without_static_constructors(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.aggregation import (
+            SkillSessionGroup,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.scheduler import (
+            EvolutionScheduler,
+        )
+
+        db = SimpleNamespace(commit=AsyncMock())
+        evolution_repository = SimpleNamespace(
+            get_unprocessed_sessions=AsyncMock(return_value=[]),
+            get_unscored_sessions=AsyncMock(return_value=[]),
+            cleanup_old_sessions=AsyncMock(return_value=0),
+        )
+        skill_repository = object()
+        skill_version_repository = object()
+        repository_leases: list[dict[str, object]] = []
+
+        @asynccontextmanager
+        async def session_factory():
+            yield db
+
+        @asynccontextmanager
+        async def repository_lease(**kwargs: object):
+            repository_leases.append(dict(kwargs))
+            yield SimpleNamespace(
+                repository=evolution_repository,
+                skill_repository=skill_repository,
+                skill_version_repository=skill_version_repository,
+            )
+
+        llm_client = object()
+
+        @asynccontextmanager
+        async def llm_client_lease(**_kwargs: object):
+            yield llm_client
+
+        summarizer = MagicMock()
+        judge = MagicMock()
+        aggregator = MagicMock()
+        aggregator.aggregate = AsyncMock(
+            return_value={"skill-a": SkillSessionGroup(skill_name="skill-a")}
+        )
+        engine = MagicMock(last_blocked_by_review_count=0)
+        engine.evolve_all = AsyncMock(return_value=[])
+        scheduler = EvolutionScheduler(
+            config=SkillEvolutionConfig(enabled=True),
+            summarizer=summarizer,
+            judge=judge,
+            aggregator=aggregator,
+            engine=engine,
+            llm_client_lease=llm_client_lease,
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=repository_lease,
+            session_factory=session_factory,
+        )
+
+        result = await scheduler.run_once(tenant_id="tenant-1")
+
+        assert result["groups"] == 1
+        assert repository_leases == [{"db": db, "tenant_id": "tenant-1"}]
+        aggregator.aggregate.assert_awaited_once_with(
+            evolution_repository,
+            tenant_id="tenant-1",
+            project_id=None,
+            filter_project_id=False,
+        )
+        engine.evolve_all.assert_awaited_once()
+        evolve_kwargs = engine.evolve_all.await_args.kwargs
+        assert evolve_kwargs["skill_repository"] is skill_repository
+        assert evolve_kwargs["skill_version_repository"] is skill_version_repository
+        source = getsource(EvolutionScheduler._execute_cycle)
+        assert "SkillEvolutionRepository(" not in source
+        assert "SqlSkillRepository(" not in source
+        assert "SqlSkillVersionRepository(" not in source
 
     @pytest.mark.asyncio
     async def test_capture_requests_are_coalesced_per_tenant_project_skill(self) -> None:
@@ -1293,9 +1464,6 @@ class TestSkillEvolutionEndToEnd:
         from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
             SqlSkillRepository,
         )
-        from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
-        from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
-        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
         from src.infrastructure.agent.plugins.skill_evolution.models import (
             SkillEvolutionJob,
             SkillEvolutionSession,
@@ -1359,13 +1527,6 @@ class TestSkillEvolutionEndToEnd:
                     raise AssertionError(f"Unexpected prompt: {system[:120]}")
                 return {"choices": [{"message": {"content": content}}]}
 
-        class FakeLLMProviderManager:
-            def __init__(self, client: FakeLLMClient) -> None:
-                self.client = client
-
-            async def get_llm_client(self) -> FakeLLMClient:
-                return self.client
-
         class FakeSkillService:
             def __init__(self, session_factory) -> None:
                 self._session_factory = session_factory
@@ -1413,6 +1574,11 @@ class TestSkillEvolutionEndToEnd:
                 await db.commit()
 
             client = FakeLLMClient()
+
+            @asynccontextmanager
+            async def fake_llm_client_lease(**_kwargs):
+                yield client
+
             config = SkillEvolutionConfig(
                 enabled=True,
                 min_sessions_per_skill=1,
@@ -1425,15 +1591,14 @@ class TestSkillEvolutionEndToEnd:
             plugin = SkillEvolutionPlugin(
                 config=config,
                 skill_service=FakeSkillService(session_factory),
-                llm_provider_manager=FakeLLMProviderManager(client),
+                llm_client_lease=fake_llm_client_lease,
+                plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+                skill_evolution_repository_lease=(_direct_skill_evolution_repository_lease),
                 session_factory=session_factory,
             )
 
-            registry = AgentPluginRegistry()
-            plugin.setup(PluginRuntimeApi("skill-evolution", registry=registry))
-            hook_result = await registry.apply_hook(
-                "after_turn_complete",
-                payload={
+            await plugin.capture_turn(
+                {
                     "tenant_id": tenant_id,
                     "project_id": project_id,
                     "conversation_id": "conv-evolution-smoke",
@@ -1443,7 +1608,7 @@ class TestSkillEvolutionEndToEnd:
                     "conversation_context": [{"role": "assistant", "content": "Done."}],
                     "success": True,
                     "execution_time_ms": 120,
-                },
+                }
             )
 
             result = await plugin.trigger_evolution(
@@ -1484,8 +1649,6 @@ class TestSkillEvolutionEndToEnd:
             plugin_module._scheduler = None
             plugin_module._session_factory = None
 
-        assert "after_turn_complete" in registry.list_hooks()
-        assert hook_result.diagnostics == []
         assert result == {
             "summarized": 1,
             "judged": 1,

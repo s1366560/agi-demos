@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../../plugins/webOperationAdmissionV2';
 /**
  * Settings-related actions extracted from agentV3.ts.
  *
@@ -78,7 +79,13 @@ export function createSettingsActions(deps: SettingsActionDeps) {
      * the recovery service will handle it when Worker restarts.
      */
     loadPendingHITL: async (conversationId: string): Promise<void> => {
+      const owner = getWebOperationAvailabilityV2().owner;
       await useAgentHITLStore.getState().loadPendingHITL(conversationId);
+      if (
+        !getWebOperationAvailabilityV2().available ||
+        getWebOperationAvailabilityV2().owner !== owner
+      )
+        return;
       const hs = useAgentHITLStore.getState();
       if (hs.pendingClarification || hs.pendingDecision || hs.pendingEnvVarRequest) {
         useExecutionStore.getState().setAgentExecutionState('awaiting_input');

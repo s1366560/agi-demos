@@ -1,362 +1,173 @@
-"""Unit tests for topology API router."""
+"""Regression coverage for the Workspace Core-owned topology surface."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, Mock
+from collections.abc import Awaitable, Callable
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
-from fastapi import FastAPI, status
-from fastapi.testclient import TestClient
+from fastapi import BackgroundTasks, HTTPException
+from pydantic import ValidationError
 
-from src.domain.model.workspace.topology_edge import TopologyEdge
-from src.domain.model.workspace.topology_node import TopologyNode, TopologyNodeType
+from src.application.services.workspace_collaboration_authority import (
+    WORKSPACE_COLLABORATION_CONTRACT_VERSION,
+    WorkspaceCollaborationActor,
+    WorkspaceCollaborationMutationCommand,
+)
+from src.application.services.workspace_layout_limits import MAX_WORKSPACE_HEX_COORDINATE
+from src.domain.model.workspace.topology_node import TopologyNodeType
+from src.infrastructure.adapters.primary.web.routers import topology
+from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_secondary_dispatch import (
+    dispatch_secondary_workspace_mutation,
+)
+
+type _LegacyHandlerCall = Callable[[Any], Awaitable[object]]
 
 
-def _make_node(node_id: str = "node-1") -> TopologyNode:
-    return TopologyNode(
-        id=node_id,
-        workspace_id="ws-1",
-        node_type=TopologyNodeType.NOTE,
-        title="Node",
-        position_x=10.0,
-        position_y=20.0,
-        hex_q=1,
-        hex_r=-1,
-        status="ready",
-        tags=["alpha"],
-        data={"a": 1},
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+def _legacy_handler_calls() -> tuple[_LegacyHandlerCall, ...]:
+    common = {"workspace_id": "workspace-1"}
+    return (
+        lambda current_user: topology.create_node(
+            body=topology.TopologyNodeCreate(node_type=TopologyNodeType.NOTE, title="Node"),
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.list_nodes(
+            limit=1000,
+            offset=0,
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.get_node(
+            node_id="node-1",
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.update_node(
+            node_id="node-1",
+            body=topology.TopologyNodeUpdate(title="Updated"),
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.delete_node(
+            node_id="node-1",
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.create_edge(
+            body=topology.TopologyEdgeCreate(
+                source_node_id="node-1",
+                target_node_id="node-2",
+            ),
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.list_edges(
+            limit=2000,
+            offset=0,
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.get_edge(
+            edge_id="edge-1",
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.update_edge(
+            edge_id="edge-1",
+            body=topology.TopologyEdgeUpdate(label="Updated"),
+            current_user=current_user,
+            **common,
+        ),
+        lambda current_user: topology.delete_edge(
+            edge_id="edge-1",
+            current_user=current_user,
+            **common,
+        ),
     )
-
-
-def _make_edge(edge_id: str = "edge-1") -> TopologyEdge:
-    return TopologyEdge(
-        id=edge_id,
-        workspace_id="ws-1",
-        source_node_id="node-1",
-        target_node_id="node-2",
-        label="connects",
-        source_hex_q=1,
-        source_hex_r=-1,
-        target_hex_q=2,
-        target_hex_r=-1,
-        direction="forward",
-        auto_created=True,
-        data={"w": 1},
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-
-
-@pytest.fixture
-def mock_topology_service() -> AsyncMock:
-    service = AsyncMock()
-    service.create_node = AsyncMock(return_value=_make_node())
-    service.list_nodes = AsyncMock(return_value=[_make_node()])
-    service.list_all_nodes = AsyncMock(return_value=[_make_node()])
-    service.get_node = AsyncMock(return_value=_make_node())
-    service.update_node = AsyncMock(return_value=_make_node())
-    service.list_edges_for_node = AsyncMock(return_value=[_make_edge()])
-    service.delete_node = AsyncMock(return_value=True)
-
-    service.create_edge = AsyncMock(return_value=_make_edge())
-    service.list_edges = AsyncMock(return_value=[_make_edge()])
-    service.list_all_edges = AsyncMock(return_value=[_make_edge()])
-    service.get_edge = AsyncMock(return_value=_make_edge())
-    service.update_edge = AsyncMock(return_value=_make_edge())
-    service.delete_edge = AsyncMock(return_value=True)
-    return service
-
-
-@pytest.fixture
-def topology_client(
-    mock_topology_service: AsyncMock, monkeypatch: pytest.MonkeyPatch
-) -> TestClient:
-    from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-    from src.infrastructure.adapters.primary.web.routers.topology import (
-        get_topology_service,
-        router,
-    )
-
-    app = FastAPI()
-    app.include_router(router)
-
-    user = Mock()
-    user.id = "user-1"
-    app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[get_topology_service] = lambda: mock_topology_service
-    publish_mock = AsyncMock()
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.routers.topology.publish_workspace_event_with_retry",
-        publish_mock,
-    )
-    app.state.container = Mock()
-    app.state.container.redis.return_value = Mock()
-    client = TestClient(app)
-    client.publish_mock = publish_mock  # type: ignore[attr-defined]
-    return client
 
 
 @pytest.mark.unit
-class TestTopologyRouter:
-    def test_create_node_success(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/nodes",
-            json={
-                "node_type": "note",
-                "title": "My Node",
-                "position_x": 12.5,
-                "position_y": -3,
-                "hex_q": 3,
-                "hex_r": 1,
-                "status": "queued",
-                "tags": ["beta"],
-                "data": {"foo": "bar"},
-            },
+@pytest.mark.parametrize("call", _legacy_handler_calls())
+async def test_legacy_topology_handlers_fail_closed_without_local_runtime(
+    call: _LegacyHandlerCall,
+) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await call(cast("Any", SimpleNamespace(id="user-1")))
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "code": "WORKSPACE_CORE_UNAVAILABLE",
+        "reason": "workspace_core_unavailable",
+        "detail": "Workspace Core is unavailable",
+    }
+
+
+@pytest.mark.unit
+def test_topology_contract_module_has_no_static_service_or_di_fallback() -> None:
+    retired_names = {
+        "TopologyService",
+        "get_topology_service",
+        "get_db",
+        "_topology_access_denied_error",
+        "_invalid_topology_request_error",
+        "_topology_node_not_found_error",
+        "_topology_edge_not_found_error",
+        "_topology_not_found_error",
+        "_is_not_found_error",
+        "_serialize_node",
+        "_serialize_edge",
+        "_publish_topology_event_after_commit",
+    }
+
+    assert retired_names.isdisjoint(vars(topology))
+
+
+@pytest.mark.unit
+def test_topology_contract_models_keep_validation_boundaries() -> None:
+    with pytest.raises(ValidationError):
+        topology.TopologyNodeCreate(
+            node_type=TopologyNodeType.NOTE,
+            hex_q=MAX_WORKSPACE_HEX_COORDINATE + 1,
         )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.json()["id"] == "node-1"
-        assert response.json()["hex_q"] == 1
-        assert response.json()["status"] == "ready"
-        assert response.json()["tags"] == ["alpha"]
-        assert mock_topology_service.create_node.await_count == 1
-        assert mock_topology_service.create_node.await_args.kwargs["hex_q"] == 3
-        assert mock_topology_service.create_node.await_args.kwargs["hex_r"] == 1
-        assert mock_topology_service.create_node.await_args.kwargs["status"] == "queued"
-        assert mock_topology_service.create_node.await_args.kwargs["tags"] == ["beta"]
-        assert topology_client.publish_mock.await_count == 1  # type: ignore[attr-defined]
-
-    def test_create_node_still_succeeds_when_event_publish_fails(
-        self,
-        topology_client: TestClient,
-    ) -> None:
-        topology_client.publish_mock.side_effect = RuntimeError("redis unavailable")  # type: ignore[attr-defined]
-
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/nodes",
-            json={"node_type": "note", "title": "My Node"},
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-
-    def test_create_edge_success_uses_authoritative_endpoint_geometry(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/edges",
-            json={
-                "source_node_id": "node-1",
-                "target_node_id": "node-2",
-                "direction": "forward",
-                "auto_created": True,
-            },
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.json()["source_hex_q"] == 1
-        assert response.json()["direction"] == "forward"
-        assert response.json()["auto_created"] is True
-        assert "source_hex_q" not in mock_topology_service.create_edge.await_args.kwargs
-        assert "target_hex_q" not in mock_topology_service.create_edge.await_args.kwargs
-        assert mock_topology_service.create_edge.await_args.kwargs["direction"] == "forward"
-        assert mock_topology_service.create_edge.await_args.kwargs["auto_created"] is True
-
-    def test_create_edge_rejects_client_controlled_geometry(
-        self, topology_client: TestClient
-    ) -> None:
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/edges",
-            json={
+    with pytest.raises(ValidationError):
+        topology.TopologyEdgeCreate.model_validate(
+            {
                 "source_node_id": "node-1",
                 "target_node_id": "node-2",
                 "source_hex_q": 1,
-            },
+            }
         )
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    def test_create_node_validation_failure(self, topology_client: TestClient) -> None:
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/nodes",
-            json={
-                "node_type": "invalid-type",
-                "title": "Bad Node",
-            },
-        )
+@pytest.mark.unit
+async def test_secondary_dispatcher_does_not_execute_local_topology_mutations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def legacy_service_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("secondary dispatcher touched the retired topology service")
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    monkeypatch.setattr(topology, "get_topology_service", legacy_service_trap, raising=False)
+    handled = await dispatch_secondary_workspace_mutation(
+        actor=WorkspaceCollaborationActor(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            user_id="user-1",
+        ),
+        command=WorkspaceCollaborationMutationCommand(
+            contract_version=WORKSPACE_COLLABORATION_CONTRACT_VERSION,
+            surface="topology",
+            action="create_node",
+            expected_revision=0,
+            idempotency_key="topology-command-1",
+            payload={"node_type": "note"},
+        ),
+        request=cast("Any", SimpleNamespace()),
+        background_tasks=BackgroundTasks(),
+        current_user=cast("Any", SimpleNamespace(id="user-1")),
+        db=cast("Any", SimpleNamespace()),
+    )
 
-    def test_create_node_rejects_out_of_bounds_hex(self, topology_client: TestClient) -> None:
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/nodes",
-            json={
-                "node_type": "note",
-                "hex_q": 25,
-                "hex_r": 0,
-            },
-        )
-
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-    def test_create_edge_permission_failure(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.create_edge.side_effect = PermissionError("Insufficient permission")
-
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/edges",
-            json={"source_node_id": "node-1", "target_node_id": "node-2"},
-        )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.json()["detail"] == "Access denied"
-        assert "permission" not in response.text.lower()
-
-    def test_create_node_workspace_membership_failure_is_actionable(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.create_node.side_effect = PermissionError(
-            "User must be a workspace member"
-        )
-
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/nodes",
-            json={"node_type": "note", "title": "My Node"},
-        )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.json()["detail"] == "User must be a workspace member"
-
-    def test_update_edge_workspace_validation_failure(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.update_edge.side_effect = ValueError(
-            "Endpoints must be in same workspace"
-        )
-
-        response = topology_client.patch(
-            "/api/v1/workspaces/ws-1/topology/edges/edge-1",
-            json={"source_node_id": "node-1", "target_node_id": "node-999"},
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["detail"] == "Invalid topology request"
-        assert "same workspace" not in response.text.lower()
-
-    def test_create_edge_workspace_endpoint_validation_is_actionable(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.create_edge.side_effect = ValueError(
-            "Edge endpoints must exist in same workspace"
-        )
-
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/edges",
-            json={"source_node_id": "node-1", "target_node_id": "node-2"},
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["detail"] == "Edge endpoints must exist in same workspace"
-
-    def test_create_node_value_error_is_sanitized(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.create_node.side_effect = ValueError(
-            "Reserved center coordinate in workspace ws-secret"
-        )
-
-        response = topology_client.post(
-            "/api/v1/workspaces/ws-1/topology/nodes",
-            json={"node_type": "note", "title": "My Node"},
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["detail"] == "Invalid topology request"
-        assert "ws-secret" not in response.text
-
-    def test_list_nodes_value_error_is_sanitized(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.list_nodes.side_effect = ValueError("workspace ws-secret not found")
-
-        response = topology_client.get("/api/v1/workspaces/ws-1/topology/nodes")
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()["detail"] == "Topology not found"
-        assert "ws-secret" not in response.text
-
-    def test_get_node_missing_id_is_sanitized(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.get_node.side_effect = ValueError("node node-secret not found")
-
-        response = topology_client.get("/api/v1/workspaces/ws-1/topology/nodes/node-secret")
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()["detail"] == "Topology node not found"
-        assert "node-secret" not in response.text
-
-    def test_update_node_non_not_found_value_error_is_sanitized(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.update_node.side_effect = ValueError("node secret payload invalid")
-
-        response = topology_client.patch(
-            "/api/v1/workspaces/ws-1/topology/nodes/node-1",
-            json={"title": "Updated"},
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["detail"] == "Invalid topology request"
-        assert "secret" not in response.text
-
-    def test_get_edge_missing_id_is_sanitized(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.get_edge.side_effect = ValueError("edge edge-secret not found")
-
-        response = topology_client.get("/api/v1/workspaces/ws-1/topology/edges/edge-secret")
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()["detail"] == "Topology edge not found"
-        assert "edge-secret" not in response.text
-
-    def test_delete_edge_missing_id_is_sanitized(
-        self,
-        topology_client: TestClient,
-        mock_topology_service: AsyncMock,
-    ) -> None:
-        mock_topology_service.delete_edge.side_effect = ValueError("edge edge-secret not found")
-
-        response = topology_client.delete("/api/v1/workspaces/ws-1/topology/edges/edge-secret")
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()["detail"] == "Topology edge not found"
-        assert "edge-secret" not in response.text
+    assert handled is False

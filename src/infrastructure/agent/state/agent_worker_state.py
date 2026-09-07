@@ -28,20 +28,14 @@ from typing import TYPE_CHECKING, Any, cast, override
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
     from src.domain.ports.services.sandbox_port import SandboxPort
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 
 import redis.asyncio as redis
 
-from src.domain.model.plugins import PluginScopeContext
-from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
-from src.infrastructure.agent.plugins.registry import (
-    PluginDiagnostic,
-    PluginSkillBuildContext,
-    PluginToolBuildContext,
-    get_plugin_registry,
-)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 # Import Agent Session Pool components
 from .agent_session_pool import (
@@ -53,6 +47,7 @@ from .agent_session_pool import (
     compute_subagents_hash,
     compute_tools_hash,
     generate_session_key,
+    generation_cache_key_v2,
     get_mcp_tools_from_cache,
     get_or_create_agent_session,
     get_or_create_subagent_router,
@@ -63,6 +58,7 @@ from .agent_session_pool import (
     invalidate_mcp_tools_cache,
     invalidate_subagent_router_cache,
     invalidate_tool_definitions_cache,
+    resolve_generation_cache_descriptor_v2,
     update_mcp_tools_cache,
 )
 
@@ -83,18 +79,13 @@ __all__ = [  # noqa: RUF022
     "discover_tools_with_retry",
     # Utilities
     "generate_session_key",
-    "get_agent_graph_service",
     # Tools cache access (hot-plug support)
     "get_cached_tools",
     "get_cached_tools_for_project",
     "get_custom_tool_diagnostics",
-    "get_hitl_response_listener",
-    "get_mcp_sandbox_adapter",
-    "shutdown_mcp_sandbox_adapter",
+    "current_mcp_sandbox_adapter_v2",
     # MCP Tools
     "get_mcp_tools_from_cache",
-    # Graph service
-    "get_or_create_agent_graph_service",
     "get_or_create_agent_session",
     # Provider config
     "get_or_create_provider_config",
@@ -103,9 +94,7 @@ __all__ = [  # noqa: RUF022
     # Tool Definitions
     "get_or_create_tool_definitions",
     "get_or_create_tools",
-    "get_pool_adapter",
     "get_pool_stats",
-    "get_session_registry",
     # SystemPromptManager
     "get_system_prompt_manager",
     "invalidate_agent_session",
@@ -115,32 +104,13 @@ __all__ = [  # noqa: RUF022
     "invalidate_tool_definitions_cache",
     "invalidate_tools_cache",
     "inject_discovered_mcp_tools_into_cache",
-    "is_pool_enabled",
     # Prewarm
     "prewarm_agent_session",
-    "set_agent_graph_service",
-    # HITL Response Listener (real-time delivery)
-    "set_hitl_response_listener",
-    # MCP Sandbox Adapter
-    "set_mcp_sandbox_adapter",
-    # Multi-Agent Orchestrator
-    "set_agent_orchestrator",
-    "get_agent_orchestrator",
-    # Pool Manager (new 3-tier architecture)
-    "set_pool_adapter",
-    "sync_mcp_sandbox_adapter_from_docker",
     "update_mcp_tools_cache",
 ]
 
 # Global state for agent worker
-_agent_graph_service: Any | None = None
-_tenant_graph_services: dict[str, Any] = {}
-_tenant_graph_service_lock = asyncio.Lock()
 _redis_pool: redis.ConnectionPool | None = None
-_mcp_sandbox_adapter: Any | None = None
-_pool_adapter: Any | None = None  # PooledAgentSessionAdapter (when enabled)
-_hitl_response_listener: Any | None = None  # HITLResponseListener (real-time)
-_agent_orchestrator: Any | None = None  # AgentOrchestrator (multi-agent)
 
 # Tool set cache (by project_id key)
 _tools_cache: dict[str, dict[str, Any]] = {}
@@ -160,175 +130,38 @@ _skill_loader_cache: dict[str, Any] = {}
 _skill_loader_cache_lock = asyncio.Lock()
 
 
-def set_agent_graph_service(service: Any) -> None:
-    """Set the global graph service instance for agent worker.
+def current_mcp_sandbox_adapter_v2() -> MCPSandboxAdapter | None:
+    """Resolve the sandbox adapter from the exact pinned V2 operation."""
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+        MCPSandboxAdapter,
+    )
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        AGENT_WORKER_RUNTIME_SERVICE_V2,
+        AgentWorkerRuntimeResolverProtocolV2,
+        AgentWorkerRuntimeServicesV2,
+    )
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 
-    Called during Agent Worker initialization to make graph_service
-    available to all Agent Activities.
-
-    Args:
-        service: The graph service (NativeGraphAdapter) instance
-    """
-    global _agent_graph_service
-    _agent_graph_service = service
-    _tenant_graph_services.setdefault("default", service)
-    logger.info("Agent Worker: Graph service registered for Activities")
-
-
-def get_agent_graph_service() -> Any | None:
-    """Get the global graph service instance for agent worker.
-
-    Returns:
-        The graph service instance or None if not initialized
-    """
-    return _agent_graph_service
-
-
-async def get_or_create_agent_graph_service(tenant_id: str | None = None) -> Any:
-    """Get tenant-scoped graph service, creating and caching when needed."""
-    cache_key = tenant_id or "default"
-    if cache_key in _tenant_graph_services:
-        return _tenant_graph_services[cache_key]
-
-    async with _tenant_graph_service_lock:
-        if cache_key in _tenant_graph_services:
-            return _tenant_graph_services[cache_key]
-
-        from src.configuration.factories import create_native_graph_adapter
-
-        try:
-            graph_service = await create_native_graph_adapter(tenant_id=tenant_id)
-        except Exception as exc:
-            # Mirror the API-startup degradation path: when the knowledge-graph
-            # stack cannot initialize (for example, no embedding provider is
-            # configured for the tenant), chat must stay available with
-            # graph-backed features disabled instead of failing outright.
-            # The failure is intentionally not cached so that configuring a
-            # provider later heals the graph service without a restart.
-            logger.warning(
-                "Agent Worker: Graph service unavailable for tenant key '%s' (%s); "
-                "continuing with knowledge-graph features disabled",
-                cache_key,
-                exc,
-            )
-            return None
-        _tenant_graph_services[cache_key] = graph_service
-
-        # Keep backward compatibility for callers that still use global getter
-        if cache_key == "default":
-            global _agent_graph_service
-            _agent_graph_service = graph_service
-
-        logger.info("Agent Worker: Graph service cached for tenant key '%s'", cache_key)
-        return graph_service
-
-
-def set_mcp_sandbox_adapter(adapter: Any) -> None:
-    """Set the global MCP Sandbox Adapter instance for agent worker.
-
-    Called during Agent Worker initialization to make MCPSandboxAdapter
-    available to all Agent Activities for loading Project Sandbox MCP tools.
-
-    Args:
-        adapter: The MCPSandboxAdapter instance
-    """
-    global _mcp_sandbox_adapter
-    _mcp_sandbox_adapter = adapter
-    logger.info("Agent Worker: MCP Sandbox Adapter registered for Activities")
-
-
-async def sync_mcp_sandbox_adapter_from_docker() -> int:
-    """Sync existing sandbox containers from Docker on startup.
-
-    Called during Agent Worker initialization to discover and recover
-    existing sandbox containers that may have been created before
-    the adapter was (re)initialized.
-
-    Returns:
-        Number of sandboxes discovered and synced
-    """
-    if _mcp_sandbox_adapter is None:
-        return 0
-
-    try:
-        count = await _mcp_sandbox_adapter.sync_from_docker()
-        if count > 0:
-            logger.info(f"Agent Worker: Synced {count} existing sandboxes from Docker")
-        return cast(int, count)
-    except Exception as e:
-        logger.warning(f"Agent Worker: Failed to sync sandboxes from Docker: {e}")
-        return 0
-
-
-def get_mcp_sandbox_adapter() -> Any | None:
-    """Get the global MCP Sandbox Adapter instance for agent worker.
-
-    Returns:
-        The MCPSandboxAdapter instance or None if not initialized
-    """
-    return _mcp_sandbox_adapter
-
-
-async def shutdown_mcp_sandbox_adapter() -> None:
-    """Close and clear the global MCP sandbox adapter used by local agent runtime."""
-    global _mcp_sandbox_adapter
-
-    adapter = _mcp_sandbox_adapter
-    _mcp_sandbox_adapter = None
-    if adapter is None:
-        return
-
-    close = getattr(adapter, "close", None)
-    if close is not None:
-        await close()
-    logger.info("Agent Worker: MCP Sandbox Adapter closed")
-
-
-def set_agent_orchestrator(orchestrator: Any) -> None:
-    global _agent_orchestrator
-    _agent_orchestrator = orchestrator
-    logger.info("Agent Worker: AgentOrchestrator registered for Activities")
-
-
-def get_agent_orchestrator() -> Any | None:
-    return _agent_orchestrator
-
-
-# ============================================================================
-# Agent Pool Adapter State (NEW: 3-tier architecture)
-# ============================================================================
-
-
-def set_pool_adapter(adapter: Any) -> None:
-    """Set the global Pool Adapter instance for agent worker.
-
-    Called during Agent Worker initialization when AGENT_POOL_ENABLED=true.
-    The adapter provides pooled instance management with tier-based isolation.
-
-    Args:
-        adapter: The PooledAgentSessionAdapter instance
-    """
-    global _pool_adapter
-    _pool_adapter = adapter
-    logger.info("Agent Worker: Pool Adapter registered for Activities")
-
-
-def get_pool_adapter() -> Any | None:
-    """Get the global Pool Adapter instance for agent worker.
-
-    Returns:
-        The PooledAgentSessionAdapter instance or None if not initialized/disabled
-    """
-    return _pool_adapter
-
-
-def is_pool_enabled() -> bool:
-    """Check if pool-based architecture is enabled.
-
-    Returns:
-        True if pool adapter is available and started
-    """
-    return _pool_adapter is not None and _pool_adapter._running
+    operation = current_operation_context_v2()
+    resolver = operation.require(AGENT_WORKER_RUNTIME_SERVICE_V2)
+    if not isinstance(resolver, AgentWorkerRuntimeResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_agent_worker_runtime",
+            "agent worker runtime service has an invalid resolver",
+        )
+    services = resolver.resolve(operation)
+    if not isinstance(services, AgentWorkerRuntimeServicesV2):
+        raise RuntimeV2Error(
+            "invalid_agent_worker_runtime",
+            "agent worker runtime resolver returned invalid services",
+        )
+    adapter = services.sandbox_adapter
+    if adapter is not None and not isinstance(adapter, MCPSandboxAdapter):
+        raise RuntimeV2Error(
+            "invalid_agent_worker_runtime",
+            "agent worker runtime resolved an invalid sandbox adapter",
+        )
+    return adapter
 
 
 async def get_redis_pool() -> redis.ConnectionPool:
@@ -381,15 +214,6 @@ def clear_state() -> None:
     Note: This clears references but does not close async resources.
     Use close_redis_pool() separately to properly close the Redis pool.
     """
-    global \
-        _agent_graph_service, \
-        _tenant_graph_services, \
-        _tools_cache, \
-        _project_sandbox_tools_cache, \
-        _skills_cache, \
-        _skill_loader_cache
-    _agent_graph_service = None
-    _tenant_graph_services.clear()
     _tools_cache.clear()
     _project_sandbox_tools_cache.clear()
     _skills_cache.clear()
@@ -413,6 +237,7 @@ async def get_or_create_tools(
     redis_client: Any,
     llm: Any = None,
     agent_mode: str = "default",
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Get or create a cached tool set for a project, including sandbox tools and skills.
@@ -428,13 +253,27 @@ async def get_or_create_tools(
         redis_client: Redis client instance
         llm: LangChain chat model for tools that require LLM (e.g., SummaryTool)
         agent_mode: Agent mode for skill filtering (e.g., "default", "plan")
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
         **kwargs: Accepted for backward compatibility (mcp_tools_ttl_seconds, etc.)
 
     Returns:
         Dictionary of tool name -> tool instance (built-in + sandbox + skill_loader)
     """
-    # 1. Get or create cached built-in tools
-    tools = await _get_or_create_builtin_tools(project_id, redis_client)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    cache_key = (
+        generation_cache_key_v2(
+            project_id,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+    # 1. Build the base tools. Only the complete set is published to the generation cache.
+    tools = await _get_or_create_builtin_tools(
+        project_id,
+        redis_client,
+        generation_descriptor=generation_descriptor,
+    )
 
     # 2. Load Project Sandbox MCP tools (if sandbox exists for project)
     await _add_sandbox_tools(
@@ -444,12 +283,19 @@ async def get_or_create_tools(
         redis_client,
         mcp_tools_ttl_seconds=kwargs.get("mcp_tools_ttl_seconds", 300),
         force_mcp_refresh=bool(kwargs.get("force_mcp_refresh", False)),
+        generation_descriptor=generation_descriptor,
     )
 
     # 3. Add SkillLoaderTool
-    await _add_skill_loader_tool(tools, tenant_id, project_id, agent_mode)
+    await _add_skill_loader_tool(
+        tools,
+        tenant_id,
+        project_id,
+        agent_mode,
+        generation_descriptor=generation_descriptor,
+    )
 
-    # 4. Configure skill_installer and plugin_manager tools
+    # 4. Configure the skill_installer tool
     _add_skill_installer_tools(tools, tenant_id, project_id)
 
     # 5. Add SkillSyncTool
@@ -467,29 +313,19 @@ async def get_or_create_tools(
     # 8. Add Todo Tools
     _add_todo_tools(tools, project_id)
 
-    # 8c. Configure skill evolution session capture
-    _configure_skill_evolution_capture()
-
     # 8b. Add model availability tool
     _add_model_awareness_tools(tools, tenant_id, project_id)
 
     # 9. Configure register_mcp_server tool
     _add_register_mcp_server_tool(tools, tenant_id, project_id)
 
-    # 10. Add plugin tools
-    await _add_plugin_tools(
+    # 10. Add the builtin memory capability without consulting the V1 plugin registry.
+    _add_memory_tools(
         tools,
         tenant_id,
         project_id,
         graph_service=graph_service,
         redis_client=redis_client,
-    )
-
-    # 10b. Add sandbox plugin tools (dependency-managed)
-    sandbox_id = kwargs.get("sandbox_id")
-    sandbox_port = kwargs.get("sandbox_port")
-    await _add_sandbox_plugin_tools(
-        tools, tenant_id, project_id, sandbox_id, sandbox_port, redis_client
     )
 
     # 11. Add custom tools from .memstack/tools/
@@ -507,11 +343,9 @@ async def get_or_create_tools(
     # 14. Add Canvas tools (A2UI)
     _add_canvas_tools(tools)
 
-    # 15. Add Multi-Agent tools (behind feature flag)
-    _add_agent_tools(tools, project_id)
-
-    # 16. Add Workspace Chat tools
-    await _add_workspace_chat_tools(tools, tenant_id, project_id)
+    if cache_key is not None:
+        async with _tools_cache_lock:
+            _tools_cache[cache_key] = dict(tools)
 
     return tools
 
@@ -519,32 +353,28 @@ async def get_or_create_tools(
 async def _get_or_create_builtin_tools(
     project_id: str,
     redis_client: Any,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any]:
-    """Get or create cached built-in tools, returning a copy."""
-    from src.infrastructure.agent.tools.clarification import configure_clarification
-    from src.infrastructure.agent.tools.decision import configure_decision
-    from src.infrastructure.agent.tools.define import get_registered_tools
+    """Build the base tools before the complete generation tool set is cached."""
+    from src.infrastructure.agent.tools.clarification import make_clarification_tool
+    from src.infrastructure.agent.tools.decision import make_decision_tool
+    from src.infrastructure.agent.tools.web_scrape import web_scrape_tool
+    from src.infrastructure.agent.tools.web_search import make_web_search_tool
 
+    _ = generation_descriptor
     async with _tools_cache_lock:
-        if project_id not in _tools_cache:
-            from src.infrastructure.agent.tools.web_scrape import configure_web_scrape
-            from src.infrastructure.agent.tools.web_search import configure_web_search
-
-            configure_web_search(redis_client=redis_client)
-            configure_web_scrape()
-            configure_clarification(hitl_handler=None)
-            configure_decision(hitl_handler=None)
-
-            registry = get_registered_tools()
-            _tools_cache[project_id] = {
-                "web_search": registry["web_search"],
-                "web_scrape": registry["web_scrape"],
-                "ask_clarification": registry["ask_clarification"],
-                "request_decision": registry["request_decision"],
-            }
-            logger.info(f"Agent Worker: Tool set cached for project {project_id}")
-
-    return dict(_tools_cache[project_id])
+        tools = {
+            "web_search": make_web_search_tool(redis_client=redis_client),
+            "web_scrape": web_scrape_tool,
+            "ask_clarification": make_clarification_tool(hitl_handler=None),
+            "request_decision": make_decision_tool(hitl_handler=None),
+        }
+        logger.info(
+            "Agent Worker: Base tool set built for project %s",
+            project_id,
+        )
+        return tools
 
 
 async def _add_sandbox_tools(
@@ -555,9 +385,10 @@ async def _add_sandbox_tools(
     *,
     mcp_tools_ttl_seconds: int = 300,
     force_mcp_refresh: bool = False,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> None:
     """Load and add Project Sandbox MCP tools."""
-    if _mcp_sandbox_adapter is None:
+    if current_mcp_sandbox_adapter_v2() is None:
         return
     try:
         sandbox_tools = await _get_or_load_project_sandbox_tools(
@@ -566,6 +397,7 @@ async def _add_sandbox_tools(
             redis_client=redis_client,
             ttl_seconds=mcp_tools_ttl_seconds,
             force_refresh=force_mcp_refresh,
+            generation_descriptor=generation_descriptor,
         )
         if sandbox_tools:
             tools.update(sandbox_tools)
@@ -573,6 +405,8 @@ async def _add_sandbox_tools(
                 f"Agent Worker: Loaded {len(sandbox_tools)} Project Sandbox tools "
                 f"for project {project_id}"
             )
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(
             f"Agent Worker: Failed to load Project Sandbox tools for project {project_id}: {e}"
@@ -586,6 +420,7 @@ async def _get_or_load_project_sandbox_tools(
     *,
     ttl_seconds: int = 300,
     force_refresh: bool = False,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any]:
     """Return cached project sandbox tools or load them from the sandbox.
 
@@ -593,10 +428,19 @@ async def _get_or_load_project_sandbox_tools(
     wrappers prevents repeated DB sandbox lookups and MCP tool-list calls when
     chat/session infrastructure rebuilds an agent in quick succession.
     """
-    cache_key = f"{tenant_id}:{project_id}"
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    cache_key = (
+        generation_cache_key_v2(
+            project_id,
+            tenant_id,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
     now = time.time()
 
-    if not force_refresh and ttl_seconds > 0:
+    if cache_key is not None and not force_refresh and ttl_seconds > 0:
         async with _project_sandbox_tools_cache_lock:
             cached = _project_sandbox_tools_cache.get(cache_key)
             if cached is not None:
@@ -615,7 +459,7 @@ async def _get_or_load_project_sandbox_tools(
         redis_client=redis_client,
     )
 
-    if ttl_seconds > 0 and sandbox_tools:
+    if cache_key is not None and ttl_seconds > 0 and sandbox_tools:
         async with _project_sandbox_tools_cache_lock:
             _project_sandbox_tools_cache[cache_key] = (dict(sandbox_tools), now)
 
@@ -627,20 +471,19 @@ async def _add_skill_loader_tool(
     tenant_id: str,
     project_id: str,
     agent_mode: str,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> None:
     """Add SkillLoaderTool initialized with skill list in description."""
     try:
-        from src.infrastructure.agent.tools.skill_loader import set_sandbox_id
-
+        sandbox_id = _find_sandbox_id(tools, project_id=project_id) or ""
         skill_loader_info = await get_or_create_skill_loader_tool(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode=agent_mode,
+            generation_descriptor=generation_descriptor,
+            sandbox_id=sandbox_id,
         )
-        # Set sandbox_id from loaded sandbox tools for resource sync
-        sandbox_id = _find_sandbox_id(tools)
-        if sandbox_id:
-            set_sandbox_id(sandbox_id)
         tools["skill_loader"] = skill_loader_info
         logger.info(
             f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, agent_mode={agent_mode}"
@@ -654,26 +497,19 @@ def _add_skill_installer_tools(
     tenant_id: str,
     project_id: str,
 ) -> None:
-    """Configure skill_installer and plugin_manager @tool_define tools."""
+    """Add a generation-bound skill_installer tool."""
     try:
-        from src.infrastructure.agent.tools.plugin_manager import configure_plugin_manager
-        from src.infrastructure.agent.tools.skill_installer import configure_skill_installer
+        from src.infrastructure.agent.tools.skill_installer import make_skill_installer_tool
 
         project_path = resolve_project_base_path(project_id)
-        configure_skill_installer(
+        tools["skill_installer"] = make_skill_installer_tool(
             project_path=project_path,
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        configure_plugin_manager(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-        logger.info(
-            f"Agent Worker: skill_installer + plugin_manager configured for project {project_id}"
-        )
+        logger.info(f"Agent Worker: skill_installer added for project {project_id}")
     except Exception as e:
-        logger.warning(f"Agent Worker: Failed to configure skill_installer/plugin_manager: {e}")
+        logger.warning(f"Agent Worker: Failed to configure skill_installer: {e}")
 
 
 def _add_skill_sync_tool(
@@ -682,24 +518,22 @@ def _add_skill_sync_tool(
     project_id: str,
 ) -> None:
     """Add SkillSyncTool for syncing skills from sandbox back to the system."""
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as sync_session_factory,
         )
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.skill_sync import configure_skill_sync
+        from src.infrastructure.agent.tools.skill_sync import make_skill_sync_tool
 
         sandbox_id = _find_sandbox_id(tools)
-        configure_skill_sync(
+        tools["skill_sync"] = make_skill_sync_tool(
             tenant_id=tenant_id,
             project_id=project_id,
-            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_adapter=sandbox_adapter,
             sandbox_id=sandbox_id,
             session_factory=sync_session_factory,
             skill_loader_tool=tools.get("skill_loader"),
         )
-        registry = get_registered_tools()
-        tools["skill_sync"] = registry["skill_sync"]
         logger.info(f"Agent Worker: SkillSyncTool added for tenant {tenant_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillSyncTool: {e}")
@@ -715,22 +549,17 @@ def _add_env_var_tools(
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
         )
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.env_var_tools import configure_env_var_tools
+        from src.infrastructure.agent.tools.env_var_tools import make_env_var_tools
         from src.infrastructure.security.encryption_service import get_encryption_service
 
         encryption_service = get_encryption_service()
 
-        configure_env_var_tools(
-            encryption_service=encryption_service,
-            session_factory=async_session_factory,
-            tenant_id=tenant_id,
-            project_id=project_id,
+        tools.update(
+            make_env_var_tools(
+                encryption_service=encryption_service,
+                session_factory=async_session_factory,
+            )
         )
-        registry = get_registered_tools()
-        tools["get_env_var"] = registry["get_env_var"]
-        tools["request_env_var"] = registry["request_env_var"]
-        tools["check_env_vars"] = registry["check_env_vars"]
         logger.info(
             f"Agent Worker: Environment variable tools added for tenant {tenant_id}, "
             f"project {project_id}"
@@ -746,9 +575,9 @@ def _add_system_api_tool(
 ) -> None:
     """Register the system_api tool for current-user API calls."""
     try:
-        from src.infrastructure.agent.tools.system_api import system_api_tool
+        from src.infrastructure.agent.tools.system_api import make_system_api_tool
 
-        tools["system_api"] = system_api_tool
+        tools["system_api"] = make_system_api_tool()
         logger.info(
             "Agent Worker: system_api tool configured for tenant %s, project %s",
             tenant_id,
@@ -761,17 +590,11 @@ def _add_system_api_tool(
 def _add_hitl_tools(tools: dict[str, Any], project_id: str) -> None:
     """Add Human-in-the-Loop Tools (ClarificationTool, DecisionTool)."""
     try:
-        from src.infrastructure.agent.tools.clarification import configure_clarification
-        from src.infrastructure.agent.tools.decision import configure_decision
-        from src.infrastructure.agent.tools.define import get_registered_tools
+        from src.infrastructure.agent.tools.clarification import make_clarification_tool
+        from src.infrastructure.agent.tools.decision import make_decision_tool
 
-        # hitl_handler is injected later by the processor/session; pass None for now
-        configure_clarification(hitl_handler=None)
-        configure_decision(hitl_handler=None)
-
-        registry = get_registered_tools()
-        tools["ask_clarification"] = registry["ask_clarification"]
-        tools["request_decision"] = registry["request_decision"]
+        tools["ask_clarification"] = make_clarification_tool(hitl_handler=None)
+        tools["request_decision"] = make_decision_tool(hitl_handler=None)
         logger.info(
             f"Agent Worker: Human-in-the-loop tools (ask_clarification, request_decision) "
             f"added for project {project_id}"
@@ -786,111 +609,12 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as todo_session_factory,
         )
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.todo_tools import (
-            configure_todoread,
-            configure_todowrite,
-        )
+        from src.infrastructure.agent.tools.todo_tools import make_todo_tools
 
-        configure_todoread(session_factory=todo_session_factory)
-        configure_todowrite(session_factory=todo_session_factory)
-        registry = get_registered_tools()
-        tools["todoread"] = registry["todoread"]
-        tools["todowrite"] = registry["todowrite"]
+        tools.update(make_todo_tools(session_factory=todo_session_factory))
         logger.info(f"Agent Worker: Todo tools configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure todo tools: {e}")
-
-
-def _configure_skill_evolution_capture() -> None:
-    """Configure skill evolution session capture with the DB session factory."""
-    try:
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            configure_skill_evolution_capture,
-        )
-
-        configure_skill_evolution_capture(session_factory=async_session_factory)
-        logger.info("Agent Worker: Skill evolution capture configured")
-    except Exception as e:
-        logger.warning(f"Agent Worker: Failed to configure skill evolution capture: {e}")
-
-
-def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
-    try:
-        from src.configuration.config import get_settings
-
-        settings = get_settings()
-        if not settings.multi_agent_enabled:
-            return
-
-        orchestrator = get_agent_orchestrator()
-        if orchestrator is None:
-            logger.debug("Agent Worker: AgentOrchestrator not set, skipping agent tools")
-            return
-
-        from src.infrastructure.agent.tools.agent_definition_tool import (
-            configure_agent_definition_manage,
-        )
-        from src.infrastructure.agent.tools.agent_history import configure_agent_history
-        from src.infrastructure.agent.tools.agent_list import configure_agent_list
-        from src.infrastructure.agent.tools.agent_send import configure_agent_send
-        from src.infrastructure.agent.tools.agent_sessions import (
-            configure_agent_sessions,
-        )
-        from src.infrastructure.agent.tools.agent_spawn import configure_agent_spawn
-        from src.infrastructure.agent.tools.agent_stop import configure_agent_stop
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.workspace_clarification import (
-            configure_workspace_clarification,
-        )
-        from src.infrastructure.agent.tools.workspace_health_verdict import (
-            workspace_health_verdict_tool,
-        )
-        from src.infrastructure.agent.tools.workspace_leader_wtp import (
-            configure_workspace_leader_wtp,
-        )
-        from src.infrastructure.agent.tools.workspace_wtp import configure_workspace_wtp
-
-        configure_agent_spawn(orchestrator=orchestrator)
-        configure_agent_list(orchestrator=orchestrator)
-        configure_agent_send(orchestrator=orchestrator)
-        configure_agent_sessions(orchestrator=orchestrator)
-        configure_agent_history(orchestrator=orchestrator)
-        configure_agent_stop(orchestrator=orchestrator)
-        configure_agent_definition_manage(orchestrator=orchestrator)
-        configure_workspace_wtp(orchestrator=orchestrator)
-        configure_workspace_leader_wtp(orchestrator=orchestrator)
-        configure_workspace_clarification(orchestrator=orchestrator)
-        _ = workspace_health_verdict_tool
-
-        registry = get_registered_tools()
-        agent_tool_names = (
-            "agent_spawn",
-            "agent_list",
-            "agent_send",
-            "agent_sessions",
-            "agent_history",
-            "agent_stop",
-            "agent_definition_manage",
-            "workspace_report_progress",
-            "workspace_report_complete",
-            "workspace_report_blocked",
-            "workspace_request_clarification",
-            "workspace_respond_clarification",
-            "workspace_assign_task",
-            "workspace_cancel_task",
-            "workspace_health_verdict",
-        )
-        for name in agent_tool_names:
-            if name in registry:
-                tools[name] = registry[name]
-
-        logger.info(f"Agent Worker: Multi-agent tools configured for project {project_id}")
-    except Exception as e:
-        logger.warning(f"Agent Worker: Failed to configure agent tools: {e}")
 
 
 def _add_model_awareness_tools(
@@ -900,17 +624,20 @@ def _add_model_awareness_tools(
 ) -> None:
     """Configure model-awareness tool for listing currently usable chat models."""
     try:
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.model_availability_tool import (
-            list_available_models_tool,
-            switch_model_next_turn_tool,
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
         )
+        from src.infrastructure.agent.tools.model_availability_tool import (
+            make_model_awareness_tools,
+        )
+        from src.infrastructure.llm.model_catalog import get_model_catalog_service
 
-        _ = list_available_models_tool
-        _ = switch_model_next_turn_tool
-        registry = get_registered_tools()
-        tools["list_available_models"] = registry["list_available_models"]
-        tools["switch_model_next_turn"] = registry["switch_model_next_turn"]
+        tools.update(
+            make_model_awareness_tools(
+                session_factory=async_session_factory,
+                model_catalog=get_model_catalog_service(),
+            )
+        )
         logger.info(
             "Agent Worker: model awareness tools configured for tenant %s, project %s",
             tenant_id,
@@ -925,33 +652,33 @@ def _add_register_mcp_server_tool(
     tenant_id: str,
     project_id: str,
 ) -> None:
-    """Configure register_mcp_server @tool_define tool."""
+    """Bind register_mcp_server to one generation's runtime dependencies."""
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as app_session_factory,
         )
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.register_mcp_server import (
-            configure_register_mcp_server_tool,
+        from src.infrastructure.agent.tools.register_mcp_server import register_mcp_server_tool
+        from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+            make_register_mcp_server_tool,
         )
 
         sandbox_id_for_tools = _find_sandbox_id(tools, project_id=project_id)
 
-        configure_register_mcp_server_tool(
+        tools["register_mcp_server"] = make_register_mcp_server_tool(
+            template=register_mcp_server_tool,
             session_factory=app_session_factory,
             tenant_id=tenant_id,
             project_id=project_id,
-            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_adapter=sandbox_adapter,
             sandbox_id=sandbox_id_for_tools,
         )
-        registry = get_registered_tools()
-        tools["register_mcp_server"] = registry["register_mcp_server"]
         logger.info(f"Agent Worker: register_mcp_server configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure register_mcp_server: {e}")
 
 
-async def _add_plugin_tools(
+def _add_memory_tools(
     tools: dict[str, Any],
     tenant_id: str,
     project_id: str,
@@ -959,359 +686,51 @@ async def _add_plugin_tools(
     graph_service: Any,
     redis_client: Any,
 ) -> None:
-    """Load plugin runtime and add plugin-provided tools."""
+    """Add the builtin memory tools without consulting a mutable plugin registry."""
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
-    from src.infrastructure.agent.core.plugin_tool_adapter import (
-        adapt_plugin_tool,
-    )
+    from src.infrastructure.agent.tools.memory_tool_provider import build_memory_tools
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-    # Ensure plugin runtime is loaded before building plugin-provided tools.
-    runtime_manager = get_plugin_runtime_manager()
-    runtime_diagnostics = await runtime_manager.ensure_loaded()
-    for diagnostic in runtime_diagnostics:
-        _log_plugin_diagnostic(diagnostic, context="runtime_load")
-
-    # Add plugin tools registered via plugin runtime (phase-1 foundation).
-    # Default behavior stays unchanged when no plugins are registered.
-    plugin_registry = get_plugin_registry()
-    plugin_tools, diagnostics = await plugin_registry.build_tools(
-        PluginToolBuildContext(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            base_tools=tools,
-            graph_service=graph_service,
-            redis_client=redis_client,
-            session_factory=async_session_factory,
-        )
-    )
-    for diagnostic in diagnostics:
-        _log_plugin_diagnostic(diagnostic, context="tool_build")
-    if plugin_tools:
-        adapted_count = 0
-        for tool_name, tool_impl in plugin_tools.items():
-            plugin_name = getattr(tool_impl, "_plugin_origin", "unknown")
-            adapted = adapt_plugin_tool(
-                tool_name=tool_name,
-                tool_impl=tool_impl,
-                plugin_name=plugin_name,
-            )
-            if adapted is not None:
-                tools[tool_name] = adapted
-                adapted_count += 1
-            else:
-                logger.warning(
-                    "Agent Worker: Skipped unadaptable plugin tool '%s'",
-                    tool_name,
-                )
-        logger.info(
-            "Agent Worker: Added %d plugin tools for project %s (adapted %d)",
-            len(plugin_tools),
-            project_id,
-            adapted_count,
-        )
-
-
-async def _add_sandbox_plugin_tools(
-    tools: dict[str, Any],
-    tenant_id: str,
-    project_id: str,
-    sandbox_id: str | None,
-    sandbox_port: Any,
-    redis_client: Any,
-) -> None:
-    """Load sandbox plugin tool factories and wrap them with dependency management."""
-    if sandbox_id is None or sandbox_port is None:
-        logger.debug("Agent Worker: No sandbox available, skipping sandbox plugin tools")
-        return
-
-    try:
-        from src.infrastructure.agent.plugins.registry import get_plugin_registry
-
-        plugin_registry = get_plugin_registry()
-        sandbox_factories = plugin_registry.list_sandbox_tool_factories()
-
-        if not sandbox_factories:
-            return
-
-        orchestrator = _build_sandbox_orchestrator(
-            redis_client=redis_client,
-            sandbox_port=sandbox_port,
-        )
-
-        added_count = 0
-        for plugin_name, factories in sandbox_factories.items():
-            deps_service_key = f"{plugin_name}:sandbox_deps"
-            declared_deps = plugin_registry.get_service(deps_service_key)
-
-            for factory in factories:
-                count = await _process_sandbox_factory(
-                    factory=factory,
-                    plugin_name=plugin_name,
-                    declared_deps=declared_deps,
-                    tools=tools,
-                    tenant_id=tenant_id,
-                    project_id=project_id,
-                    sandbox_id=sandbox_id,
-                    sandbox_port=sandbox_port,
-                    orchestrator=orchestrator,
-                )
-                added_count += count
-
-        if added_count > 0:
-            logger.info(
-                "Agent Worker: Added %d sandbox plugin tools for project %s",
-                added_count,
-                project_id,
-            )
-    except Exception:
-        logger.debug(
-            "Agent Worker: Sandbox plugin tools not available",
-            exc_info=True,
-        )
-
-
-def _build_sandbox_orchestrator(
-    *,
-    redis_client: Any,
-    sandbox_port: Any,
-) -> Any:
-    """Build a DependencyOrchestrator for one sandbox session."""
-    from src.infrastructure.agent.plugins.sandbox_deps.orchestrator import (
-        DependencyOrchestrator,
-    )
-    from src.infrastructure.agent.plugins.sandbox_deps.sandbox_installer import (
-        SandboxDependencyInstaller as SbxInstaller,
-    )
-    from src.infrastructure.agent.plugins.sandbox_deps.security_gate import (
-        SecurityGate,
-    )
-    from src.infrastructure.agent.plugins.sandbox_deps.state_store import (
-        DepsStateStore,
-    )
-
-    state_store = DepsStateStore(redis_client=redis_client)
-    security_gate = SecurityGate()
-    sandbox_installer = SbxInstaller(
-        sandbox_tool_caller=sandbox_port.call_tool,
-        security_gate=security_gate,
-    )
-    return DependencyOrchestrator(
-        state_store=state_store,
-        sandbox_installer=sandbox_installer,
-        security_gate=security_gate,
-    )
-
-
-def _create_tool_execution_router(  # pyright: ignore[reportUnusedFunction]  # Phase 2.5+ prep
-    *,
-    sandbox_port: Any,
-    sandbox_id: str,
-    dep_orchestrator: Any | None = None,
-) -> Any:
-    """Create a ToolExecutionRouter for routing tools to host or sandbox.
-
-    Args:
-        sandbox_port: Interface to communicate with sandbox containers.
-        sandbox_id: ID of the target sandbox container.
-        dep_orchestrator: Optional DependencyOrchestrator for sandbox dependencies.
-
-    Returns:
-        A configured ToolExecutionRouter.
-    """
-    from src.infrastructure.agent.core.host_tool_executor import HostToolExecutor
-    from src.infrastructure.agent.core.sandbox_tool_executor import (
-        SandboxToolExecutor,
-    )
-    from src.infrastructure.agent.core.tool_execution_router import (
-        ToolExecutionRouter,
-    )
-
-    host_executor = HostToolExecutor()
-    sandbox_executor = SandboxToolExecutor(
-        sandbox_port=sandbox_port,
-        sandbox_id=sandbox_id,
-        dependency_orchestrator=dep_orchestrator,
-    )
-    return ToolExecutionRouter(
-        sandbox_executor=sandbox_executor,
-        host_executor=host_executor,
-    )
-
-
-async def _process_sandbox_factory(
-    *,
-    factory: Any,
-    plugin_name: str,
-    declared_deps: Any,
-    tools: dict[str, Any],
-    tenant_id: str,
-    project_id: str,
-    sandbox_id: str,
-    sandbox_port: Any,
-    orchestrator: Any,
-) -> int:
-    """Process a single sandbox plugin factory, returning the count of tools added."""
-    import inspect
-
-    from src.infrastructure.agent.plugins.registry import PluginToolBuildContext
-
-    try:
-        build_ctx = PluginToolBuildContext(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            base_tools=tools,
-        )
-        factory_result = factory(build_ctx)
-
-        if inspect.isawaitable(factory_result):
-            factory_result = await factory_result
-
-        if not isinstance(factory_result, dict):
-            return 0
-
-        added = 0
-        for tool_name, tool_meta in factory_result.items():
-            tool_info = _build_tool_from_meta(
-                tool_name=tool_name,
-                tool_meta=tool_meta,
-                declared_deps=declared_deps,
-                tools=tools,
-                plugin_name=plugin_name,
-                sandbox_id=sandbox_id,
-                project_id=project_id,
-                sandbox_port=sandbox_port,
-                orchestrator=orchestrator,
-            )
-            if tool_info is not None:
-                tools[tool_name] = tool_info
-                added += 1
-        return added
-    except Exception:
-        logger.warning(
-            "Agent Worker: Failed to build sandbox plugin tool from '%s'",
-            plugin_name,
-            exc_info=True,
-        )
-        return 0
-
-
-def _build_tool_from_meta(
-    *,
-    tool_name: str,
-    tool_meta: Any,
-    declared_deps: Any,
-    tools: dict[str, Any],
-    plugin_name: str,
-    sandbox_id: str,
-    project_id: str,
-    sandbox_port: Any,
-    orchestrator: Any,
-) -> Any:
-    """Extract metadata from a factory result entry and build a ToolInfo, or return None."""
-    from src.infrastructure.agent.plugins.sandbox_deps.models import (
-        RuntimeDependencies,
-    )
-    from src.infrastructure.agent.plugins.sandbox_deps.sandbox_plugin_tool_wrapper import (
-        create_sandbox_plugin_tool,
-    )
-
-    if tool_name in tools:
-        logger.debug(
-            "Agent Worker: Sandbox plugin tool '%s' skipped (name conflict)",
-            tool_name,
-        )
-        return None
-
-    tool_description = ""
-    tool_parameters: dict[str, Any] = {}
-    tool_permission: str | None = None
-    tool_deps = declared_deps
-
-    if isinstance(tool_meta, dict):
-        tool_description = tool_meta.get("description", "")
-        tool_parameters = tool_meta.get("parameters", {})
-        tool_permission = tool_meta.get("permission")
-        if "dependencies" in tool_meta:
-            tool_deps = tool_meta["dependencies"]
-
-    if tool_deps is None:
-        return None
-
-    if not isinstance(tool_deps, RuntimeDependencies):
-        return None
-
-    return create_sandbox_plugin_tool(
-        plugin_id=plugin_name,
-        tool_name=tool_name,
-        description=tool_description,
-        parameters=tool_parameters,
-        sandbox_id=sandbox_id,
+    memory_tools = build_memory_tools(
+        tenant_id=tenant_id,
         project_id=project_id,
-        sandbox_port=sandbox_port,
-        orchestrator=orchestrator,
-        dependencies=tool_deps,
-        permission=tool_permission,
+        graph_service=graph_service,
+        redis_client=redis_client,
+        session_factory=async_session_factory,
     )
+    conflicts = sorted(set(tools).intersection(memory_tools))
+    if conflicts:
+        raise RuntimeV2Error(
+            "tool_contribution_conflict",
+            f"builtin memory tools conflict with existing tools: {', '.join(conflicts)}",
+        )
+    tools.update(memory_tools)
 
 
-async def _add_plugin_skills(
+def _add_workspace_runtime_skill(
     skills: list[Any],
     tenant_id: str,
     project_id: str | None,
-    agent_mode: str = "default",
 ) -> list[Any]:
-    """Load plugin runtime and add plugin-provided skills.
-
-    Returns a new list with plugin skills appended (no name conflicts
-    with existing filesystem/database skills).
-    """
-    from src.infrastructure.agent.tools.plugin_skills import build_plugin_skills
-
-    # Ensure plugin runtime is loaded before building plugin-provided skills.
-    runtime_manager = get_plugin_runtime_manager()
-    runtime_diagnostics = await runtime_manager.ensure_loaded()
-    for diagnostic in runtime_diagnostics:
-        _log_plugin_diagnostic(diagnostic, context="runtime_load_skills")
-
-    plugin_registry = get_plugin_registry()
-    plugin_skills = await build_plugin_skills(
-        plugin_registry,
-        PluginSkillBuildContext(
-            tenant_id=tenant_id,
-            project_id=project_id or "",
-            agent_mode=agent_mode,
-        ),
-        discovered_plugins=runtime_manager.discovered_plugins,
+    """Add the builtin workspace harness without consulting a mutable registry."""
+    from src.infrastructure.agent.workspace.skill_provider import (
+        build_workspace_task_harness_skill,
     )
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-    if not plugin_skills:
-        return skills
-
-    existing_names = {getattr(s, "name", None) for s in skills}
-    added = 0
-    merged = list(skills)
-    for skill in plugin_skills:
-        if skill.name in existing_names:
-            logger.debug(
-                "Agent Worker: Plugin skill '%s' skipped (name conflict with existing skill)",
-                skill.name,
-            )
-            continue
-        merged.append(skill)
-        existing_names.add(skill.name)
-        added += 1
-
-    if added:
-        logger.info(
-            "Agent Worker: Added %d plugin skills for tenant=%s project=%s",
-            added,
-            tenant_id,
-            project_id,
+    workspace_skill = build_workspace_task_harness_skill(
+        tenant_id=tenant_id,
+        project_id=project_id,
+    )
+    existing_names = {getattr(skill, "name", None) for skill in skills}
+    if workspace_skill.name in existing_names:
+        raise RuntimeV2Error(
+            "agent_capability_conflict",
+            f"builtin workspace skill conflicts with existing skill {workspace_skill.name}",
         )
-
-    return merged
+    return [*skills, workspace_skill]
 
 
 def _find_sandbox_id(
@@ -1328,8 +747,11 @@ def _find_sandbox_id(
         if sandbox_id:
             return sandbox_id
 
-    if project_id and _mcp_sandbox_adapter is not None:
-        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+    if project_id:
+        sandbox_adapter = current_mcp_sandbox_adapter_v2()
+        if sandbox_adapter is None:
+            return None
+        active = getattr(sandbox_adapter, "_active_sandboxes", {})
         candidates: list[tuple[str, Any]] = [
             (cast(str, sid), instance)
             for sid, instance in active.items()
@@ -1372,6 +794,16 @@ def _has_memstack_content(base: Path) -> bool:
     )
 
 
+def _sandbox_adapter_for_path_v2() -> MCPSandboxAdapter | None:
+    """Resolve the optional sandbox path source without requiring local callers to pin."""
+    try:
+        return current_mcp_sandbox_adapter_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        return None
+
+
 def _resolve_sandbox_path(
     project_id: str,
     tools: dict[str, Any] | None,
@@ -1384,7 +816,8 @@ def _resolve_sandbox_path(
     """
     from pathlib import Path
 
-    if _mcp_sandbox_adapter is None:
+    sandbox_adapter = _sandbox_adapter_for_path_v2()
+    if sandbox_adapter is None:
         return None
 
     sandbox_id: str | None = None
@@ -1392,7 +825,7 @@ def _resolve_sandbox_path(
         sandbox_id = _find_sandbox_id(tools)
 
     if sandbox_id is None:
-        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+        active = getattr(sandbox_adapter, "_active_sandboxes", {})
         for sid, instance in active.items():
             inst_project_id = getattr(instance, "project_id", None)
             if inst_project_id == project_id:
@@ -1402,7 +835,7 @@ def _resolve_sandbox_path(
     if sandbox_id is None:
         return None
 
-    active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+    active = getattr(sandbox_adapter, "_active_sandboxes", {})
     instance = active.get(sandbox_id)
     if instance is None:
         return None
@@ -1480,21 +913,6 @@ def resolve_project_base_path(
     return cwd
 
 
-def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> None:
-    """Log plugin runtime diagnostics consistently."""
-    message = (
-        f"[AgentWorker][Plugin:{diagnostic.plugin_name}][{context}] "
-        f"{diagnostic.code}: {diagnostic.message}"
-    )
-    if diagnostic.level == "error":
-        logger.error(message)
-        return
-    if diagnostic.level == "info":
-        logger.info(message)
-        return
-    logger.warning(message)
-
-
 def _add_custom_tools(tools: dict[str, Any], project_id: str) -> None:
     """Load custom tools from ``.memstack/tools/`` directory.
 
@@ -1556,47 +974,17 @@ def _add_session_comm_tools(
     project_id: str,
     redis_client: Any,
 ) -> None:
-    """Configure and register peer agent session communication tools.
-
-    Uses the module-level DI pattern (``configure_session_comm``) to inject
-    a ``SessionCommService`` backed by per-request DB repositories, then
-    adds the three peer session comm tool functions to the tool dictionary.
-    """
+    """Add generation-bound peer agent session communication tools."""
     try:
-        from src.application.services.session_comm_service import SessionCommService
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as comm_session_factory,
         )
-        from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
-            SqlAgentExecutionEventRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-            SqlConversationRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_message_repository import (
-            SqlMessageRepository,
-        )
         from src.infrastructure.agent.tools.session_comm_tools import (
-            configure_session_comm,
-            sessions_history_tool,
-            sessions_list_tool,
-            sessions_send_tool,
+            make_session_comm_tools,
         )
 
-        session = comm_session_factory()
-        conversation_repo = SqlConversationRepository(session)
-        event_repo = SqlAgentExecutionEventRepository(session)
-        message_repo = SqlMessageRepository(session)
-
-        service = SessionCommService(
-            conversation_repo=conversation_repo,
-            message_repo=message_repo,
-            agent_execution_event_repo=event_repo,
-        )
-        configure_session_comm(service)
-        tools[sessions_list_tool.name] = sessions_list_tool
-        tools[sessions_history_tool.name] = sessions_history_tool
-        tools[sessions_send_tool.name] = sessions_send_tool
+        _ = redis_client
+        tools.update(make_session_comm_tools(session_factory=comm_session_factory))
         logger.info(
             "Agent Worker: Peer session comm tools added for project %s",
             project_id,
@@ -1605,43 +993,22 @@ def _add_session_comm_tools(
         logger.warning("Agent Worker: Failed to add session comm tools: %s", e)
 
 
-async def _add_workspace_chat_tools(
-    tools: dict[str, Any],
-    tenant_id: str,
-    project_id: str,
-) -> None:
-    """Leave Workspace chat registration to the Core-owned tool provider."""
-    del tools, tenant_id, project_id
-    logger.debug("Agent Worker: legacy Python Workspace chat tools are retired")
-
-
 def _add_session_status_tool(
     tools: dict[str, Any],
     project_id: str,
 ) -> None:
-    """Configure and register the session_status tool.
-
-    Uses the module-level DI pattern (``configure_session_status``) to inject
-    a ``ConversationRepository``, then adds the session_status tool function
-    to the tool dictionary.
-    """
+    """Add a generation-bound session_status tool."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as status_session_factory,
         )
-        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-            SqlConversationRepository,
-        )
         from src.infrastructure.agent.tools.session_status import (
-            configure_session_status,
-            session_status_tool,
+            make_session_status_tool,
         )
 
-        session = status_session_factory()
-        conversation_repo = SqlConversationRepository(session)
-
-        configure_session_status(conversation_repo=conversation_repo)
-        tools[session_status_tool.name] = session_status_tool
+        tools["session_status"] = make_session_status_tool(
+            session_factory=status_session_factory,
+        )
         logger.info(
             "Agent Worker: Session status tool added for project %s",
             project_id,
@@ -1654,22 +1021,16 @@ def _add_cron_tool(
     tools: dict[str, Any],
     project_id: str,
 ) -> None:
-    """Configure and register the cron job management tool.
-
-    Uses the session-factory DI pattern: each tool invocation creates its
-    own DB session, builds repos/service, does work, commits, and closes.
-    """
+    """Add a generation-bound cron job management tool."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
+            async_session_factory as cron_session_factory,
         )
         from src.infrastructure.agent.tools.cron_tool import (
-            configure_cron_tool,
-            cron_tool,
+            make_cron_tool,
         )
 
-        configure_cron_tool(session_factory=async_session_factory)
-        tools[cron_tool.name] = cron_tool
+        tools["cron"] = make_cron_tool(session_factory=cron_session_factory)
         logger.info(
             "Agent Worker: Cron tool added for project %s",
             project_id,
@@ -1679,37 +1040,14 @@ def _add_cron_tool(
 
 
 def _add_canvas_tools(tools: dict[str, Any]) -> None:
-    """Add Canvas/A2UI tools (create, update, delete canvas blocks).
+    """Add Canvas/A2UI tools bound to the active V2 runtime host."""
+    from src.infrastructure.agent.canvas.tools import make_canvas_tools
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_canvas_manager_v2,
+    )
 
-    Reuses the existing CanvasManager singleton if already configured,
-    so that blocks created during HITL flows survive across tool rebuilds.
-    """
-    try:
-        from src.infrastructure.agent.canvas.manager import CanvasManager
-        from src.infrastructure.agent.canvas.tools import (
-            canvas_create,
-            canvas_create_interactive,
-            canvas_delete,
-            canvas_update,
-            configure_canvas,
-            get_canvas_manager,
-        )
-
-        # Reuse existing manager to preserve in-memory canvas blocks
-        # (e.g. blocks created by hitl_tool_handler during A2UI flows).
-        try:
-            manager = get_canvas_manager()
-        except RuntimeError:
-            manager = CanvasManager()
-            configure_canvas(manager)
-
-        tools[canvas_create.name] = canvas_create
-        tools[canvas_create_interactive.name] = canvas_create_interactive
-        tools[canvas_update.name] = canvas_update
-        tools[canvas_delete.name] = canvas_delete
-        logger.info("Agent Worker: Canvas tools added (incl. interactive)")
-    except Exception as e:
-        logger.warning("Agent Worker: Failed to add canvas tools: %s", e)
+    tools.update(make_canvas_tools(manager=current_agent_canvas_manager_v2()))
+    logger.info("Agent Worker: Canvas tools added (incl. interactive)")
 
 
 async def _load_project_sandbox_tools(
@@ -1740,8 +1078,9 @@ async def _load_project_sandbox_tools(
     """
 
     tools: dict[str, Any] = {}
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
 
-    if _mcp_sandbox_adapter is None:
+    if sandbox_adapter is None:
         return tools
 
     try:
@@ -1760,9 +1099,10 @@ async def _load_project_sandbox_tools(
             return tools
 
         # STEP 5: Connect to MCP and load tools
-        await _mcp_sandbox_adapter.connect_mcp(project_sandbox_id)
+        await sandbox_adapter.connect_mcp(project_sandbox_id)
         tools = _wrap_sandbox_tools(
-            project_sandbox_id, await _mcp_sandbox_adapter.list_tools(project_sandbox_id)
+            project_sandbox_id,
+            await sandbox_adapter.list_tools(project_sandbox_id),
         )
 
         logger.info(
@@ -1773,6 +1113,8 @@ async def _load_project_sandbox_tools(
         # STEP 6: Load user MCP server tools and resolve app IDs
         await _load_and_merge_user_mcp_tools(tools, project_sandbox_id, project_id, redis_client)
 
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(f"[AgentWorker] Failed to load project sandbox tools: {e}")
         import traceback
@@ -1827,7 +1169,8 @@ async def _recover_existing_project_sandbox(project_id: str, tenant_id: str) -> 
     This recovery path is only reached after the DB points at a sandbox that is
     no longer usable and Docker discovery found no replacement.
     """
-    if _mcp_sandbox_adapter is None:
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
         return None
 
     try:
@@ -1849,7 +1192,7 @@ async def _recover_existing_project_sandbox(project_id: str, tenant_id: str) -> 
 
             lifecycle = ProjectSandboxLifecycleService(
                 repository=sandbox_repo,
-                sandbox_adapter=_mcp_sandbox_adapter,
+                sandbox_adapter=sandbox_adapter,
             )
             info = await lifecycle.get_or_create_sandbox(
                 project_id=project_id,
@@ -1896,12 +1239,13 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
 
     Returns True if container is available, False otherwise.
     """
-    if _mcp_sandbox_adapter is None:
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
         return False
 
-    container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)
+    container_exists = await sandbox_adapter.container_exists(project_sandbox_id)
     if not container_exists:
-        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+        active = getattr(sandbox_adapter, "_active_sandboxes", {})
         active.pop(project_sandbox_id, None)
         logger.warning(
             f"[AgentWorker] Sandbox {project_sandbox_id} in DB but container "
@@ -1910,16 +1254,16 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
         return False
 
     # Sync from Docker to ensure adapter has the container in its cache
-    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+    if project_sandbox_id not in sandbox_adapter._active_sandboxes:
         logger.info(
             f"[AgentWorker] Syncing sandbox {project_sandbox_id} from Docker "
             f"to adapter's internal state"
         )
-        await _mcp_sandbox_adapter.sync_from_docker()
+        await sandbox_adapter.sync_from_docker()
 
     # Verify adapter state after sync. ``container_exists`` above is a real
     # Docker check, so stale in-memory entries cannot mask a removed container.
-    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+    if project_sandbox_id not in sandbox_adapter._active_sandboxes:
         logger.warning(
             f"[AgentWorker] Sandbox {project_sandbox_id} exists in Docker but "
             f"could not be synced into adapter state."
@@ -1933,13 +1277,17 @@ async def _discover_sandbox_from_docker(project_id: str) -> str | None:
     """Fall back to Docker discovery for backwards compatibility."""
     import asyncio
 
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
+        return None
+
     logger.info(f"[AgentWorker] Checking Docker directly for project sandbox {project_id}...")
     loop = asyncio.get_event_loop()
 
     # List all containers with memstack.sandbox label
     containers = await loop.run_in_executor(
         None,
-        lambda: _mcp_sandbox_adapter._docker.containers.list(  # type: ignore[union-attr]
+        lambda: sandbox_adapter._docker.containers.list(
             all=True,
             filters={"label": "memstack.sandbox=true"},
         ),
@@ -1949,8 +1297,8 @@ async def _discover_sandbox_from_docker(project_id: str) -> str | None:
 
     if project_sandbox_id:
         # Sync to adapter if found in Docker
-        if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
-            await _mcp_sandbox_adapter.sync_from_docker()  # type: ignore[union-attr]
+        if project_sandbox_id not in sandbox_adapter._active_sandboxes:
+            await sandbox_adapter.sync_from_docker()
 
     return project_sandbox_id
 
@@ -1993,6 +1341,10 @@ def _wrap_sandbox_tools(
     """Wrap sandbox MCP tools with SandboxMCPToolWrapper, filtering internal tools."""
     from src.infrastructure.agent.tools.sandbox_tool_wrapper import create_sandbox_mcp_tool
 
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
+        return {}
+
     # MCP management tools are internal, not exposed to agents
     _MCP_MANAGEMENT_TOOLS = {
         "mcp_server_install",
@@ -2013,8 +1365,7 @@ def _wrap_sandbox_tools(
         if tool_name in _MCP_MANAGEMENT_TOOLS:
             continue
 
-        assert _mcp_sandbox_adapter is not None
-        adapter: SandboxPort = _mcp_sandbox_adapter
+        adapter: SandboxPort = sandbox_adapter
         tool_info_obj = create_sandbox_mcp_tool(
             sandbox_id=project_sandbox_id,
             tool_name=tool_name,
@@ -2035,8 +1386,10 @@ async def _load_and_merge_user_mcp_tools(
     redis_client: redis.Redis | None,
 ) -> None:
     """Load user MCP server tools and resolve MCPApp IDs."""
-    assert _mcp_sandbox_adapter is not None
-    adapter: SandboxPort = _mcp_sandbox_adapter
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
+        return
+    adapter: SandboxPort = sandbox_adapter
     user_mcp_tools = await _load_user_mcp_server_tools(
         sandbox_adapter=adapter,
         sandbox_id=project_sandbox_id,
@@ -2830,7 +2183,10 @@ def get_cached_tools() -> dict[str, dict[str, Any]]:
     return dict(_tools_cache)
 
 
-def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
+def get_cached_tools_for_project(
+    project_id: str,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+) -> dict[str, Any] | None:
     """Get cached tools for a specific project (synchronous, for hot-plug support).
 
     This is used by ReActAgent's tool_provider to get current tools without
@@ -2839,24 +2195,22 @@ def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
 
     Args:
         project_id: Project ID to get tools for
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         Dictionary of tool name -> tool instance, or None if not cached
     """
-    cached = _tools_cache.get(project_id)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    if generation_descriptor is None:
+        return None
+    cache_key = generation_cache_key_v2(
+        project_id,
+        generation_descriptor=generation_descriptor,
+    )
+    cached = _tools_cache.get(cache_key)
     if cached is None:
         return None
-    from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
-
-    _publish_scoped_tool_generation(project_id, cached)
-    service = get_agent_tool_set_service()
-    current = service.current(PluginScopeContext(project_id=project_id))
-    if current is None:
-        raise RuntimeError(
-            "no scoped tool generation exists for a cached project; "
-            "the generation publish step must have failed"
-        )
-    return dict(current.tools)
+    return dict(cached)
 
 
 def get_custom_tool_diagnostics(
@@ -2877,9 +2231,14 @@ def invalidate_tools_cache(project_id: str | None = None) -> None:
     """
     global _tools_cache
     if project_id:
-        _tools_cache.pop(project_id, None)
+        generation_prefix = f"{project_id}:generation="
+        tool_keys = [
+            key for key in _tools_cache if key == project_id or key.startswith(generation_prefix)
+        ]
+        for key in tool_keys:
+            _tools_cache.pop(key, None)
         for key in list(_project_sandbox_tools_cache):
-            if key.endswith(f":{project_id}"):
+            if key.startswith(f"{project_id}:") or key.endswith(f":{project_id}"):
                 _project_sandbox_tools_cache.pop(key, None)
         _custom_tool_diagnostics.pop(project_id, None)
         logger.info(
@@ -2897,6 +2256,7 @@ async def inject_discovered_mcp_tools_into_cache(
     project_id: str,
     server_name: str,
     discovered_tools: list[dict[str, Any]],
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> int:
     """Inject freshly discovered MCP tools into ``_tools_cache`` for immediate availability.
 
@@ -2912,14 +2272,26 @@ async def inject_discovered_mcp_tools_into_cache(
         server_name: MCP server name (e.g. ``"chrome-devtools"``).
         discovered_tools: Raw MCP tool metadata dicts from the
             ``toolset_changed`` event payload.
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         Number of tools injected.
     """
     from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
 
-    if not discovered_tools or _mcp_sandbox_adapter is None:
+    if not discovered_tools:
         return 0
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
+        return 0
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    if generation_descriptor is None:
+        logger.debug("[AgentWorker] Skipping MCP cache injection outside a generation boundary")
+        return 0
+    cache_key = generation_cache_key_v2(
+        project_id,
+        generation_descriptor=generation_descriptor,
+    )
 
     sandbox_id = await _resolve_project_sandbox_id(project_id)
     if not sandbox_id:
@@ -2929,7 +2301,7 @@ async def inject_discovered_mcp_tools_into_cache(
         )
         return 0
 
-    adapter = cast("MCPSandboxAdapter", _mcp_sandbox_adapter)
+    adapter = sandbox_adapter
     injected: dict[str, Any] = {}
 
     for tool_info in discovered_tools:
@@ -2945,9 +2317,9 @@ async def inject_discovered_mcp_tools_into_cache(
         injected[tool_adapter.name] = tool_adapter
 
     if injected:
-        existing = _tools_cache.get(project_id, {})
+        existing = _tools_cache.get(cache_key, {})
         merged = {**existing, **injected}
-        _tools_cache[project_id] = merged
+        _tools_cache[cache_key] = merged
         logger.info(
             "[AgentWorker] Injected %d MCP tools into cache for project %s (total: %d)",
             len(injected),
@@ -2958,7 +2330,10 @@ async def inject_discovered_mcp_tools_into_cache(
     return len(injected)
 
 
-def rescan_custom_tools_for_project(project_id: str) -> int:
+def rescan_custom_tools_for_project(
+    project_id: str,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+) -> int:
     """Re-scan custom tools for a project and merge into the tools cache.
 
     This enables hot-reload of custom tools created mid-conversation.
@@ -2967,11 +2342,21 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
 
     Args:
         project_id: Project ID to rescan custom tools for.
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         Number of custom tools found (including previously loaded ones).
     """
-    cached = _tools_cache.get(project_id)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    cache_key = (
+        generation_cache_key_v2(
+            project_id,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+    cached = _tools_cache.get(cache_key) if cache_key is not None else None
     if cached is None:
         # No cached tools yet -- still load custom tools for diagnostics.
         # The tools themselves cannot be merged (no cache entry), but
@@ -3033,7 +2418,6 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
                 len(custom_tools),
                 project_id,
             )
-        _publish_scoped_tool_generation(project_id, cached)
         return len(custom_tools)
 
     except Exception as e:
@@ -3043,40 +2427,6 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
             e,
         )
         return 0
-
-
-def _publish_scoped_tool_generation(
-    project_id: str,
-    tools: dict[str, Any],
-) -> None:
-    """Publish the current scoped tool generation when it has changed."""
-    from src.infrastructure.plugins.agent_tools import (
-        LegacyToolBuildError,
-        get_agent_tool_set_service,
-        legacy_tool_descriptor,
-    )
-
-    # The legacy cache can hold tools whose metadata drifted from their cache
-    # key; one malformed entry must not take down the whole toolset, so those
-    # entries are skipped with a warning rather than failing the publish.
-    publishable: dict[str, Any] = {}
-    for tool_id, tool in tools.items():
-        try:
-            _ = legacy_tool_descriptor(tool_id, tool)
-        except LegacyToolBuildError as exc:
-            logger.warning(
-                "Agent Worker: skipping malformed cached tool %s for project %s: %s",
-                tool_id,
-                project_id,
-                exc,
-            )
-            continue
-        publishable[tool_id] = tool
-    service = get_agent_tool_set_service()
-    scope = PluginScopeContext(project_id=project_id)
-    current_inventory, _candidate_inventory, differs = service.shadow_comparison(scope, publishable)
-    if current_inventory is None or differs:
-        service.publish(scope, publishable)
 
 
 def invalidate_all_caches_for_project(
@@ -3123,11 +2473,20 @@ def invalidate_all_caches_for_project(
         "mcp_tools": 0,
     }
 
-    # 1. Invalidate tools_cache for this project
-    if project_id in _tools_cache:
-        del _tools_cache[project_id]
-        invalidated["tools_cache"] = 1
-        logger.info(f"Agent Worker: tools_cache invalidated for project {project_id}")
+    # 1. Invalidate every generation namespace for this project.
+    generation_prefix = f"{project_id}:generation="
+    tool_keys = [
+        key for key in _tools_cache if key == project_id or key.startswith(generation_prefix)
+    ]
+    for key in tool_keys:
+        del _tools_cache[key]
+    if tool_keys:
+        invalidated["tools_cache"] = len(tool_keys)
+        logger.info(
+            "Agent Worker: tools_cache invalidated for project %s (%d entries)",
+            project_id,
+            len(tool_keys),
+        )
 
     # 2. Invalidate agent sessions for this project
     # Sessions are keyed by tenant_id:project_id:agent_mode
@@ -3171,6 +2530,7 @@ def invalidate_all_caches_for_project(
 async def get_or_create_skills(
     tenant_id: str,
     project_id: str | None = None,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> list[Any]:
     """Get or create a cached skills list for a tenant/project.
 
@@ -3180,6 +2540,7 @@ async def get_or_create_skills(
     Args:
         tenant_id: Tenant ID for cache key
         project_id: Optional project ID for cache key
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         List of Skill domain entities
@@ -3190,10 +2551,22 @@ async def get_or_create_skills(
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
-    cache_key = f"{tenant_id}:{project_id or 'global'}"
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    base_key = f"{tenant_id}:{project_id or 'global'}"
+    cache_key = (
+        generation_cache_key_v2(
+            tenant_id,
+            project_id or "global",
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+    cache_label = cache_key or f"{base_key}:uncached"
 
     async with _skills_cache_lock:
-        if cache_key not in _skills_cache:
+        cached = _skills_cache.get(cache_key) if cache_key is not None else None
+        if cached is None:
             # Use sandbox-aware path resolution for skill scanning
             base_path = resolve_project_base_path(project_id or "")
 
@@ -3250,20 +2623,17 @@ async def get_or_create_skills(
                 loaded_by_name,
                 tenant_id=tenant_id,
                 project_id=project_id,
-                cache_key=cache_key,
+                cache_key=cache_label,
             )
 
             skills = list(loaded_by_name.values())
 
-            # Merge plugin-provided skills
-            try:
-                skills = await _add_plugin_skills(skills, tenant_id, project_id)
-            except Exception as e:
-                logger.warning("Agent Worker: Plugin skills loading failed: %s", e)
-            _skills_cache[cache_key] = skills
+            skills = _add_workspace_runtime_skill(skills, tenant_id, project_id)
+            if cache_key is not None:
+                _skills_cache[cache_key] = skills
             logger.info(
-                "Agent Worker: Skills cached for %s, total=%d, errors=%d",
-                cache_key,
+                "Agent Worker: Skills loaded for %s, total=%d, errors=%d",
+                cache_label,
                 len(skills),
                 len(all_errors),
             )
@@ -3271,7 +2641,9 @@ async def get_or_create_skills(
                 for error in all_errors:
                     logger.warning("Agent Worker: Skill loading error: %s", error)
 
-        return _skills_cache[cache_key]
+            return skills
+
+        return cached
 
 
 async def _merge_database_skills_for_worker(
@@ -3408,6 +2780,8 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
     tenant_id: str,
     project_id: str | None = None,
     agent_mode: str = "default",
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+    sandbox_id: str = "",
 ) -> Any:
     """Get or create a cached and initialized SkillLoaderTool.
 
@@ -3422,6 +2796,8 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
         tenant_id: Tenant ID for skill scoping
         project_id: Optional project ID for filtering
         agent_mode: Agent mode for filtering skills (e.g., "default", "plan")
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
+        sandbox_id: Sandbox identity captured by the bound tool and its cache namespace
 
     Returns:
         Initialized SkillLoaderTool instance with dynamic description
@@ -3435,12 +2811,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
     from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
         SqlSkillRepository,
     )
-    from src.infrastructure.agent.tools.define import get_registered_tools
-    from src.infrastructure.agent.tools.skill_loader import (
-        configure_skill_loader_tool,
-        get_available_skills,
-        set_available_skills,
-    )
+    from src.infrastructure.agent.tools.skill_loader import make_skill_loader_tool
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
     class SessionSkillRepository(SkillRepositoryPort):
@@ -3529,10 +2900,25 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                     scope=scope,
                 )
 
-    cache_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}"
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    sandbox_cache_key = sandbox_id or "no-sandbox"
+    base_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}:{sandbox_cache_key}"
+    cache_key = (
+        generation_cache_key_v2(
+            tenant_id,
+            project_id or "global",
+            agent_mode,
+            sandbox_cache_key,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+    cache_label = cache_key or f"{base_key}:uncached"
 
     async with _skill_loader_cache_lock:
-        if cache_key not in _skill_loader_cache:
+        cached = _skill_loader_cache.get(cache_key) if cache_key is not None else None
+        if cached is None:
             # Use sandbox-aware path resolution for skill scanning
             base_path = resolve_project_base_path(project_id or "")
 
@@ -3556,19 +2942,11 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 filesystem_loader=fs_loader,
             )
 
-            # Configure the @tool_define skill_loader with deps
-            configure_skill_loader_tool(
-                skill_service=skill_service,
-                tenant_id=tenant_id,
-                project_id=project_id or "",
-                agent_mode=agent_mode,
-                skip_database=False,
-            )
-
             # Initialize from cached skills to avoid double filesystem scan
             cached_skills = await get_or_create_skills(
                 tenant_id=tenant_id,
                 project_id=project_id,
+                generation_descriptor=generation_descriptor,
             )
             filtered_skills = [
                 skill
@@ -3576,21 +2954,26 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 if "*" in getattr(skill, "agent_modes", ["*"])
                 or agent_mode in getattr(skill, "agent_modes", [])
             ]
-            set_available_skills([s.name for s in filtered_skills])
-
-            # Get ToolInfo from registry
-            registry = get_registered_tools()
-            tool_info = registry.get("skill_loader")
-            if tool_info is None:
-                tool_info = get_registered_tools()["skill_loader"]
-
-            _skill_loader_cache[cache_key] = tool_info
-            logger.info(
-                f"Agent Worker: SkillLoaderTool cached for {cache_key}, "
-                f"skills in description: {len(get_available_skills())}"
+            available_skill_names = tuple(s.name for s in filtered_skills)
+            tool_info = make_skill_loader_tool(
+                skill_service=skill_service,
+                tenant_id=tenant_id,
+                project_id=project_id or "",
+                agent_mode=agent_mode,
+                sandbox_id=sandbox_id,
+                skip_database=False,
+                available_skill_names=available_skill_names,
             )
 
-        return _skill_loader_cache[cache_key]
+            if cache_key is not None:
+                _skill_loader_cache[cache_key] = tool_info
+            logger.info(
+                f"Agent Worker: SkillLoaderTool loaded for {cache_label}, "
+                f"skills in description: {len(available_skill_names)}"
+            )
+            return tool_info
+
+        return cached
 
 
 def get_cached_skill_loaders() -> dict[str, Any]:
@@ -3632,9 +3015,13 @@ async def prewarm_agent_session(
     outside of the critical request path.
     """
     try:
-        graph_service = await get_or_create_agent_graph_service(tenant_id=tenant_id)
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_worker_redis_client_v2,
+            current_agent_worker_runtime_services_v2,
+        )
 
-        redis_client = await get_redis_client()
+        graph_service = current_agent_worker_runtime_services_v2().graph_runtime.graph_service
+        redis_client = current_agent_worker_redis_client_v2()
 
         provider_config = await get_or_create_provider_config()
         llm_client = await get_or_create_llm_client(provider_config)
@@ -3682,124 +3069,6 @@ async def prewarm_agent_session(
         logger.warning(
             f"Agent Worker: Prewarm failed for tenant={tenant_id}, project={project_id}: {e}"
         )
-
-
-# ============================================================================
-# HITL Response Listener State (Real-time Delivery)
-# ============================================================================
-
-
-def set_hitl_response_listener(listener: Any) -> None:
-    """Set the global HITL Response Listener instance for agent worker.
-
-    Called during Agent Worker initialization to enable real-time
-    HITL response delivery via Redis Streams.
-
-    Args:
-        listener: The HITLResponseListener instance
-    """
-    global _hitl_response_listener
-    _hitl_response_listener = listener
-    logger.info("Agent Worker: HITL Response Listener registered for Activities")
-
-
-def get_hitl_response_listener() -> Any | None:
-    """Get the global HITL Response Listener instance for agent worker.
-
-    Returns:
-        The HITLResponseListener instance or None if not initialized
-    """
-    return _hitl_response_listener
-
-
-def get_session_registry() -> Any:
-    """Get the AgentSessionRegistry for HITL waiter tracking.
-
-    Returns:
-        AgentSessionRegistry instance (singleton per worker)
-    """
-    from src.infrastructure.agent.hitl.session_registry import (
-        get_session_registry as _get_registry,
-    )
-
-    return _get_registry()
-
-
-async def register_hitl_waiter(
-    request_id: str,
-    conversation_id: str,
-    hitl_type: str,
-    tenant_id: str,
-    project_id: str,
-) -> bool:
-    """
-    Register an HITL waiter and add project to listener.
-
-    This is the main entry point for Activities to register
-    that they're waiting for an HITL response.
-
-    Args:
-        request_id: HITL request ID
-        conversation_id: Conversation ID
-        hitl_type: Type of HITL
-        tenant_id: Tenant ID
-        project_id: Project ID
-
-    Returns:
-        True if registered successfully
-    """
-    registry = get_session_registry()
-    await registry.register_waiter(
-        request_id=request_id,
-        conversation_id=conversation_id,
-        hitl_type=hitl_type,
-    )
-
-    # Ensure listener is monitoring this project
-    if _hitl_response_listener:
-        await _hitl_response_listener.add_project(tenant_id, project_id)
-
-    logger.debug(
-        f"Agent Worker: Registered HITL waiter: request={request_id}, project={project_id}"
-    )
-    return True
-
-
-async def unregister_hitl_waiter(request_id: str) -> bool:
-    """
-    Unregister an HITL waiter after response received or timeout.
-
-    Args:
-        request_id: HITL request ID
-
-    Returns:
-        True if unregistered successfully
-    """
-    registry = get_session_registry()
-    return cast(bool, await registry.unregister_waiter(request_id))
-
-
-async def wait_for_hitl_response_realtime(
-    request_id: str,
-    timeout: float = 5.0,
-) -> dict[str, Any] | None:
-    """
-    Wait for HITL response via real-time Redis Stream delivery.
-
-    This is a fast-path check before falling back to Temporal Signal.
-    Returns quickly if response arrives via Redis, or None if timeout.
-
-    Args:
-        request_id: HITL request ID
-        timeout: Max seconds to wait (should be short, e.g., 5s)
-
-    Returns:
-        Response data if delivered via Redis, None otherwise
-    """
-    registry = get_session_registry()
-    return cast(
-        dict[str, Any] | None, await registry.wait_for_response(request_id, timeout=timeout)
-    )
 
 
 # ============================================================================

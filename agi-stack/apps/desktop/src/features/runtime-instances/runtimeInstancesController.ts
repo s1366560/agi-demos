@@ -1,9 +1,9 @@
 import { DesktopApiError } from '../../api/client';
-import { RuntimeInstancesUnavailableError } from './runtimeInstancesClient';
 import {
   RUNTIME_INSTANCES_CLOUD_ACTIONS,
   RUNTIME_INSTANCES_LOCAL_ACTIONS,
-} from './runtimeInstancesCapability';
+  RuntimeInstancesUnavailableError,
+} from './runtimeInstancesContract';
 import type {
   RuntimeInstanceSummary,
   RuntimeInstancesAuthority,

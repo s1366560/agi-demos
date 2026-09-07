@@ -209,9 +209,9 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
   );
 });
 
-test("Tenant Tasks records fail-closed Cloud and explicit Local degradation boundaries", () => {
+test("Tenant Tasks records observed transports and fail-closed revision boundaries", () => {
   const capability = readCapability(
-    "parity-capability-definitions.02-tenant-operations.v2.json",
+    "parity-capability-definitions.02-tenant-tasks.v2.json",
     "tenant-tenant-tasks",
   );
 
@@ -220,14 +220,25 @@ test("Tenant Tasks records fail-closed Cloud and explicit Local degradation boun
   assert.equal(capability.cloud_status, "unavailable");
   assert.equal(
     capability.cloud_reason_code,
-    "renderer_capability_authority_unobserved",
+    "capability_authority_revision_unavailable",
   );
   assert.equal(capability.local_status, "unavailable");
   assert.equal(
     capability.local_reason_code,
-    "renderer_capability_authority_unobserved",
+    "capability_authority_revision_unavailable",
   );
-  assert.deepEqual(capability.cloud_actions, []);
+  assert.deepEqual(capability.cloud_actions, [
+    "view",
+    "list",
+    "search",
+    "filter",
+    "paginate",
+    "refresh",
+    "retry-task",
+    "stop-task",
+    "retry-pending",
+    "navigate-dead-letter-queue",
+  ]);
   assert.deepEqual(capability.local_actions, [
     "view",
     "list",
@@ -239,11 +250,11 @@ test("Tenant Tasks records fail-closed Cloud and explicit Local degradation boun
   ]);
   assert.match(
     capability.judgment_rationale,
-    /renderer_capability_authority_unobserved/u,
+    /generation-backed V2 Provider/u,
   );
   assert.match(
     capability.judgment_rationale,
-    /both modes.*renderer_capability_authority_unobserved/u,
+    /neither response supplies a snapshot-wide authority revision/u,
   );
   assertPermissionCoverage(
     capability,
@@ -306,11 +317,6 @@ test("management route capabilities fail closed when authority revisions are abs
       "tenant-tenant-evolution",
       "local_skill_evolution_authority_unavailable",
     ],
-    [
-      "parity-capability-definitions.06-plugins.v2.json",
-      "tenant-tenant-plugins",
-      "capability_authority_revision_unavailable",
-    ],
   ];
 
   for (const [fragment, capabilityId, localReason] of cases) {
@@ -334,6 +340,30 @@ test("management route capabilities fail closed when authority revisions are abs
       );
     }
   }
+});
+
+test("Plugin Marketplace records observed Cloud and Local V2 authority", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.06-plugins.v2.json",
+    "tenant-tenant-plugins",
+  );
+
+  assert.equal(capability.cloud_status, "implemented");
+  assert.equal(capability.local_status, "implemented");
+  assert.equal(Object.hasOwn(capability, "cloud_reason_code"), false);
+  assert.equal(Object.hasOwn(capability, "local_reason_code"), false);
+  for (const entry of [
+    "agi-stack/apps/desktop/src/App.tsx",
+    "agi-stack/apps/desktop/src/api/pluginMarketplaceModel.ts",
+    "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+    "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+    "agi-stack/apps/desktop/src/plugins/DesktopRendererGenerationHostV2.tsx",
+  ]) {
+    assert.ok(capability.cloud_entries.includes(entry), entry);
+    assert.ok(capability.local_entries.includes(entry), entry);
+  }
+  assert.match(capability.judgment_rationale, /V2 Marketplace/u);
+  assert.match(capability.judgment_rationale, /authority revision/u);
 });
 
 test("Skill Evolution records tenant-native and adjacent Web review permissions", () => {
@@ -868,38 +898,27 @@ test("renderer-declared Cloud route slices retain entries but expose no actions"
       true,
     ],
     [
-      "parity-capability-definitions.02-tenant-operations.v2.json",
-      "tenant-tenant-tasks",
-      true,
-    ],
-    [
       "parity-capability-definitions.09-runtime-pool.v2.json",
       "tenant-tenant-runtimes",
       true,
-    ],
-    [
-      "parity-capability-definitions.09-runtime-pool.v2.json",
-      "tenant-tenant-pool",
-      false,
     ],
     [
       "parity-capability-definitions.10-runtime-instances.v2.json",
       "tenant-tenant-instances",
       true,
     ],
-    [
-      "parity-capability-definitions.11-runtime-deployment.v2.json",
-      "tenant-tenant-clusters",
-      false,
-    ],
   ];
 
   for (const [fragment, capabilityId, localDeclared] of cases) {
     const capability = readCapability(fragment, capabilityId);
+    const expectedReason =
+      capabilityId === "tenant-tenant-instances" || capabilityId === "tenant-tenant-runtimes"
+        ? "capability_authority_revision_unavailable"
+        : "renderer_capability_authority_unobserved";
     assert.equal(capability.cloud_status, "unavailable", capabilityId);
     assert.equal(
       capability.cloud_reason_code,
-      "renderer_capability_authority_unobserved",
+      expectedReason,
       capabilityId,
     );
     assert.deepEqual(capability.cloud_actions, [], capabilityId);
@@ -915,17 +934,21 @@ test("renderer-declared Cloud route slices retain entries but expose no actions"
     }
     assert.match(
       capability.judgment_rationale,
-      /renderer_capability_authority_unobserved/u,
+      new RegExp(expectedReason, "u"),
       capabilityId,
     );
     if (localDeclared) {
       assert.equal(capability.local_status, "unavailable", capabilityId);
       assert.equal(
         capability.local_reason_code,
-        "renderer_capability_authority_unobserved",
+        expectedReason,
         capabilityId,
       );
-      assert.notDeepEqual(capability.local_actions, [], capabilityId);
+      if (capabilityId === "tenant-tenant-instances") {
+        assert.deepEqual(capability.local_actions, [], capabilityId);
+      } else {
+        assert.notDeepEqual(capability.local_actions, [], capabilityId);
+      }
       for (const entry of [
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
@@ -937,6 +960,74 @@ test("renderer-declared Cloud route slices retain entries but expose no actions"
       }
     }
   }
+});
+
+test("observed Runtime Pool authority fails closed without a revision", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.09-runtime-pool.v2.json",
+    "tenant-tenant-pool",
+  );
+
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(capability.cloud_actions, []);
+  assert.ok(
+    capability.cloud_entries.includes(
+      "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolAuthorityModuleV2.ts",
+    ),
+  );
+  assert.equal(
+    capability.cloud_entries.includes(
+      "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolCapability.ts",
+    ),
+    false,
+  );
+  assert.match(
+    capability.judgment_rationale,
+    /capability_authority_revision_unavailable/u,
+  );
+  assert.equal(capability.local_status, "not_applicable");
+  assert.equal(
+    capability.local_reason_code,
+    "cloud_runtime_pool_not_applicable",
+  );
+});
+
+test("observed Runtime Clusters authority fails closed without a revision", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.11-runtime-deployment.v2.json",
+    "tenant-tenant-clusters",
+  );
+
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(capability.cloud_actions, []);
+  assert.ok(
+    capability.cloud_entries.includes(
+      "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts",
+    ),
+  );
+  for (const retiredPath of [
+    "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersCapability.ts",
+    "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersClient.ts",
+  ]) {
+    assert.equal(capability.cloud_entries.includes(retiredPath), false);
+  }
+  assert.match(
+    capability.judgment_rationale,
+    /capability_authority_revision_unavailable/u,
+  );
+  assert.equal(capability.local_status, "not_applicable");
+  assert.equal(
+    capability.local_reason_code,
+    "cloud_cluster_control_not_applicable",
+  );
 });
 
 test("Runtime Instances excludes the unbound general config contract", () => {
@@ -967,7 +1058,7 @@ test("Runtime Instances excludes the unbound general config contract", () => {
   assert.ok(permissionActions(capability, "web").includes("configure"));
 });
 
-test("Runtime Instances records direct dependencies and current member and scope defects", () => {
+test("Runtime Instances records direct dependencies and its current Web defect boundary", () => {
   const capability = readCapability(
     "parity-capability-definitions.10-runtime-instances.v2.json",
     "tenant-tenant-instances",
@@ -1009,11 +1100,8 @@ test("Runtime Instances records direct dependencies and current member and scope
     capability.web_reason_code,
     "runtime_instance_contract_and_authorization_incomplete",
   );
-  assert.match(capability.judgment_rationale, /member.*identifier/iu);
-  assert.match(
-    capability.judgment_rationale,
-    /selected tenant.*default tenant/iu,
-  );
+  assert.match(capability.judgment_rationale, /Web remains partial/iu);
+  assert.match(capability.judgment_rationale, /contract and authorization gaps/iu);
 });
 
 test("Clusters excludes the unbound runner-pool update contract", () => {

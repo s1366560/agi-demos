@@ -1,9 +1,9 @@
 import type { AppRendererProps } from '@mcp-ui/client';
+import type { DesktopProjectMcpAppsClientV2 } from '../../plugins/desktopProjectMcpAppsAuthorityModuleV2';
 
 import type {
   DesktopMCPAppResourceListResponse,
   DesktopMCPAppResourceReadResponse,
-  DesktopMCPAppSummary,
   DesktopMCPAppToolCallResponse,
 } from '../../api/client';
 
@@ -16,31 +16,14 @@ export type MCPAppHostContext = Readonly<{
   originalToolName: string;
 }>;
 
-export type MCPAppHostClient = {
-  listMCPApps?: (projectId: string) => Promise<DesktopMCPAppSummary[]>;
-  callMCPAppTool?: (
-    appId: string,
-    toolName: string,
-    argumentsValue: Record<string, unknown>,
-    idempotencyKey: string,
-  ) => Promise<DesktopMCPAppToolCallResponse>;
-  callMCPAppToolDirect?: (
-    projectId: string,
-    serverName: string,
-    toolName: string,
-    argumentsValue: Record<string, unknown>,
-    idempotencyKey: string,
-  ) => Promise<DesktopMCPAppToolCallResponse>;
-  readMCPAppResource?: (
-    projectId: string,
-    uri: string,
-    serverName?: string | null,
-  ) => Promise<DesktopMCPAppResourceReadResponse>;
-  listMCPAppResources?: (
-    projectId: string,
-    serverName?: string | null,
-  ) => Promise<DesktopMCPAppResourceListResponse>;
-};
+export type MCPAppHostClient = Pick<
+  DesktopProjectMcpAppsClientV2,
+  | 'listMCPApps'
+  | 'callMCPAppTool'
+  | 'callMCPAppToolDirect'
+  | 'readMCPAppResource'
+  | 'listMCPAppResources'
+>;
 
 export type MCPAppResourceListResult = {
   resources: Array<{
@@ -116,47 +99,46 @@ export async function callMCPAppTool(
   context: MCPAppHostContext,
   params: { name: string; arguments?: Record<string, unknown> },
   keyStore: MCPToolCallKeyStore = getDefaultToolCallKeyStore(),
+  signal?: AbortSignal,
 ): Promise<MCPAppCallToolResult> {
+  requireActiveRequest(signal);
   const toolName = requiredText(params.name, 'MCP tool name');
   const argumentsValue = params.arguments ?? {};
   const keyLease = await keyStore.acquire(context, toolName, argumentsValue);
+  requireActiveRequest(signal);
   const appId = context.appId?.trim() ?? '';
   if (appId && !appId.startsWith('_synthetic_')) {
-    if (!client.callMCPAppTool) throw new Error('MCP App tool proxy is unavailable');
     const result = normalizeToolResult(
-      await client.callMCPAppTool(
-        appId,
-        toolName,
-        argumentsValue,
-        keyLease.idempotencyKey,
-      ),
+      await client.callMCPAppTool(appId, toolName, argumentsValue, keyLease.idempotencyKey, signal),
     );
-    keyStore.complete(keyLease);
+    requireActiveRequest(signal);
+    if (!result.isError) keyStore.complete(keyLease);
     return result;
   }
 
   const projectId = requiredText(context.projectId, 'project id');
-  const apps = client.listMCPApps ? await client.listMCPApps(projectId) : [];
+  const apps = await client.listMCPApps(projectId, signal);
+  requireActiveRequest(signal);
   const matchingApp = apps.find(
     (app) =>
       (!context.serverName || app.server_name === context.serverName) &&
       (app.tool_name === toolName || app.tool_name === context.originalToolName),
   );
   if (matchingApp) {
-    if (!client.callMCPAppTool) throw new Error('MCP App tool proxy is unavailable');
     const result = normalizeToolResult(
       await client.callMCPAppTool(
         matchingApp.id,
         toolName,
         argumentsValue,
         keyLease.idempotencyKey,
+        signal,
       ),
     );
-    keyStore.complete(keyLease);
+    requireActiveRequest(signal);
+    if (!result.isError) keyStore.complete(keyLease);
     return result;
   }
 
-  if (!client.callMCPAppToolDirect) throw new Error('MCP App direct tool proxy is unavailable');
   const serverName = requiredText(context.serverName ?? '', 'MCP server name');
   const result = normalizeToolResult(
     await client.callMCPAppToolDirect(
@@ -165,9 +147,11 @@ export async function callMCPAppTool(
       toolName,
       argumentsValue,
       keyLease.idempotencyKey,
+      signal,
     ),
   );
-  keyStore.complete(keyLease);
+  requireActiveRequest(signal);
+  if (!result.isError) keyStore.complete(keyLease);
   return result;
 }
 
@@ -175,26 +159,31 @@ export async function readMCPAppResource(
   client: MCPAppHostClient,
   context: MCPAppHostContext,
   uri: string,
+  signal?: AbortSignal,
 ): Promise<DesktopMCPAppResourceReadResponse> {
-  if (!client.readMCPAppResource) throw new Error('MCP App resource proxy is unavailable');
-  return client.readMCPAppResource(
+  requireActiveRequest(signal);
+  const result = await client.readMCPAppResource(
     requiredText(context.projectId, 'project id'),
     requiredText(uri, 'MCP resource URI'),
     context.serverName,
+    signal,
   );
+  requireActiveRequest(signal);
+  return result;
 }
 
 export async function listMCPAppResources(
   client: MCPAppHostClient,
   context: MCPAppHostContext,
+  signal?: AbortSignal,
 ): Promise<MCPAppResourceListResult> {
-  if (!client.listMCPAppResources) {
-    throw new Error('MCP App resource proxy is unavailable');
-  }
+  requireActiveRequest(signal);
   const result = await client.listMCPAppResources(
     requiredText(context.projectId, 'project id'),
     context.serverName,
+    signal,
   );
+  requireActiveRequest(signal);
   return {
     resources: result.resources.map((resource) => ({
       ...resource,
@@ -259,11 +248,10 @@ function browserStorage(): MCPToolCallKeyStorage | null {
   }
 }
 
-function readToolCallKey(
-  storage: MCPToolCallKeyStorage | null,
-  storageKey: string,
-): string | null {
-  const value = storage ? storage.getItem(storageKey) : (fallbackToolCallKeys.get(storageKey) ?? null);
+function readToolCallKey(storage: MCPToolCallKeyStorage | null, storageKey: string): string | null {
+  const value = storage
+    ? storage.getItem(storageKey)
+    : (fallbackToolCallKeys.get(storageKey) ?? null);
   if (
     value?.startsWith(MCP_TOOL_CALL_KEY_PREFIX) &&
     value.length <= 200 &&
@@ -325,4 +313,8 @@ function canonicalValue(value: unknown): unknown {
     );
   }
   throw new Error('MCP tool arguments must be JSON serializable');
+}
+
+function requireActiveRequest(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException('MCP App request cancelled', 'AbortError');
 }

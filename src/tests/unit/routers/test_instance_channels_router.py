@@ -20,6 +20,12 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserTenant,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_instance_repository import (
+    SqlInstanceRepository,
+)
+from src.infrastructure.plugins.v2.instance_channel_services import (
+    InstanceChannelAccessServiceV2,
+)
 
 
 def _make_instance(instance_id: str, tenant_id: str) -> InstanceModel:
@@ -30,6 +36,21 @@ def _make_instance(instance_id: str, tenant_id: str) -> InstanceModel:
         tenant_id=tenant_id,
         created_by="test-user",
         created_at=datetime.now(UTC),
+    )
+
+
+def _access_authority(
+    db: AsyncSession,
+    current_user: User,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        current_user=current_user,
+        services=SimpleNamespace(
+            access=InstanceChannelAccessServiceV2(
+                instance_repository=SqlInstanceRepository(db),
+            )
+        ),
     )
 
 
@@ -46,7 +67,7 @@ class TestInstanceChannelAuthorization:
         test_db.add(instance)
         await test_db.commit()
 
-        await _require_instance_access(instance.id, test_user, test_db)
+        await _require_instance_access(_access_authority(test_db, test_user), instance.id)
 
     @pytest.mark.asyncio
     async def test_rejects_non_member(
@@ -60,7 +81,10 @@ class TestInstanceChannelAuthorization:
         await test_db.commit()
 
         with pytest.raises(HTTPException) as exc_info:
-            await _require_instance_access(instance.id, another_user, test_db)
+            await _require_instance_access(
+                _access_authority(test_db, another_user),
+                instance.id,
+            )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
@@ -88,9 +112,8 @@ class TestInstanceChannelAuthorization:
 
         with pytest.raises(HTTPException) as exc_info:
             await _require_instance_access(
+                _access_authority(test_db, another_user),
                 instance.id,
-                another_user,
-                test_db,
                 require_admin=True,
             )
 
@@ -103,7 +126,10 @@ class TestInstanceChannelAuthorization:
         test_user: User,
     ) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            await _require_instance_access("missing-instance", test_user, test_db)
+            await _require_instance_access(
+                _access_authority(test_db, test_user),
+                "missing-instance",
+            )
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
@@ -115,25 +141,36 @@ class _ChannelServiceStub:
         self.test_connection = AsyncMock(side_effect=ValueError(message))
 
 
+def _route_authority(service: _ChannelServiceStub) -> tuple[SimpleNamespace, SimpleNamespace]:
+    db = SimpleNamespace(commit=AsyncMock())
+    authority = SimpleNamespace(
+        db=db,
+        current_user=SimpleNamespace(id="user-1", is_superuser=True),
+        services=SimpleNamespace(
+            access=SimpleNamespace(
+                tenant_id_for_instance=AsyncMock(return_value="tenant-1"),
+            ),
+            channels=service,
+        ),
+    )
+    return authority, db
+
+
 @pytest.mark.unit
 class TestInstanceChannelErrorResponses:
     @pytest.mark.asyncio
     async def test_update_channel_sanitizes_missing_channel_id(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         service = _ChannelServiceStub()
-        monkeypatch.setattr(instance_channels, "_require_instance_access", AsyncMock())
-        monkeypatch.setattr(instance_channels, "_build_service", lambda _db: service)
-        db = SimpleNamespace(commit=AsyncMock())
+        authority, db = _route_authority(service)
 
         with pytest.raises(HTTPException) as exc_info:
             await instance_channels.update_channel(
                 instance_id="instance-1",
                 channel_id="channel-secret",
                 body=UpdateChannelRequest(name="New"),
-                current_user=SimpleNamespace(id="user-1"),
-                db=db,
+                authority=authority,
             )
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -144,19 +181,15 @@ class TestInstanceChannelErrorResponses:
     @pytest.mark.asyncio
     async def test_delete_channel_sanitizes_missing_channel_id(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         service = _ChannelServiceStub()
-        monkeypatch.setattr(instance_channels, "_require_instance_access", AsyncMock())
-        monkeypatch.setattr(instance_channels, "_build_service", lambda _db: service)
-        db = SimpleNamespace(commit=AsyncMock())
+        authority, db = _route_authority(service)
 
         with pytest.raises(HTTPException) as exc_info:
             await instance_channels.delete_channel(
                 instance_id="instance-1",
                 channel_id="channel-secret",
-                current_user=SimpleNamespace(id="user-1"),
-                db=db,
+                authority=authority,
             )
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -167,19 +200,15 @@ class TestInstanceChannelErrorResponses:
     @pytest.mark.asyncio
     async def test_test_channel_connection_sanitizes_missing_channel_id(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         service = _ChannelServiceStub()
-        monkeypatch.setattr(instance_channels, "_require_instance_access", AsyncMock())
-        monkeypatch.setattr(instance_channels, "_build_service", lambda _db: service)
-        db = SimpleNamespace(commit=AsyncMock())
+        authority, db = _route_authority(service)
 
         with pytest.raises(HTTPException) as exc_info:
             await instance_channels.test_channel_connection(
                 instance_id="instance-1",
                 channel_id="channel-secret",
-                current_user=SimpleNamespace(id="user-1"),
-                db=db,
+                authority=authority,
             )
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND

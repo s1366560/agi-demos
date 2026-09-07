@@ -1,20 +1,19 @@
-/**
- * useVoiceChat - WebSocket-based voice chat hook.
- *
- * Manages the full lifecycle of a voice chat session:
- *  1. WebSocket connection to the backend voice endpoint
- *  2. Microphone capture via AudioWorklet (raw PCM Int16 at 16kHz)
- *  3. Dispatching incoming text frames (ASR, agent, TTS events) to callbacks
- *  4. Forwarding incoming binary frames (TTS MP3 audio) to a callback
- *
- * The caller is responsible for connection lifecycle (no auto-reconnect).
- */
+import {
+  useState,
+  useRef,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useSyncExternalStore,
+} from 'react';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { WebVoiceSessionV2, type WebVoiceSnapshotV2 } from '@/services/voiceRetainedSessionV2';
 
-import { createWebSocketAuthProtocols, createWebSocketUrl } from '@/services/client/urlUtils';
-
-import { getAuthToken } from '@/utils/tokenResolver';
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+  type WebOperationContextV2,
+} from '@/plugins/webOperationAdmissionV2';
 
 export interface UseVoiceChatOptions {
   projectId: string;
@@ -25,320 +24,213 @@ export interface UseVoiceChatOptions {
   onAgentComplete?: ((content: string) => void) | undefined;
   onTtsStart?: (() => void) | undefined;
   onTtsEnd?: (() => void) | undefined;
-  onTtsAudio?: ((data: ArrayBuffer) => void) | undefined;
+  onTtsAudio?: ((data: ArrayBuffer, operation: WebOperationContextV2) => void) | undefined;
   onError?: ((error: string) => void) | undefined;
   speaker?: string | undefined;
 }
-
 export interface UseVoiceChatReturn {
   isConnected: boolean;
   isRecording: boolean;
-  connect: () => void;
-  disconnect: () => void;
+  session: WebVoiceSessionV2 | null;
+  operation: WebOperationContextV2 | null;
+  stream: MediaStream | null;
+  analyser: AnalyserNode | null;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
   startRecording: () => Promise<void>;
-  stopRecording: () => void;
+  stopRecording: () => Promise<void>;
 }
-
-const DEFAULT_SPEAKER = 'zh_female_tianmeixiaoyuan_moon_bigtts';
-
-interface VoiceTextMessage {
-  type: string;
-  text?: string;
-  content?: string;
-  message?: string;
+const EMPTY: WebVoiceSnapshotV2 = {
+  connected: false,
+  recording: false,
+  stream: null,
+  analyser: null,
+};
+const retired = () => new DOMException('Voice session retired', 'AbortError');
+interface Lifetime {
+  identity: object;
+  active: boolean;
+  epoch: number;
+  session: WebVoiceSessionV2 | null;
+  pending?: Promise<void>;
+  pendingEpoch?: number;
+  draining?: WebVoiceSessionV2 | null;
 }
-
+function dispatch(
+  options: UseVoiceChatOptions,
+  data: string | ArrayBuffer,
+  operation: WebOperationContextV2
+) {
+  if (data instanceof ArrayBuffer) {
+    options.onTtsAudio?.(data, operation);
+    return;
+  }
+  let message: { type?: string; text?: string; content?: string; message?: string };
+  try {
+    message = JSON.parse(data);
+  } catch {
+    return;
+  }
+  if (!message || typeof message !== 'object') return;
+  switch (message.type) {
+    case 'asr_interim':
+      if (typeof message.text === 'string') options.onAsrInterim?.(message.text);
+      break;
+    case 'asr_final':
+      if (typeof message.text === 'string') options.onAsrFinal?.(message.text);
+      break;
+    case 'agent_token':
+      if (typeof message.content === 'string') options.onAgentToken?.(message.content);
+      break;
+    case 'agent_complete':
+      if (typeof message.content === 'string') options.onAgentComplete?.(message.content);
+      break;
+    case 'tts_start':
+      options.onTtsStart?.();
+      break;
+    case 'tts_end':
+      options.onTtsEnd?.();
+      break;
+    case 'error':
+      if (typeof message.message === 'string') options.onError?.(message.message);
+      break;
+  }
+}
 export const useVoiceChat = (options: UseVoiceChatOptions): UseVoiceChatReturn => {
-  const [isConnected, setIsConnected] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-
-  const wsRef = useRef<WebSocket | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const isMountedRef = useRef(true);
-
-  // Connection ID counter: each connect() call increments this.
-  // WebSocket event handlers only act if their captured ID matches the current one.
-  // This prevents stale events from a React StrictMode double-mount or rapid reconnect.
-  const connectionIdRef = useRef(0);
-
-  // Store the latest options in a ref so callbacks always read current values
-  // without causing re-creation of the memoized functions.
-  const optionsRef = useRef(options);
-  useEffect(() => {
-    optionsRef.current = options;
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
+  const identity = useMemo(
+    () => ({
+      owner: availability.owner,
+      projectId: options.projectId,
+      conversationId: options.conversationId,
+      speaker: options.speaker,
+    }),
+    [availability.owner, options.projectId, options.conversationId, options.speaker]
+  );
+  const current = useRef<Lifetime | null>(null);
+  const latest = useRef(options);
+  const last = useRef<WebVoiceSessionV2 | null>(null);
+  const [view, setView] = useState<{
+    identity: object;
+    snapshot: WebVoiceSnapshotV2;
+    session: WebVoiceSessionV2 | null;
+  }>({ identity, snapshot: EMPTY, session: null });
+  useLayoutEffect(() => {
+    latest.current = options;
   });
-  /**
-   * Handle an incoming text (JSON) message from the WebSocket.
-   */
-  const handleTextMessage = useCallback((data: string) => {
-    const opts = optionsRef.current;
-    let parsed: VoiceTextMessage;
-    try {
-      parsed = JSON.parse(data) as VoiceTextMessage;
-    } catch {
-      console.error('Failed to parse voice WS message:', data);
-      return;
-    }
-
-    switch (parsed.type) {
-      case 'asr_interim':
-        if (parsed.text !== undefined) {
-          opts.onAsrInterim?.(parsed.text);
-        }
-        break;
-      case 'asr_final':
-        if (parsed.text !== undefined) {
-          opts.onAsrFinal?.(parsed.text);
-        }
-        break;
-      case 'agent_token':
-        if (parsed.content !== undefined) {
-          opts.onAgentToken?.(parsed.content);
-        }
-        break;
-      case 'agent_complete':
-        if (parsed.content !== undefined) {
-          opts.onAgentComplete?.(parsed.content);
-        }
-        break;
-      case 'tts_start':
-        opts.onTtsStart?.();
-        break;
-      case 'tts_end':
-        opts.onTtsEnd?.();
-        break;
-      case 'error':
-        if (parsed.message !== undefined) {
-          opts.onError?.(parsed.message);
-        }
-        break;
-      default:
-        // Unknown message type -- ignore
-        break;
-    }
-  }, []);
-
-  /**
-   * Stop microphone capture and tear down audio nodes.
-   */
-  const teardownAudio = useCallback(() => {
-    if (workletNodeRef.current) {
-      workletNodeRef.current.port.onmessage = null;
-      workletNodeRef.current.disconnect();
-      workletNodeRef.current = null;
-    }
-
-    if (sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
-      sourceNodeRef.current = null;
-    }
-
-    if (mediaStreamRef.current) {
-      for (const track of mediaStreamRef.current.getTracks()) {
-        track.stop();
-      }
-      mediaStreamRef.current = null;
-    }
-
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close().catch(() => {
-        // Ignore close errors during teardown
-      });
-      audioContextRef.current = null;
-    }
-  }, []);
-
-  /**
-   * Disconnect the WebSocket and clean up all resources.
-   */
-  const disconnect = useCallback(() => {
-    // Invalidate the current connection ID so any in-flight WS events are ignored.
-    connectionIdRef.current++;
-
-    setIsRecording(false);
-    teardownAudio();
-
-    if (wsRef.current) {
-      // Prevent onclose from firing further logic after explicit disconnect
-      const ws = wsRef.current;
-      wsRef.current = null;
-      ws.onopen = null;
-      ws.onmessage = null;
-      ws.onerror = null;
-      ws.onclose = null;
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
+  useLayoutEffect(() => {
+    const lifetime: Lifetime = { identity, active: true, epoch: 0, session: null };
+    current.current = lifetime;
+    return () => {
+      lifetime.active = false;
+      lifetime.epoch++;
+      if (lifetime.session) void lifetime.session.stop().catch(() => undefined);
+    };
+  }, [identity]);
+  const connect = useCallback((): Promise<void> => {
+    const lifetime = current.current;
+    if (!lifetime || !lifetime.active || lifetime.identity !== identity)
+      return Promise.reject(retired());
+    if (lifetime.pending && lifetime.pendingEpoch === lifetime.epoch) return lifetime.pending;
+    if (lifetime.session) {
+      try {
+        lifetime.session.check();
+        return lifetime.session.ready.then(() => undefined);
+      } catch {
+        /* Drain below. */
       }
     }
-
-    setIsConnected(false);
-  }, [teardownAudio]);
-
-  /**
-   * Open a WebSocket connection to the backend voice endpoint.
-   */
-  const connect = useCallback(() => {
-    // Avoid double-connect
-    if (
-      wsRef.current &&
-      (wsRef.current.readyState === WebSocket.OPEN ||
-        wsRef.current.readyState === WebSocket.CONNECTING)
-    ) {
-      return;
-    }
-
-    const token = getAuthToken();
-    if (!token) {
-      optionsRef.current.onError?.('No auth token available');
-      return;
-    }
-
-    // Bump connection ID — all event handlers capture this value.
-    // If a stale WebSocket fires events, the ID won't match and we ignore them.
-    const connId = ++connectionIdRef.current;
-
-    const wsUrl = createWebSocketUrl('/voice/chat', {
-      project_id: optionsRef.current.projectId,
-      conversation_id: optionsRef.current.conversationId,
-    });
-
-    const ws = new WebSocket(wsUrl, createWebSocketAuthProtocols(token));
-    ws.binaryType = 'arraybuffer';
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      // Stale connection: something else already replaced wsRef
-      if (connId !== connectionIdRef.current) {
-        ws.close();
-        return;
-      }
-      if (!isMountedRef.current) return;
-      setIsConnected(true);
-
-      // Send voice configuration as the first message
-      const config = {
-        type: 'voice_config',
-        sample_rate: 16000,
-        speaker: optionsRef.current.speaker ?? DEFAULT_SPEAKER,
-      };
-      ws.send(JSON.stringify(config));
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
-      if (connId !== connectionIdRef.current) return;
-      if (!isMountedRef.current) return;
-
-      if (typeof event.data === 'string') {
-        handleTextMessage(event.data);
-      } else if (event.data instanceof ArrayBuffer) {
-        // Binary frame: TTS MP3 audio
-        optionsRef.current.onTtsAudio?.(event.data);
-      }
-    };
-
-    ws.onerror = () => {
-      if (connId !== connectionIdRef.current) return;
-      if (!isMountedRef.current) return;
-      optionsRef.current.onError?.('WebSocket connection error');
-    };
-
-    ws.onclose = () => {
-      if (connId !== connectionIdRef.current) return;
-      if (!isMountedRef.current) return;
-      wsRef.current = null;
-      setIsConnected(false);
-      setIsRecording(false);
-    };
-  }, [handleTextMessage]);
-
-  /**
-   * Start capturing microphone audio and streaming PCM data over the WebSocket.
-   */
-  const startRecording = useCallback(async () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      optionsRef.current.onError?.('WebSocket is not connected');
-      return;
-    }
-
-    try {
-      // Create AudioContext with the browser default sample rate.
-      // The AudioWorklet handles resampling to 16kHz.
-      const ctx = new AudioContext();
-      audioContextRef.current = ctx;
-
-      // Load the worklet module
-      await ctx.audioWorklet.addModule('/audio-processor.js');
-
-      // Create the worklet node and configure it with the actual sample rate
-      const workletNode = new AudioWorkletNode(ctx, 'audio-processor');
-      workletNode.port.postMessage({ type: 'config', sampleRate: ctx.sampleRate });
-      workletNodeRef.current = workletNode;
-
-      // Forward PCM chunks to the WebSocket as binary frames
-      workletNode.port.onmessage = (event: MessageEvent) => {
-        const ws = wsRef.current;
-        if (ws && ws.readyState === WebSocket.OPEN && event.data instanceof Int16Array) {
-          ws.send(event.data.buffer);
-        }
-      };
-
-      // Acquire microphone
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+    const captured = { ...latest.current };
+    const epoch = lifetime.epoch;
+    const valid = () => current.current === lifetime && lifetime.active && lifetime.epoch === epoch;
+    lifetime.draining = last.current;
+    const task = (async () => {
+      if (lifetime.draining) await lifetime.draining.stop();
+      if (!valid()) throw retired();
+      const session = new WebVoiceSessionV2({
+        projectId: captured.projectId,
+        conversationId: captured.conversationId,
+        speaker: captured.speaker ?? 'zh_female_tianmeixiaoyuan_moon_bigtts',
+        changed: (snapshot) => {
+          if (valid() && lifetime.session === session)
+            setView({ identity, snapshot, session: snapshot.connected ? session : null });
+        },
+        message: (data, operation) => {
+          if (valid() && lifetime.session === session) dispatch(captured, data, operation);
+        },
+        error: (error) => {
+          if (valid() && lifetime.session === session)
+            captured.onError?.(error instanceof Error ? error.message : 'Voice session failed');
         },
       });
-      mediaStreamRef.current = stream;
-
-      // Connect: microphone source -> worklet node
-      const source = ctx.createMediaStreamSource(stream);
-      sourceNodeRef.current = source;
-      source.connect(workletNode);
-
-      if (isMountedRef.current) {
-        setIsRecording(true);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to start recording';
-      optionsRef.current.onError?.(message);
-      teardownAudio();
+      lifetime.session = session;
+      last.current = session;
+      await session.ready;
+      if (!valid() || lifetime.session !== session) throw retired();
+      session.check();
+      setView({ identity, snapshot: session.getSnapshot(), session });
+    })();
+    lifetime.pending = task;
+    lifetime.pendingEpoch = epoch;
+    void task
+      .finally(() => {
+        if (lifetime.pending === task) delete lifetime.pending;
+      })
+      .catch(() => undefined);
+    return task;
+  }, [identity]);
+  const disconnect = useCallback(async (): Promise<void> => {
+    const lifetime = current.current;
+    if (!lifetime || lifetime.identity !== identity) return;
+    lifetime.epoch++;
+    const session = lifetime.session ?? lifetime.draining;
+    if (lifetime.active) setView({ identity, snapshot: EMPTY, session: null });
+    const results = await Promise.allSettled([session?.stop(), lifetime.pending]);
+    for (const result of results)
+      if (
+        result.status === 'rejected' &&
+        !(result.reason instanceof DOMException && result.reason.name === 'AbortError')
+      )
+        throw result.reason;
+  }, [identity]);
+  const startRecording = useCallback(async () => {
+    const lifetime = current.current;
+    if (!lifetime || !lifetime.active || lifetime.identity !== identity || !lifetime.session)
+      throw retired();
+    const session = lifetime.session;
+    try {
+      await session.startRecording();
+    } catch (error) {
+      await session.stopRecording();
+      if (
+        current.current === lifetime &&
+        lifetime.active &&
+        lifetime.session === session &&
+        !(error instanceof DOMException && error.name === 'AbortError')
+      )
+        session.reportRecordingError(error);
+      throw error;
     }
-  }, [teardownAudio]);
-
-  /**
-   * Stop recording (but keep the WebSocket open).
-   */
+  }, [identity]);
   const stopRecording = useCallback(() => {
-    teardownAudio();
-    if (isMountedRef.current) {
-      setIsRecording(false);
-    }
-  }, [teardownAudio]);
-
-  // Mark mount/unmount state.
-  // IMPORTANT: We do NOT call disconnect() on unmount because React StrictMode
-  // double-mounts in dev, which would tear down the WebSocket mid-connection.
-  // The caller (VoiceCallPanel.handleEndCall) is responsible for calling disconnect().
-  useEffect(() => {
-    const connectionId = connectionIdRef;
-    isMountedRef.current = true;
-
-    return () => {
-      isMountedRef.current = false;
-      // Invalidate any in-flight connection so stale events are ignored,
-      // but do NOT close the WebSocket here -- the parent manages lifecycle.
-      connectionId.current += 1;
-    };
-  }, []);
-
+    const lifetime = current.current;
+    return lifetime?.identity === identity
+      ? (lifetime.session?.stopRecording() ?? Promise.resolve())
+      : Promise.resolve();
+  }, [identity]);
+  const snapshot = view.identity === identity ? view.snapshot : EMPTY;
+  const session = view.identity === identity ? view.session : null;
   return {
-    isConnected,
-    isRecording,
+    isConnected: snapshot.connected,
+    isRecording: snapshot.recording,
+    stream: snapshot.stream,
+    analyser: snapshot.analyser,
+    session,
+    operation: session?.operation ?? null,
     connect,
     disconnect,
     startRecording,

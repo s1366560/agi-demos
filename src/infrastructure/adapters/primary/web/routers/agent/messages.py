@@ -6,20 +6,27 @@ Endpoints for conversation messages, execution history, and status.
 import json
 import logging
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.hitl_response_contract import hitl_authority_revision
-from src.configuration.di_container import DIContainer
-from src.configuration.factories import create_llm_client
 from src.domain.events.types import (
     DELTA_EVENT_TYPES,
     INTERNAL_EVENT_TYPES,
     AgentEventType,
+)
+from src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2 import (
+    AgentExecutionQueryApplicationAuthorityV2,
+    agent_execution_query_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.agent_message_history_http_application_authority_v2 import (
+    AgentMessageHistoryHttpApplicationAuthorityV2,
+    agent_message_history_http_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -36,9 +43,23 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    current_agent_worker_redis_client_v2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    current_operation_context_v2,
+    pin_agent_turn_operation_v2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.session_event_log import (
+    SESSION_EVENT_LOG_SERVICE_V2,
+    SessionEventLogServiceV2,
+)
 
 from .schemas import ExecutionStatsResponse
-from .utils import get_container_with_db
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -188,6 +209,9 @@ _DISPLAYABLE_EVENTS.update(
         # Contract-agent tool calls can persist only streaming act_delta rows
         # when the final tool call terminates the session before a full act row.
         "act_delta",
+        # V2 turn admission is the authoritative user-message event. History
+        # projects its typed model_message while retaining the persisted row id.
+        "turn_admitted",
         # Per-tool skill progress is part of the WebSocket contract but predates
         # the canonical AgentEventType registry.
         "skill_tool_start",
@@ -405,6 +429,29 @@ def _build_user_message(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
         metadata["forcedSkillName"] = data["forced_skill_name"]
     if metadata:
         item["metadata"] = metadata
+    return item
+
+
+def _build_turn_admitted(
+    data: dict[str, Any],
+    event: Any,
+    **_kwargs: Any,
+) -> dict[str, Any] | object:
+    """Project a valid typed turn admission onto the public user-message shape."""
+    raw_model_message = data.get("model_message")
+    if not isinstance(raw_model_message, Mapping):
+        return _SKIP_EVENT_SENTINEL
+    if raw_model_message.get("role") != "user":
+        return _SKIP_EVENT_SENTINEL
+    content = raw_model_message.get("content")
+    if not isinstance(content, str):
+        return _SKIP_EVENT_SENTINEL
+
+    projected_data = dict(data)
+    projected_data["message_id"] = event.message_id
+    projected_data["content"] = content
+    item = _build_user_message(projected_data)
+    item["__timeline_type"] = "user_message"
     return item
 
 
@@ -1199,6 +1246,7 @@ def _build_agent_stopped(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]
 
 # Dispatch dict: event_type -> builder function
 _EVENT_BUILDERS: dict[str, Any] = {
+    "turn_admitted": _build_turn_admitted,
     "user_message": _build_user_message,
     "assistant_message": _build_assistant_message,
     "thought": _build_thought,
@@ -1498,8 +1546,6 @@ async def _check_has_more(
 @router.get("/conversations/{conversation_id}/messages")
 async def get_conversation_messages(
     conversation_id: str,
-    request: Request,
-    project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=500, description="Maximum events to return"),
     from_time_us: int | None = Query(
         None, description="Starting event_time_us (inclusive) for forward pagination"
@@ -1513,9 +1559,9 @@ async def get_conversation_messages(
     before_counter: int | None = Query(
         None, description="For backward pagination, event_counter for the cursor"
     ),
-    current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    history: AgentMessageHistoryHttpApplicationAuthorityV2 = Depends(
+        agent_message_history_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get conversation timeline from unified event stream with bidirectional pagination.
@@ -1523,18 +1569,7 @@ async def get_conversation_messages(
     Returns timeline of all events in the conversation, ordered by sequence number.
     """
     try:
-        assert request is not None
-        await _verify_conversation_access(
-            conversation_id,
-            current_user,
-            db,
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-        container = get_container_with_db(request, db)
-
-        event_repo = container.agent_execution_event_repository()
-        tool_exec_repo = container.tool_execution_record_repository()
+        event_repo = history.service
 
         cursors = await _resolve_pagination_cursors(
             event_repo,
@@ -1557,13 +1592,15 @@ async def get_conversation_messages(
         )
 
         tool_exec_map = _build_tool_exec_map(
-            await tool_exec_repo.list_by_conversation(conversation_id)
+            await history.service.list_tool_executions(
+                conversation_id=conversation_id,
+                message_id=None,
+            )
         )
         hitl_answered_map = _build_hitl_answered_map(events)
 
-        hitl_repo = container.hitl_request_repository()
         hitl_status_map = _build_hitl_status_map(
-            await hitl_repo.get_by_conversation(conversation_id)
+            await history.service.list_hitl_requests(conversation_id)
         )
         visible_assistant_message_ids = {
             event.message_id
@@ -1575,7 +1612,7 @@ async def get_conversation_messages(
             for event in events
             if event.event_type == "artifact_created" and event.message_id
         }
-        message_events_by_id = await event_repo.get_events_by_message_ids(
+        message_events_by_id = await history.service.get_events_by_message_ids(
             conversation_id, visible_assistant_message_ids | visible_artifact_message_ids
         )
         completion_map = _build_completion_map(
@@ -1634,7 +1671,6 @@ async def get_conversation_messages(
 @router.get("/conversations/{conversation_id}/execution")
 async def get_conversation_execution(
     conversation_id: str,
-    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=100, description="Maximum executions to return"),
     status_filter: str | None = Query(None, description="Filter by execution status"),
@@ -1642,10 +1678,12 @@ async def get_conversation_execution(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    execution_query: AgentExecutionQueryApplicationAuthorityV2 = Depends(
+        agent_execution_query_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get the agent execution history for a conversation."""
     try:
-        assert request is not None
         await _verify_conversation_access(
             conversation_id,
             current_user,
@@ -1653,11 +1691,7 @@ async def get_conversation_execution(
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        executions = await agent_service.get_execution_history(
+        executions = await execution_query.services.get_execution_history(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
@@ -1687,36 +1721,19 @@ async def get_conversation_execution(
 @router.get("/conversations/{conversation_id}/tool-executions")
 async def get_conversation_tool_executions(
     conversation_id: str,
-    request: Request,
-    project_id: str = Query(..., description="Project ID for authorization"),
     message_id: str | None = Query(None, description="Filter by message ID"),
     limit: int = Query(100, ge=1, le=500, description="Maximum executions to return"),
-    current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    history: AgentMessageHistoryHttpApplicationAuthorityV2 = Depends(
+        agent_message_history_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get the tool execution history for a conversation."""
     try:
-        assert request is not None
-        await _verify_conversation_access(
-            conversation_id,
-            current_user,
-            db,
-            tenant_id=tenant_id,
-            project_id=project_id,
+        records = await history.service.list_tool_executions(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            limit=limit,
         )
-        container = get_container_with_db(request, db)
-
-        tool_execution_repo = container.tool_execution_record_repository()
-
-        if message_id:
-            records = [
-                record
-                for record in await tool_execution_repo.list_by_message(message_id, limit=limit)
-                if record.conversation_id == conversation_id
-            ]
-        else:
-            records = await tool_execution_repo.list_by_conversation(conversation_id, limit=limit)
 
         return {
             "conversation_id": conversation_id,
@@ -1758,47 +1775,68 @@ async def get_conversation_execution_status(
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
 
-        redis_client = container.redis_client
-        is_running = False
-        current_message_id = None
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"agent-execution-status:{conversation_id}",
+            tenant_id=tenant_id,
+            project_id=project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: db,
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": tenant_id,
+                    "user_id": current_user.id,
+                    "project_id": project_id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-execution-status",
+                    "channel": "http",
+                    "method": request.method,
+                    "path": request.url.path,
+                    "conversation_id": conversation_id,
+                    "include_recovery_info": include_recovery_info,
+                },
+            },
+        ):
+            redis_client = current_agent_worker_redis_client_v2()
+            key = f"agent:running:{conversation_id}"
+            is_running = bool(await redis_client.exists(key))
+            current_message_id = None
+            if is_running:
+                message_id_bytes = await redis_client.get(key)
+                if message_id_bytes:
+                    current_message_id = (
+                        message_id_bytes.decode()
+                        if isinstance(message_id_bytes, bytes)
+                        else message_id_bytes
+                    )
 
-        if redis_client:
-            import redis.asyncio as redis
+            result = {
+                "conversation_id": conversation_id,
+                "is_running": is_running,
+                "current_message_id": current_message_id,
+            }
 
-            if isinstance(redis_client, redis.Redis):
-                key = f"agent:running:{conversation_id}"
-                exists = await redis_client.exists(key)
-                is_running = bool(exists)
+            if include_recovery_info:
+                recovery_info = await _get_recovery_info(
+                    redis_client=redis_client,
+                    conversation_id=conversation_id,
+                    message_id=current_message_id,
+                    from_time_us=from_time_us,
+                )
+                result["recovery"] = recovery_info
 
-                if is_running:
-                    message_id_bytes = await redis_client.get(key)
-                    if message_id_bytes:
-                        current_message_id = (
-                            message_id_bytes.decode()
-                            if isinstance(message_id_bytes, bytes)
-                            else message_id_bytes
-                        )
+            return result
 
-        result = {
-            "conversation_id": conversation_id,
-            "is_running": is_running,
-            "current_message_id": current_message_id,
-        }
-
-        if include_recovery_info:
-            recovery_info = await _get_recovery_info(
-                container=container,
-                redis_client=redis_client,
-                conversation_id=conversation_id,
-                message_id=current_message_id,
-                from_time_us=from_time_us,
-            )
-            result["recovery"] = recovery_info
-
-        return result
-
+    except RuntimeV2Error as exc:
+        logger.warning("Agent execution status V2 authority unavailable: code=%s", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Agent execution status authority is unavailable"),
+            },
+        ) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -1809,8 +1847,18 @@ async def get_conversation_execution_status(
         ) from exc
 
 
+def _session_event_log_service_v2() -> SessionEventLogServiceV2:
+    """Resolve the durable recovery authority from the pinned V2 operation."""
+    provider = current_operation_context_v2().require(SESSION_EVENT_LOG_SERVICE_V2)
+    if not isinstance(provider, SessionEventLogServiceV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "v2 session event-log service has an invalid implementation",
+        )
+    return provider
+
+
 async def _get_recovery_info(
-    container: DIContainer,
     redis_client: Any,
     conversation_id: str,
     message_id: str | None,
@@ -1832,14 +1880,17 @@ async def _get_recovery_info(
                 recovery_info.update(stream_recovery)
 
         if not recovery_info["stream_exists"]:
-            event_repo = container.agent_execution_event_repository()
-            last_time_us, last_counter = await event_repo.get_last_event_time(conversation_id)
-            if last_time_us > 0:
-                recovery_info["last_event_time_us"] = last_time_us
-                recovery_info["last_event_counter"] = last_counter
+            cursor = await _session_event_log_service_v2().last_cursor(
+                conversation_id=conversation_id
+            )
+            if cursor.event_time_us > 0:
+                recovery_info["last_event_time_us"] = cursor.event_time_us
+                recovery_info["last_event_counter"] = cursor.event_counter
                 recovery_info["can_recover"] = True
                 recovery_info["recovery_source"] = "database"
 
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(f"Error getting recovery info: {e}")
 
@@ -1968,15 +2019,16 @@ def _compute_timeline_data(executions: list[dict[str, Any]]) -> list[dict[str, A
 @router.get("/conversations/{conversation_id}/execution/stats")
 async def get_execution_stats(
     conversation_id: str,
-    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    execution_query: AgentExecutionQueryApplicationAuthorityV2 = Depends(
+        agent_execution_query_application_authority_dependency_v2
+    ),
 ) -> ExecutionStatsResponse:
     """Get execution statistics for a conversation."""
     try:
-        assert request is not None
         await _verify_conversation_access(
             conversation_id,
             current_user,
@@ -1984,11 +2036,7 @@ async def get_execution_stats(
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        executions = await agent_service.get_execution_history(
+        executions = await execution_query.services.get_execution_history(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,

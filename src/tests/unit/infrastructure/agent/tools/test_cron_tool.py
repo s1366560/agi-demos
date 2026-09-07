@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ import pytest
 from src.application.services.cron_service import CronMutationUnavailableError
 from src.infrastructure.agent.tools import cron_tool as cron_tool_module
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.cron_tool import cron_tool
+from src.infrastructure.agent.tools.cron_tool import cron_tool, make_cron_tool
 
 pytestmark = pytest.mark.unit
 
@@ -74,15 +75,15 @@ async def test_mutation_actions_surface_fail_closed_error_without_commit(
             )
         ),
     )
-    monkeypatch.setattr(cron_tool_module, "_cron_session_factory", session_factory)
     monkeypatch.setattr(cron_tool_module, "_build_service", lambda _session: service)
+    bound_tool = make_cron_tool(session_factory=session_factory)
 
     kwargs = (
         {"action": "update", "job_id": "job-1", "patch": {"name": "Updated"}}
         if action == "update"
         else {"action": "remove", "job_id": "job-1"}
     )
-    result = await cron_tool.execute(_make_ctx(), **kwargs)
+    result = await bound_tool.execute(_make_ctx(), **kwargs)
     payload = json.loads(result.output)
 
     assert result.is_error is True
@@ -107,10 +108,10 @@ async def test_job_actions_reject_cross_project_job_ids(
         list_runs=AsyncMock(),
         count_runs=AsyncMock(),
     )
-    monkeypatch.setattr(cron_tool_module, "_cron_session_factory", session_factory)
     monkeypatch.setattr(cron_tool_module, "_build_service", lambda _session: service)
+    bound_tool = make_cron_tool(session_factory=session_factory)
 
-    result = await cron_tool.execute(_make_ctx(), action=action, job_id="job-1")
+    result = await bound_tool.execute(_make_ctx(), action=action, job_id="job-1")
     payload = json.loads(result.output)
 
     assert result.is_error is True
@@ -118,3 +119,77 @@ async def test_job_actions_reject_cross_project_job_ids(
     service.trigger_manual_run.assert_not_awaited()
     service.list_runs.assert_not_awaited()
     session.commit.assert_not_awaited()
+
+
+async def test_bound_cron_factories_are_isolated_during_interleaved_awaits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_entered = asyncio.Event()
+    release_first = asyncio.Event()
+    exits: dict[str, int] = {"a": 0, "b": 0}
+
+    @asynccontextmanager
+    async def _session(label: str):
+        try:
+            yield SimpleNamespace(label=label)
+        finally:
+            exits[label] += 1
+
+    class _Service:
+        def __init__(self, label: str) -> None:
+            self.label = label
+            self.count_calls = 0
+
+        async def count_jobs(self, _project_id: str, *, include_disabled: bool) -> int:
+            self.count_calls += 1
+            if self.count_calls == 1:
+                if self.label == "a":
+                    first_entered.set()
+                    await release_first.wait()
+                elif self.label == "b":
+                    await first_entered.wait()
+                    release_first.set()
+                    await asyncio.sleep(0)
+            totals = {"a": (2, 1), "b": (5, 3)}
+            total, enabled = totals[self.label]
+            return total if include_disabled else enabled
+
+        async def list_jobs(
+            self,
+            _project_id: str,
+            *,
+            include_disabled: bool,
+            limit: int,
+        ) -> list[object]:
+            _ = include_disabled, limit
+            return []
+
+    monkeypatch.setattr(
+        cron_tool_module,
+        "_build_service",
+        lambda session: _Service(session.label),
+    )
+    tool_a = make_cron_tool(session_factory=lambda: _session("a"))
+    tool_b = make_cron_tool(session_factory=lambda: _session("b"))
+
+    result_a, result_b = await asyncio.gather(
+        tool_a.execute(_make_ctx(project_id="project-a"), action="status"),
+        tool_b.execute(_make_ctx(project_id="project-b"), action="status"),
+    )
+
+    assert result_a.metadata == {"total": 2, "enabled": 1}
+    assert result_b.metadata == {"total": 5, "enabled": 3}
+    assert exits == {"a": 1, "b": 1}
+
+
+async def test_unbound_cron_template_rejects_legacy_runtime_fallback() -> None:
+    result = await cron_tool.execute(_make_ctx(), action="status")
+
+    assert result.is_error is True
+    assert json.loads(result.output) == {
+        "error": "Cron tool error: cron requires a generation-bound runtime"
+    }
+
+
+def test_cron_module_has_no_legacy_configure_seam() -> None:
+    assert not hasattr(cron_tool_module, "configure_cron_tool")

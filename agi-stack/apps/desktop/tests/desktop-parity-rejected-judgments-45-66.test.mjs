@@ -48,17 +48,8 @@ test("Project Channels follows ProjectChannelsRedirect into the PluginHub produc
   );
   const expectedWebActions = [
     "view",
-    "list",
-    "install",
-    "enable",
-    "disable",
-    "uninstall",
-    "reload",
     "view-channel-catalog",
     "view-channel-schema",
-    "view-config-schema",
-    "view-config",
-    "update-config",
     "list-channel-configs",
     "create-channel-config",
     "update-channel-config",
@@ -78,17 +69,8 @@ test("Project Channels follows ProjectChannelsRedirect into the PluginHub produc
     },
   ]);
   assert.deepEqual(contractKeys(capability, "web"), [
-    "GET /api/v1/channels/tenants/{tenant_id}/plugins",
     "GET /api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog",
     "GET /api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog/{channel_type}/schema",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/install",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/enable",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/disable",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/uninstall",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/reload",
-    "GET /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config-schema",
-    "GET /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
-    "PUT /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
     "GET /api/v1/channels/projects/{project_id}/configs",
     "POST /api/v1/channels/projects/{project_id}/configs",
     "PUT /api/v1/channels/configs/{config_id}",
@@ -110,26 +92,11 @@ test("Project Channels follows ProjectChannelsRedirect into the PluginHub produc
 
   for (const action of [
     "view",
-    "list",
     "view-channel-catalog",
     "view-channel-schema",
-    "view-config-schema",
-    "view-config",
+    "list-channel-configs",
+    "test-channel-config",
   ]) {
-    assertActionRole(capability, "web", action, "tenant_member");
-  }
-  for (const action of [
-    "install",
-    "enable",
-    "disable",
-    "uninstall",
-    "reload",
-    "update-config",
-  ]) {
-    assertActionRole(capability, "web", action, "tenant_admin");
-    assertActionRole(capability, "web", action, "tenant_owner");
-  }
-  for (const action of ["list-channel-configs", "test-channel-config"]) {
     assertActionRole(capability, "web", action, "project_member");
   }
   for (const action of [
@@ -141,8 +108,15 @@ test("Project Channels follows ProjectChannelsRedirect into the PluginHub produc
     assertActionRole(capability, "web", action, "project_owner");
   }
 
+  assert.equal(
+    contractKeys(capability, "web").some((contract) =>
+      /\/plugins\/(?:install|reload|\{plugin_name\})/u.test(contract),
+    ),
+    false,
+  );
   assert.match(capability.judgment_rationale, /ProjectChannelsRedirect/u);
   assert.match(capability.judgment_rationale, /PluginHub/u);
+  assert.match(capability.judgment_rationale, /generation-backed/u);
 });
 
 test("Project Channels Cloud contract matches the native connection dialog", () => {
@@ -161,6 +135,13 @@ test("Project Channels Cloud contract matches the native connection dialog", () 
     "test-channel-config",
   ];
 
+  assert.equal(capability.cloud_status, "implemented");
+  assert.equal(Object.hasOwn(capability, "cloud_reason_code"), false);
+  assert.equal(capability.local_status, "not_applicable");
+  assert.equal(
+    capability.local_reason_code,
+    "local_channel_runtime_not_applicable",
+  );
   assert.deepEqual(capability.cloud_actions, expectedCloudActions);
   assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
     "GET /api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog",
@@ -432,7 +413,7 @@ test("Project Settings records only the routed page sandbox operations and autho
   assert.equal(capability.cloud_status, "partial");
   assert.equal(
     capability.cloud_reason_code,
-    "desktop_project_settings_actions_and_update_contract_mismatch",
+    "desktop_project_settings_actions_unwired",
   );
   assert.deepEqual(capability.cloud_actions, ["view"]);
   assert.equal(capability.local_status, "unavailable");
@@ -442,8 +423,10 @@ test("Project Settings records only the routed page sandbox operations and autho
     "local_project_settings_authority_unavailable",
   );
   assert.doesNotMatch(capability.judgment_rationale, /userPayload\.id/u);
-  assert.match(capability.judgment_rationale, /PATCH/u);
-  assert.match(capability.judgment_rationale, /PUT/u);
+  assert.match(capability.judgment_rationale, /Project Settings V2 authority/u);
+  assert.match(capability.judgment_rationale, /project-scoped generation lease/u);
+  assert.match(capability.judgment_rationale, /static factory and its latent mutation methods were removed/u);
+  assert.match(capability.judgment_rationale, /PATCH-versus-PUT mismatch rationale is no longer/u);
 
   for (const action of [
     "view",
@@ -550,7 +533,7 @@ test("User Profile records the observed native route while Snapshot v4 fails clo
   assert.match(capability.judgment_rationale, /authority_revision/u);
 });
 
-test("declared Tenant Creation and Project Support loaders stay unavailable", () => {
+test("declared Tenant Creation and Project Support capability snapshots stay unavailable", () => {
   const cases = [
     {
       fragment:
@@ -567,10 +550,15 @@ test("declared Tenant Creation and Project Support loaders stay unavailable", ()
         "parity-capability-definitions.24-native-product-auxiliary.v2.json",
       id: "project-support",
       entries: [
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportCapability.ts",
-        "agi-stack/apps/desktop/src/features/project-support/projectSupportClient.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportController.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportTypes.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
       ],
     },
   ];
@@ -593,7 +581,28 @@ test("declared Tenant Creation and Project Support loaders stay unavailable", ()
     ]) {
       assert.ok(capability.cloud_entries.includes(entry), `${id}: missing ${entry}`);
     }
-    assert.match(capability.judgment_rationale, /declared renderer provenance/u);
+    if (id === "tenant-creation") {
+      assert.match(capability.judgment_rationale, /generated-catalog V2 root Provider/u);
+      assert.match(capability.judgment_rationale, /root-scoped operation lease/u);
+      assert.match(capability.judgment_rationale, /static createTenantCreationClient transport was removed/u);
+    } else {
+      assert.match(capability.judgment_rationale, /declared renderer provenance/u);
+      assert.match(capability.judgment_rationale, /generated-catalog V2 root Provider/u);
+      assert.match(capability.judgment_rationale, /project-scoped operation lease/u);
+      assert.match(capability.judgment_rationale, /hosted ticket authority remains tenant-scoped/u);
+      assert.match(capability.judgment_rationale, /authorityRevision=null/u);
+      assert.match(capability.judgment_rationale, /static projectSupportClient\/projectSupportRuntime transport path was removed/u);
+      assert.ok(
+        !capability.cloud_entries.includes(
+          "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        ),
+      );
+      assert.ok(
+        !capability.cloud_entries.includes(
+          "agi-stack/apps/desktop/src/features/project-support/projectSupportRuntime.ts",
+        ),
+      );
+    }
   }
 });
 
@@ -642,6 +651,12 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
       "agi-stack/apps/desktop/src/features/backend-stores/backendStoresClient.ts",
       "agi-stack/apps/desktop/src/features/backend-stores/backendStoresController.ts",
       "agi-stack/apps/desktop/src/features/backend-stores/backendStoresRouteModule.tsx",
+      "agi-stack/apps/desktop/src/plugins/desktopBackendStoresAuthorityModuleV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopBackendStoresHttpProjectionV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopBackendStoresOperationContractV2.ts",
+      "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+      "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+      "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
     ],
     "project-playbooks": [
       "agi-stack/apps/desktop/src/features/project-playbooks/ProjectPlaybooksPage.tsx",
@@ -649,6 +664,13 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksController.ts",
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksEventSource.ts",
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksRouteModule.tsx",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadAuthorityModuleV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadHttpProjectionV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadOperationContractV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsAuthorityModuleV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsOperationContractV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsSocketProjectionV2.ts",
+      "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
     ],
   };
 
@@ -660,6 +682,12 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
     assert.equal(capability.cloud_status, "implemented", capabilityId);
     assert.equal(capability.local_status, "not_applicable", capabilityId);
     assert.equal(capability.local_policy, "cloud_only", capabilityId);
+    if (capabilityId === "backend-stores") {
+      assert.equal(
+        capability.local_reason_code,
+        "local_backend_stores_cloud_authority_unavailable",
+      );
+    }
     for (const entry of expectedEntries[capabilityId]) {
       assert.ok(capability.cloud_entries.includes(entry), `${capabilityId}: missing ${entry}`);
     }
@@ -683,6 +711,20 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
         requirementsForAction(capability, "desktop_cloud", action).length > 0,
         `${capabilityId}: missing desktop_cloud permission for ${action}`,
       );
+    }
+    if (capabilityId === "backend-stores") {
+      assert.match(capability.judgment_rationale, /static createBackendStoresClient/u);
+      assert.match(capability.judgment_rationale, /generated-catalog root Provider/u);
+      assert.match(capability.judgment_rationale, /tenant-scoped generation lease/u);
+      assert.match(capability.judgment_rationale, /zero-network not-applicable projection/u);
+      assert.match(capability.judgment_rationale, /not a product-capability expansion/u);
+    } else {
+      assert.match(capability.judgment_rationale, /static createCloudProjectPlaybooksEventSource production factory/u);
+      assert.match(capability.judgment_rationale, /generated-catalog root Provider/u);
+      assert.match(capability.judgment_rationale, /project-scoped generation lease/u);
+      assert.match(capability.judgment_rationale, /authenticated Electron socket broker/u);
+      assert.match(capability.judgment_rationale, /not a product-capability expansion/u);
+      assert.match(capability.judgment_rationale, /Local remains cloud-only not applicable/u);
     }
   }
 });

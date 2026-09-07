@@ -1,6 +1,8 @@
 """Unit tests for WebSocket HITL handler safeguards."""
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,6 +14,10 @@ from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestStatus, 
 from src.infrastructure.adapters.primary.web.websocket.handlers import hitl_handler
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.agent.hitl import utils as hitl_utils
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+)
 
 
 def _make_context() -> MessageContext:
@@ -53,6 +59,182 @@ def _set_hitl_encryption_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     get_settings.cache_clear()
     monkeypatch.setattr(hitl_utils, "_hitl_stream_encryption_service", None)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_publish_hitl_response_uses_v2_operation_redis(monkeypatch) -> None:
+    redis_client = SimpleNamespace(xadd=AsyncMock(return_value="1-0"))
+    pin_calls: list[dict[str, object]] = []
+    reservation = object()
+    acquire = AsyncMock(return_value=reservation)
+    monkeypatch.setattr(hitl_handler, "acquire_existing_scoped_session_v2", acquire)
+
+    @asynccontextmanager
+    async def pin_operation(received: object, **kwargs: object):
+        assert received is reservation
+        pin_calls.append(dict(kwargs))
+        yield object()
+
+    async def reject_process_global_redis() -> object:
+        raise AssertionError("process-global Redis authority must not be used")
+
+    from src.configuration import config as config_module
+    from src.infrastructure.agent.state import agent_worker_state
+
+    monkeypatch.setattr(
+        config_module,
+        "get_settings",
+        lambda: SimpleNamespace(hitl_realtime_enabled=True),
+    )
+    monkeypatch.setattr(agent_worker_state, "get_redis_client", reject_process_global_redis)
+    monkeypatch.setattr(
+        hitl_handler,
+        "pin_scoped_agent_turn_operation_v2",
+        pin_operation,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        hitl_handler,
+        "current_agent_worker_redis_client_v2",
+        lambda: redis_client,
+        raising=False,
+    )
+
+    context = _make_context()
+    published = await hitl_handler._publish_hitl_response_to_redis(
+        context=context,
+        tenant_id="tenant-1",
+        project_id="project-1",
+        conversation_id="conversation-1",
+        message_id="message-1",
+        request_id="request-1",
+        hitl_type="decision",
+        response_data={"decision": "approve"},
+        user_id="user-1",
+        agent_mode="default",
+    )
+
+    acquire.assert_awaited_once_with(
+        context,
+        conversation_id="conversation-1",
+        project_id="project-1",
+        hitl_request_id="request-1",
+    )
+    assert published is True
+    assert pin_calls == [
+        {
+            "operation_id": "agent-hitl-response-publish:request-1",
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+            "session_id": "conversation-1",
+            "services": {
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": "tenant-1",
+                    "project_id": "project-1",
+                    "user_id": "user-1",
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-hitl-response-publish",
+                    "channel": "websocket",
+                    "request_id": "request-1",
+                    "conversation_id": "conversation-1",
+                    "message_id": "message-1",
+                    "hitl_type": "decision",
+                },
+            },
+        }
+    ]
+    redis_client.xadd.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_hitl_recovery_forks_v2_stream_from_scoped_admission(monkeypatch) -> None:
+    context = _make_context()
+    manager = MagicMock()
+    manager.bridge_tasks = {"session-1": {}}
+    manager.subscribe = AsyncMock()
+    context._connection_manager = manager
+    hitl_request = _make_hitl_request(request_type=HITLRequestType.DECISION)
+    repository = SimpleNamespace(get_by_id=AsyncMock(return_value=hitl_request))
+    pin_calls: list[dict[str, object]] = []
+    reservation = object()
+    acquire = AsyncMock(return_value=reservation)
+    monkeypatch.setattr(hitl_handler, "acquire_existing_scoped_session_v2", acquire)
+
+    @asynccontextmanager
+    async def pin_operation(received: object, **kwargs: object):
+        assert received is reservation
+        pin_calls.append(dict(kwargs))
+        yield object()
+
+    from src.infrastructure.adapters.primary.web.websocket.handlers import subscription_handler
+    from src.infrastructure.adapters.secondary.persistence import (
+        sql_hitl_request_repository as repository_module,
+    )
+
+    start_bridge = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        repository_module,
+        "SqlHITLRequestRepository",
+        lambda _db: repository,
+    )
+    monkeypatch.setattr(hitl_handler, "pin_scoped_agent_turn_operation_v2", pin_operation)
+    monkeypatch.setattr(
+        subscription_handler,
+        "_start_recovery_bridge_task_v2",
+        start_bridge,
+    )
+
+    await hitl_handler._start_hitl_stream_bridge(context, "req-1")
+
+    acquire.assert_awaited_once_with(
+        context, conversation_id="conv-1", project_id="project-1", hitl_request_id="req-1"
+    )
+    manager.subscribe.assert_awaited_once_with("session-1", "conv-1")
+    assert pin_calls == [
+        {
+            "operation_id": "agent-hitl-recovery-admission:req-1",
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+            "session_id": "conv-1",
+            "services": {
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": "tenant-1",
+                    "project_id": "project-1",
+                    "user_id": "user-1",
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-hitl-recovery-admission",
+                    "channel": "websocket",
+                    "request_id": "req-1",
+                    "conversation_id": "conv-1",
+                    "message_id": "msg-1",
+                },
+            },
+        }
+    ]
+    start_bridge.assert_awaited_once_with(
+        context=context,
+        conversation_id="conv-1",
+        message_id=None,
+        replay_from_db=True,
+        cursor_time_us=None,
+        cursor_counter=None,
+        operation_kind="agent-hitl-recovery-stream",
+        hitl_request_id="req-1",
+    )
+
+
+@pytest.mark.unit
+def test_hitl_recovery_has_no_static_llm_or_agent_service_factory() -> None:
+    source = Path(hitl_handler.__file__).read_text(encoding="utf-8")
+
+    assert "create_llm_client" not in source
+    assert "get_scoped_container().agent_service" not in source
+    assert "agent_worker_state import" not in source
+    assert "get_redis_client" not in source
 
 
 @pytest.mark.unit

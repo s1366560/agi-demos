@@ -12,27 +12,21 @@ import pytest
 class TestRefactoredArchitectureIntegration:
     """Integration tests for the refactored ReActAgent modules."""
 
-    def test_event_converter_singleton(self):
-        """Test EventConverter singleton pattern."""
-        from src.infrastructure.agent.events.converter import (
-            get_event_converter,
-        )
+    def test_event_converter_is_explicitly_constructed(self):
+        """Test EventConverter has no implicit process-global identity."""
+        from src.infrastructure.agent.events.converter import EventConverter
 
-        converter1 = get_event_converter()
-        converter2 = get_event_converter()
-        assert converter1 is converter2
+        converter1 = EventConverter()
+        converter2 = EventConverter()
+        assert converter1 is not converter2
 
+    def test_attachment_processor_is_explicitly_constructed(self):
+        """Test AttachmentProcessor has no implicit process-global identity."""
+        from src.infrastructure.agent.attachment.processor import AttachmentProcessor
 
-    def test_attachment_processor_singleton(self):
-        """Test AttachmentProcessor singleton pattern."""
-        from src.infrastructure.agent.attachment.processor import (
-            AttachmentProcessor,
-            get_attachment_processor,
-        )
-
-        processor = get_attachment_processor()
-        assert processor is not None
-        assert isinstance(processor, AttachmentProcessor)
+        processor1 = AttachmentProcessor()
+        processor2 = AttachmentProcessor()
+        assert processor1 is not processor2
 
     def test_llm_invoker_class_exists(self):
         """Test LLMInvoker class exists with expected structure."""
@@ -58,45 +52,13 @@ class TestRefactoredArchitectureIntegration:
         assert ClarificationStrategy is not None
         assert DecisionStrategy is not None
 
-    def test_artifact_extractor_singleton(self):
-        """Test ArtifactExtractor singleton pattern."""
-        from src.infrastructure.agent.artifact.extractor import (
-            ArtifactExtractor,
-            get_artifact_extractor,
-        )
+    def test_artifact_extractor_is_explicitly_constructed(self):
+        """Test ArtifactExtractor has no implicit process-global identity."""
+        from src.infrastructure.agent.artifact.extractor import ArtifactExtractor
 
-        extractor = get_artifact_extractor()
-        assert extractor is not None
-        assert isinstance(extractor, ArtifactExtractor)
-
-
-    def test_react_loop_class_exists(self):
-        """Test ReActLoop class exists."""
-        from src.infrastructure.agent.core.react_loop import ReActLoop
-
-        assert ReActLoop is not None
-        assert hasattr(ReActLoop, "run")
-
-
-@pytest.mark.integration
-class TestDIContainerIntegration:
-    """Test DI container properly creates all agent components."""
-
-    def test_di_container_creates_event_converter(self):
-        """Test DIContainer.event_converter() works."""
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        converter = container.event_converter()
-        assert converter is not None
-
-    def test_di_container_creates_attachment_processor(self):
-        """Test DIContainer.attachment_processor() works."""
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        processor = container.attachment_processor()
-        assert processor is not None
+        extractor1 = ArtifactExtractor()
+        extractor2 = ArtifactExtractor()
+        assert extractor1 is not extractor2
 
 
 @pytest.mark.integration
@@ -147,21 +109,11 @@ class TestModuleImports:
 
         assert ArtifactExtractor is not None
 
-    def test_import_react_loop(self):
-        """Test ReActLoop module imports."""
-        from src.infrastructure.agent.core.react_loop import ReActLoop
-
-        assert ReActLoop is not None
-
     def test_import_agent_ports(self):
         """Test all agent ports can be imported."""
-        from src.domain.ports.agent import (
-            LLMInvokerPort,
-            ReActLoopPort,
-        )
+        from src.domain.ports.agent import LLMInvokerPort
 
         assert LLMInvokerPort is not None
-        assert ReActLoopPort is not None
 
 
 @pytest.mark.integration

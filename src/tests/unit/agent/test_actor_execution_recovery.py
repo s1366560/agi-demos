@@ -23,6 +23,7 @@ class _FakeAgent:
         message_id,
         canonical_run_id=None,
         hitl_response=None,
+        plugin_generation=None,
     ):
         self.calls.append(
             {
@@ -34,6 +35,7 @@ class _FakeAgent:
                 "message_id": message_id,
                 "canonical_run_id": canonical_run_id,
                 "hitl_response": hitl_response,
+                "plugin_generation": plugin_generation,
             }
         )
         yield {"type": "complete", "data": {"content": "ok"}}
@@ -62,6 +64,7 @@ class _SummaryFakeAgent(_FakeAgent):
         message_id,
         canonical_run_id=None,
         hitl_response=None,
+        plugin_generation=None,
     ):
         self.calls.append(
             {
@@ -73,6 +76,7 @@ class _SummaryFakeAgent(_FakeAgent):
                 "message_id": message_id,
                 "canonical_run_id": canonical_run_id,
                 "hitl_response": hitl_response,
+                "plugin_generation": plugin_generation,
             }
         )
         yield {"type": "context_summary_generated", "data": {"summary": "saved"}}
@@ -90,6 +94,7 @@ class _ErrorAgent(_FakeAgent):
         message_id,
         canonical_run_id=None,
         hitl_response=None,
+        plugin_generation=None,
     ):
         self.calls.append(
             {
@@ -101,6 +106,7 @@ class _ErrorAgent(_FakeAgent):
                 "message_id": message_id,
                 "canonical_run_id": canonical_run_id,
                 "hitl_response": hitl_response,
+                "plugin_generation": plugin_generation,
             }
         )
         if False:
@@ -133,6 +139,14 @@ def _stub_run_authority(monkeypatch) -> tuple[AsyncMock, AsyncMock]:
     return mark, settle
 
 
+@pytest.fixture(autouse=True)
+def _stub_session_log_cursor(monkeypatch) -> AsyncMock:
+    """Direct continue tests isolate resume logic from the required outer v2 boundary."""
+    cursor = AsyncMock(return_value=(0, 0))
+    monkeypatch.setattr(execution, "_get_last_db_event_time", cursor)
+    return cursor
+
+
 @pytest.mark.unit
 class TestActorExecutionRecovery:
     """Tests HITL resume path with snapshot fallback."""
@@ -152,6 +166,11 @@ class TestActorExecutionRecovery:
             user_message="hi",
             user_id="user-1",
             correlation_id="corr-1",
+            plugin_generation={
+                "profile_id": "default-v2",
+                "generation": 7,
+                "digest": "a" * 64,
+            },
             timeout_seconds=120.0,
         )
 
@@ -181,6 +200,7 @@ class TestActorExecutionRecovery:
         assert result.content == "ok"
         assert agent.calls
         assert agent.calls[0]["conversation_context"] == state.messages
+        assert agent.calls[0]["plugin_generation"] == state.plugin_generation
         execution.load_hitl_snapshot.assert_awaited_once_with("req-1")
         _stub_mark_hitl_completed.assert_awaited_once_with("req-1", lease_owner=None)
 

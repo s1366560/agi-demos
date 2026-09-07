@@ -4,20 +4,25 @@ import type {
   DesktopCapabilityAvailability,
   DesktopCapabilityScope,
 } from '../runtime/capabilitySnapshot';
-import { createTenantAnalyticsHttpClient } from './tenantAnalyticsHttpClient';
+import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 
 export async function loadTenantAnalyticsCapability(
   config: DesktopRuntimeConfig,
+  tenantAnalyticsOperationsV2: Pick<
+    DesktopTenantAnalyticsOperationsV2,
+    'loadTenantAnalytics'
+  >,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
   const tenantId = scopeIdentifier(config.tenantId);
   const scope = tenantCapabilityScope(tenantId);
   if (!tenantId) return unavailable('tenant_analytics_scope_unavailable', scope);
   try {
-    const snapshot = await createTenantAnalyticsHttpClient(config).load(
-      { authority: config.mode, tenantId, period: '30d' },
-      { signal },
-    );
+    const snapshot = await tenantAnalyticsOperationsV2.loadTenantAnalytics({
+      config,
+      scope: { authority: config.mode, tenantId, period: '30d' },
+      ...(signal === undefined ? {} : { signal }),
+    });
     if (
       snapshot.allowedActions.length !== 2 ||
       snapshot.allowedActions[0] !== 'view' ||

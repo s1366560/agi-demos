@@ -4,8 +4,6 @@ import type { ProjectWorkItem } from '../../types';
 import type {
   ActivityReadEntry as AuthorityReadEntry,
   ActivityAuthorityScope,
-  CloudAgentAuthorityScope,
-  DesktopAgentAuthorityAdapter,
   DesktopActivityAuthorityClient,
 } from '../agent-authority/agentAuthorityTypes';
 import {
@@ -22,10 +20,9 @@ import {
 
 export type UseActivityInboxOptions = {
   items: ProjectWorkItem[];
-  // Kept until App.tsx injects the authority adapter; it is never storage authority.
   scopeKey: string;
-  authorityAdapter?: DesktopAgentAuthorityAdapter;
-  authorityScope?: CloudAgentAuthorityScope;
+  activityClientV2: DesktopActivityAuthorityClient;
+  authorityScope: ActivityAuthorityScope | null;
 };
 
 export type ActivityInboxController = {
@@ -64,204 +61,200 @@ export function activityEntriesToAuthorityReceipts(
     .sort((left, right) => left.entry_id.localeCompare(right.entry_id));
 }
 
-export function resolveActivityAuthorityBinding(
-  authorityAdapter: DesktopAgentAuthorityAdapter | undefined,
-  cloudScope: CloudAgentAuthorityScope | undefined,
-): Readonly<{
-  client: DesktopActivityAuthorityClient | null;
-  scope: ActivityAuthorityScope | undefined;
-}> {
-  return {
-    client: authorityAdapter?.activityClient ?? null,
-    scope:
-      authorityAdapter?.authority === 'local'
-        ? authorityAdapter.activityScope
-        : cloudScope,
-  };
-}
+type ActivityLifetime = {
+  context: Readonly<{
+    client: DesktopActivityAuthorityClient;
+    scope: ActivityAuthorityScope | null;
+    scopeKey: string;
+  }>;
+  controller: AbortController;
+  revision: number;
+  entries: AuthorityReadEntry[];
+  pending: AuthorityReadEntry[];
+  ready: boolean;
+  writes: Promise<void>;
+};
 
 export function useActivityInbox({
   items,
   scopeKey,
-  authorityAdapter,
+  activityClientV2,
   authorityScope,
 }: UseActivityInboxOptions): ActivityInboxController {
-  const [readState, setReadState] = useState<ActivityReadState>({});
-  const [availability, setAvailability] = useState<
-    ActivityInboxController['availability']
-  >(authorityAdapter?.availability ?? 'unavailable');
-  const [reasonCode, setReasonCode] = useState<string | null>(
-    authorityAdapter?.reasonCode ??
-      'activity_authority_integration_unavailable',
+  const context = useMemo(
+    () =>
+      Object.freeze({
+        client: activityClientV2,
+        scope: authorityScope ? Object.freeze({ ...authorityScope }) : null,
+        scopeKey,
+      }),
+    [
+      activityClientV2,
+      scopeKey,
+      authorityScope?.authority,
+      authorityScope?.principalId,
+      authorityScope?.tenantId,
+      authorityScope?.projectId,
+    ],
   );
-  const authorityRevisionRef = useRef(0);
-  const authorityEntriesRef = useRef<AuthorityReadEntry[]>([]);
-  const authorityReadyRef = useRef(false);
-  const pendingAuthorityEntriesRef = useRef<AuthorityReadEntry[]>([]);
-  const authorityScopeGenerationRef = useRef(0);
-  const authorityWriteChainRef = useRef<Promise<void>>(Promise.resolve());
-
+  const contextRef = useRef(context);
+  contextRef.current = context;
+  const lifetimeRef = useRef<ActivityLifetime | null>(null);
+  const [readState, setReadState] = useState<ActivityReadState>({});
+  const [availability, setAvailability] =
+    useState<ActivityInboxController['availability']>('unavailable');
+  const [reasonCode, setReasonCode] = useState<string | null>(
+    'activity_authority_integration_unavailable',
+  );
   const entries = useMemo(() => buildActivityInboxEntries(items), [items]);
-  const { client: activityClient, scope: effectiveAuthorityScope } =
-    resolveActivityAuthorityBinding(authorityAdapter, authorityScope);
+  const isCurrent = useCallback(
+    (lifetime: ActivityLifetime) =>
+      lifetimeRef.current === lifetime &&
+      contextRef.current === lifetime.context &&
+      !lifetime.controller.signal.aborted,
+    [],
+  );
 
   const writeAuthorityEntries = useCallback(
-    (incoming: readonly AuthorityReadEntry[]) => {
-      if (!activityClient || !effectiveAuthorityScope || incoming.length === 0)
+    (incoming: readonly AuthorityReadEntry[], lifetime: ActivityLifetime) => {
+      if (
+        !isCurrent(lifetime) ||
+        lifetime.context !== context ||
+        !context.scope ||
+        incoming.length === 0
+      )
         return;
-      const scopeGeneration = authorityScopeGenerationRef.current;
-      authorityWriteChainRef.current = authorityWriteChainRef.current.then(
-        async () => {
-          if (scopeGeneration !== authorityScopeGenerationRef.current) return;
-          const previousEntries = authorityEntriesRef.current;
-          const receipts = mergeAuthorityReadEntries(previousEntries, incoming);
-          authorityEntriesRef.current = receipts;
-          setReadState(activityAuthorityEntriesToReadState(receipts));
-          try {
-            const result = await activityClient.putActivityReadState(
-              effectiveAuthorityScope,
-              {
-                expected_authority_revision: authorityRevisionRef.current,
-                entries: receipts,
-              },
-            );
-            if (scopeGeneration !== authorityScopeGenerationRef.current) return;
-            if (result.kind === 'queued_offline') {
-              authorityRevisionRef.current = result.expectedAuthorityRevision;
-              authorityEntriesRef.current = [...result.entries];
-              setAvailability('degraded');
-              setReasonCode(result.reasonCode);
-              return;
-            }
-            authorityRevisionRef.current = result.state.authority_revision;
-            authorityEntriesRef.current = [...result.state.entries];
-            setReadState(
-              activityAuthorityEntriesToReadState(result.state.entries),
-            );
+      const scope = context.scope;
+      lifetime.writes = lifetime.writes.then(async () => {
+        if (!isCurrent(lifetime)) return;
+        const previousEntries = lifetime.entries;
+        const receipts = mergeAuthorityReadEntries(previousEntries, incoming);
+        lifetime.entries = receipts;
+        setReadState(activityAuthorityEntriesToReadState(receipts));
+        try {
+          const result = await context.client.putActivityReadState(
+            scope,
+            {
+              expected_authority_revision: lifetime.revision,
+              entries: receipts,
+            },
+            { signal: lifetime.controller.signal },
+          );
+          if (!isCurrent(lifetime)) return;
+          if (result.kind === 'queued_offline') {
+            lifetime.revision = result.expectedAuthorityRevision;
+            lifetime.entries = [...result.entries];
+            setReadState(activityAuthorityEntriesToReadState(result.entries));
+            setAvailability('degraded');
+            setReasonCode(result.reasonCode);
+          } else {
+            lifetime.revision = result.state.authority_revision;
+            lifetime.entries = [...result.state.entries];
+            setReadState(activityAuthorityEntriesToReadState(result.state.entries));
             setAvailability('available');
             setReasonCode(null);
-          } catch {
-            if (scopeGeneration !== authorityScopeGenerationRef.current) return;
-            authorityEntriesRef.current = previousEntries;
-            setReadState(activityAuthorityEntriesToReadState(previousEntries));
-            setAvailability('degraded');
-            setReasonCode(
-              activityAuthorityReasonCode(authorityAdapter, 'update_failed'),
-            );
-            try {
-              const state =
-                await activityClient.getActivityReadState(
-                  effectiveAuthorityScope,
-                );
-              if (scopeGeneration !== authorityScopeGenerationRef.current)
-                return;
-              authorityRevisionRef.current = state.authority_revision;
-              authorityEntriesRef.current = [...state.entries];
-              setReadState(activityAuthorityEntriesToReadState(state.entries));
-            } catch {
-              // Keep the last verified state; only offline retry receipts may remain optimistic.
-            }
           }
-        },
-      );
+        } catch {
+          if (!isCurrent(lifetime)) return;
+          lifetime.entries = previousEntries;
+          setReadState(activityAuthorityEntriesToReadState(previousEntries));
+          setAvailability('degraded');
+          setReasonCode(activityAuthorityReasonCode(scope, 'update_failed'));
+          try {
+            const state = await context.client.getActivityReadState(scope, {
+              signal: lifetime.controller.signal,
+            });
+            if (!isCurrent(lifetime)) return;
+            lifetime.revision = state.authority_revision;
+            lifetime.entries = [...state.entries];
+            setReadState(activityAuthorityEntriesToReadState(state.entries));
+          } catch {
+            // Keep the last verified state; only offline retry receipts may remain optimistic.
+          }
+        }
+      });
     },
-    [activityClient, authorityAdapter, effectiveAuthorityScope],
+    [context, isCurrent],
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-    authorityScopeGenerationRef.current += 1;
-    authorityRevisionRef.current = 0;
-    authorityEntriesRef.current = [];
-    authorityReadyRef.current = false;
-    pendingAuthorityEntriesRef.current = [];
-    authorityWriteChainRef.current = Promise.resolve();
+    const lifetime: ActivityLifetime = {
+      context,
+      controller: new AbortController(),
+      revision: 0,
+      entries: [],
+      pending: [],
+      ready: false,
+      writes: Promise.resolve(),
+    };
+    lifetimeRef.current = lifetime;
     setReadState({});
-
-    if (!activityClient || !effectiveAuthorityScope) {
+    const cleanup = () => {
+      lifetime.controller.abort();
+      lifetime.pending = [];
+    };
+    if (!context.scope) {
       setAvailability('unavailable');
-      setReasonCode(
-        authorityAdapter?.reasonCode ??
-          'activity_authority_integration_unavailable',
-      );
-      return () => controller.abort();
+      setReasonCode('activity_authority_integration_unavailable');
+      return cleanup;
     }
-
+    const scope = context.scope;
     setAvailability('available');
     setReasonCode(null);
-    void activityClient
-      .flushPendingActivityReadState(effectiveAuthorityScope, {
-        signal: controller.signal,
-      })
+    void context.client
+      .flushPendingActivityReadState(scope, { signal: lifetime.controller.signal })
       .then((result) => {
-        if (controller.signal.aborted) return;
+        if (!isCurrent(lifetime)) return;
         if (result.kind === 'queued_offline') {
-          authorityRevisionRef.current = result.expectedAuthorityRevision;
-          authorityEntriesRef.current = [...result.entries];
+          lifetime.revision = result.expectedAuthorityRevision;
+          lifetime.entries = [...result.entries];
           setReadState(activityAuthorityEntriesToReadState(result.entries));
-          authorityReadyRef.current = true;
           setAvailability('degraded');
           setReasonCode(result.reasonCode);
         } else {
-          authorityRevisionRef.current = result.state.authority_revision;
-          authorityEntriesRef.current = [...result.state.entries];
-          setReadState(
-            activityAuthorityEntriesToReadState(result.state.entries),
-          );
-          authorityReadyRef.current = true;
+          lifetime.revision = result.state.authority_revision;
+          lifetime.entries = [...result.state.entries];
+          setReadState(activityAuthorityEntriesToReadState(result.state.entries));
           setAvailability('available');
           setReasonCode(null);
         }
-        const pending = pendingAuthorityEntriesRef.current;
-        pendingAuthorityEntriesRef.current = [];
-        writeAuthorityEntries(pending);
+        lifetime.ready = true;
+        const pending = lifetime.pending;
+        lifetime.pending = [];
+        writeAuthorityEntries(pending, lifetime);
       })
       .catch(() => {
-        if (controller.signal.aborted) return;
+        if (!isCurrent(lifetime)) return;
         setAvailability('degraded');
-        setReasonCode(
-          activityAuthorityReasonCode(authorityAdapter, 'unavailable'),
-        );
+        setReasonCode(activityAuthorityReasonCode(scope, 'unavailable'));
       });
-    return () => controller.abort();
-  }, [
-    authorityAdapter,
-    activityClient,
-    effectiveAuthorityScope,
-    scopeKey,
-    writeAuthorityEntries,
-  ]);
+    return cleanup;
+  }, [context, isCurrent, writeAuthorityEntries]);
 
   const commitRead = useCallback(
     (selectedEntries: readonly ActivityInboxEntry[]) => {
+      const lifetime = lifetimeRef.current;
       if (
-        !activityClient ||
-        !effectiveAuthorityScope ||
+        !lifetime ||
+        lifetime.context !== context ||
+        !isCurrent(lifetime) ||
+        !context.scope ||
         selectedEntries.length === 0
       )
         return;
-      const incoming = activityEntriesToAuthorityReceipts(
-        selectedEntries,
-        Date.now(),
-      );
-      if (!authorityReadyRef.current) {
-        pendingAuthorityEntriesRef.current = mergeAuthorityReadEntries(
-          pendingAuthorityEntriesRef.current,
-          incoming,
-        );
+      const incoming = activityEntriesToAuthorityReceipts(selectedEntries, Date.now());
+      if (!lifetime.ready) {
+        lifetime.pending = mergeAuthorityReadEntries(lifetime.pending, incoming);
         setReadState(
           activityAuthorityEntriesToReadState(
-            mergeAuthorityReadEntries(
-              authorityEntriesRef.current,
-              pendingAuthorityEntriesRef.current,
-            ),
+            mergeAuthorityReadEntries(lifetime.entries, lifetime.pending),
           ),
         );
         return;
       }
-      writeAuthorityEntries(incoming);
+      writeAuthorityEntries(incoming, lifetime);
     },
-    [activityClient, effectiveAuthorityScope, writeAuthorityEntries],
+    [context, isCurrent, writeAuthorityEntries],
   );
 
   const markRead = useCallback(
@@ -272,16 +265,11 @@ export function useActivityInbox({
     [commitRead, entries],
   );
 
-  const markAllRead = useCallback(
-    () => commitRead(entries),
-    [commitRead, entries],
-  );
+  const markAllRead = useCallback(() => commitRead(entries), [commitRead, entries]);
 
   const markConversationRead = useCallback(
     (conversationId: string) => {
-      commitRead(
-        entries.filter((entry) => entry.conversationId === conversationId),
-      );
+      commitRead(entries.filter((entry) => entry.conversationId === conversationId));
     },
     [commitRead, entries],
   );
@@ -310,10 +298,10 @@ export function useActivityInbox({
 }
 
 function activityAuthorityReasonCode(
-  adapter: DesktopAgentAuthorityAdapter | undefined,
+  scope: ActivityAuthorityScope,
   reason: 'unavailable' | 'update_failed',
 ): string {
-  return `${adapter?.authority === 'local' ? 'local' : 'cloud'}_activity_read_state_${reason}`;
+  return `${scope.authority === 'local' ? 'local' : 'cloud'}_activity_read_state_${reason}`;
 }
 
 function mergeAuthorityReadEntries(
@@ -322,7 +310,5 @@ function mergeAuthorityReadEntries(
 ): AuthorityReadEntry[] {
   const entries = new Map(current.map((entry) => [entry.entry_id, entry]));
   incoming.forEach((entry) => entries.set(entry.entry_id, entry));
-  return [...entries.values()].sort((left, right) =>
-    left.entry_id.localeCompare(right.entry_id),
-  );
+  return [...entries.values()].sort((left, right) => left.entry_id.localeCompare(right.entry_id));
 }

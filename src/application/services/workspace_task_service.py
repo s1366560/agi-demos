@@ -701,17 +701,17 @@ class WorkspaceTaskService:
     ) -> None:
         """Fire-and-forget friction ingestion for a lane transition.
 
-        No-op unless ``configure_friction_ingest`` has been called at
-        startup. Failures increment ``friction_ingest_failed_total`` but
-        never propagate — task status updates must not fail because the
-        friction ledger is unavailable.
+        The current operation's V2 generation owns the ingestion service.
+        Failures increment ``friction_ingest_failed_total`` but never
+        propagate — task status updates must not fail because Reflection is
+        unavailable.
         """
         try:
             from src.application.services.friction_runtime import (
                 record_lane_change,
             )
 
-            await record_lane_change(
+            _ = await record_lane_change(
                 project_id=project_id,
                 task_id=task_id,
                 from_lane=from_lane,

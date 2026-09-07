@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../../plugins/webOperationAdmissionV2';
 /**
  * Message sending actions extracted from agentV3.ts.
  *
@@ -63,9 +64,16 @@ async function syncConversationSelectedAgent(
     return;
   }
 
-  const updatedConversation = await agentService.updateConversationConfig(conversationId, projectId, {
-    selected_agent_id: selectedAgentId,
-  });
+  const owner = getWebOperationAvailabilityV2().owner;
+  const updatedConversation = await agentService.updateConversationConfig(
+    conversationId,
+    projectId,
+    {
+      selected_agent_id: selectedAgentId,
+    }
+  );
+  if (getWebOperationAvailabilityV2().owner !== owner)
+    throw new DOMException('Owner replaced', 'AbortError');
   useConversationsStore.getState().updateCurrentConversation(updatedConversation);
 }
 
@@ -90,6 +98,11 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
       projectId: string,
       additionalHandlers?: AdditionalAgentHandlers
     ): Promise<string | null> => {
+      const owner = getWebOperationAvailabilityV2().owner;
+      const stillOwned = () =>
+        getWebOperationAvailabilityV2().available &&
+        getWebOperationAvailabilityV2().owner === owner;
+      if (!stillOwned()) return null;
       const { activeConversationId, getStreamingConversationCount } = get();
       const messages = useTimelineStore.getState().agentMessages;
       const timeline = useTimelineStore.getState().agentTimeline;
@@ -113,7 +126,12 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
         try {
           const newConv = await useConversationsStore
             .getState()
-            .createConversation(projectId, content.slice(0, 30) + '...', additionalHandlers?.agentId);
+            .createConversation(
+              projectId,
+              content.slice(0, 30) + '...',
+              additionalHandlers?.agentId
+            );
+          if (!stillOwned()) return null;
           conversationId = newConv.id;
           isNewConversation = true;
           resetCanvasForConversationScope();
@@ -131,6 +149,7 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
             };
           });
         } catch (error) {
+          if (!stillOwned()) return null;
           const msg = error instanceof Error ? error.message : String(error);
           const createErr = `Failed to create conversation: ${msg}`;
           useStreamingStore.getState().setAgentError(createErr);
@@ -146,14 +165,22 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
             additionalHandlers?.agentId
           );
         } catch (error) {
+          if (!stillOwned()) return null;
           const msg = error instanceof Error ? error.message : String(error);
-          useStreamingStore
-            .getState()
-            .setAgentError(`Failed to update conversation agent: ${msg}`);
+          useStreamingStore.getState().setAgentError(`Failed to update conversation agent: ${msg}`);
           return null;
         }
       }
 
+      if (!stillOwned()) return null;
+      let operation;
+      try {
+        operation = await agentService.connectSession();
+        if (!stillOwned()) return null;
+        agentService.assertSession(operation);
+      } catch {
+        return null;
+      }
       const userMsgId = uuidv4();
       const userMsg: Message = {
         id: userMsgId,
@@ -226,6 +253,7 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
       });
 
       const streamHandlerDeps: StreamHandlerDeps = {
+        operation,
         get,
         set: set as StreamHandlerDeps['set'],
         getDeltaBuffer,
@@ -269,10 +297,13 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
               agent_id: additionalHandlers?.agentId,
               mentions: additionalHandlers?.mentions,
             },
-            handler
+            handler,
+            operation
           );
+          agentService.assertSession(operation);
           return conversationId;
         } catch {
+          if (!stillOwned() || operation.signal.aborted) return null;
           const { updateConversationState } = get();
           updateConversationState(handlerConversationId, {
             error: 'Failed to connect to chat stream',
@@ -302,10 +333,13 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
             agent_id: additionalHandlers?.agentId,
             mentions: additionalHandlers?.mentions,
           },
-          handler
+          handler,
+          operation
         );
+        agentService.assertSession(operation);
         return conversationId;
       } catch (_e) {
+        if (!stillOwned() || operation.signal.aborted) return null;
         const { updateConversationState } = get();
         updateConversationState(handlerConversationId, {
           error: 'Failed to connect to chat stream',

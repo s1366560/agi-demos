@@ -5,10 +5,23 @@ React-mode agent execution with streaming support.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
-from typing import Any
+from collections.abc import AsyncIterator, Sequence
+from typing import Any, Protocol
 
 from src.domain.model.agent import Conversation
+
+
+class ToolDefinitionView(Protocol):
+    """Model-visible fields needed by discovery projections."""
+
+    name: str
+    description: str
+
+
+class ModelVisibleToolSetView(Protocol):
+    """Infrastructure-neutral view of one immutable resolved ToolSet."""
+
+    definitions: Sequence[ToolDefinitionView]
 
 
 class AgentServicePort(ABC):
@@ -64,13 +77,20 @@ class AgentServicePort(ABC):
         """
 
     @abstractmethod
-    async def get_available_tools(self, project_id: str, tenant_id: str) -> list[dict[str, Any]]:
+    async def get_available_tools(
+        self,
+        project_id: str,
+        tenant_id: str,
+        *,
+        tool_set: ModelVisibleToolSetView,
+    ) -> list[dict[str, Any]]:
         """
         Get list of available tools for the agent.
 
         Args:
             project_id: The project ID
             tenant_id: The tenant ID
+            tool_set: Immutable ToolSet resolved by the pinned V2 operation
 
         Returns:
             List of tool definitions with name and description

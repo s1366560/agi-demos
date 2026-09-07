@@ -5,7 +5,9 @@
  * resource fetching, tool call proxying, and lifecycle operations.
  */
 
-import { httpClient } from './client/httpClient';
+import { httpClient, type HttpRequestConfig } from './client/httpClient';
+
+export type MCPAppRequestOptions = Pick<HttpRequestConfig, 'operation' | 'signal'>;
 
 import type {
   MCPApp,
@@ -20,13 +22,17 @@ const BASE_URL = '/mcp/apps';
 
 export const mcpAppAPI = {
   /** List MCP Apps, optionally filtered by project */
-  async list(projectId?: string, includeDisabled = false): Promise<MCPApp[]> {
+  async list(
+    projectId?: string,
+    includeDisabled = false,
+    options?: MCPAppRequestOptions
+  ): Promise<MCPApp[]> {
     const params = new URLSearchParams();
     if (projectId) params.set('project_id', projectId);
     if (includeDisabled) params.set('include_disabled', 'true');
 
     const qs = params.toString();
-    return await api.get<MCPApp[]>(`${BASE_URL}${qs ? `?${qs}` : ''}`);
+    return await api.get<MCPApp[]>(`${BASE_URL}${qs ? `?${qs}` : ''}`, options);
   },
 
   /** Get MCP App details */
@@ -42,15 +48,23 @@ export const mcpAppAPI = {
   /** Proxy a tool call from an MCP App iframe to its MCP server */
   async proxyToolCall(
     appId: string,
-    request: MCPAppToolCallRequest
+    request: MCPAppToolCallRequest,
+    options?: MCPAppRequestOptions
   ): Promise<MCPAppToolCallResponse> {
-    return await api.post<MCPAppToolCallResponse>(`${BASE_URL}/${appId}/tool-call`, request);
+    return await api.post<MCPAppToolCallResponse>(
+      `${BASE_URL}/${appId}/tool-call`,
+      request,
+      options
+    );
   },
 
   /** Direct tool-call proxy without requiring a DB app record.
    *  Used for auto-discovered MCP Apps (synthetic app_id). */
-  async proxyToolCallDirect(request: MCPAppDirectToolCallRequest): Promise<MCPAppToolCallResponse> {
-    return await api.post<MCPAppToolCallResponse>(`${BASE_URL}/proxy/tool-call`, request);
+  async proxyToolCallDirect(
+    request: MCPAppDirectToolCallRequest,
+    options?: MCPAppRequestOptions
+  ): Promise<MCPAppToolCallResponse> {
+    return await api.post<MCPAppToolCallResponse>(`${BASE_URL}/proxy/tool-call`, request, options);
   },
 
   /** Delete an MCP App */
@@ -67,19 +81,25 @@ export const mcpAppAPI = {
   async readResource(
     uri: string,
     projectId: string,
-    serverName?: string
+    serverName?: string,
+    options?: MCPAppRequestOptions
   ): Promise<{ contents: Array<{ uri: string; mimeType: string; text: string }> }> {
-    return await api.post(`${BASE_URL}/resources/read`, {
-      uri,
-      project_id: projectId,
-      server_name: serverName,
-    });
+    return await api.post(
+      `${BASE_URL}/resources/read`,
+      {
+        uri,
+        project_id: projectId,
+        server_name: serverName,
+      },
+      options
+    );
   },
 
   /** Proxy a resources/list request (standard MCP protocol) */
   async listResources(
     projectId: string,
-    serverName?: string
+    serverName?: string,
+    options?: MCPAppRequestOptions
   ): Promise<{
     resources: Array<{
       uri: string;
@@ -88,9 +108,13 @@ export const mcpAppAPI = {
       description?: string | undefined;
     }>;
   }> {
-    return await api.post(`${BASE_URL}/resources/list`, {
-      project_id: projectId,
-      server_name: serverName,
-    });
+    return await api.post(
+      `${BASE_URL}/resources/list`,
+      {
+        project_id: projectId,
+        server_name: serverName,
+      },
+      options
+    );
   },
 };

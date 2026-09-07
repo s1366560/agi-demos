@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, aclosing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast
@@ -17,6 +17,20 @@ from src.domain.events.types import AgentEventType
 from src.domain.model.agent import AgentExecutionEvent
 from src.domain.model.agent.conversation.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
+from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.scoped_boundary import pin_scoped_agent_turn_operation_v2
+from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeReservationV2
+from src.infrastructure.plugins.v2.workspace_runtime_repository_lease_v2 import (
+    RepositoryLeaseV2,
+    lease_workspace_runtime_repositories_v2,
+)
 from src.infrastructure.workspace_core.client import (
     WorkspaceRuntimeCorrelationRequest,
     WorkspaceRuntimeCorrelationResponse,
@@ -53,7 +67,7 @@ class _ConversationRepository(Protocol):
 
 
 class _AgentExecutionEventRepository(Protocol):
-    async def save_and_commit(self, event: AgentExecutionEvent) -> None: ...
+    async def save_and_commit(self, event: AgentExecutionEvent, /) -> None: ...
 
     async def get_events(
         self,
@@ -73,28 +87,6 @@ class _AgentExecutionEventRepository(Protocol):
         conversation_id: str,
         message_id: str,
     ) -> list[AgentExecutionEvent]: ...
-
-
-class _AgentService(Protocol):
-    def stream_chat_v2(  # noqa: PLR0913
-        self,
-        conversation_id: str,
-        user_message: str,
-        project_id: str,
-        user_id: str,
-        tenant_id: str,
-        preferred_language: str | None = None,
-        attachment_ids: list[str] | None = None,
-        file_metadata: list[dict[str, Any]] | None = None,
-        forced_skill_name: str | None = None,
-        app_model_context: dict[str, Any] | None = None,
-        image_attachments: list[str] | None = None,
-        agent_id: str | None = None,
-        mentions: list[str] | None = None,
-        api_auth_token: str | None = None,
-        execution_message_id: str | None = None,
-        canonical_run_id: str | None = None,
-    ) -> AsyncIterator[dict[str, Any]]: ...
 
 
 class _WorkspaceCoreRuntimeClient(Protocol):
@@ -119,21 +111,7 @@ class _WorkspaceCoreRuntimeClient(Protocol):
     ) -> WorkspaceRuntimeTerminalReadResponse: ...
 
 
-class _ScopedContainer(Protocol):
-    def conversation_repository(self) -> _ConversationRepository: ...
-
-    def agent_execution_event_repository(self) -> _AgentExecutionEventRepository: ...
-
-    def agent_service(self, llm: object) -> _AgentService: ...
-
-
-class _ApplicationContainer(Protocol):
-    def with_db(self, db: AsyncSession) -> _ScopedContainer: ...
-
-
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
-ContainerProvider = Callable[[], _ApplicationContainer | None]
-LlmFactory = Callable[[str], Awaitable[object]]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -183,6 +161,24 @@ class ProviderWorkspaceScope:
         return {key: value for key, value in values.items() if value is not None}
 
 
+class ProviderScopedAdmissionV2(Protocol):
+    async def authorize(self, db: AsyncSession, scope: ProviderWorkspaceScope) -> None: ...
+
+    async def acquire(
+        self, db: AsyncSession, scope: ProviderWorkspaceScope
+    ) -> ScopedRuntimeReservationV2: ...
+
+
+def _require_scoped_admission(
+    admission: ProviderScopedAdmissionV2 | None,
+) -> ProviderScopedAdmissionV2:
+    if admission is None:
+        raise RuntimeV2Error(
+            "scoped_runtime_missing", _("Provider scoped admission is unavailable")
+        )
+    return admission
+
+
 class MemStackAgentRuntimeProvider:
     """Bridge Provider calls into session-scoped MemStack runtime services."""
 
@@ -191,8 +187,8 @@ class MemStackAgentRuntimeProvider:
         *,
         workspace_core_client: _WorkspaceCoreRuntimeClient,
         session_factory: SessionFactory | None = None,
-        container_provider: ContainerProvider | None = None,
-        llm_factory: LlmFactory | None = None,
+        repository_lease: RepositoryLeaseV2 | None = None,
+        scoped_admission: ProviderScopedAdmissionV2 | None = None,
         terminal_persist_wait_seconds: float = _MAX_TERMINAL_PERSIST_WAIT_SECONDS,
     ) -> None:
         super().__init__()
@@ -200,9 +196,9 @@ class MemStackAgentRuntimeProvider:
             raise ValueError("terminal persistence wait must be positive")
         self._workspace_core_client = workspace_core_client
         self._session_factory = session_factory or _default_session_factory()
-        self._container_provider = container_provider or _default_container_provider
-        self._llm_factory = llm_factory or _default_llm_factory
+        self._repository_lease = repository_lease or lease_workspace_runtime_repositories_v2
         self._terminal_persist_wait_seconds = terminal_persist_wait_seconds
+        self._scoped_admission = scoped_admission
 
     async def stream_send(
         self,
@@ -214,118 +210,161 @@ class MemStackAgentRuntimeProvider:
             raise ValueError("chat.send requires a text message")
 
         async with self._session_factory() as db:
-            scoped = self._scoped_container(db)
-            conversation = await _ensure_send_conversation(
-                db,
-                scoped.conversation_repository(),
-                scope,
-                request.to_bot.provider_bot_ref,
-            )
-            event_repo = scoped.agent_execution_event_repository()
-            message_id = _provider_message_id(request.id)
-            correlation_id = _provider_correlation_id(request.id)
-            correlation = await self._workspace_core_client.record_runtime_correlation(
-                _runtime_correlation_request(
-                    request,
-                    scope=scope,
-                    correlation_id=correlation_id,
+            admission = _require_scoped_admission(self._scoped_admission)
+            await admission.authorize(db, scope)
+            async with self._repository_lease(
+                db=db,
+                tenant_id=scope.tenant_id,
+                project_id=scope.project_id,
+                conversation_id=scope.conversation_id,
+            ) as repositories:
+                conversation = await _ensure_send_conversation(
+                    db,
+                    repositories.conversation,
+                    scope,
+                    request.to_bot.provider_bot_ref,
                 )
-            )
-            if not correlation.created:
-                logger.info(
-                    "Handling duplicate Avernet Agent Runtime delivery",
-                    extra={
-                        "run_id": request.id,
-                        "correlation_id": correlation.correlation_id,
-                        "correlation_status": correlation.status,
-                        **scope.correlation,
-                    },
-                )
-                if correlation.status in {"completed", "failed", "aborted"}:
-                    terminal = await self._workspace_core_client.read_runtime_terminal(
-                        correlation.correlation_id,
-                        tenant_id=scope.tenant_id,
-                        project_id=scope.project_id,
-                        workspace_id=scope.workspace_id,
+                event_repo = repositories.execution_event
+                message_id = _provider_message_id(request.id)
+                correlation_id = _provider_correlation_id(request.id)
+                correlation = await self._workspace_core_client.record_runtime_correlation(
+                    _runtime_correlation_request(
+                        request,
+                        scope=scope,
+                        correlation_id=correlation_id,
                     )
-                    yield _replayed_terminal_event(terminal)
-                return
-            llm = await self._llm_factory(scope.tenant_id)
-            service = scoped.agent_service(llm)
-            app_model_context = await _workspace_model_context(
-                event_repo,
-                request=request,
-                scope=scope,
-            )
-            sequence = 0
-            terminal_seen = False
-
-            try:
-                async for raw_event in service.stream_chat_v2(
-                    conversation_id=conversation.id,
-                    user_message=message_text,
-                    project_id=scope.project_id,
-                    user_id=scope.user_id,
-                    tenant_id=scope.tenant_id,
-                    app_model_context=app_model_context,
-                    image_attachments=_provider_image_urls(request),
-                    agent_id=request.to_bot.provider_bot_ref or None,
-                    execution_message_id=message_id,
-                    canonical_run_id=request.id,
-                ):
-                    provider_event = _map_runtime_event(raw_event, sequence=sequence)
-                    if provider_event is None:
-                        continue
-                    sequence += 1
-                    if provider_event.state in {"final", "error"}:
-                        terminal_seen = await self._prepare_terminal_event(
-                            db,
-                            event_repo,
-                            provider_event=provider_event,
-                            correlation_id=correlation_id,
-                            scope=scope,
-                            request_id=request.id,
-                            conversation_id=conversation.id,
-                            message_id=message_id,
-                            timeout_seconds=min(
-                                self._terminal_persist_wait_seconds,
-                                request.timeout_ms / 1000,
-                            ),
+                )
+                if not correlation.created:
+                    logger.info(
+                        "Handling duplicate Avernet Agent Runtime delivery",
+                        extra={
+                            "run_id": request.id,
+                            "correlation_id": correlation.correlation_id,
+                            "correlation_status": correlation.status,
+                            **scope.correlation,
+                        },
+                    )
+                    if correlation.status in {"completed", "failed", "aborted"}:
+                        terminal = await self._workspace_core_client.read_runtime_terminal(
+                            correlation.correlation_id,
+                            tenant_id=scope.tenant_id,
+                            project_id=scope.project_id,
+                            workspace_id=scope.workspace_id,
                         )
-                        if not terminal_seen:
-                            return
-                    yield provider_event
-                    if terminal_seen:
-                        return
-            except Exception:
-                logger.exception(
-                    "MemStack Agent Runtime Provider send failed",
-                    extra={"run_id": request.id, **scope.correlation},
-                )
-                persisted_error = await _persist_provider_error(
+                        yield _replayed_terminal_event(terminal)
+                    return
+                app_model_context = await _workspace_model_context(
                     event_repo,
-                    conversation_id=conversation.id,
-                    message_id=message_id,
-                    request_id=request.id,
-                )
-                if persisted_error is None:
-                    return
-                provider_event = ProviderRuntimeEvent(
-                    state="error",
-                    sequence=sequence,
-                    error_message="Agent Runtime failed",
-                )
-                committed = await self._commit_runtime_terminal(
-                    correlation_id=correlation_id,
+                    request=request,
                     scope=scope,
-                    provider_event=provider_event,
-                    persisted_event=persisted_error,
-                    request_id=request.id,
                 )
-                if not committed:
-                    return
-                provider_event.persisted = True
-                yield provider_event
+                sequence = 0
+                terminal_seen = False
+                turn_stack = AsyncExitStack()
+
+                try:
+                    reservation = await admission.acquire(db, scope)
+                    _ = await turn_stack.enter_async_context(
+                        pin_scoped_agent_turn_operation_v2(
+                            reservation,
+                            operation_id=f"workspace-provider:{request.id}",
+                            tenant_id=scope.tenant_id,
+                            project_id=scope.project_id,
+                            session_id=conversation.id,
+                            services={
+                                OPERATION_DB_SESSION_SERVICE_V2: db,
+                                OPERATION_IDENTITY_SERVICE_V2: {
+                                    "tenant_id": scope.tenant_id,
+                                    "user_id": scope.user_id,
+                                    "project_id": scope.project_id,
+                                },
+                                OPERATION_METADATA_SERVICE_V2: {
+                                    "kind": "agent-turn",
+                                    "channel": "workspace-core-provider",
+                                    "conversation_id": conversation.id,
+                                    "run_id": request.id,
+                                    "message_id": message_id,
+                                    "workspace_id": scope.workspace_id,
+                                    "task_id": scope.task_id,
+                                    "plan_id": scope.plan_id,
+                                    "plan_node_id": scope.plan_node_id,
+                                },
+                            },
+                        )
+                    )
+                    service = await current_agent_turn_service_v2()
+                    agent_stream = cast(
+                        AsyncGenerator[dict[str, Any], None],
+                        service.stream_chat_v2(
+                            conversation_id=conversation.id,
+                            user_message=message_text,
+                            project_id=scope.project_id,
+                            user_id=scope.user_id,
+                            tenant_id=scope.tenant_id,
+                            app_model_context=app_model_context,
+                            image_attachments=_provider_image_urls(request),
+                            agent_id=request.to_bot.provider_bot_ref or None,
+                            execution_message_id=message_id,
+                            canonical_run_id=request.id,
+                        ),
+                    )
+                    events = await turn_stack.enter_async_context(aclosing(agent_stream))
+                    async for raw_event in events:
+                        provider_event = _map_runtime_event(raw_event, sequence=sequence)
+                        if provider_event is None:
+                            continue
+                        sequence += 1
+                        if provider_event.state in {"final", "error"}:
+                            terminal_seen = await self._prepare_terminal_event(
+                                db,
+                                event_repo,
+                                provider_event=provider_event,
+                                correlation_id=correlation_id,
+                                scope=scope,
+                                request_id=request.id,
+                                conversation_id=conversation.id,
+                                message_id=message_id,
+                                timeout_seconds=min(
+                                    self._terminal_persist_wait_seconds,
+                                    request.timeout_ms / 1000,
+                                ),
+                            )
+                            if not terminal_seen:
+                                return
+                        yield provider_event
+                        if terminal_seen:
+                            return
+                except Exception:
+                    logger.exception(
+                        "MemStack Agent Runtime Provider send failed",
+                        extra={"run_id": request.id, **scope.correlation},
+                    )
+                    persisted_error = await _persist_provider_error(
+                        event_repo,
+                        conversation_id=conversation.id,
+                        message_id=message_id,
+                        request_id=request.id,
+                    )
+                    if persisted_error is None:
+                        return
+                    provider_event = ProviderRuntimeEvent(
+                        state="error",
+                        sequence=sequence,
+                        error_message="Agent Runtime failed",
+                    )
+                    committed = await self._commit_runtime_terminal(
+                        correlation_id=correlation_id,
+                        scope=scope,
+                        provider_event=provider_event,
+                        persisted_event=persisted_error,
+                        request_id=request.id,
+                    )
+                    if not committed:
+                        return
+                    provider_event.persisted = True
+                    yield provider_event
+                finally:
+                    await turn_stack.aclose()
 
     async def inject(self, request: ProviderWebhookRequest) -> None:
         scope = ProviderWorkspaceScope.from_request(request)
@@ -333,46 +372,54 @@ class MemStackAgentRuntimeProvider:
         if not content:
             raise ValueError("chat.inject requires a text message")
         async with self._session_factory() as db:
-            scoped = self._scoped_container(db)
-            conversation, _ = await _authorized_conversation(
-                scoped.conversation_repository(),
-                scope,
-            )
-            event_repo = scoped.agent_execution_event_repository()
-            existing = await event_repo.get_events(
-                conversation_id=conversation.id,
-                event_types={_INJECTION_EVENT_TYPE},
-                limit=1000,
-            )
-            if any(event.event_data.get("delivery_request_id") == request.id for event in existing):
-                return
-            last_time_us, last_counter = await event_repo.get_last_event_time(conversation.id)
-            event_time_us, event_counter = EventTimeGenerator(
-                last_time_us,
-                last_counter,
-            ).next()
-            await event_repo.save_and_commit(
-                AgentExecutionEvent(
-                    id=_provider_event_id("inject", request.id),
-                    conversation_id=conversation.id,
-                    message_id=_provider_message_id(request.id),
-                    event_type=_INJECTION_EVENT_TYPE,
-                    event_data={
-                        "role": "system",
-                        "content": content,
-                        "source": "avernet_chat_inject",
-                        "delivery_request_id": request.id,
-                        "bcs_session_id": request.session_id,
-                        "bcs_group_id": request.bcn_group_id,
-                        "provider_id": request.to_bot.provider_id,
-                        "provider_bot_ref": request.to_bot.provider_bot_ref,
-                        "extensions": scope.correlation,
-                        "attachments": _safe_attachment_metadata(request),
-                    },
-                    event_time_us=event_time_us,
-                    event_counter=event_counter,
+            await _require_scoped_admission(self._scoped_admission).authorize(db, scope)
+            async with self._repository_lease(
+                db=db,
+                tenant_id=scope.tenant_id,
+                project_id=scope.project_id,
+                conversation_id=scope.conversation_id,
+            ) as repositories:
+                conversation, _ = await _authorized_conversation(
+                    repositories.conversation,
+                    scope,
                 )
-            )
+                event_repo = repositories.execution_event
+                existing = await event_repo.get_events(
+                    conversation_id=conversation.id,
+                    event_types={_INJECTION_EVENT_TYPE},
+                    limit=1000,
+                )
+                if any(
+                    event.event_data.get("delivery_request_id") == request.id for event in existing
+                ):
+                    return
+                last_time_us, last_counter = await event_repo.get_last_event_time(conversation.id)
+                event_time_us, event_counter = EventTimeGenerator(
+                    last_time_us,
+                    last_counter,
+                ).next()
+                await event_repo.save_and_commit(
+                    AgentExecutionEvent(
+                        id=_provider_event_id("inject", request.id),
+                        conversation_id=conversation.id,
+                        message_id=_provider_message_id(request.id),
+                        event_type=_INJECTION_EVENT_TYPE,
+                        event_data={
+                            "role": "system",
+                            "content": content,
+                            "source": "avernet_chat_inject",
+                            "delivery_request_id": request.id,
+                            "bcs_session_id": request.session_id,
+                            "bcs_group_id": request.bcn_group_id,
+                            "provider_id": request.to_bot.provider_id,
+                            "provider_bot_ref": request.to_bot.provider_bot_ref,
+                            "extensions": scope.correlation,
+                            "attachments": _safe_attachment_metadata(request),
+                        },
+                        event_time_us=event_time_us,
+                        event_counter=event_counter,
+                    )
+                )
 
     async def abort(self, request: ProviderWebhookRequest) -> ProviderAbortResult:
         from src.application.services.agent.runtime_cancellation import (
@@ -382,28 +429,34 @@ class MemStackAgentRuntimeProvider:
         scope = ProviderWorkspaceScope.from_request(request)
         terminal_event: ProviderRuntimeEvent | None = None
         async with self._session_factory() as db:
-            scoped = self._scoped_container(db)
-            conversation, _ = await _authorized_conversation(
-                scoped.conversation_repository(),
-                scope,
-            )
-            result = await cancel_conversation_runtime(conversation)
-            if (
-                result.ray_cancelled or result.local_worker_cancelled
-            ) and request.run_id is not None:
-                persisted_abort = await _persist_provider_abort(
-                    scoped.agent_execution_event_repository(),
-                    conversation_id=conversation.id,
-                    target_run_id=request.run_id,
-                    abort_request_id=request.id,
+            await _require_scoped_admission(self._scoped_admission).authorize(db, scope)
+            async with self._repository_lease(
+                db=db,
+                tenant_id=scope.tenant_id,
+                project_id=scope.project_id,
+                conversation_id=scope.conversation_id,
+            ) as repositories:
+                conversation, _ = await _authorized_conversation(
+                    repositories.conversation,
+                    scope,
                 )
-                if persisted_abort is not None:
-                    terminal_event = await self._commit_abort_terminal(
-                        correlation_id=_provider_correlation_id(request.run_id),
-                        scope=scope,
-                        persisted_event=persisted_abort,
+                result = await cancel_conversation_runtime(conversation)
+                if (
+                    result.ray_cancelled or result.local_worker_cancelled
+                ) and request.run_id is not None:
+                    persisted_abort = await _persist_provider_abort(
+                        repositories.execution_event,
+                        conversation_id=conversation.id,
                         target_run_id=request.run_id,
+                        abort_request_id=request.id,
                     )
+                    if persisted_abort is not None:
+                        terminal_event = await self._commit_abort_terminal(
+                            correlation_id=_provider_correlation_id(request.run_id),
+                            scope=scope,
+                            persisted_event=persisted_abort,
+                            target_run_id=request.run_id,
+                        )
         return ProviderAbortResult(
             ray_cancelled=result.ray_cancelled,
             local_worker_cancelled=result.local_worker_cancelled,
@@ -414,22 +467,28 @@ class MemStackAgentRuntimeProvider:
         scope = ProviderWorkspaceScope.from_request(request)
         limit = min(max(request.limit or _DEFAULT_HISTORY_LIMIT, 1), _MAX_HISTORY_LIMIT)
         async with self._session_factory() as db:
-            scoped = self._scoped_container(db)
-            conversation, _ = await _authorized_conversation(
-                scoped.conversation_repository(),
-                scope,
-            )
-            event_repo = scoped.agent_execution_event_repository()
-            before_time = request.before
-            if before_time is None and request.after is None:
-                before_time = (1 << 63) - 1
-            events = await event_repo.get_events(
-                conversation_id=conversation.id,
-                from_time_us=request.after or 0,
-                limit=limit + 1,
-                event_types=set(_MESSAGE_EVENT_TYPES),
-                before_time_us=before_time,
-            )
+            await _require_scoped_admission(self._scoped_admission).authorize(db, scope)
+            async with self._repository_lease(
+                db=db,
+                tenant_id=scope.tenant_id,
+                project_id=scope.project_id,
+                conversation_id=scope.conversation_id,
+            ) as repositories:
+                conversation, _ = await _authorized_conversation(
+                    repositories.conversation,
+                    scope,
+                )
+                event_repo = repositories.execution_event
+                before_time = request.before
+                if before_time is None and request.after is None:
+                    before_time = (1 << 63) - 1
+                events = await event_repo.get_events(
+                    conversation_id=conversation.id,
+                    from_time_us=request.after or 0,
+                    limit=limit + 1,
+                    event_types=set(_MESSAGE_EVENT_TYPES),
+                    before_time_us=before_time,
+                )
 
         has_more = len(events) > limit
         if has_more and before_time is not None:
@@ -443,12 +502,6 @@ class MemStackAgentRuntimeProvider:
             next_before=events[0].event_time_us if has_more and events else None,
             next_after=events[-1].event_time_us if has_more and events else None,
         )
-
-    def _scoped_container(self, db: AsyncSession) -> _ScopedContainer:
-        container = self._container_provider()
-        if container is None:
-            raise RuntimeError("MemStack application container is not initialized")
-        return container.with_db(db)
 
     async def _commit_abort_terminal(
         self,
@@ -1040,20 +1093,6 @@ def _default_session_factory() -> SessionFactory:
     )
 
     return cast("SessionFactory", async_session_factory)
-
-
-def _default_container_provider() -> _ApplicationContainer | None:
-    from src.infrastructure.adapters.primary.web.startup.container import (
-        get_app_container,
-    )
-
-    return cast("_ApplicationContainer | None", get_app_container())
-
-
-async def _default_llm_factory(tenant_id: str) -> object:
-    from src.configuration.factories import create_llm_client
-
-    return await create_llm_client(tenant_id)
 
 
 __all__ = ["MemStackAgentRuntimeProvider", "ProviderWorkspaceScope"]

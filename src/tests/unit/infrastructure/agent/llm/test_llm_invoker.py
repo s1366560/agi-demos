@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.infrastructure.agent import llm as llm_package
+from src.infrastructure.agent.llm import invoker as invoker_module
 from src.infrastructure.agent.llm.invoker import (
     InvocationConfig,
     InvocationContext,
@@ -24,9 +26,6 @@ from src.infrastructure.agent.llm.invoker import (
     InvokerState,
     LLMInvoker,
     TokenUsage,
-    create_llm_invoker,
-    get_llm_invoker,
-    set_llm_invoker,
 )
 
 # ============================================================================
@@ -516,49 +515,19 @@ class TestUsageEventHandling:
 
 
 # ============================================================================
-# Test Singleton Functions
+# Retired Process-Global Authority
 # ============================================================================
 
 
 @pytest.mark.unit
-class TestSingletonFunctions:
-    """Test singleton getter/setter functions."""
-
-    def test_get_without_init_raises(self):
-        """Test getting invoker without initialization raises."""
-        # Reset global
-        import src.infrastructure.agent.llm.invoker as module
-
-        module._invoker = None
-
-        with pytest.raises(RuntimeError, match="not initialized"):
-            get_llm_invoker()
-
-    def test_set_and_get(self, mock_retry_policy, mock_cost_tracker):
-        """Test setting and getting invoker."""
-        invoker = LLMInvoker(
-            retry_policy=mock_retry_policy,
-            cost_tracker=mock_cost_tracker,
-        )
-        set_llm_invoker(invoker)
-
-        result = get_llm_invoker()
-        assert result is invoker
-
-    def test_create_llm_invoker(self, mock_retry_policy, mock_cost_tracker):
-        """Test create_llm_invoker function."""
-        invoker = create_llm_invoker(
-            retry_policy=mock_retry_policy,
-            cost_tracker=mock_cost_tracker,
-            debug_logging=True,
-        )
-
-        assert isinstance(invoker, LLMInvoker)
-        assert invoker._debug_logging is True
-
-        # Should be retrievable
-        result = get_llm_invoker()
-        assert result is invoker
+@pytest.mark.parametrize(
+    "authority_name",
+    ("_invoker", "get_llm_invoker", "set_llm_invoker", "create_llm_invoker"),
+)
+def test_process_global_llm_invoker_authority_is_retired(authority_name: str) -> None:
+    assert not hasattr(invoker_module, authority_name)
+    if not authority_name.startswith("_"):
+        assert not hasattr(llm_package, authority_name)
 
 
 # ============================================================================

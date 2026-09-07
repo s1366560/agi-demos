@@ -55,7 +55,6 @@ _GUARDED_FILES: tuple[Path, ...] = (
 # is discoverable; not a current failure.
 _LEGACY_ROUTERS: tuple[Path, ...] = (
     _REPO_ROOT / "src/infrastructure/agent/routing/default_message_router.py",
-    _REPO_ROOT / "src/infrastructure/agent/routing/binding_router.py",
     _REPO_ROOT / "src/infrastructure/agent/routing/execution_router.py",
 )
 
@@ -68,9 +67,15 @@ _RUNTIME_GATE_FILES: tuple[Path, ...] = (
     _REPO_ROOT / "src/infrastructure/agent/core/react_agent.py",
     _REPO_ROOT / "src/infrastructure/agent/core/react_agent_routing_mixin.py",
     _REPO_ROOT / "src/infrastructure/agent/core/tool_selector.py",
+    _REPO_ROOT / "src/infrastructure/agent/plugins/selection_pipeline.py",
     _REPO_ROOT / "src/infrastructure/agent/routing/intent_gate.py",
     _REPO_ROOT / "src/infrastructure/llm/category_router.py",
     _REPO_ROOT / "src/infrastructure/adapters/secondary/persistence/sql_subagent_repository.py",
+)
+
+_RETIRED_AGENT_LOOP_FILES: tuple[Path, ...] = (
+    _REPO_ROOT / "src/infrastructure/agent/core/react_loop.py",
+    _REPO_ROOT / "src/domain/ports/agent/react_loop_port.py",
 )
 
 
@@ -105,6 +110,7 @@ _TEXT_GATE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("domain lane keyword table", re.compile(r"_DOMAIN_LANE_RULES")),
     ("intent gate runtime classify call", re.compile(r"_intent_gate\.classify\(")),
     ("previous attempt prose markers", re.compile(r"previous_reason|provider.*previous_attempt")),
+    ("implicit tool intent classifier", re.compile(r"_detect_intent\(")),
 )
 
 
@@ -167,6 +173,12 @@ def test_allowlist_is_non_empty_and_resolved() -> None:
     assert _GUARDED_FILES, "allow-list empty"
     missing = [p for p in (*_GUARDED_FILES, *_RUNTIME_GATE_FILES) if not p.exists()]
     assert not missing, f"missing guarded files: {missing}"
+
+
+def test_legacy_react_loop_files_are_retired() -> None:
+    """The V2 SessionProcessor authority must not regain a parallel loop implementation."""
+    remaining = [path for path in _RETIRED_AGENT_LOOP_FILES if path.exists()]
+    assert not remaining, f"retired Agent loop files returned: {remaining}"
 
 
 def test_legacy_routers_are_tracked() -> None:

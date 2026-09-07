@@ -77,13 +77,13 @@ class SubscribeSandboxHandler(WebSocketMessageHandler):
 
     async def _start_sandbox_bridge(self, context: MessageContext, project_id: str) -> None:
         """Start background task to bridge Redis sandbox events to WebSocket."""
-        container = context.get_scoped_container()
+        from src.infrastructure.plugins.v2.sandbox_projection import (
+            current_sandbox_application_services_v2,
+        )
 
-        # Get event publisher (which has Redis event bus access)
-        try:
-            event_publisher: SandboxEventPublisher | None = container.sandbox_event_publisher()
-        except Exception:
-            event_publisher = None
+        event_publisher: SandboxEventPublisher | None = (
+            current_sandbox_application_services_v2().event_publisher
+        )
 
         if not event_publisher or not event_publisher._event_bus:
             logger.warning(f"[WS] Sandbox event bus not available for project {project_id}")

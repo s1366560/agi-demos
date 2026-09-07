@@ -1,16 +1,18 @@
 """Goal evaluation for session processor.
 
 Extracted from processor.py -- evaluates whether the agent's current goal
-has been completed, using task state, LLM self-check, or assistant text
-heuristics.
+has been completed, using authoritative task state or a structured Agent
+judgment tool call.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
-import re
+import time
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -23,12 +25,16 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_WORKER,
     WORKSPACE_SESSION_ROLE_KEY,
 )
+from src.infrastructure.logging_redaction import redact_sensitive_log_text
 from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 if TYPE_CHECKING:
     from ..core.message import Message
 
 logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger("agent_decision_audit")
+
+GOAL_COMPLETION_JUDGE_TOOL_V2 = "submit_goal_completion_judgment_v2"
 
 
 class TaskStateUnavailableError(RuntimeError):
@@ -46,6 +52,27 @@ class GoalCheckResult:
     pending_tasks: int = 0
 
 
+@dataclass(frozen=True, kw_only=True)
+class GoalJudgmentAuditV2:
+    """Complete audit envelope for one structured goal-completion judgment."""
+
+    agent_id: str
+    tool_name: str
+    input_json: Mapping[str, Any]
+    output_json: Mapping[str, Any]
+    rationale: str
+    latency_ms: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class _GoalJudgmentV2:
+    achieved: bool
+    rationale: str
+
+
+type GoalJudgmentAuditSinkV2 = Callable[[GoalJudgmentAuditV2], None | Awaitable[None]]
+
+
 class GoalEvaluator:
     """Evaluates whether the agent's current goal is complete.
 
@@ -56,7 +83,7 @@ class GoalEvaluator:
     Parameters
     ----------
     llm_client:
-        Optional LLM client for explicit goal self-check calls.
+        Optional LLM client for structured goal-judgment calls.
     tools:
         The processor's live tools dict (name -> ToolDefinition).  Only
         ``todoread`` is accessed.
@@ -67,18 +94,20 @@ class GoalEvaluator:
         llm_client: Any | None,  # noqa: ANN401
         tools: dict[str, Any],
         runtime_context: dict[str, Any] | None = None,
+        audit_sink: GoalJudgmentAuditSinkV2 | None = None,
     ) -> None:
         self._llm_client = llm_client
         self._tools = tools
         self._current_message: Message | None = None
         self._runtime_context = dict(runtime_context or {})
+        self._audit_sink = audit_sink or _log_goal_judgment_audit
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def set_current_message(self, message: Message | None) -> None:
-        """Update the current assistant message for text-based evaluation."""
+        """Update the latest assistant evidence included in judgment context."""
         self._current_message = message
 
     def has_task_reader(self) -> bool:
@@ -379,7 +408,9 @@ class GoalEvaluator:
         return payload
 
     def _extract_tasks_from_todoread_result(
-        self, raw_result: Any, strict: bool  # noqa: ANN401
+        self,
+        raw_result: Any,  # noqa: ANN401
+        strict: bool,
     ) -> list[dict[str, Any]]:
         """Extract todo items from a todoread execution result."""
         if isinstance(raw_result, ToolResult) and raw_result.is_error:
@@ -420,9 +451,7 @@ class GoalEvaluator:
             )
         return self._normalize_todoread_tasks(tasks, strict)
 
-    def _normalize_todoread_tasks(
-        self, tasks: list[Any], strict: bool
-    ) -> list[dict[str, Any]]:
+    def _normalize_todoread_tasks(self, tasks: list[Any], strict: bool) -> list[dict[str, Any]]:
         """Normalize todo entries and fail closed on malformed strict payloads."""
         normalized: list[dict[str, Any]] = []
 
@@ -543,10 +572,7 @@ class GoalEvaluator:
             else:
                 counts["other"] += 1
         counts["remaining"] = (
-            counts["pending"]
-            + counts["in_progress"]
-            + counts["failed"]
-            + counts["other"]
+            counts["pending"] + counts["in_progress"] + counts["failed"] + counts["other"]
         )
         return counts
 
@@ -572,95 +598,120 @@ class GoalEvaluator:
         if not context_summary:
             return None
 
-        content = await self._call_goal_check_llm(context_summary)
-        if content is None:
+        judgment = await self._call_goal_check_llm(context_summary)
+        if judgment is None:
+            return None
+        if not judgment.achieved:
             return None
 
-        parsed = self._extract_goal_json(content)
-        if parsed is None:
-            parsed = self._extract_goal_from_plain_text(content)
-        if parsed is None:
-            logger.debug(
-                "[GoalEvaluator] Task reconciliation payload not parseable: %s",
-                content[:200],
-            )
-            return None
-
-        achieved = self._coerce_goal_achieved_bool(parsed.get("goal_achieved"))
-        if achieved is not True:
-            return None
-
-        reason = str(parsed.get("reason", "")).strip()
         return GoalCheckResult(
             achieved=True,
-            reason=reason or "Recent assistant evidence satisfies the goal despite stale tasks",
+            reason=judgment.rationale,
             source="llm_task_reconciliation",
         )
 
     async def _evaluate_llm_goal(self, messages: list[dict[str, Any]]) -> GoalCheckResult:
-        """Evaluate completion using explicit LLM self-check in no-task mode."""
-        fallback = self._evaluate_goal_from_latest_text()
+        """Evaluate completion through one required structured Agent tool call."""
         if self._llm_client is None:
-            return fallback
+            return self._goal_judge_unavailable_result()
 
         context_summary = self._build_goal_check_context(messages)
         if not context_summary:
-            return fallback
+            return self._goal_judge_unavailable_result()
 
-        content = await self._call_goal_check_llm(context_summary)
-        if content is None:
-            return fallback
-
-        parsed = self._extract_goal_json(content)
-        if parsed is None:
-            parsed = self._extract_goal_from_plain_text(content)
-        if parsed is None:
-            logger.debug(
-                "[GoalEvaluator] Goal self-check payload not parseable, using fallback: %s",
-                content[:200],
-            )
-            return fallback
-
-        achieved = self._coerce_goal_achieved_bool(parsed.get("goal_achieved"))
-        if achieved is None:
-            logger.debug("[GoalEvaluator] Goal self-check missing boolean goal_achieved")
-            return fallback
-
-        reason = str(parsed.get("reason", "")).strip()
+        judgment = await self._call_goal_check_llm(context_summary)
+        if judgment is None:
+            return self._goal_judge_unavailable_result()
         return GoalCheckResult(
-            achieved=achieved,
-            reason=reason or ("Goal achieved" if achieved else "Goal not achieved"),
+            achieved=judgment.achieved,
+            reason=judgment.rationale,
             source="llm_self_check",
         )
 
-    async def _call_goal_check_llm(self, context_summary: str) -> str | None:
-        """Call LLM for goal check and return content string, or None on failure."""
+    @staticmethod
+    def _goal_judge_unavailable_result() -> GoalCheckResult:
+        return GoalCheckResult(
+            achieved=False,
+            reason="Goal completion judge unavailable or invalid",
+            source="agent_judge",
+        )
+
+    async def _call_goal_check_llm(self, context_summary: str) -> _GoalJudgmentV2 | None:
+        """Require and audit one structured goal-completion judgment tool call."""
+        input_json = {"context_summary": context_summary}
+        started_at = time.perf_counter()
         try:
             response = await self._llm_client.generate(  # type: ignore[union-attr]
                 messages=[
                     {
                         "role": "system",
                         "content": (
-                            "You are a strict completion checker. "
-                            "Return ONLY JSON object: "
-                            '{"goal_achieved": boolean, "reason": string}. '
-                            "Use goal_achieved=true only when user objective is fully satisfied."
+                            "You are a strict completion judge. Call "
+                            f"{GOAL_COMPLETION_JUDGE_TOOL_V2} exactly once. "
+                            "Use goal_achieved=true only when the user objective is fully "
+                            "satisfied. Do not return a prose or JSON verdict outside the tool call."
                         ),
                     },
-                    {"role": "user", "content": context_summary},
+                    {
+                        "role": "user",
+                        "content": json.dumps(input_json, ensure_ascii=False, sort_keys=True),
+                    },
                 ],
+                tools=[_goal_completion_judgment_tool_v2()],
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": GOAL_COMPLETION_JUDGE_TOOL_V2},
+                },
                 temperature=0.0,
-                max_tokens=120,
+                max_tokens=192,
             )
         except Exception as exc:
-            logger.warning(f"[GoalEvaluator] LLM goal self-check failed: {exc}")
+            logger.warning(
+                "[GoalEvaluator] Structured goal judgment failed with %s",
+                type(exc).__name__,
+            )
             return None
+        if not isinstance(response, Mapping):
+            logger.warning("[GoalEvaluator] Structured goal judgment returned an invalid envelope")
+            return None
+        output_json = _extract_goal_judgment_tool_call_v2(response)
+        if output_json is None:
+            logger.warning(
+                "[GoalEvaluator] Structured goal judgment omitted the required tool call"
+            )
+            return None
+        if set(output_json) != {"goal_achieved", "rationale"}:
+            logger.warning("[GoalEvaluator] Structured goal judgment returned invalid arguments")
+            return None
+        achieved = output_json.get("goal_achieved")
+        rationale = output_json.get("rationale")
+        if (
+            not isinstance(achieved, bool)
+            or not isinstance(rationale, str)
+            or not rationale.strip()
+        ):
+            logger.warning("[GoalEvaluator] Structured goal judgment returned invalid arguments")
+            return None
+        normalized_output = {
+            "goal_achieved": achieved,
+            "rationale": rationale.strip(),
+        }
+        audit = GoalJudgmentAuditV2(
+            agent_id=self._goal_judge_agent_id(),
+            tool_name=GOAL_COMPLETION_JUDGE_TOOL_V2,
+            input_json=input_json,
+            output_json=normalized_output,
+            rationale=rationale.strip(),
+            latency_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
+        )
+        audit_result = self._audit_sink(audit)
+        if inspect.isawaitable(audit_result):
+            await audit_result
+        return _GoalJudgmentV2(achieved=achieved, rationale=rationale.strip())
 
-        if isinstance(response, dict):
-            return str(response.get("content", "") or "")
-        if isinstance(response, str):
-            return response
-        return str(response)
+    def _goal_judge_agent_id(self) -> str:
+        selected_agent_id = str(self._runtime_context.get("selected_agent_id", "")).strip()
+        return selected_agent_id or "agent:goal-completion-judge"
 
     def _build_pending_task_goal_check_context(
         self,
@@ -678,7 +729,9 @@ class GoalEvaluator:
                 continue
             task_id = str(task.get("id", "")).strip()
             content = str(task.get("content", "")).strip()
-            pending_examples.append(f"- id={task_id or '<missing>'} status={status} content={content[:160]}")
+            pending_examples.append(
+                f"- id={task_id or '<missing>'} status={status} content={content[:160]}"
+            )
             if len(pending_examples) >= 8:
                 break
 
@@ -699,52 +752,8 @@ class GoalEvaluator:
         ]
         return "\n".join(lines)
 
-    # ------------------------------------------------------------------
-    # Text-based fallback evaluation
-    # ------------------------------------------------------------------
-
-    def _evaluate_goal_from_latest_text(self) -> GoalCheckResult:
-        """Fallback goal check from latest assistant text."""
-        if not self._current_message:
-            return GoalCheckResult(
-                achieved=False,
-                reason="No assistant output available for goal check",
-                source="assistant_text",
-            )
-
-        full_text = self._current_message.get_full_text().strip()
-        if not full_text:
-            return GoalCheckResult(
-                achieved=False,
-                reason="Assistant output is empty",
-                source="assistant_text",
-            )
-
-        parsed = self._extract_goal_json(full_text)
-        if parsed and isinstance(parsed.get("goal_achieved"), bool):
-            achieved = bool(parsed["goal_achieved"])
-            reason = str(parsed.get("reason", "")).strip()
-            return GoalCheckResult(
-                achieved=achieved,
-                reason=reason or ("Goal achieved" if achieved else "Goal not achieved"),
-                source="assistant_text",
-            )
-
-        if self._has_explicit_completion_phrase(full_text):
-            return GoalCheckResult(
-                achieved=True,
-                reason="Assistant declared completion in final response",
-                source="assistant_text",
-            )
-
-        return GoalCheckResult(
-            achieved=False,
-            reason="No explicit goal_achieved signal in assistant response",
-            source="assistant_text",
-        )
-
     def _build_goal_check_context(self, messages: list[dict[str, Any]]) -> str:
-        """Build a compact context summary for goal self-check."""
+        """Build a compact context summary for the structured goal judge."""
         summary_lines: list[str] = []
         recent_messages = messages[-8:] if len(messages) > 8 else messages
         for msg in recent_messages:
@@ -772,143 +781,85 @@ class GoalEvaluator:
 
         return "\n".join(summary_lines)
 
-    # ------------------------------------------------------------------
-    # JSON / text parsing helpers
-    # ------------------------------------------------------------------
 
-    @staticmethod
-    def _coerce_goal_achieved_bool(value: Any) -> bool | None:  # noqa: ANN401
-        """Coerce a goal_achieved value to bool, or return None if not possible."""
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"true", "yes", "1"}:
-                return True
-            if lowered in {"false", "no", "0"}:
-                return False
+def _goal_completion_judgment_tool_v2() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+            "description": "Submit one auditable judgment of whether the user goal is complete.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal_achieved": {"type": "boolean"},
+                    "rationale": {"type": "string", "minLength": 1},
+                },
+                "required": ["goal_achieved", "rationale"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def _extract_goal_judgment_tool_call_v2(
+    response: Mapping[str, object],
+) -> dict[str, Any] | None:
+    tool_calls = _object_list(response.get("tool_calls"))
+    if not tool_calls:
+        choices = _object_list(response.get("choices"))
+        choice = _object_mapping(choices[0]) if choices else None
+        message = _object_mapping(choice.get("message")) if choice else None
+        tool_calls = _object_list(message.get("tool_calls")) if message else []
+    if len(tool_calls) != 1:
         return None
-
-    def _extract_goal_from_plain_text(self, text: str) -> dict[str, Any] | None:
-        """Parse non-JSON goal-check payloads from plain text."""
-        normalized = text.strip()
-        if not normalized:
-            return None
-        normalized = normalized[:2000]
-
-        bool_match = re.search(
-            r"\bgoal[_\s-]*achieved\b\s*[:=]\s*(true|false|yes|no|1|0)\b",
-            normalized,
-            flags=re.IGNORECASE,
-        )
-        if bool_match:
-            bool_token = bool_match.group(1).strip().lower()
-            achieved = bool_token in {"true", "yes", "1"}
-            reason_match = re.search(
-                r"\breason\b\s*[:=]\s*([^\n\r]{1,500})",
-                normalized,
-                flags=re.IGNORECASE,
-            )
-            reason = reason_match.group(1).strip() if reason_match else normalized[:200]
-            return {"goal_achieved": achieved, "reason": reason}
-
-        lowered = normalized.lower()
-        if "goal not achieved" in lowered or "goal is not achieved" in lowered:
-            return {"goal_achieved": False, "reason": normalized[:200]}
-        if ("goal achieved" in lowered or "goal is achieved" in lowered) and not re.search(
-            r"\b(not|still|remaining|in progress|incomplete|partial)\b",
-            lowered,
-        ):
-            return {"goal_achieved": True, "reason": normalized[:200]}
+    call = _object_mapping(tool_calls[0])
+    function = _object_mapping(call.get("function")) if call else None
+    if (
+        call is None
+        or call.get("type") != "function"
+        or function is None
+        or function.get("name") != GOAL_COMPLETION_JUDGE_TOOL_V2
+    ):
         return None
-
-    @staticmethod
-    def _find_json_object_end(text: str, start_idx: int) -> int | None:
-        """Find the end index (inclusive) of a balanced JSON object.
-
-        Scans from start_idx (which must be a '{') tracking brace depth
-        and string escaping. Returns the index of the closing '}' or None.
-        """
-        depth = 0
-        in_string = False
-        escape_next = False
-        for index in range(start_idx, len(text)):
-            char = text[index]
-
-            if in_string:
-                if escape_next:
-                    escape_next = False
-                elif char == "\\":
-                    escape_next = True
-                elif char == '"':
-                    in_string = False
-                continue
-
-            if char == '"':
-                in_string = True
-            elif char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    return index
-        return None
-
-    @staticmethod
-    def _try_parse_json_dict(text: str) -> dict[str, Any] | None:
-        """Try to parse text as a JSON dict. Returns dict or None."""
+    arguments = function.get("arguments")
+    mapping = _object_mapping(arguments)
+    if mapping is None and isinstance(arguments, str):
         try:
-            parsed = json.loads(text)
+            mapping = _object_mapping(json.loads(arguments))
         except json.JSONDecodeError:
-            return None
-        if isinstance(parsed, dict):
-            return parsed
+            mapping = None
+    if mapping is None:
         return None
+    return dict(mapping) or None
 
-    def _extract_goal_json(self, text: str) -> dict[str, Any] | None:
-        """Extract goal-check JSON object from model text."""
-        stripped = text.strip()
-        if not stripped:
-            return None
 
-        result = self._try_parse_json_dict(stripped)
-        if result is not None:
-            return result
+def _object_list(value: object) -> list[object]:
+    return list(value) if isinstance(value, list) else []
 
-        start_idx = stripped.find("{")
-        while start_idx >= 0:
-            end_idx = self._find_json_object_end(stripped, start_idx)
-            if end_idx is not None:
-                candidate = stripped[start_idx : end_idx + 1]
-                result = self._try_parse_json_dict(candidate)
-                if result is not None:
-                    return result
-            start_idx = stripped.find("{", start_idx + 1)
 
+def _object_mapping(value: object) -> Mapping[str, object] | None:
+    if not isinstance(value, dict):
         return None
+    if not all(isinstance(key, str) for key in value):
+        return None
+    return value
 
-    @staticmethod
-    def _has_explicit_completion_phrase(text: str) -> bool:
-        """Conservative completion phrase detection."""
-        lowered = text.strip().lower()
-        if not lowered:
-            return False
 
-        positive_patterns = (
-            r"\bgoal\s+achieved\b",
-            r"\btask\s+completed\b",
-            r"\ball\s+tasks?\s+(?:are\s+)?done\b",
-            r"\bwork\s+(?:is\s+)?complete\b",
-            r"\bsuccessfully\s+completed\b",
-        )
-        negative_patterns = (
-            r"\bnot\s+(?:yet\s+)?done\b",
-            r"\bnot\s+(?:yet\s+)?complete\b",
-            r"\bstill\s+working\b",
-            r"\bin\s+progress\b",
-            r"\bremaining\b",
-        )
+def _log_goal_judgment_audit(audit: GoalJudgmentAuditV2) -> None:
+    audit_logger.info(
+        "Goal completion judgment completed",
+        extra={
+            "agent_id": audit.agent_id,
+            "tool_name": audit.tool_name,
+            "input": _redacted_audit_json(audit.input_json),
+            "output": _redacted_audit_json(audit.output_json),
+            "rationale": redact_sensitive_log_text(audit.rationale),
+            "latency_ms": audit.latency_ms,
+        },
+    )
 
-        has_positive = any(re.search(pattern, lowered) for pattern in positive_patterns)
-        has_negative = any(re.search(pattern, lowered) for pattern in negative_patterns)
-        return has_positive and not has_negative
+
+def _redacted_audit_json(value: Mapping[str, Any]) -> str:
+    return redact_sensitive_log_text(
+        json.dumps(dict(value), ensure_ascii=False, sort_keys=True, default=str)
+    )

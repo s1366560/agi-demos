@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import {
+  createProjectSandboxSurfaceHttpClientV2Fixture as createSandboxRuntimeSurfaceClient,
+} from './projectSandboxSurfaceOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
-  createSandboxRuntimeSurfaceClient,
   parseSandboxRuntimeCapabilitySnapshot,
   remoteDesktopReconnectDelay,
 } = require(
@@ -141,6 +143,9 @@ test('runtime client loads capabilities before opening an iframe session', async
   const calls = [];
   globalThis.fetch = async (input, init) => {
     calls.push({ url: String(input), init });
+    if (String(input).includes('/projects/project%2F1?')) {
+      return Response.json({ id: 'project/1', tenant_id: 'default' });
+    }
     if (String(input).endsWith('/sandbox/capabilities')) {
       return Response.json(availableSnapshot);
     }
@@ -176,21 +181,25 @@ test('runtime client loads capabilities before opening an iframe session', async
       'protocol',
       'proxy_url',
     ]);
-    assert.equal(calls.length, 2);
-    assert.equal(
-      calls[0].url,
-      'https://api.memstack.test/root/api/v1/projects/project%2F1/sandbox/capabilities'
-    );
-    assert.equal(calls[0].init.credentials, 'include');
-    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer session-credential');
+    assert.equal(calls.length, 4);
+    assert.equal(calls[0].url,
+      'https://api.memstack.test/root/api/v1/projects/project%2F1?tenant_id=default');
+    assert.equal(calls[2].url, calls[0].url);
     assert.equal(
       calls[1].url,
+      'https://api.memstack.test/root/api/v1/projects/project%2F1/sandbox/capabilities'
+    );
+    assert.equal(calls[1].init.credentials, 'include');
+    assert.equal(calls[1].init.headers.get('Authorization'), 'Bearer session-credential');
+    assert.equal(
+      calls[3].url,
       'https://api.memstack.test/root/api/v1/projects/project%2F1/' +
         'sandbox/desktop/session?resolution=1920x1080'
     );
-    assert.equal(calls[1].init.method, 'POST');
-    assert.equal(calls[1].init.credentials, 'include');
-    assert.doesNotMatch(calls[1].url, /token|password|credential/iu);
+    assert.equal(calls[3].init.method, 'POST');
+    assert.equal(calls[3].init.credentials, 'include');
+    assert.doesNotMatch(calls[3].url, /token|password|credential/iu);
+    await opened.value.release();
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -241,10 +250,14 @@ test('runtime client rejects untrusted frame origins', async () => {
       auth_mode: 'scoped_http_only_cookie',
     },
   ];
-  globalThis.fetch = async () => Response.json(responses.shift());
+  globalThis.fetch = async (input) => String(input).includes('/projects/project-1?')
+    ? Response.json({ id: 'project-1', tenant_id: 'default' })
+    : Response.json(responses.shift());
   const client = createSandboxRuntimeSurfaceClient({
     ...DEFAULT_CONFIG,
     apiBaseUrl: 'https://api.memstack.test',
+    apiKey: 'session-credential',
+    mode: 'cloud',
     projectId: 'project-1',
   });
 
@@ -252,7 +265,7 @@ test('runtime client rejects untrusted frame origins', async () => {
     const snapshot = await client.loadCapabilities();
     await assert.rejects(
       client.openRemoteDesktop(snapshot, { resolution: '1920x1080' }),
-      /sandbox remote desktop descriptor is invalid/
+      /sandbox_remote_desktop_descriptor_invalid/
     );
   } finally {
     globalThis.fetch = originalFetch;

@@ -1,7 +1,7 @@
 """Tests for MCP tool route hardening."""
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException
@@ -9,9 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.mcp.server import MCPServer, MCPServerConfig
 from src.domain.model.mcp.transport import TransportType
+from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
+    MCPApplicationAuthorityV2,
+)
 from src.infrastructure.adapters.primary.web.routers.mcp import tools as tools_router
 from src.infrastructure.adapters.primary.web.routers.mcp.schemas import MCPToolCallRequest
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.plugins.v2.mcp_services import SqlMCPProjectAccessV2
 
 
 class EnabledServerRepository:
@@ -52,17 +56,8 @@ class UnconfiguredServerRepository:
         return server
 
 
-class FailingMCPClient:
-    def __init__(self, **_kwargs: object) -> None:
-        pass
-
-    async def __aenter__(self) -> "FailingMCPClient":
-        return self
-
-    async def __aexit__(self, *_args: object) -> None:
-        pass
-
-    async def call_tool(self, **_kwargs: object) -> object:
+class FailingDirectToolCaller:
+    async def call(self, **_kwargs: object) -> object:
         raise RuntimeError("internal mcp token secret")
 
 
@@ -70,20 +65,35 @@ async def _allow_project_access(*_args: object, **_kwargs: object) -> None:
     return None
 
 
+def _authority(
+    repository: object,
+    *,
+    direct_tool_caller: object | None = None,
+    db: object | None = None,
+    tenant_id: str = "tenant-1",
+    user_id: str = "user-1",
+    access: object | None = None,
+) -> MCPApplicationAuthorityV2:
+    return cast(
+        MCPApplicationAuthorityV2,
+        SimpleNamespace(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            services=SimpleNamespace(
+                server_repository=repository,
+                direct_tool_caller=direct_tool_caller or FailingDirectToolCaller(),
+                access=access,
+            ),
+        ),
+    )
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_call_mcp_tool_sanitizes_client_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
-    import src.infrastructure.agent.mcp.client as client_module
-
-    monkeypatch.setattr(
-        repo_module,
-        "SqlMCPServerRepository",
-        lambda _db: EnabledServerRepository(),
-    )
-    monkeypatch.setattr(client_module, "MCPClient", FailingMCPClient)
     monkeypatch.setattr(tools_router, "ensure_project_access", _allow_project_access)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -93,9 +103,7 @@ async def test_call_mcp_tool_sanitizes_client_errors(
                 tool_name="tool-1",
                 arguments={},
             ),
-            db=SimpleNamespace(),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(EnabledServerRepository()),
         )
 
     assert exc_info.value.status_code == 400
@@ -108,13 +116,6 @@ async def test_call_mcp_tool_sanitizes_client_errors(
 async def test_call_mcp_tool_fails_closed_for_idempotency_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
-
-    monkeypatch.setattr(
-        repo_module,
-        "SqlMCPServerRepository",
-        lambda _db: EnabledServerRepository(),
-    )
     monkeypatch.setattr(tools_router, "ensure_project_access", _allow_project_access)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -125,9 +126,7 @@ async def test_call_mcp_tool_fails_closed_for_idempotency_key(
                 arguments={},
                 idempotency_key="desktop-mcp-tool-call:server-id-1",
             ),
-            db=SimpleNamespace(),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(EnabledServerRepository()),
         )
 
     assert exc_info.value.status_code == 409
@@ -150,9 +149,6 @@ async def test_call_mcp_tool_sanitizes_server_lookup_errors(
     expected_status: int,
     expected_detail: str,
 ) -> None:
-    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
-
-    monkeypatch.setattr(repo_module, "SqlMCPServerRepository", lambda _db: repo)
     monkeypatch.setattr(tools_router, "ensure_project_access", _allow_project_access)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -162,9 +158,7 @@ async def test_call_mcp_tool_sanitizes_server_lookup_errors(
                 tool_name="tool-1",
                 arguments={},
             ),
-            db=SimpleNamespace(),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(repo),
         )
 
     assert exc_info.value.status_code == expected_status
@@ -180,8 +174,6 @@ async def test_call_mcp_tool_rejects_same_tenant_project_non_member(
     test_project_db: Project,
     another_user: User,
 ) -> None:
-    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
-
     class ProjectServerRepository:
         async def get_by_id(self, _server_id: str) -> MCPServer:
             return MCPServer(
@@ -198,10 +190,6 @@ async def test_call_mcp_tool_rejects_same_tenant_project_non_member(
                 ),
             )
 
-    monkeypatch.setattr(
-        repo_module, "SqlMCPServerRepository", lambda _db: ProjectServerRepository()
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await tools_router.call_mcp_tool(
             request_data=MCPToolCallRequest(
@@ -209,9 +197,13 @@ async def test_call_mcp_tool_rejects_same_tenant_project_non_member(
                 tool_name="tool-1",
                 arguments={},
             ),
-            db=test_db,
-            tenant_id=test_project_db.tenant_id,
-            current_user=another_user,
+            authority=_authority(
+                ProjectServerRepository(),
+                db=test_db,
+                tenant_id=test_project_db.tenant_id,
+                user_id=another_user.id,
+                access=SqlMCPProjectAccessV2(_session=test_db),
+            ),
         )
 
     assert exc_info.value.status_code == 403
@@ -225,14 +217,9 @@ async def test_list_all_mcp_tools_uses_authorized_project_tenant(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
-
     calls: list[dict[str, Any]] = []
 
     class ProjectServerRepository:
-        def __init__(self, _db: object) -> None:
-            pass
-
         async def get_enabled_servers(
             self, tenant_id: str, project_id: str | None = None
         ) -> list[SimpleNamespace]:
@@ -252,15 +239,17 @@ async def test_list_all_mcp_tools_uses_authorized_project_tenant(
                 )
             ]
 
-    monkeypatch.setattr(repo_module, "SqlMCPServerRepository", ProjectServerRepository)
-
     response = await tools_router.list_all_mcp_tools(
         project_id=test_project_db.id,
         page=1,
         per_page=50,
-        db=test_db,
-        tenant_id="fallback-tenant",
-        current_user=test_user,
+        authority=_authority(
+            ProjectServerRepository(),
+            db=test_db,
+            tenant_id=test_project_db.tenant_id,
+            user_id=test_user.id,
+            access=SqlMCPProjectAccessV2(_session=test_db),
+        ),
     )
 
     assert response.total == 1

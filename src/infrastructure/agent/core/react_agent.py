@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -34,11 +34,9 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
-from src.infrastructure.plugins.agent_events import create_agent_plugin_event_dispatcher
+from src.infrastructure.plugins.v2.agent_commands import PinnedCommandInterceptorV2
+from src.infrastructure.plugins.v2.boundary import fork_current_agent_operation_v2
 
-from ..commands.builtins import register_builtin_commands
-from ..commands.interceptor import CommandInterceptor
-from ..commands.registry import CommandRegistry
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
 from ..events.converter import normalize_event_dict
@@ -46,7 +44,6 @@ from ..heartbeat.config import HeartbeatConfig
 from ..heartbeat.runner import HeartbeatRunner
 from ..permission import PermissionManager
 from ..planning.plan_detector import PlanDetector
-from ..plugins.registry import get_plugin_registry
 from ..plugins.selection_pipeline import (
     ToolSelectionContext,
     ToolSelectionTraceStep,
@@ -55,11 +52,13 @@ from ..routing import (
     IntentGate,
 )
 from ..sisyphus.prompt_builder import SisyphusPromptBuilder
+from .detached_subagent_task_supervisor import DetachedSubAgentTaskSupervisor
 from .processor import (
     ProcessorConfig,
     ProcessorFactory,
     ToolDefinition,
 )
+from .subagent_registry_authority import current_agent_subagent_run_registry_v2
 from .subagent_router import SubAgentMatch
 from .subagent_runner import SubAgentRunnerDeps, SubAgentSessionRunner
 from .subagent_tools import SubAgentToolBuilder, SubAgentToolBuilderDeps
@@ -179,9 +178,8 @@ class ReActAgent(
     _subagent_lifecycle_hook_failures: list[int]
     # _init_subagent_router
     subagent_router: Any
-    # _init_subagent_run_registry
-    _subagent_run_registry: Any
-    _subagent_session_tasks: dict[str, asyncio.Task[Any]]
+    _detached_subagent_task_supervisor: DetachedSubAgentTaskSupervisor
+    _subagent_session_tasks: Mapping[str, asyncio.Task[Any]]
     # _init_orchestrators
     _event_converter: EventConverter
     # _init_background_services
@@ -205,7 +203,7 @@ class ReActAgent(
     # _intent_gate
     _intent_gate: IntentGate
 
-    def __init__(  # noqa: PLR0913, PLR0915
+    def __init__(  # noqa: PLR0913
         self,
         model: str,
         tools: dict[str, Any] | None = None,  # Tool name -> Tool instance (static)
@@ -231,16 +229,11 @@ class ReActAgent(
         max_subagent_children_per_requester: int = 8,
         max_subagent_active_runs_per_lineage: int = 8,
         max_subagent_lane_concurrency: int = 8,
-        subagent_run_registry_path: str | None = None,
-        subagent_run_postgres_dsn: str | None = None,
-        subagent_run_sqlite_path: str | None = None,
-        subagent_run_redis_cache_url: str | None = None,
-        subagent_run_redis_cache_ttl_seconds: int = 60,
-        subagent_terminal_retention_seconds: int = 86400,
         subagent_announce_max_events: int = 20,
         subagent_announce_max_retries: int = 2,
         subagent_announce_retry_delay_ms: int = 200,
         subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None = None,
+        detached_subagent_task_supervisor: DetachedSubAgentTaskSupervisor | None = None,
         # Context window management
         context_window_config: ContextWindowConfig | None = None,
         max_context_tokens: int = 128000,
@@ -252,8 +245,7 @@ class ReActAgent(
         artifact_service: ArtifactService | None = None,
         # LLM client for unified resilience (circuit breaker + rate limiter)
         llm_client: LLMClient | None = None,
-        # Provider id for the per-turn agent loop seam (P2/I2); empty disables
-        # resolution and keeps the builtin ReAct loop.
+        # Provider id for the required per-turn v2 agent-loop resolution.
         provider_id: str = "",
         # Skill resource sync service for sandbox resource injection
         resource_sync_service: Any | None = None,
@@ -284,7 +276,7 @@ class ReActAgent(
         session_factory: Any = None,
         tool_selection_pipeline: Any | None = None,
         tool_selection_max_tools: int = 40,
-        tool_selection_semantic_backend: str = "embedding_vector",
+        tool_selection_semantic_backend: str = "agent_decision",
         router_mode_tool_count_threshold: int = 100,
         tool_policy_layers: Mapping[str, Any] | None = None,
         span_service: Any | None = None,
@@ -319,16 +311,11 @@ class ReActAgent(
             max_subagent_active_runs: Maximum active subagent runs per conversation.
             max_subagent_children_per_requester: Maximum active child runs per requester key.
             max_subagent_lane_concurrency: Maximum concurrent detached SubAgent sessions.
-            subagent_run_registry_path: Optional persistence path for SubAgent run registry.
-            subagent_run_postgres_dsn: Optional PostgreSQL DSN for DB-backed run repository.
-            subagent_run_sqlite_path: Optional SQLite path for DB-backed run repository.
-            subagent_run_redis_cache_url: Optional Redis URL for run snapshot cache.
-            subagent_run_redis_cache_ttl_seconds: TTL for run snapshot cache.
-            subagent_terminal_retention_seconds: Terminal run retention TTL in seconds.
             subagent_announce_max_events: Max retained announce events in run metadata.
             subagent_announce_max_retries: Max retries for completion announce metadata updates.
             subagent_announce_retry_delay_ms: Base retry delay in milliseconds.
             subagent_lifecycle_hook: Optional callback for detached subagent lifecycle events.
+            detached_subagent_task_supervisor: Project-lifetime owner for detached run tasks.
             context_window_config: Optional context window configuration
             max_context_tokens: Maximum context tokens (default: 128000)
             agent_mode: Agent mode for skill filtering (default: "default")
@@ -365,7 +352,7 @@ class ReActAgent(
         self.project_root = project_root or DEFAULT_SANDBOX_WORKSPACE
         self.artifact_service = artifact_service  # Artifact service for rich outputs
         self._llm_client = llm_client  # LLM client for unified resilience
-        self._provider_id = provider_id  # Per-turn agent loop seam (P2/I2)
+        self._provider_id = provider_id
         self._resource_sync_service = resource_sync_service  # Skill resource sync
         self._graph_service = graph_service  # Graph service for SubAgent memory sharing
         self._workspace_manager = workspace_manager  # Workspace persona/soul file loader
@@ -378,6 +365,9 @@ class ReActAgent(
             )
         self._plan_detector = plan_detector or PlanDetector()
         self._intent_gate = IntentGate()
+        self._detached_subagent_task_supervisor = (
+            detached_subagent_task_supervisor or DetachedSubAgentTaskSupervisor()
+        )
 
         self._init_tool_pipeline(
             tool_selection_pipeline,
@@ -425,12 +415,6 @@ class ReActAgent(
             subagent_announce_max_retries,
             subagent_announce_retry_delay_ms,
             subagent_lifecycle_hook,
-            subagent_run_registry_path,
-            subagent_run_postgres_dsn,
-            subagent_run_sqlite_path,
-            subagent_run_redis_cache_url,
-            subagent_run_redis_cache_ttl_seconds,
-            subagent_terminal_retention_seconds,
             span_service=span_service,
             fork_merge_service=fork_merge_service,
         )
@@ -450,22 +434,16 @@ class ReActAgent(
         )
         self._reset_stream_state()
 
-        # -- Create CommandRegistry and interceptor for slash commands --
-        command_registry = CommandRegistry()
-        register_builtin_commands(command_registry)
-        command_interceptor = CommandInterceptor(command_registry)
-
         # -- Create ProcessorFactory for shared processor creation --
         self._processor_factory = ProcessorFactory(
             llm_client=self._llm_client,
             permission_manager=self.permission_manager,
             artifact_service=self.artifact_service,
-            command_interceptor=command_interceptor,
+            command_interceptor=PinnedCommandInterceptorV2(),
             base_model=self.model,
+            base_provider_id=self._provider_id,
             base_api_key=self.api_key,
             base_url=self.base_url,
-            plugin_registry=get_plugin_registry(),
-            plugin_event_dispatcher=create_agent_plugin_event_dispatcher(get_plugin_registry()),
             message_bus=message_bus,
             control_channel=control_channel,
         )
@@ -479,16 +457,17 @@ class ReActAgent(
                 artifact_service=self.artifact_service,
                 background_executor=self._background_executor,
                 result_aggregator=self._result_aggregator,
-                subagent_run_registry=self._subagent_run_registry,
+                operation_reserver=fork_current_agent_operation_v2,
+                session_factory=self._session_factory,
+                subagent_run_registry_resolver=current_agent_subagent_run_registry_v2,
                 subagent_lane_semaphore=self._subagent_lane_semaphore,
                 subagent_lifecycle_hook=self._subagent_lifecycle_hook,
                 subagent_lifecycle_hook_failures=self._subagent_lifecycle_hook_failures,
-                subagent_session_tasks=self._subagent_session_tasks,
+                detached_subagent_task_supervisor=self._detached_subagent_task_supervisor,
                 model=self.model,
                 api_key=self.api_key,
                 base_url=self.base_url,
                 config=self.config,
-                subagents=self.subagents,
                 max_subagent_delegation_depth=self._max_subagent_delegation_depth,
                 max_subagent_active_runs=self._max_subagent_active_runs,
                 max_subagent_active_runs_per_lineage=(self._max_subagent_active_runs_per_lineage),
@@ -502,8 +481,7 @@ class ReActAgent(
         )
         self._tool_builder = SubAgentToolBuilder(
             SubAgentToolBuilderDeps(
-                subagent_run_registry=self._subagent_run_registry,
-                subagents=self.subagents,
+                subagent_run_registry_resolver=current_agent_subagent_run_registry_v2,
                 enable_subagent_as_tool=self._enable_subagent_as_tool,
                 max_subagent_delegation_depth=(self._max_subagent_delegation_depth),
                 max_subagent_active_runs=self._max_subagent_active_runs,
@@ -514,11 +492,9 @@ class ReActAgent(
         )
 
         # Cross-wire callbacks (after both objects exist)
-        self._session_runner.deps.get_current_tools_fn = self._get_current_tools
         self._session_runner.deps.filter_tools_fn = self._subagent_filter_tools
         self._session_runner.deps.inject_nested_tools_fn = self._subagent_inject_nested_tools
 
-        self._tool_builder.deps.get_current_tools_fn = self._get_current_tools
         self._tool_builder.deps.get_observability_stats_fn = self._get_subagent_observability_stats
         self._tool_builder.deps.execute_subagent_fn = self._execute_subagent
         self._tool_builder.deps.launch_session_fn = self._launch_subagent_session
@@ -617,11 +593,15 @@ class ReActAgent(
             return self._workspace_manager.for_agent(scoped_agent_id)
         return self._workspace_manager
 
-    def _filter_skills_for_agent(self, selected_agent: Agent | None) -> list[Skill]:
+    def _filter_skills_for_agent(
+        self,
+        selected_agent: Agent | None,
+        *,
+        available_skills: Sequence[Skill],
+    ) -> list[Skill]:
         """Filter skills using the selected agent's allowlist."""
-        available_skills = list(self.skills or [])
         if selected_agent is None or not selected_agent.allowed_skills:
-            return available_skills
+            return list(available_skills)
         allowed_skill_names = {
             skill_name.strip().lower() for skill_name in selected_agent.allowed_skills
         }
@@ -667,26 +647,22 @@ class ReActAgent(
         self,
         *,
         processor: Any,
+        tenant_id: str,
         project_id: str,
         workspace_task: Any | None,
     ) -> None:
         """Build and inject lane JIT guidance for a workspace-scoped session.
 
-        Sources the friction ledger from the process-level singleton wired
-        by :func:`configure_friction_ingest` at app startup, and a
-        SQL-backed playbook repository scoped to a fresh DB session.
+        The exact pinned V2 generation supplies the friction ledger, SQL
+        session boundary, and playbook implementation.
 
         No-op when:
         - no workspace task is bound to the session,
-        - no DB session factory or friction ledger is available,
         - the task's current status has no registered :class:`LaneContract`,
         - any composition step raises (logged + swallowed; this hook must
-          never break the agent loop).
+        never break the agent loop).
         """
         if workspace_task is None:
-            return
-        session_factory = self._session_factory
-        if session_factory is None:
             return
 
         task_status = getattr(workspace_task, "status", None)
@@ -697,42 +673,23 @@ class ReActAgent(
             return
 
         try:
-            from src.application.services.friction_runtime import (
-                get_friction_ledger,
-            )
             from src.application.services.lane_experience_runtime import (
                 inject_lane_jit_context,
             )
-            from src.application.services.lane_experience_service import (
-                LaneExperienceService,
+            from src.infrastructure.plugins.v2.reflection_runtime import (
+                current_reflection_runtime_v2,
             )
-            from src.domain.model.lane_contract import LaneContractRegistry
-            from src.infrastructure.adapters.secondary.persistence.sql_playbook_repository import (
-                SqlPlaybookRepository,
-            )
-
-            ledger = get_friction_ledger()
-            if ledger is None:
-                return
-
-            registry = LaneContractRegistry.default()
-            contract = registry.get(lane_id)
-            if contract is None:
-                return
 
             card_body = getattr(workspace_task, "description", None) or ""
-
-            async with session_factory() as session:
-                service = LaneExperienceService(
-                    friction_ledger=ledger,
-                    playbook_repository=SqlPlaybookRepository(session),
-                )
-                ctx = await service.build(
-                    project_id=project_id,
-                    lane_contract=contract,
-                    card_body=card_body,
-                )
-            await inject_lane_jit_context(processor, ctx)
+            ctx = await current_reflection_runtime_v2().build_lane_jit_context(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                lane_id=lane_id,
+                card_body=card_body,
+            )
+            if ctx is None:
+                return
+            _ = await inject_lane_jit_context(processor, ctx)
         except Exception:
             logger.warning(
                 "lane_jit_guidance injection failed (project=%s, task=%s)",

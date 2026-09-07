@@ -497,7 +497,9 @@ class ToolExecutor:
         if "_error" in arguments and arguments.get("_error") == "truncated":
             error_msg = self._build_truncation_error_message(
                 tool_name,
-                arguments.get("_message", "Tool arguments were truncated. The content may be too large."),
+                arguments.get(
+                    "_message", "Tool arguments were truncated. The content may be too large."
+                ),
             )
             return arguments, error_msg
 
@@ -710,31 +712,16 @@ class ToolExecutor:
                 )
             return
 
-        # Import artifact extractor
-        from src.infrastructure.agent.artifact.extractor import (
-            ExtractionContext,
-            get_artifact_extractor,
-        )
+        from src.infrastructure.agent.artifact.extractor import ArtifactExtractor
 
-        extractor = get_artifact_extractor()
-        extraction_context = ExtractionContext(
-            project_id=context.project_id,
-            tenant_id=context.tenant_id,
-            conversation_id=context.conversation_id,
-        )
-
-        async for artifact in extractor.process(
-            tool_name=tool_name,
-            result=result,
-            context=extraction_context,
-            tool_execution_id=tool_execution_id,
-        ):
+        extraction = ArtifactExtractor().extract_only(result, tool_name)
+        for artifact in extraction.artifacts:
             try:
                 # Upload artifact
                 upload_result = await self._artifact_service.upload_artifact(
-                    content=artifact.content,  # type: ignore[attr-defined]
+                    content=artifact.content,
                     filename=artifact.filename or f"artifact_{uuid.uuid4().hex[:8]}",
-                    content_type=artifact.content_type,  # type: ignore[attr-defined]
+                    content_type=artifact.mime_type,
                     project_id=context.project_id,
                     tenant_id=context.tenant_id,
                     metadata={
@@ -748,9 +735,9 @@ class ToolExecutor:
                 yield AgentArtifactCreatedEvent(
                     artifact_id=upload_result.get("artifact_id", ""),
                     filename=artifact.filename,
-                    mime_type=artifact.content_type,  # type: ignore[attr-defined]
+                    mime_type=artifact.mime_type,
                     category=artifact.category,
-                    size_bytes=artifact.size_bytes if hasattr(artifact, "size_bytes") else 0,
+                    size_bytes=artifact.size_bytes,
                     url=upload_result.get("url", ""),
                     source_tool=tool_name,
                     tool_execution_id=tool_execution_id,
@@ -758,59 +745,3 @@ class ToolExecutor:
 
             except Exception as e:
                 logger.error(f"Failed to upload artifact: {e}", exc_info=True)
-
-
-# ============================================================================
-# Singleton Management
-# ============================================================================
-
-_executor: ToolExecutor | None = None
-
-
-def get_tool_executor() -> ToolExecutor:
-    """
-    Get singleton ToolExecutor instance.
-
-    Raises:
-        RuntimeError if executor not initialized
-    """
-    global _executor
-    if _executor is None:
-        raise RuntimeError(
-            "ToolExecutor not initialized. Call set_tool_executor() or create_tool_executor() first."
-        )
-    return _executor
-
-
-def set_tool_executor(executor: ToolExecutor) -> None:
-    """Set singleton ToolExecutor instance."""
-    global _executor
-    _executor = executor
-
-
-def create_tool_executor(
-    doom_loop_detector: DoomLoopDetectorProtocol,
-    permission_manager: PermissionManagerProtocol,
-    artifact_service: ArtifactServiceProtocol | None = None,
-    debug_logging: bool = False,
-) -> ToolExecutor:
-    """
-    Create and set singleton ToolExecutor.
-
-    Args:
-        doom_loop_detector: Doom loop detector instance
-        permission_manager: Permission manager instance
-        artifact_service: Optional artifact service
-        debug_logging: Enable debug logging
-
-    Returns:
-        Created ToolExecutor instance
-    """
-    global _executor
-    _executor = ToolExecutor(
-        doom_loop_detector=doom_loop_detector,
-        permission_manager=permission_manager,
-        artifact_service=artifact_service,
-        debug_logging=debug_logging,
-    )
-    return _executor

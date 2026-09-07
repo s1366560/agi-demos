@@ -3,8 +3,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use tokio::task::JoinHandle;
+use tokio::sync::watch;
 use tokio::time::sleep;
+
+use crate::worker_lifecycle_v2::WorkerRuntimeV2;
 
 use agistack_adapters_postgres::{ChannelOutboxRecord, PgChannelRepository};
 
@@ -513,50 +515,39 @@ where
             return None;
         }
         let worker = Arc::clone(&self);
-        let join = tokio::spawn(async move {
-            worker.run_loop().await;
-        });
-        Some(ChannelOutboxDeliveryWorkerRuntime { join: Some(join) })
+        Some(WorkerRuntimeV2::spawn(
+            "channel-outbox",
+            move |stop| async move {
+                worker.run_loop(stop).await;
+            },
+        ))
     }
 
     pub(crate) async fn run_once(&self) -> Result<ChannelOutboxDeliverySummary, ChannelApiError> {
         self.runtime.run_once().await
     }
 
-    async fn run_loop(self: Arc<Self>) {
+    async fn run_loop(self: Arc<Self>, mut stop: watch::Receiver<bool>) {
         loop {
+            if *stop.borrow() || stop.has_changed().is_err() {
+                break;
+            }
+            // A claimed operation must settle before the generation can drain.
             if let Err(err) = self.run_once().await {
                 eprintln!("[agistack] channel outbox delivery worker poll failed: {err:?}");
             }
-            sleep(Duration::from_millis(
-                self.config.poll_interval_millis.max(1),
-            ))
-            .await;
+            tokio::select! {
+                biased;
+                _ = stop.changed() => {}
+                _ = sleep(Duration::from_millis(
+                    self.config.poll_interval_millis.max(1),
+                )) => {}
+            }
         }
     }
 }
 
-pub(crate) struct ChannelOutboxDeliveryWorkerRuntime {
-    join: Option<JoinHandle<()>>,
-}
-
-impl ChannelOutboxDeliveryWorkerRuntime {
-    #[cfg(test)]
-    async fn shutdown(mut self) {
-        if let Some(join) = self.join.take() {
-            join.abort();
-            let _ = join.await;
-        }
-    }
-}
-
-impl Drop for ChannelOutboxDeliveryWorkerRuntime {
-    fn drop(&mut self) {
-        if let Some(join) = &self.join {
-            join.abort();
-        }
-    }
-}
+pub(crate) type ChannelOutboxDeliveryWorkerRuntime = WorkerRuntimeV2;
 
 fn positive_i64_env(name: &str, default: i64) -> i64 {
     std::env::var(name)
@@ -1069,7 +1060,7 @@ mod tests {
 
         for _ in 0..20 {
             if store.state.lock().expect("store state").sent.len() == 1 {
-                runtime.shutdown().await;
+                runtime.shutdown().await.expect("worker drains");
                 let state = store.state.lock().expect("store state");
                 assert_eq!(state.sent[0].0, "outbox-loop");
                 assert!(state.claim_calls >= 1);
@@ -1078,7 +1069,9 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
-        runtime.shutdown().await;
+        runtime.shutdown().await.expect("worker drains");
         panic!("delivery worker did not poll before timeout");
     }
+
+    include!("delivery_runtime_lifecycle_v2.rs");
 }

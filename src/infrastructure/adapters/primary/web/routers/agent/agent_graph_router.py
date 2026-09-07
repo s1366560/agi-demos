@@ -3,31 +3,32 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.graph.agent_graph import AgentGraph
 from src.domain.model.agent.graph.graph_pattern import GraphPattern
 from src.domain.model.agent.graph.graph_run import GraphRun
 from src.domain.model.auth.user import User
+from src.infrastructure.adapters.primary.web.agent_graph_http_application_authority_v2 import (
+    AgentGraphHttpApplicationAuthorityV2,
+    agent_graph_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
 from src.infrastructure.i18n import gettext as _
-
-from .utils import get_container_with_db
+from src.infrastructure.plugins.v2.agent_graph_management_services import (
+    AgentGraphAccessDeniedV2,
+    AgentGraphNotFoundV2,
+    AgentGraphRunNotFoundV2,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-_PROJECT_GRAPH_WRITE_ROLES = ("owner", "admin", "member")
 
 
 # ---------------------------------------------------------------------------
@@ -147,48 +148,6 @@ class CancelRunRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class _GraphRepository(Protocol):
-    async def find_by_id(self, entity_id: str) -> AgentGraph | None: ...
-
-
-class _GraphOrchestrator(Protocol):
-    async def get_run_status(self, run_id: str) -> GraphRun | None: ...
-
-
-async def _ensure_project_graph_access(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    tenant_id: str | None = None,
-    project_id: str,
-    required_roles: tuple[str, ...] | None = None,
-) -> str:
-    conditions = [
-        UserProject.user_id == current_user.id,
-        UserProject.project_id == project_id,
-    ]
-    if tenant_id is not None:
-        conditions.append(Project.tenant_id == tenant_id)
-
-    query = (
-        select(Project.tenant_id)
-        .select_from(UserProject)
-        .join(Project, UserProject.project_id == Project.id)
-        .where(and_(*conditions))
-    )
-    if required_roles is not None:
-        query = query.where(UserProject.role.in_(required_roles))
-
-    result = await db.execute(refresh_select_statement(query))
-    project_tenant_id = result.scalar_one_or_none()
-    if project_tenant_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied to project"),
-        )
-    return str(project_tenant_id)
-
-
 def _graph_to_response(graph: AgentGraph) -> GraphResponse:
     return GraphResponse(
         id=graph.id,
@@ -264,52 +223,6 @@ def _run_to_response(run: GraphRun, *, include_executions: bool = False) -> Grap
     )
 
 
-async def _get_accessible_graph(
-    repo: _GraphRepository,
-    graph_id: str,
-    *,
-    db: AsyncSession,
-    current_user: User,
-    require_write: bool = False,
-) -> AgentGraph:
-    graph = await repo.find_by_id(graph_id)
-    if graph is None:
-        raise HTTPException(status_code=404, detail=_("Graph not found"))
-    validated_tenant_id = await _ensure_project_graph_access(
-        db,
-        current_user=current_user,
-        tenant_id=graph.tenant_id,
-        project_id=graph.project_id,
-        required_roles=_PROJECT_GRAPH_WRITE_ROLES if require_write else None,
-    )
-    if validated_tenant_id and validated_tenant_id != graph.tenant_id:
-        raise HTTPException(status_code=404, detail=_("Graph not found"))
-    return graph
-
-
-async def _get_accessible_graph_run(
-    orchestrator: _GraphOrchestrator,
-    run_id: str,
-    *,
-    db: AsyncSession,
-    current_user: User,
-    require_write: bool = False,
-) -> GraphRun:
-    run = await orchestrator.get_run_status(run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail=_("Graph run not found"))
-    validated_tenant_id = await _ensure_project_graph_access(
-        db,
-        current_user=current_user,
-        tenant_id=run.tenant_id,
-        project_id=run.project_id,
-        required_roles=_PROJECT_GRAPH_WRITE_ROLES if require_write else None,
-    )
-    if validated_tenant_id and validated_tenant_id != run.tenant_id:
-        raise HTTPException(status_code=404, detail=_("Graph run not found"))
-    return run
-
-
 # ---------------------------------------------------------------------------
 # Graph CRUD endpoints
 # ---------------------------------------------------------------------------
@@ -358,24 +271,28 @@ def _apply_graph_updates(graph: AgentGraph, body: UpdateGraphRequest) -> None:
 
 @router.get("/graphs", response_model=GraphListResponse)
 async def list_graphs(
-    request: Request,
     project_id: str = Query(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> GraphListResponse:
-    container = get_container_with_db(request, db)
-    repo = container.graph_repository()
     try:
-        project_tenant_id = await _ensure_project_graph_access(
-            db,
-            current_user=current_user,
+        service = graph_authority.service
+        grant = await service.require_project_access(
             project_id=project_id,
+            user_id=str(current_user.id),
         )
-        graphs = await repo.list_by_project(tenant_id=project_tenant_id, project_id=project_id)
+        graphs = await service.list_graphs(grant)
         return GraphListResponse(
             graphs=[_graph_to_response(g) for g in graphs],
             total=len(graphs),
         )
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
     except HTTPException:
         raise
     except Exception:
@@ -385,21 +302,27 @@ async def list_graphs(
 
 @router.post("/graphs", response_model=GraphResponse, status_code=201)
 async def create_graph(
-    request: Request,
     body: CreateGraphRequest,
     project_id: str = Query(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> GraphResponse:
     from src.domain.model.agent.graph.agent_edge import AgentEdge
     from src.domain.model.agent.graph.agent_node import AgentNode
 
-    project_tenant_id = await _ensure_project_graph_access(
-        db,
-        current_user=current_user,
-        project_id=project_id,
-        required_roles=_PROJECT_GRAPH_WRITE_ROLES,
-    )
+    try:
+        grant = await graph_authority.service.require_project_access(
+            project_id=project_id,
+            user_id=str(current_user.id),
+            require_write=True,
+        )
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
 
     try:
         pattern = GraphPattern(body.pattern)
@@ -431,7 +354,7 @@ async def create_graph(
     ]
 
     graph = AgentGraph(
-        tenant_id=project_tenant_id,
+        tenant_id=grant.tenant_id,
         project_id=project_id,
         name=body.name,
         description=body.description,
@@ -447,12 +370,9 @@ async def create_graph(
     if validation_errors:
         raise HTTPException(status_code=400, detail=_("Invalid graph definition"))
 
-    container = get_container_with_db(request, db)
-    repo = container.graph_repository()
     try:
-        await repo.save(graph)
-        await db.commit()
-        return _graph_to_response(graph)
+        created = await graph_authority.service.create_graph(graph, grant=grant)
+        return _graph_to_response(created)
     except HTTPException:
         raise
     except Exception:
@@ -462,61 +382,68 @@ async def create_graph(
 
 @router.get("/graphs/{graph_id}", response_model=GraphResponse)
 async def get_graph(
-    request: Request,
     graph_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> GraphResponse:
-    container = get_container_with_db(request, db)
-    repo = container.graph_repository()
     try:
-        graph = await _get_accessible_graph(
-            repo,
-            graph_id,
-            db=db,
-            current_user=current_user,
+        access = await graph_authority.service.get_graph(
+            graph_id=graph_id,
+            user_id=str(current_user.id),
         )
+    except AgentGraphNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Graph not found")) from exc
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
     except HTTPException:
         raise
     except Exception:
         logger.exception("Failed to get graph %s", graph_id)
         raise HTTPException(status_code=500, detail=_("Failed to get graph")) from None
-    return _graph_to_response(graph)
+    return _graph_to_response(access.graph)
 
 
 @router.put("/graphs/{graph_id}", response_model=GraphResponse)
 async def update_graph(
-    request: Request,
     graph_id: str,
     body: UpdateGraphRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> GraphResponse:
-    container = get_container_with_db(request, db)
-    repo = container.graph_repository()
     try:
-        graph = await _get_accessible_graph(
-            repo,
-            graph_id,
-            db=db,
-            current_user=current_user,
+        access = await graph_authority.service.get_graph(
+            graph_id=graph_id,
+            user_id=str(current_user.id),
             require_write=True,
         )
+    except AgentGraphNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Graph not found")) from exc
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
     except HTTPException:
         raise
     except Exception:
         logger.exception("Failed to find graph %s for update", graph_id)
         raise HTTPException(status_code=500, detail=_("Failed to update graph")) from None
 
-    _apply_graph_updates(graph, body)
+    _apply_graph_updates(access.graph, body)
 
-    validation_errors = graph.validate_graph()
+    validation_errors = access.graph.validate_graph()
     if validation_errors:
         raise HTTPException(status_code=400, detail=_("Invalid graph definition"))
 
     try:
-        await repo.save(graph)
-        await db.commit()
+        graph = await graph_authority.service.update_graph(access)
         return _graph_to_response(graph)
     except HTTPException:
         raise
@@ -527,21 +454,25 @@ async def update_graph(
 
 @router.delete("/graphs/{graph_id}", status_code=204)
 async def delete_graph(
-    request: Request,
     graph_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> None:
-    container = get_container_with_db(request, db)
-    repo = container.graph_repository()
     try:
-        graph = await _get_accessible_graph(
-            repo,
-            graph_id,
-            db=db,
-            current_user=current_user,
+        access = await graph_authority.service.get_graph(
+            graph_id=graph_id,
+            user_id=str(current_user.id),
             require_write=True,
         )
+    except AgentGraphNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Graph not found")) from exc
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
     except HTTPException:
         raise
     except Exception:
@@ -549,8 +480,7 @@ async def delete_graph(
         raise HTTPException(status_code=500, detail=_("Failed to delete graph")) from None
 
     try:
-        await repo.delete(graph.id)
-        await db.commit()
+        await graph_authority.service.delete_graph(access)
     except HTTPException:
         raise
     except Exception:
@@ -565,37 +495,32 @@ async def delete_graph(
 
 @router.post("/graphs/{graph_id}/runs", response_model=GraphRunResponse, status_code=201)
 async def start_graph_run(
-    request: Request,
     graph_id: str,
     body: StartRunRequest,
     project_id: str = Query(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> GraphRunResponse:
-    container = get_container_with_db(request, db)
-    repo = container.graph_repository()
-    orchestrator = container.graph_orchestrator()
     try:
-        graph = await _get_accessible_graph(
-            repo,
-            graph_id,
-            db=db,
-            current_user=current_user,
-            require_write=True,
-        )
-        if graph.project_id != project_id:
-            raise HTTPException(status_code=404, detail=_("Graph not found"))
-        run, _events = await orchestrator.start_run(
+        run = await graph_authority.service.start_graph_run(
             graph_id=graph_id,
+            expected_project_id=project_id,
             conversation_id=body.conversation_id,
-            tenant_id=graph.tenant_id,
-            project_id=project_id,
+            user_id=str(current_user.id),
             initial_context=body.initial_context,
             parent_session_id=body.parent_session_id,
             parent_agent_id=body.parent_agent_id,
         )
-        await db.commit()
         return _run_to_response(run, include_executions=True)
+    except AgentGraphNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Graph not found")) from exc
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=_("Invalid graph run request")) from exc
     except HTTPException:
@@ -607,26 +532,28 @@ async def start_graph_run(
 
 @router.get("/graphs/{graph_id}/runs", response_model=GraphRunListResponse)
 async def list_graph_runs(
-    request: Request,
     graph_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> GraphRunListResponse:
-    container = get_container_with_db(request, db)
-    repo = container.graph_repository()
-    orchestrator = container.graph_orchestrator()
     try:
-        access_checked_graph = await _get_accessible_graph(
-            repo,
-            graph_id,
-            db=db,
-            current_user=current_user,
+        runs = await graph_authority.service.list_graph_runs(
+            graph_id=graph_id,
+            user_id=str(current_user.id),
         )
-        runs = await orchestrator.list_runs_for_graph(access_checked_graph.id)
         return GraphRunListResponse(
             runs=[_run_to_response(r) for r in runs],
             total=len(runs),
         )
+    except AgentGraphNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Graph not found")) from exc
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
     except HTTPException:
         raise
     except Exception:
@@ -636,52 +563,57 @@ async def list_graph_runs(
 
 @router.get("/graphs/runs/{run_id}", response_model=GraphRunResponse)
 async def get_graph_run(
-    request: Request,
     run_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> GraphRunResponse:
-    container = get_container_with_db(request, db)
-    orchestrator = container.graph_orchestrator()
     try:
-        run = await _get_accessible_graph_run(
-            orchestrator,
-            run_id,
-            db=db,
-            current_user=current_user,
+        access = await graph_authority.service.get_graph_run(
+            run_id=run_id,
+            user_id=str(current_user.id),
         )
+    except AgentGraphRunNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Graph run not found")) from exc
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
     except HTTPException:
         raise
     except Exception:
         logger.exception("Failed to get run %s", run_id)
         raise HTTPException(status_code=500, detail=_("Failed to get graph run")) from None
-    return _run_to_response(run, include_executions=True)
+    return _run_to_response(access.run, include_executions=True)
 
 
 @router.post("/graphs/runs/{run_id}/cancel", response_model=GraphRunResponse)
 async def cancel_graph_run(
-    request: Request,
     run_id: str,
     body: CancelRunRequest | None = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    graph_authority: AgentGraphHttpApplicationAuthorityV2 = Depends(
+        agent_graph_http_application_authority_dependency_v2
+    ),
 ) -> GraphRunResponse:
-    container = get_container_with_db(request, db)
-    orchestrator = container.graph_orchestrator()
     reason = body.reason if body else "User requested cancellation"
     try:
-        access_checked_run = await _get_accessible_graph_run(
-            orchestrator,
-            run_id,
-            db=db,
-            current_user=current_user,
+        access = await graph_authority.service.get_graph_run(
+            run_id=run_id,
+            user_id=str(current_user.id),
             require_write=True,
         )
-        run, _events = await orchestrator.cancel_run(access_checked_run.id, reason=reason)
-        await db.commit()
-        if run.tenant_id != access_checked_run.tenant_id:
-            raise HTTPException(status_code=404, detail=_("Graph run not found"))
+        run = await graph_authority.service.cancel_graph_run(access, reason=reason)
         return _run_to_response(run, include_executions=True)
+    except AgentGraphRunNotFoundV2 as exc:
+        raise HTTPException(status_code=404, detail=_("Graph run not found")) from exc
+    except AgentGraphAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=_("Invalid graph run request")) from exc
     except HTTPException:

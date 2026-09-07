@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.skill_evolution_repository_services import (
+        SkillEvolutionRepositoryProtocolV2,
+    )
 
 from src.infrastructure.agent.plugins.skill_evolution.config import SkillEvolutionConfig
 from src.infrastructure.agent.plugins.skill_evolution.models import (
     SkillEvolutionSession,
-)
-from src.infrastructure.agent.plugins.skill_evolution.repository import (
-    SkillEvolutionRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,11 +33,7 @@ class SkillSessionGroup:
     def add(self, session: SkillEvolutionSession) -> None:
         self.sessions.append(session)
         self.session_count = len(self.sessions)
-        scores = [
-            s.overall_score
-            for s in self.sessions
-            if s.overall_score is not None
-        ]
+        scores = [s.overall_score for s in self.sessions if s.overall_score is not None]
         self.avg_score = sum(scores) / len(scores) if scores else 0.0
         successes = sum(1 for s in self.sessions if s.success)
         self.success_rate = successes / self.session_count if self.session_count else 0.0
@@ -55,7 +54,7 @@ class SkillSessionAggregator:
 
     async def aggregate(
         self,
-        repo: SkillEvolutionRepository,
+        repo: SkillEvolutionRepositoryProtocolV2,
         *,
         tenant_id: str,
         project_id: str | None = None,

@@ -1,6 +1,6 @@
 """Tests for final completion gating in SessionProcessor."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -9,6 +9,30 @@ from src.infrastructure.agent.processor import (
     ProcessorConfig,
     SessionProcessor,
 )
+from src.infrastructure.plugins.v2.agent_loop import (
+    AgentLoopRunContextV2,
+    BuiltinAgentLoopResolverV2,
+)
+
+
+class _NativeLoop:
+    @staticmethod
+    def run(context: AgentLoopRunContextV2):
+        return context.run_native()
+
+
+def _processor_config() -> ProcessorConfig:
+    return ProcessorConfig(
+        model="test-model",
+        max_steps=3,
+        provider_id="test-provider",
+        loop_resolver=BuiltinAgentLoopResolverV2(
+            loop_id="builtin-react",
+            plugin_id="memstack-kernel",
+            implementation=_NativeLoop(),
+            lifecycle_notifier=MagicMock(),
+        ),
+    )
 
 
 @pytest.mark.unit
@@ -18,7 +42,7 @@ class TestProcessorCompletionGate:
     @pytest.mark.asyncio
     async def test_process_blocks_complete_when_final_task_gate_fails(self) -> None:
         processor = SessionProcessor(
-            config=ProcessorConfig(model="test-model", max_steps=3),
+            config=_processor_config(),
             tools=[],
         )
 
@@ -80,7 +104,7 @@ class TestProcessorCompletionGate:
     @pytest.mark.asyncio
     async def test_process_allows_llm_task_reconciliation_to_bypass_stale_gate(self) -> None:
         processor = SessionProcessor(
-            config=ProcessorConfig(model="test-model", max_steps=3),
+            config=_processor_config(),
             tools=[],
         )
 
@@ -124,7 +148,7 @@ class TestProcessorCompletionGate:
     @pytest.mark.asyncio
     async def test_process_blocks_complete_when_task_events_seen_without_todoread(self) -> None:
         processor = SessionProcessor(
-            config=ProcessorConfig(model="test-model", max_steps=3),
+            config=_processor_config(),
             tools=[],
         )
 

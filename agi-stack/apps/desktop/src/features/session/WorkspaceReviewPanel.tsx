@@ -29,15 +29,10 @@ import {
   RocketIcon,
   ExclamationTriangleIcon,
 } from '@radix-ui/react-icons';
-import {
-  DesktopApiClient,
-} from '../../api/client';
+import type { DesktopProjectMcpAppsClientV2 } from '../../plugins/desktopProjectMcpAppsAuthorityModuleV2';
 import {
   RunChangeScope,
 } from '../agent-authority/agentAuthorityTypes';
-import {
-  type ChatWorkflowTarget,
-} from '../chat/ChatPanel';
 import {
   DesktopMCPAppCanvas,
 } from '../chat/DesktopMCPAppCanvas';
@@ -254,7 +249,7 @@ export function WorkspaceReviewPanel({
   artifactCanvas: LiveArtifactCanvasState;
   artifactClient: DesktopArtifactClient;
   mcpAppCanvas: MCPAppCanvasState;
-  mcpAppApi: DesktopApiClient;
+  mcpAppApi: DesktopProjectMcpAppsClientV2;
   mcpAppProjectId: string;
   mcpAppSandboxProxyUrl: string;
   onSendMCPAppMessage: (message: string) => void;
@@ -1776,12 +1771,4 @@ export function ReviewEmpty({
       <p>{body}</p>
     </div>
   );
-}
-
-export function chatWorkflowTargetForReviewTab(tab: ReviewTab): ChatWorkflowTarget {
-  if (tab === 'pull' || tab === 'checks') return 'pull';
-  if (tab === 'background' || tab === 'activity') return 'background';
-  if (tab === 'artifacts' || tab === 'apps') return 'artifacts';
-  if (tab === 'changes') return 'changes';
-  return 'plan';
 }

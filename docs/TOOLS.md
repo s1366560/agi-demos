@@ -15,7 +15,7 @@ Last checked against code: 2026-06-23.
 | Tool provider/runtime wiring | `src/infrastructure/agent/tools/tool_provider.py`, `pipeline.py`, `executor.py` |
 | Tool conversion for LLM calls | `src/infrastructure/agent/core/tool_converter.py` |
 | Sandbox MCP wrapper | `src/infrastructure/agent/tools/sandbox_tool_wrapper.py` |
-| Plugin tools | `src/infrastructure/agent/tools/plugin_tools.py`, `plugin_manager.py` |
+| V2 plugin inventory | `src/infrastructure/agent/tools/plugin_manager.py` |
 | Sandbox server tools | `sandbox-mcp-server/src/tools/` |
 | Runtime catalog API | `GET /api/v1/agent/tools`, `GET /api/v1/agent/tools/capabilities` |
 
@@ -60,10 +60,10 @@ plugin tools, MCP server tools, and sandbox tools without editing the static bui
 | Workspace | `workspace_assign_task`, `workspace_cancel_task`, `workspace_report_progress`, `workspace_report_complete`, `workspace_report_blocked`, `workspace_chat_send`, `workspace_chat_read`, `workspace_request_clarification`, `workspace_respond_clarification`, `workspace_health_verdict` | Workspace plan/task collaboration and WTP reporting. |
 | Workspace planning contract | `workspace_submit_planning_contract`, `workspace_submit_verification_judgment`, `workspace_submit_iteration_review`, `workspace_submit_supervisor_decision`, `workspace_submit_worktree_preparation` | Terminal contract submissions invoked once per run by the builtin workspace planner, verifier, iteration reviewer, supervisor, and worktree manager. |
 | Multi-agent action | `assign_task`, `refuse_task`, `request_human_input`, `escalate`, `mark_conflict`, `declare_progress`, `signal_goal_complete` | Structured inter-agent action events. |
-| Skills | `skill`, `skill_loader`, `skill_installer`, `skill_sync` | Load, install, sync, or invoke skills. |
-| Plugins | `plugin_manager`, plugin runtime tools | Runtime plugin loading, reload, enablement, diagnostics, and plugin-provided tools. |
-| MCP server management | `register_mcp_server`, `mcp_server_install`, `mcp_server_start`, `mcp_server_discover_tools`, `mcp_server_status`, `mcp_server_logs`, `mcp_server_list`, `debug_mcp_server`, `create_mcp_server_from_template` | Register, install, start, inspect, and debug MCP servers; separate from MCP tools discovered from those servers. |
-| Runtime/model | `list_available_models`, `switch_model_next_turn`, `session_status`, `structured_output`, `reflect_friction`, `verdict`, `handoff`, `cron`, `custom_tools_status` | Runtime introspection, structured outputs, review/verdicts, scheduled actions, and custom-tool loading diagnostics. |
+| Skills | `skill_loader`, `skill_installer`, `skill_sync` | Load, install, or sync skills. |
+| Plugins | `plugin_manager`, generation-provided tools | Read the pinned V2 generation inventory; legacy mutation actions return the protocol-retired error. |
+| MCP server management | `register_mcp_server`, `mcp_server_install`, `mcp_server_start`, `mcp_server_discover_tools`, `mcp_server_status`, `mcp_server_logs`, `mcp_server_list` | Register, install, start, and inspect MCP servers; separate from MCP tools discovered from those servers. |
+| Runtime/model | `list_available_models`, `switch_model_next_turn`, `session_status`, `reflect_friction`, `verdict`, `cron`, `custom_tools_status` | Runtime introspection, review/verdicts, scheduled actions, and custom-tool loading diagnostics. |
 | Environment UI | `terminal`, `desktop` | Web terminal and remote desktop service management. |
 
 ## Multi-Agent Tool Semantics
@@ -126,7 +126,6 @@ Related code:
 
 - `src/infrastructure/agent/permission/`
 - `src/infrastructure/agent/tools/tool_mutation_guard.py`
-- `src/infrastructure/agent/tools/mutation_ledger.py`
 - `src/infrastructure/agent/tools/mutation_transaction.py`
 
 ## Events
@@ -159,8 +158,8 @@ Preferred path for a new built-in tool:
 6. Update this document only if the tool creates a new family or changes the contract.
 
 For custom tools, use the dynamic loader conventions in
-`src/infrastructure/agent/tools/custom_tool_loader.py`; for plugin tools, use plugin runtime
-registration rather than hardcoding imports.
+`src/infrastructure/agent/tools/custom_tool_loader.py`; plugin-provided tools must use V2 generation
+effect registration rather than hardcoded imports.
 
 ## Operational Checks
 

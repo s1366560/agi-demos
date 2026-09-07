@@ -1,4 +1,4 @@
-import { DesktopApiClient } from '../../api/client';
+import type { DesktopProjectMcpServersOperationsV2 } from '../../plugins/desktopProjectMcpServersAuthorityModuleV2';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   ManagementRouteClientError,
@@ -8,13 +8,13 @@ import {
 } from './managementRouteTypes';
 
 export type McpServersRouteAuthority = Pick<
-  DesktopApiClient,
+  DesktopProjectMcpServersOperationsV2,
   'listMCPServers'
 >;
 
 export function createMcpServersRouteClient(
   config: DesktopRuntimeConfig,
-  authority: McpServersRouteAuthority = new DesktopApiClient(config),
+  authority: McpServersRouteAuthority,
 ): ManagementRouteClient {
   const runtimeConfig = Object.freeze({ ...config });
   const client: ManagementRouteClient = {
@@ -28,10 +28,16 @@ export function createMcpServersRouteClient(
           'mcp_servers_project_scope_required',
         );
       }
-      const servers = await authority.listMCPServers(
-        currentScope.projectId,
-        options?.signal,
-      );
+      const servers = await authority.listMCPServers({
+        config: runtimeConfig,
+        scope: {
+          authority: currentScope.authority,
+          tenantId: currentScope.tenantId,
+          projectId: currentScope.projectId,
+        },
+        args: [currentScope.projectId],
+        signal: options?.signal,
+      });
       return managementRouteObservation(currentScope, servers.length);
     },
   };

@@ -372,11 +372,17 @@ test('conversation lifecycle row updates are immutable and constrained to existi
 
 test('App coordinates lifecycle responses with current scope and active-session cleanup', () => {
   assert.match(appSource, /const renameConversation = async/);
-  assert.match(appSource, /apiClient\.updateAgentConversationTitle/);
+  assert.match(
+    appSource,
+    /desktopConversationLifecycleOperationsV2\.updateAgentConversationTitle/,
+  );
   assert.match(appSource, /replaceConversationInWorkspaceRows/);
   assert.match(appSource, /agentConversationSessionRef\.current = nextSession/);
   assert.match(appSource, /const deleteConversation = async/);
-  assert.match(appSource, /apiClient\.deleteAgentConversation/);
+  assert.match(
+    appSource,
+    /desktopConversationLifecycleOperationsV2\.deleteAgentConversation/,
+  );
   assert.match(appSource, /removeConversationFromWorkspaceRows/);
   assert.match(appSource, /mutationScopeIsCurrent\(\)/);
   assert.match(appSource, /selectWorkspace\(normalizedWorkspaceId, projectId\)/);

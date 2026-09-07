@@ -111,15 +111,10 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
         attempt_id: str | None,
         linked_workspace_task_id: str | None = None,
     ) -> dict[str, Any] | None:
-        from src.configuration.factories import create_llm_client
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
         from src.infrastructure.agent.workspace.contract_agent_runtime import (
             cancel_workspace_contract_chat,
-            create_workspace_contract_agent_service,
             recover_workspace_contract_payload,
-            resolve_workspace_actor_user_id,
+            workspace_contract_agent_turn_authority_v2,
             workspace_contract_conversation_id,
         )
         from src.infrastructure.agent.workspace.runtime_role_contract import (
@@ -161,6 +156,8 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
         }
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
             extract_payload=_supervisor_decision_from_event,
         )
         if recovered_payload is not None:
@@ -168,34 +165,6 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
             diagnostics["decision_submitted"] = True
             self._last_diagnostics = diagnostics
             return recovered_payload
-
-        resolved_actor_user_id = await resolve_workspace_actor_user_id(workspace_id=workspace_id)
-        diagnostics["actor_user_resolved"] = bool(resolved_actor_user_id)
-        if not resolved_actor_user_id:
-            self._last_diagnostics = diagnostics
-            return None
-
-        diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
-            conversation_id=conversation_id,
-            tenant_id=self._tenant_id,
-            project_id=self._project_id,
-            workspace_id=workspace_id,
-            linked_workspace_task_id=linked_workspace_task_id,
-            agent_id=supervisor_agent.id,
-            actor_user_id=resolved_actor_user_id,
-            title=f"Workspace Supervisor Decision - {node_id}",
-            stage="supervisor_decision",
-            metadata={
-                "plan_id": plan_id,
-                "current_plan_node_id": node_id,
-                "current_attempt_id": attempt_id or "",
-                "linked_workspace_task_id": linked_workspace_task_id or "",
-                "conversation_scope": f"supervisor:{plan_id}:{node_id}:{attempt_id or 'none'}",
-            },
-        )
-        if not diagnostics["session_persisted"]:
-            self._last_diagnostics = diagnostics
-            return None
 
         app_model_context = {
             "context_type": "workspace_worker_runtime",
@@ -217,11 +186,47 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
             },
             "llm_overrides": {"max_tokens": self._max_tokens},
         }
-        async with async_session_factory() as db:
-            llm = await create_llm_client(self._tenant_id)
-            agent_service = await create_workspace_contract_agent_service(db=db, llm=llm)
+        async with workspace_contract_agent_turn_authority_v2(
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+            agent_id=supervisor_agent.id,
+            contract_kind="supervisor-decision",
+            actor_purpose="supervisor_turn",
+        ) as authority:
+            resolved_actor_user_id = authority.actor.actor_user_id
+            diagnostics["actor_user_resolved"] = True
+            diagnostics["actor_authority_revision"] = authority.actor.authority_revision
+            diagnostics["operation_id"] = authority.operation.operation_id
+            diagnostics["plugin_generation"] = authority.operation.descriptor.to_payload()
+            diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
+                conversation_id=conversation_id,
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                workspace_id=workspace_id,
+                linked_workspace_task_id=linked_workspace_task_id,
+                agent_id=supervisor_agent.id,
+                actor_user_id=resolved_actor_user_id,
+                operation=authority.operation,
+                title=f"Workspace Supervisor Decision - {node_id}",
+                stage="supervisor_decision",
+                metadata={
+                    "plan_id": plan_id,
+                    "current_plan_node_id": node_id,
+                    "current_attempt_id": attempt_id or "",
+                    "linked_workspace_task_id": linked_workspace_task_id or "",
+                    "conversation_scope": (
+                        f"supervisor:{plan_id}:{node_id}:{attempt_id or 'none'}"
+                    ),
+                },
+            )
+            if not diagnostics["session_persisted"]:
+                self._last_diagnostics = diagnostics
+                return None
+
             payload = await self._stream_decision_payload(
-                agent_service=agent_service,
+                agent_service=authority.service,
                 cancel_workspace_contract_chat=cancel_workspace_contract_chat,
                 conversation_id=conversation_id,
                 user_prompt=user_prompt,
@@ -235,15 +240,18 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
             )
             if payload is not None:
                 return payload
-        recovered_payload = await recover_workspace_contract_payload(
-            conversation_id=conversation_id,
-            extract_payload=_supervisor_decision_from_event,
-        )
-        if recovered_payload is not None:
-            diagnostics["recovered_from_events"] = True
-            diagnostics["decision_submitted"] = True
-            self._last_diagnostics = diagnostics
-            return recovered_payload
+            recovered_payload = await recover_workspace_contract_payload(
+                conversation_id=conversation_id,
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                extract_payload=_supervisor_decision_from_event,
+                operation=authority.operation,
+            )
+            if recovered_payload is not None:
+                diagnostics["recovered_from_events"] = True
+                diagnostics["decision_submitted"] = True
+                self._last_diagnostics = diagnostics
+                return recovered_payload
         self._last_diagnostics = diagnostics
         return None
 
@@ -520,9 +528,7 @@ def _parse_decision_payload(
         rationale=rationale,
         confidence=_float_between(payload.get("confidence"), default=0.0),
         feedback_items=tuple(_dict_items(payload.get("feedback_items"))),
-        retry_not_before_seconds=_optional_nonnegative_int(
-            payload.get("retry_not_before_seconds")
-        ),
+        retry_not_before_seconds=_optional_nonnegative_int(payload.get("retry_not_before_seconds")),
         repair_brief=_dict_payload(payload.get("repair_brief")),
         event_payload=_dict_payload(payload.get("event_payload")),
     )

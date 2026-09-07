@@ -591,6 +591,26 @@ class Settings(BaseSettings):
     # OpenTelemetry Settings
     service_name: str = Field(default="memstack", alias="SERVICE_NAME")
     environment: str = Field(default="development", alias="ENVIRONMENT")
+    plugin_marketplace_trusted_key_files: tuple[Path, ...] = Field(
+        default=(), alias="PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES"
+    )
+    plugin_marketplace_allowed_registries: tuple[str, ...] = Field(
+        default=(), alias="PLUGIN_MARKETPLACE_ALLOWED_REGISTRIES"
+    )
+    plugin_v2_required_data_plane_ids: str = Field(
+        default="",
+        alias="PLUGIN_V2_REQUIRED_DATA_PLANE_IDS",
+        description=(
+            "Comma-separated immutable roster required to ACK each plugin v2 publication; "
+            "production must declare it explicitly"
+        ),
+    )
+    plugin_v2_ack_deadline_seconds: int = Field(
+        default=30,
+        alias="PLUGIN_V2_ACK_DEADLINE_SECONDS",
+        ge=1,
+        le=86_400,
+    )
     otel_exporter_otlp_endpoint: str | None = Field(
         default=None, alias="OTEL_EXPORTER_OTLP_ENDPOINT"
     )

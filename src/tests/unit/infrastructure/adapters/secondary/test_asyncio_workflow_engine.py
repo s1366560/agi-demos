@@ -8,6 +8,11 @@ from src.infrastructure.adapters.secondary.workflow.asyncio_workflow_engine impo
 )
 
 
+def test_constructor_requires_explicit_task_manager() -> None:
+    with pytest.raises(TypeError, match="manager"):
+        _ = AsyncioWorkflowEngine()  # type: ignore[call-arg]
+
+
 @pytest.mark.asyncio
 async def test_start_workflow_tracks_owner_project_and_uses_workflow_id_key() -> None:
     manager = TaskManager()

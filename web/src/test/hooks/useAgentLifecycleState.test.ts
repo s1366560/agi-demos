@@ -7,6 +7,12 @@
 import { renderHook, waitFor, act, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+const scope = vi.hoisted(() => ({ owner: {}, available: true }));
+const operation = vi.hoisted(() => ({ check: () => {}, owner: scope.owner }));
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => scope,
+  subscribeWebOperationAvailabilityV2: () => () => {},
+}));
 const authState = vi.hoisted(() => ({
   token: 'token-1' as string | null,
 }));
@@ -21,6 +27,11 @@ vi.mock('../../services/agentService', () => ({
   agentService: {
     isConnected: vi.fn(() => true),
     connect: vi.fn(() => Promise.resolve()),
+    connectSession: vi.fn(async () => {
+      await agentService.connect();
+      return operation;
+    }),
+    assertSession: vi.fn(),
     onStatusChange: vi.fn(() => vi.fn()),
     subscribeLifecycleState: vi.fn(() => vi.fn()),
     unsubscribeLifecycleState: vi.fn(),
@@ -41,7 +52,9 @@ describe('useAgentLifecycleState', () => {
     vi.mocked(agentService.isConnected).mockReturnValue(true);
     vi.mocked(agentService.connect).mockResolvedValue(undefined);
     vi.mocked(agentService.onStatusChange).mockReturnValue(vi.fn());
-    vi.mocked(agentService.subscribeLifecycleState).mockReturnValue(vi.fn());
+    vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
+      (projectId, tenantId) => () => agentService.unsubscribeLifecycleState({ projectId, tenantId })
+    );
     authState.token = 'token-1';
     localStorage.clear();
   });
@@ -78,7 +91,8 @@ describe('useAgentLifecycleState', () => {
       expect(agentService.subscribeLifecycleState).toHaveBeenCalledWith(
         mockProjectId,
         mockTenantId,
-        expect.any(Function)
+        expect.any(Function),
+        operation
       );
     });
 
@@ -105,12 +119,14 @@ describe('useAgentLifecycleState', () => {
       expect(agentService.subscribeLifecycleState).toHaveBeenCalledWith(
         mockProjectId,
         'tenant-one',
-        expect.any(Function)
+        expect.any(Function),
+        operation
       );
       expect(agentService.subscribeLifecycleState).toHaveBeenCalledWith(
         mockProjectId,
         'tenant-two',
-        expect.any(Function)
+        expect.any(Function),
+        operation
       );
     });
 

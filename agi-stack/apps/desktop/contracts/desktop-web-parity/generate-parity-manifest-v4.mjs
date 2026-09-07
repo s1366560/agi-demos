@@ -1,11 +1,20 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
 import { bindProductionEntrySurfaces } from './production-entry-integrity.mjs';
-import { writeValidatedArtifactSync } from './parity-judgment-ledger.mjs';
+import {
+  indexJudgmentRecords,
+  loadJudgmentRecords,
+  parseManifestGeneratorOptions,
+  writeValidatedArtifactSync,
+} from './parity-judgment-ledger.mjs';
+import {
+  createParityJudgmentOutput,
+  digestParityJudgmentInput,
+  finalizeParityJudgmentClosure,
+} from './parity-judgment-closure.mjs';
 import {
   assertParityStructuralClosure,
   downgradeStructurallyInvalidSurfaces,
@@ -20,7 +29,10 @@ const v3SchemaPath = resolve(contractRoot, 'parity-manifest.v3.schema.json');
 const overridePath = resolve(contractRoot, 'parity-authority-overrides.v4.json');
 const manifestPath = resolve(contractRoot, 'parity-manifest.v4.json');
 const schemaPath = resolve(contractRoot, 'parity-manifest.v4.schema.json');
-const check = process.argv.slice(2).includes('--check');
+const cliOptions = parseManifestGeneratorOptions(process.argv.slice(2), {
+  manifestPath,
+  repositoryRoot,
+});
 const surfaceNames = ['web', 'desktop_cloud', 'local_online', 'local_offline', 'native_only'];
 const browserCapabilityId = 'browser-integration-browser-bridge';
 
@@ -42,12 +54,45 @@ const enrichedCapabilities = v3Manifest.capabilities.map((capability) =>
 );
 assertAllOverridesMatched(overrides, matchedOverrides);
 const sourceRevision = v3Manifest.references.audit_revision;
-const browserCapability = createBrowserBridgeCapability(sourceRevision);
-const manifest = downgradeStructurallyInvalidSurfaces({
+const browserReview = createBrowserBridgeCapability(sourceRevision);
+if (cliOptions.emitInputsPath) {
+  writeValidatedArtifactSync(
+    cliOptions.emitInputsPath,
+    `${JSON.stringify({
+      input_digest: browserReview.inputDigest,
+      input: browserReview.input,
+    })}\n`,
+    { ownerOnly: true },
+  );
+  console.log('Prepared 1 structured Agent review input for Browser Bridge.');
+  process.exit(0);
+}
+const judgmentRecords = loadJudgmentRecords(cliOptions, { manifestPath, repositoryRoot });
+const browserJudgmentRecords = cliOptions.check
+  ? judgmentRecords.filter(
+      (record) => record?.input?.capability_id === browserCapabilityId,
+    )
+  : judgmentRecords;
+const judgmentsByCapability = indexJudgmentRecords(browserJudgmentRecords, [
+  browserCapabilityId,
+]);
+const browserCapability = {
+  ...browserReview.capability,
+  judgment: consumeBrowserBridgeJudgment({
+    ...browserReview,
+    judgmentsByCapability,
+  }),
+};
+const candidateManifest = {
   ...v3Manifest,
   $schema: './parity-manifest.v4.schema.json',
   schema_version: '4.0.0',
   capabilities: [...enrichedCapabilities, browserCapability],
+};
+const manifest = finalizeParityJudgmentClosure({
+  beforeStructuralClosure: candidateManifest,
+  afterStructuralClosure: downgradeStructurallyInvalidSurfaces(candidateManifest),
+  externalJudgmentCapabilityIds: [browserCapabilityId],
 });
 assertSchemaValid(schema, manifest);
 assertParityStructuralClosure(manifest);
@@ -57,16 +102,22 @@ assertNoLegacySurfaceIdentifier(manifest, 'manifest');
 const serializedSchema = `${JSON.stringify(schema, null, 2)}\n`;
 const serializedManifest = `${JSON.stringify(manifest)}\n`;
 
-if (check) {
+if (cliOptions.check) {
   assertCurrent(schemaPath, serializedSchema);
   assertCurrent(manifestPath, serializedManifest);
 } else {
-  writeValidatedArtifactSync(schemaPath, serializedSchema);
-  writeValidatedArtifactSync(manifestPath, serializedManifest);
+  if (cliOptions.outputOwnerOnly) {
+    assertCurrent(schemaPath, serializedSchema);
+  } else {
+    writeValidatedArtifactSync(schemaPath, serializedSchema);
+  }
+  writeValidatedArtifactSync(cliOptions.outputPath, serializedManifest, {
+    ownerOnly: cliOptions.outputOwnerOnly,
+  });
 }
 
 console.log(
-  `${check ? 'Verified' : 'Generated'} parity manifest v4 with ` +
+  `${cliOptions.check ? 'Verified' : 'Generated'} parity manifest v4 with ` +
     `${manifest.capabilities.length} capabilities, ` +
     `${manifest.capabilities.reduce((total, capability) => total + capability.journeys.length, 0)} journeys, and ` +
     `${overrides.size} explicit authority overrides.`,
@@ -247,37 +298,16 @@ function projectJudgment({
     surfaces,
     journeys,
   };
-  const output = {
-    verdict: 'accepted',
-    ...Object.fromEntries(
-      surfaceNames.map((surfaceName) => [surfaceName, surfaceSummary(surfaces[surfaceName])]),
-    ),
-  };
   return {
     ...capability.judgment,
     input,
-    input_digest: digestInput(input),
-    output,
+    input_digest: digestParityJudgmentInput(input),
+    output: createParityJudgmentOutput(surfaces),
     rationale:
       `${capability.judgment.rationale} Manifest v4 projects local_online and ` +
       `local_offline from the accepted ${localPolicy} policy and records compound authority roles ` +
       'without mutating the historical v2/v3 judgment.',
   };
-}
-
-function surfaceSummary(surface) {
-  return {
-    disposition: surface.disposition,
-    implementation_status: surface.implementation_status,
-    availability: surface.availability,
-    reason_code: surface.reason_code,
-    authority: surface.authority,
-    supporting_authorities: [...surface.supporting_authorities],
-  };
-}
-
-function digestInput(input) {
-  return `sha256:${createHash('sha256').update(JSON.stringify(input)).digest('hex')}`;
 }
 
 function indexAuthorityOverrides(catalog) {
@@ -354,6 +384,24 @@ function createBrowserBridgeCapability(sourceRevision) {
     'agi-stack/apps/desktop/sidecar/src/local_runtime/browser_bridge.rs',
     'agi-stack/apps/desktop/sidecar/src/native_host.rs',
     'agi-stack/apps/desktop/src/features/settings/BrowserIntegrationSettingsPage.tsx',
+    'agi-stack/apps/desktop/src/features/settings/useBrowserIntegrationManagementV2.ts',
+    'agi-stack/apps/desktop/src/App.tsx',
+    'agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx',
+    'agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts',
+    'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationAuthorityModuleV2.ts',
+    'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationOperationContractV2.ts',
+    'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationResponseContractV2.ts',
+    'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationHttpProjectionV2.ts',
+    'agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementAuthorityModuleV2.ts',
+    'agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementOperationContractV2.ts',
+    'agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementNativeProjectionV2.ts',
+    'agi-stack/apps/desktop/src/features/settings/useBrowserBridgeManagementV2.ts',
+    'agi-stack/apps/desktop/tests/desktop-browser-bridge-management-authority-v2.test.mjs',
+    'agi-stack/apps/desktop/tests/browser-bridge-management-lifecycle.test.mjs',
+    'agi-stack/apps/desktop/tests/desktop-browser-bridge-management-loader-v2.test.mjs',
+    'agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs',
+    'agi-stack/apps/desktop/sidecar/src/local_runtime/session_store.rs',
+    'agi-stack/apps/desktop/sidecar/src/local_runtime/browser_run_tool_host.rs',
   ];
   const boundEntries = sourcePaths.map((path) => bindSourceEntry(path, sourceRevision));
   const notApplicable = (reasonCode) => ({
@@ -463,79 +511,110 @@ function createBrowserBridgeCapability(sourceRevision) {
     audited_revision: sourceRevision,
   };
   return {
-    id: browserCapabilityId,
-    title: 'Browser Integration Bridge',
-    domain: 'native-browser',
-    scope: ['global'],
-    source_revision: sourceRevision,
-    web_route_ids: [],
-    web_route_registration_ids: [],
-    web_production_dependencies: [],
-    audited_web_sources: [],
-    production_entries: productionEntries,
-    api_contracts: apiContracts,
-    required_permissions: ['native-shell', 'browser-origin-consent'],
-    route_entry_permissions: [],
-    permission_requirements: [
-      {
-        surface: 'native_only',
-        actions: [...nativeSurface.allowed_actions],
-        authentication: 'native_shell',
-        authorization: ['browser-origin-consent'],
-        enforcement: 'enforced',
-        feature_gate: 'browser_bridge_registered',
-      },
-    ],
-    data_states: ['loading', 'ready', 'forbidden', 'unavailable', 'retry'],
-    interaction_states: [
-      'register',
-      'connect',
-      'request-origin-consent',
-      'invoke',
-      'disconnect',
-      'retry',
-    ],
-    expected_observable_result:
-      'The native browser bridge exposes only consented browser origins through the sidecar authority, an authenticated native-messaging extension transport, and the allowlisted Electron settings surface.',
-    surfaces,
-    evidence_requirements: input.evidence_requirements,
-    judgment: {
-      agent_id: '/root',
-      tool_name: 'structured_parity_judgment',
-      input,
-      input_digest: digestInput(input),
-      output: {
-        verdict: 'accepted',
-        ...Object.fromEntries(
-          surfaceNames.map((surface) => [surface, surfaceSummary(surfaces[surface])]),
-        ),
-      },
-      rationale:
-        'Browser Bridge is a separate native-only failure domain. Sidecar owns the decision authority; the browser extension and Electron settings UI are supporting transports. Release packaging and native-host registration evidence remain incomplete.',
-      latency_ms: 1,
-      recorded_at: '2026-08-10T09:05:37+08:00',
+    capability: {
+      id: browserCapabilityId,
+      title: 'Browser Integration Bridge',
+      domain: 'native-browser',
+      scope: ['global'],
+      source_revision: sourceRevision,
+      web_route_ids: [],
+      web_route_registration_ids: [],
+      web_production_dependencies: [],
+      audited_web_sources: [],
+      production_entries: productionEntries,
+      api_contracts: apiContracts,
+      required_permissions: ['native-shell', 'browser-origin-consent'],
+      route_entry_permissions: [],
+      permission_requirements: [
+        {
+          surface: 'native_only',
+          actions: [...nativeSurface.allowed_actions],
+          authentication: 'native_shell',
+          authorization: ['browser-origin-consent'],
+          enforcement: 'enforced',
+          feature_gate: 'browser_bridge_registered',
+        },
+      ],
+      data_states: ['loading', 'ready', 'forbidden', 'unavailable', 'retry'],
+      interaction_states: [
+        'register',
+        'connect',
+        'request-origin-consent',
+        'invoke',
+        'disconnect',
+        'retry',
+      ],
+      expected_observable_result:
+        'The native browser bridge exposes only consented browser origins through the sidecar authority, an authenticated native-messaging extension transport, and the allowlisted Electron settings surface.',
+      surfaces,
+      evidence_requirements: input.evidence_requirements,
+      journeys: [
+        {
+          id: 'primary',
+          title: 'Browser Integration Bridge',
+          mode_policy: modePolicy,
+          actions,
+          api_contracts: apiContracts,
+          data_states: ['loading', 'ready', 'forbidden', 'unavailable', 'retry'],
+          interaction_states: [
+            'register',
+            'connect',
+            'request-origin-consent',
+            'invoke',
+            'disconnect',
+            'retry',
+          ],
+          evidence_requirements: input.evidence_requirements,
+          expected_observable_result:
+            'Only the native-only surface may activate Browser Bridge, and it remains degraded until release registration and packaged native-host evidence are current.',
+        },
+      ],
     },
-    journeys: [
-      {
-        id: 'primary',
-        title: 'Browser Integration Bridge',
-        mode_policy: modePolicy,
-        actions,
-        api_contracts: apiContracts,
-        data_states: ['loading', 'ready', 'forbidden', 'unavailable', 'retry'],
-        interaction_states: [
-          'register',
-          'connect',
-          'request-origin-consent',
-          'invoke',
-          'disconnect',
-          'retry',
-        ],
-        evidence_requirements: input.evidence_requirements,
-        expected_observable_result:
-          'Only the native-only surface may activate Browser Bridge, and it remains degraded until release registration and packaged native-host evidence are current.',
-      },
-    ],
+    input,
+    inputDigest: digestParityJudgmentInput(input),
+    output: createParityJudgmentOutput(surfaces),
+  };
+}
+
+function consumeBrowserBridgeJudgment({
+  input,
+  inputDigest,
+  judgmentsByCapability,
+  output,
+}) {
+  const record = judgmentsByCapability.get(browserCapabilityId);
+  if (!record) {
+    throw new Error(`Missing structured Agent judgment for ${browserCapabilityId}.`);
+  }
+  if (
+    typeof record.agent_id !== 'string' ||
+    record.agent_id.length === 0 ||
+    record.tool_name !== 'structured_parity_judgment' ||
+    typeof record.rationale !== 'string' ||
+    record.rationale.length === 0 ||
+    !(record.latency_ms > 0) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u.test(record.recorded_at)
+  ) {
+    throw new Error(`Structured Agent judgment audit is incomplete for ${browserCapabilityId}.`);
+  }
+  if (!isDeepStrictEqual(record.input, input)) {
+    throw new Error(`Structured Agent judgment input drifted for ${browserCapabilityId}.`);
+  }
+  if (record.input_digest !== inputDigest) {
+    throw new Error(`Structured Agent judgment digest drifted for ${browserCapabilityId}.`);
+  }
+  if (!isDeepStrictEqual(record.output, output)) {
+    throw new Error(`Structured Agent judgment output drifted for ${browserCapabilityId}.`);
+  }
+  return {
+    agent_id: record.agent_id,
+    tool_name: record.tool_name,
+    input,
+    input_digest: inputDigest,
+    output,
+    rationale: record.rationale,
+    latency_ms: record.latency_ms,
+    recorded_at: record.recorded_at,
   };
 }
 

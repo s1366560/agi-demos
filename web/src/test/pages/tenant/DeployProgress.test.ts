@@ -52,7 +52,14 @@ describe('parseDeployProgressSseEvent', () => {
         controller.close();
       },
     });
-    vi.mocked(apiFetch.get).mockResolvedValueOnce(new Response(stream));
+    vi.mocked(apiFetch.get).mockImplementationOnce(async (...args: any[]) =>
+      args[1](new Response(stream), {
+        signal: args[2]?.signal ?? new AbortController().signal,
+        check() {
+          if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+        },
+      })
+    );
     const events: unknown[] = [];
 
     await streamDeployProgress({
@@ -61,10 +68,14 @@ describe('parseDeployProgressSseEvent', () => {
       onEvent: (event) => events.push(event),
     });
 
-    expect(apiFetch.get).toHaveBeenCalledWith('/deploys/deploy%201/progress', {
-      headers: { Accept: 'text/event-stream' },
-      signal: expect.any(AbortSignal),
-    });
+    expect(apiFetch.get).toHaveBeenCalledWith(
+      '/deploys/deploy%201/progress',
+      expect.any(Function),
+      {
+        headers: { Accept: 'text/event-stream' },
+        signal: expect.any(AbortSignal),
+      }
+    );
     expect(events).toEqual([
       {
         type: 'status',
@@ -95,7 +106,14 @@ describe('parseDeployProgressSseEvent', () => {
         controller.close();
       },
     });
-    vi.mocked(apiFetch.get).mockResolvedValueOnce(new Response(stream));
+    vi.mocked(apiFetch.get).mockImplementationOnce(async (...args: any[]) =>
+      args[1](new Response(stream), {
+        signal: args[2]?.signal ?? new AbortController().signal,
+        check() {
+          if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+        },
+      })
+    );
     const events: unknown[] = [];
 
     await streamDeployProgress({

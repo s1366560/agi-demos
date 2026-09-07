@@ -114,9 +114,8 @@
       "cloud_reason_code": "desktop_project_agent_dashboard_navigation_partial",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
-        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
@@ -127,7 +126,18 @@
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardRouteModule.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRuns.ts"
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRuns.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_authority": "none",
@@ -136,17 +146,24 @@
       "local_deviation": "Local preserves the native Project Agent Dashboard route but has no sidecar trace or active-count authority, so it fails closed before network access.",
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
-        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardRouteModule.ts",
-        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "judgment_rationale": "Web has a registered project Dashboard route and authenticated project trace/count authority with scope validation and stable errors. Cloud Desktop has a real native loader, typed client/controller/presentation, trusted-session transport, observed workspace-context revision and fail-closed scope checks, but its native page lacks the Web canonical navigation and success-state refresh and has no route-specific current-commit Electron proof. Local has no sidecar trace/count authority and correctly returns the stable local unavailable reason before network access."
+      "judgment_rationale": "At 041cbc2b0, App route and workbench consumers resolve service:desktop-renderer.project-agent-dashboard-authority@1.0.0 through project-scoped generation leases. Each load freezes config, scope and signal before admission; workspace-context observation plus trace and active-count requests remain inside one pinned generation, escaped authorities revoke after release, and Local still fails closed before any network request. Cloud therefore keeps its existing partial product status and only view/list-runs/inspect-active-count actions because the native presentation still exposes neither success-state refresh nor navigation to Logs or Patterns. Local remains unavailable with no sidecar trace/count authority and no actions. These source and contract facts establish renderer authority wiring only, not native Electron QA, globally-ready publication, ACK readiness, release readiness or V1 retirement."
     },
     {
       "id": "project-agent-logs",
@@ -264,17 +281,24 @@
       "local_deviation": "Local preserves the native Project Agent Logs route but has no sidecar trace authority, so it fails closed before network access.",
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
-        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentLogsClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentLogsRouteModule.ts",
-        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "judgment_rationale": "Web has a registered project Logs route and bounded project trace list with status filtering, member-scoped visibility and stable forbidden/unavailable states. Cloud Desktop has a real native loader and observed scoped authority; its typed client can send a status query and controllers now normalize backend-shaped 403/outage errors, but the native presentation cannot invoke the filter or success-state refresh and lacks current-commit Electron proof. Local has no sidecar trace authority and returns its stable unavailable reason before network access."
+      "judgment_rationale": "At 0acbbb7f0, App route and workbench consumers resolve service:desktop-renderer.project-agent-logs-authority@1.0.0 through project-scoped generation leases. Each load freezes config, scope, status, limit and signal before admission; workspace-context observation and the trace request remain inside one pinned generation, escaped authorities revoke after release, and Local still fails closed before any network request. Cloud therefore keeps its existing partial product status and only view/list-runs actions because the native presentation still exposes neither filter-status nor success-state refresh. Local remains unavailable with no sidecar trace authority and no actions. These source and contract facts establish renderer authority wiring only, not native Electron QA, globally-ready publication, ACK readiness, release readiness or V1 retirement."
     },
     {
       "id": "project-agent-patterns",
@@ -381,9 +405,8 @@
       "cloud_reason_code": "desktop_project_agent_patterns_inspector_partial",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
-        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
@@ -393,7 +416,15 @@
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsRouteModule.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentPatternsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentPatternsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentPatternsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_authority": "none",
@@ -402,17 +433,24 @@
       "local_deviation": "Local preserves the native Project Agent Patterns route but has no sidecar pattern repository projection, so it fails closed before network access.",
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
-        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsRouteModule.ts",
-        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentPatternsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentPatternsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentPatternsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "judgment_rationale": "Web has a registered route and project-authorized tenant-shared read-only authority. Pattern status is fail-closed as unclassified, selection/inspector/copy are reachable, and mutation controls render only when a caller supplies mutation authority. Cloud Desktop has a real native loader, observed trusted-session scope and stable errors, but the client/presentation drops pattern steps, updated time and metadata and exposes no selection, inspector or copy action; current-commit Electron proof is also absent. Local has no sidecar pattern repository/projection and returns its stable unavailable reason before network access."
+      "judgment_rationale": "At 9861c8a4e, App route and workbench consumers resolve service:desktop-renderer.project-agent-patterns-authority@1.0.0 through project-scoped generation leases. Each load freezes config, scope and signal before admission; workspace-context observation and the tenant-shared patterns request remain inside one pinned generation, exact project and tenant scope plus pattern fields are validated, escaped authorities revoke after release, and Local still fails closed before any network request. Cloud therefore keeps its existing partial product status and only view/list-patterns/inspect-shared-scope actions because the native presentation still drops pattern steps, updated time and metadata and exposes no selection, inspector, copy or refresh action. Local remains unavailable with no sidecar pattern repository projection and no actions. These source and contract facts establish renderer authority wiring only, not native Electron QA, globally-ready publication, ACK readiness, release readiness or V1 retirement."
     }
   ],
   "source_ownership": {

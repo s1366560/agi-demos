@@ -10,15 +10,17 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.skill_evolution_repository_services import (
+        SkillEvolutionRepositoryProtocolV2,
+    )
 
 from src.domain.llm_providers.llm_types import LLMClient, Message
 from src.infrastructure.agent.plugins.skill_evolution.config import SkillEvolutionConfig
 from src.infrastructure.agent.plugins.skill_evolution.models import (
     SkillEvolutionSession,
-)
-from src.infrastructure.agent.plugins.skill_evolution.repository import (
-    SkillEvolutionRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +59,7 @@ class SessionSummarizer:
         self,
         sessions: list[SkillEvolutionSession],
         llm_client: LLMClient,
-        repo: SkillEvolutionRepository,
+        repo: SkillEvolutionRepositoryProtocolV2,
     ) -> int:
         """Summarize a batch of sessions.
 
@@ -72,7 +74,9 @@ class SessionSummarizer:
                     session.id,
                 )
 
-        async def summarize_one(session: SkillEvolutionSession) -> tuple[str, dict[str, Any], str] | None:
+        async def summarize_one(
+            session: SkillEvolutionSession,
+        ) -> tuple[str, dict[str, Any], str] | None:
             try:
                 trajectory, summary_text = await self._summarize_one(session, llm_client)
                 return session.id, trajectory, summary_text
@@ -161,7 +165,7 @@ class SessionSummarizer:
 
 async def _enrich_sparse_trajectory_from_events(
     session: SkillEvolutionSession,
-    repo: SkillEvolutionRepository,
+    repo: SkillEvolutionRepositoryProtocolV2,
 ) -> None:
     raw_trajectory = session.trajectory if isinstance(session.trajectory, dict) else {}
     if not _needs_event_enrichment(raw_trajectory):
@@ -190,9 +194,9 @@ async def _enrich_sparse_trajectory_from_events(
 
     existing_steps = raw_trajectory.get("steps", [])
     should_replace_steps = not isinstance(existing_steps, list) or len(steps) > len(existing_steps)
-    should_add_final_response = final_response and not str(
-        raw_trajectory.get("final_response", "")
-    ).strip()
+    should_add_final_response = (
+        final_response and not str(raw_trajectory.get("final_response", "")).strip()
+    )
     if not should_replace_steps and not should_add_final_response:
         return
 
@@ -212,17 +216,15 @@ def _is_sparse_trajectory(trajectory: dict[str, Any]) -> bool:
     if not isinstance(steps, list) or len(steps) <= 1:
         return True
     tool_names = [
-        str(step.get("tool") or step.get("name") or "")
-        for step in steps
-        if isinstance(step, dict)
+        str(step.get("tool") or step.get("name") or "") for step in steps if isinstance(step, dict)
     ]
     return bool(tool_names) and all(name == "skill_loader" for name in tool_names)
 
 
 def _needs_event_enrichment(trajectory: dict[str, Any]) -> bool:
-    return _is_sparse_trajectory(trajectory) or not str(
-        trajectory.get("final_response", "")
-    ).strip()
+    return (
+        _is_sparse_trajectory(trajectory) or not str(trajectory.get("final_response", "")).strip()
+    )
 
 
 def _trajectory_from_events(

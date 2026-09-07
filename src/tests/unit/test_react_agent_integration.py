@@ -5,14 +5,88 @@ and TemplateRegistry when graph_service is available.
 """
 
 import json
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.domain.model.agent.subagent import SubAgent
-from src.infrastructure.agent.plugins.registry import HookDispatchResult
-from src.infrastructure.plugins.agent_events import AgentPluginEventDispatcher
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent.core.subagent_tool_set_v2 import (
+    InheritedToolSetV2,
+    SubAgentToolSetBindingV2,
+)
+from src.infrastructure.agent.mcp.skill_mcp_manager import SkillMCPManager
+from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
+from src.infrastructure.agent.processor import ToolDefinition
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+    AgentRuntimeDispatchResultV2,
+    PinnedAgentRuntimeDispatcherV2,
+)
+from src.infrastructure.plugins.v2.agent_skill_mcp_service import (
+    SKILL_MCP_MANAGER_SERVICE_V2,
+)
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
+)
+from src.infrastructure.plugins.v2.runtime import FiberPhaseV2
+from src.infrastructure.plugins.v2.tool_set import (
+    OPERATION_TOOL_SET_CATALOG_SERVICE_V2,
+    ToolSetCatalogV2,
+    ToolSetV2,
+)
+
+_TEST_GENERATION_DESCRIPTOR = PluginGenerationDescriptorV2(
+    profile_id="react-agent-integration",
+    generation=1,
+    digest="1" * 64,
+)
+_SUBAGENT_REBINDABLE_TOOL_NAMES = (
+    "delegate_to_subagent",
+    "parallel_delegate_subagents",
+    "sessions_spawn",
+    "sessions_list",
+    "sessions_history",
+    "sessions_timeline",
+    "sessions_overview",
+    "sessions_wait",
+    "sessions_ack",
+    "sessions_send",
+    "subagents",
+)
+
+
+class _TestOperationV2:
+    operation_id = "react-agent-parent-turn"
+    descriptor = _TEST_GENERATION_DESCRIPTOR
+    phase = FiberPhaseV2.ACTIVE
+
+    async def effect(self, setup, *, label: str) -> None:
+        assert label
+        result = setup()
+        if hasattr(result, "__await__"):
+            await result
+
+
+def _turn_tool_set(*names: str) -> ToolSetV2:
+    raw_tools = {name: object() for name in names}
+    definitions = tuple(ToolDefinition(name, "", {}, lambda **_: None) for name in names)
+    return ToolSetV2(
+        tools=MappingProxyType(raw_tools),
+        definitions=definitions,
+    )
+
+
+def _inherited_tool_set() -> InheritedToolSetV2:
+    names = ("test_tool", *_SUBAGENT_REBINDABLE_TOOL_NAMES)
+    return InheritedToolSetV2(
+        tool_set=_turn_tool_set(*names),
+        generation_descriptor=_TEST_GENERATION_DESCRIPTOR,
+        owner_operation_id=_TestOperationV2.operation_id,
+        rebindable_tool_names=frozenset(_SUBAGENT_REBINDABLE_TOOL_NAMES),
+    )
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -33,9 +107,22 @@ def _make_react_agent(**kwargs):
     defaults = {
         "model": "test-model",
         "tools": {"test_tool": MagicMock()},
+        "provider_id": "test-provider",
     }
     defaults.update(kwargs)
-    return ReActAgent(**defaults)
+    agent = ReActAgent(**defaults)
+    registry = SubAgentRunRegistry()
+
+    def resolver() -> SubAgentRunRegistry:
+        return registry
+
+    agent._session_runner.deps.subagent_run_registry_resolver = resolver
+    inherited_tool_set = _inherited_tool_set()
+    operation = _TestOperationV2()
+    agent._session_runner.deps.inherited_tool_set_fn = lambda: inherited_tool_set
+    agent._session_runner.deps.operation_context_fn = lambda: operation
+    agent._tool_builder.deps.subagent_run_registry_resolver = resolver
+    return agent
 
 
 def _make_processor_mock() -> MagicMock:
@@ -55,13 +142,52 @@ def _make_runtime_profile(**overrides):
         "deny_tools": [],
         "tenant_agent_config": TenantAgentConfig.create_default("tenant-1"),
         "agent_definition_prompt": "",
-        "effective_model": "test-model",
+        "effective_model_route": ModelRouteRef(
+            provider_id="test-provider",
+            model_id="test-model",
+        ),
         "effective_temperature": 0.2,
         "effective_max_tokens": 1024,
         "effective_max_steps": 4,
     }
     defaults.update(overrides)
     return AgentRuntimeProfile(**defaults)
+
+
+def _make_operation_context(dispatcher):
+    session_registry = MagicMock()
+    session_registry.register = AsyncMock()
+    orchestrator = AgentOrchestrator(
+        agent_registry=MagicMock(),
+        session_registry=session_registry,
+        spawn_manager=MagicMock(),
+        message_bus=MagicMock(),
+    )
+    operation_catalog = ToolSetCatalogV2()
+    skill_mcp_manager = SkillMCPManager()
+
+    def _require(service_key: str):
+        if service_key == AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2:
+            return orchestrator
+        if service_key == OPERATION_TOOL_SET_CATALOG_SERVICE_V2:
+            return operation_catalog
+        if service_key == SKILL_MCP_MANAGER_SERVICE_V2:
+            return skill_mcp_manager
+        return dispatcher
+
+    async def _effect(setup, *, label: str):
+        del label
+        result = setup()
+        if hasattr(result, "__await__"):
+            await result
+
+    return SimpleNamespace(
+        operation_id="test-turn",
+        descriptor=_TEST_GENERATION_DESCRIPTOR,
+        phase=FiberPhaseV2.ACTIVE,
+        require=_require,
+        effect=_effect,
+    )
 
 
 @pytest.mark.unit
@@ -121,6 +247,7 @@ class TestReActAgentMemoryIntegration:
             events = []
             async for event in agent._execute_subagent(
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Research AI trends",
                 conversation_context=[],
                 project_id="proj-1",
@@ -165,6 +292,7 @@ class TestReActAgentMemoryIntegration:
 
             async for _ in agent._execute_subagent(
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="proj-1",
@@ -205,6 +333,7 @@ class TestReActAgentMemoryIntegration:
             events = []
             async for event in agent._execute_subagent(
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="proj-1",
@@ -243,6 +372,7 @@ class TestReActAgentMemoryIntegration:
 
             async for _ in agent._execute_subagent(
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="",
@@ -278,6 +408,7 @@ class TestReActAgentMemoryIntegration:
 
             async for _ in agent._execute_subagent(
                 subagent=researcher,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="proj-1",
@@ -313,6 +444,7 @@ class TestReActAgentMemoryIntegration:
 
             async for _ in agent._execute_subagent(
                 subagent=researcher,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="proj-1",
@@ -344,6 +476,27 @@ class TestReActAgentBackgroundExecutor:
 
 @pytest.mark.unit
 class TestReActAgentWorkspaceDelegation:
+    @pytest.fixture(autouse=True)
+    def _project_agent_capabilities(self):
+        async def _resolve(agent, **_kwargs):
+            return SimpleNamespace(
+                skills=tuple(agent.skills),
+                subagents=tuple(agent.subagents),
+            )
+
+        with (
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_agent_capabilities_from_runtime_v2",
+                new=AsyncMock(side_effect=_resolve),
+            ),
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=_make_operation_context(PinnedAgentRuntimeDispatcherV2()),
+            ),
+        ):
+            yield
+
     def test_workspace_binding_from_runtime_context_parses_json_header(self):
         agent = _make_react_agent()
         context = [
@@ -465,6 +618,8 @@ class TestReActAgentWorkspaceDelegation:
         )
         workspace_root_task = MagicMock(id="root-1", workspace_id="ws-1")
         captured: dict[str, object] = {}
+        tool_set_binding = SubAgentToolSetBindingV2(operation=_TestOperationV2())
+        tool_set_binding.bind(_inherited_tool_set().tool_set)
 
         def capture_build(**kwargs):
             captured.update(kwargs)
@@ -506,6 +661,7 @@ class TestReActAgentWorkspaceDelegation:
         ):
             agent._stream_inject_subagent_tools(
                 tools_to_use=[],
+                available_subagents=agent.subagents,
                 conversation_context=[],
                 project_id="proj-1",
                 tenant_id="tenant-1",
@@ -514,6 +670,7 @@ class TestReActAgentWorkspaceDelegation:
                 workspace_root_task=workspace_root_task,
                 leader_agent_id="leader-agent",
                 actor_user_id="u-1",
+                tool_set_binding=tool_set_binding,
             )
 
             delegate_callback = captured["delegate_callback"]
@@ -590,6 +747,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -694,6 +856,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -741,6 +908,7 @@ class TestReActAgentWorkspaceDelegation:
     async def test_worker_runtime_code_context_survives_activation_miss(self):
         agent = _make_react_agent()
         captured: dict[str, object] = {}
+        profile_skill = MagicMock()
         runtime_context = {
             "context_type": "workspace_worker_runtime",
             "workspace_binding": {
@@ -767,7 +935,8 @@ class TestReActAgentWorkspaceDelegation:
             yield {"type": "complete", "data": {"content": "done"}}
 
         def _match_skill(*args, **kwargs):
-            del args, kwargs
+            del args
+            captured["matched_skills"] = kwargs["available_skills"]
             agent._stream_skill_state = {
                 "matched_skill": None,
                 "skill_score": 0.0,
@@ -803,7 +972,7 @@ class TestReActAgentWorkspaceDelegation:
                 agent,
                 "_build_runtime_profile",
                 return_value=_make_runtime_profile(
-                    available_skills=[MagicMock()],
+                    available_skills=[profile_skill],
                 ),
             ),
             patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
@@ -821,6 +990,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -856,6 +1030,7 @@ class TestReActAgentWorkspaceDelegation:
 
         config = captured["config"]
         assert events[-1]["type"] == "complete"
+        assert captured["matched_skills"] == [profile_skill]
         assert config.runtime_context["workspace_id"] == "ws-bound"
         assert config.runtime_context["root_goal_task_id"] == "root-bound"
         assert config.runtime_context["workspace_task_id"] == "task-bound"
@@ -864,7 +1039,6 @@ class TestReActAgentWorkspaceDelegation:
 
     async def test_leader_replan_runtime_context_restricts_tools_to_task_ledger(self):
         from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-        from src.infrastructure.agent.core.processor import ToolDefinition
         from src.infrastructure.agent.core.react_agent import AgentRuntimeProfile
         from src.infrastructure.agent.workspace.runtime_role_contract import (
             WORKSPACE_ROLE_LEADER,
@@ -899,17 +1073,6 @@ class TestReActAgentWorkspaceDelegation:
             agent._stream_success = True
             yield {"type": "complete", "data": {"content": "done"}}
 
-        def _prepare_tools(*args, **kwargs):
-            del args, kwargs
-            agent._stream_tools_to_use = [
-                ToolDefinition("bash", "", {}, lambda **_: None),
-                ToolDefinition("read", "", {}, lambda **_: None),
-                ToolDefinition("sessions_list", "", {}, lambda **_: None),
-                ToolDefinition("todoread", "", {}, lambda **_: None),
-                ToolDefinition("todowrite", "", {}, lambda **_: None),
-            ]
-            return []
-
         def _capture_processor(**kwargs):
             captured["config"] = kwargs["config"]
             captured["tools"] = kwargs["tools"]
@@ -943,7 +1106,10 @@ class TestReActAgentWorkspaceDelegation:
                     available_skills=[],
                     allow_tools=["bash", "read", "sessions_list", "todoread", "todowrite"],
                     deny_tools=[],
-                    effective_model="test-model",
+                    effective_model_route=ModelRouteRef(
+                        provider_id="test-provider",
+                        model_id="test-model",
+                    ),
                     effective_temperature=0.2,
                     effective_max_tokens=1024,
                     effective_max_steps=4,
@@ -968,7 +1134,18 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
-            patch.object(agent, "_stream_prepare_tools", side_effect=_prepare_tools),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(
+                    "bash",
+                    "read",
+                    "sessions_list",
+                    "todoread",
+                    "todowrite",
+                ),
+            ),
+            patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
             patch.object(agent, "_stream_record_skill_usage", return_value=None),
@@ -1013,17 +1190,14 @@ class TestReActAgentWorkspaceDelegation:
             WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
         )
 
-    async def test_stream_passes_tenant_runtime_hook_overrides_to_before_prompt_build(self):
+    async def test_stream_does_not_inject_retired_v1_runtime_hook_overrides(self):
         agent = _make_react_agent()
-        registry = MagicMock()
-        registry.apply_hook = AsyncMock(
-            return_value=HookDispatchResult(
+        dispatcher = MagicMock()
+        dispatcher.dispatch = AsyncMock(
+            return_value=AgentRuntimeDispatchResultV2(
                 payload={"memory_context": "", "emitted_events": []},
-                diagnostics=[],
             )
         )
-        agent.config.plugin_registry = registry
-        agent.config.plugin_event_dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
         agent._stream_skill_state = {
             "matched_skill": None,
             "is_forced": False,
@@ -1086,6 +1260,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -1094,6 +1273,10 @@ class TestReActAgentWorkspaceDelegation:
                 agent,
                 "_processor_factory",
                 new=SimpleNamespace(create_for_main=lambda **kwargs: _make_processor_mock()),
+            ),
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=_make_operation_context(dispatcher),
             ),
         ):
             agent._stream_messages = [{"role": "system", "content": "system"}]
@@ -1112,22 +1295,18 @@ class TestReActAgentWorkspaceDelegation:
                 events.append(event)
 
         assert events[-1]["type"] == "complete"
-        assert registry.apply_hook.await_args.args[0] == "before_prompt_build"
-        assert registry.apply_hook.await_args.kwargs["runtime_overrides"] == [
-            runtime_hook.to_dict()
-        ]
+        assert dispatcher.dispatch.await_args.args[0] == "before_prompt_build"
+        assert "runtime_hook_overrides" not in dispatcher.dispatch.await_args.kwargs
+        assert not hasattr(agent.config, "runtime_hook_overrides")
 
     async def test_stream_resets_stale_memory_context_before_before_prompt_build(self):
         agent = _make_react_agent()
-        registry = MagicMock()
-        registry.apply_hook = AsyncMock(
-            return_value=HookDispatchResult(
+        dispatcher = MagicMock()
+        dispatcher.dispatch = AsyncMock(
+            return_value=AgentRuntimeDispatchResultV2(
                 payload={"memory_context": "", "emitted_events": []},
-                diagnostics=[],
             )
         )
-        agent.config.plugin_registry = registry
-        agent.config.plugin_event_dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
 
         async def _empty_async_gen(*args, **kwargs):
             if False:
@@ -1174,6 +1353,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -1182,6 +1366,10 @@ class TestReActAgentWorkspaceDelegation:
                 agent,
                 "_processor_factory",
                 new=SimpleNamespace(create_for_main=lambda **kwargs: _make_processor_mock()),
+            ),
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=_make_operation_context(dispatcher),
             ),
         ):
             agent._stream_memory_context = "stale memory"
@@ -1196,7 +1384,7 @@ class TestReActAgentWorkspaceDelegation:
             ):
                 pass
 
-        payload = registry.apply_hook.await_args.kwargs["payload"]
+        payload = dispatcher.dispatch.await_args.kwargs["payload"]
         assert payload["memory_context"] is None
 
     def test_filter_workspace_root_tools_removes_generic_agent_bypass_tools(self):

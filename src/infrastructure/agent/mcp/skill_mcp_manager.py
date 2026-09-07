@@ -61,6 +61,7 @@ class SkillMCPManager:
         self._skill_configs: dict[str, list[SkillMCPConfig]] = {}
         self._server_refcounts: dict[str, int] = {}
         self._active_clients: dict[str, MCPClient] = {}
+        self._active_server_configs: dict[str, SkillMCPConfig] = {}
         self._active_skills: set[str] = set()
         self._server_tools: dict[str, list[MCPTool]] = {}
         self._lock = asyncio.Lock()
@@ -164,10 +165,12 @@ class SkillMCPManager:
                 logger.info("Activated skill %s", skill_id)
                 return self.get_skill_tools(skill_id)
 
-        except Exception:
-            # Rollback: decrement refcounts for servers we already started
-            for server_name in started_servers:
-                self._decrement_refcount(server_name)
+        except BaseException:
+            # Roll back completed references in dependency-reverse order.
+            # Cancellation is part of the lifecycle contract and must not
+            # leave a zero-refcount client running.
+            for server_name in reversed(started_servers):
+                await self._stop_server_if_unused(server_name)
             raise
 
     async def deactivate_skill(self, skill_id: str) -> None:
@@ -186,13 +189,20 @@ class SkillMCPManager:
         configs = self._skill_configs.get(skill_id, [])
 
         async with self._lock:
-            for config in configs:
+            cleanup_error: BaseException | None = None
+            for config in reversed(configs):
                 if not config.auto_start:
                     continue
-                await self._stop_server_if_unused(config.server_name)
+                try:
+                    await self._stop_server_if_unused(config.server_name)
+                except BaseException as exc:
+                    if cleanup_error is None:
+                        cleanup_error = exc
 
             self._active_skills.discard(skill_id)
             logger.info("Deactivated skill %s", skill_id)
+            if cleanup_error is not None:
+                raise cleanup_error
 
     def get_skill_tools(self, skill_id: str) -> list[MCPTool]:
         """Return all MCP tools available for a skill.
@@ -246,11 +256,14 @@ class SkillMCPManager:
             logger.warning("Cannot restart server %s: not active", server_name)
             return False
 
-        config = self._find_config_for_server(server_name)
+        config = self._active_server_configs.get(server_name) or self._find_config_for_server(
+            server_name
+        )
         if config is None:
             logger.error("Cannot restart server %s: config not found", server_name)
             return False
 
+        new_client: MCPClient | None = None
         try:
             async with self._lock:
                 # Disconnect old client
@@ -258,20 +271,23 @@ class SkillMCPManager:
                 await self._safe_disconnect(old_client)
 
                 # Start new client
-                client = self._create_client(config)
-                await client.connect()
-                self._active_clients[server_name] = client
+                new_client = self._create_client(config)
+                await new_client.connect()
+                self._active_clients[server_name] = new_client
 
                 # Refresh tool cache
-                await self._cache_server_tools(server_name, client)
+                await self._cache_server_tools(server_name, new_client)
 
                 logger.info("Restarted MCP server %s", server_name)
                 return True
 
         except Exception:
             logger.exception("Failed to restart MCP server %s", server_name)
+            if new_client is not None:
+                await self._safe_disconnect(new_client)
             # Remove broken client
             self._active_clients.pop(server_name, None)
+            self._active_server_configs.pop(server_name, None)
             self._server_tools.pop(server_name, None)
             return False
 
@@ -283,6 +299,7 @@ class SkillMCPManager:
                 logger.info("Shut down MCP server %s", server_name)
 
             self._active_clients.clear()
+            self._active_server_configs.clear()
             self._server_refcounts.clear()
             self._server_tools.clear()
             self._active_skills.clear()
@@ -307,17 +324,37 @@ class SkillMCPManager:
         server_name = config.server_name
         current_ref = self._server_refcounts.get(server_name, 0)
 
+        if current_ref > 0:
+            active_config = self._active_server_configs.get(server_name)
+            if active_config is None or self._config_identity(
+                active_config
+            ) != self._config_identity(config):
+                raise RuntimeError(
+                    f"MCP server {server_name} is already active with a different configuration"
+                )
+
         if current_ref == 0:
             # First reference -- actually start the server
             client = self._create_client(config)
             try:
                 await client.connect()
-            except Exception:
-                logger.exception("Failed to start MCP server %s", server_name)
+                await self._cache_server_tools(server_name, client)
+            except BaseException:
+                try:
+                    await self._safe_disconnect(client)
+                finally:
+                    self._active_clients.pop(server_name, None)
+                    self._active_server_configs.pop(server_name, None)
+                    self._server_tools.pop(server_name, None)
+                    self._server_refcounts.pop(server_name, None)
+                logger.error(
+                    "Failed or cancelled while starting MCP server %s",
+                    server_name,
+                )
                 raise
 
             self._active_clients[server_name] = client
-            await self._cache_server_tools(server_name, client)
+            self._active_server_configs[server_name] = self._copy_config(config)
             logger.info("Started MCP server %s", server_name)
 
         self._server_refcounts[server_name] = current_ref + 1
@@ -334,11 +371,14 @@ class SkillMCPManager:
 
         if self._server_refcounts.get(server_name, 0) == 0:
             client = self._active_clients.pop(server_name, None)
-            if client:
-                await self._safe_disconnect(client)
-                logger.info("Stopped MCP server %s (refcount=0)", server_name)
-            self._server_tools.pop(server_name, None)
-            self._server_refcounts.pop(server_name, None)
+            try:
+                if client:
+                    await self._safe_disconnect(client)
+                    logger.info("Stopped MCP server %s (refcount=0)", server_name)
+            finally:
+                self._active_server_configs.pop(server_name, None)
+                self._server_tools.pop(server_name, None)
+                self._server_refcounts.pop(server_name, None)
 
     def _decrement_refcount(self, server_name: str) -> None:
         """Safely decrement a server's reference count."""
@@ -377,7 +417,31 @@ class SkillMCPManager:
             logger.info("Cached %d tool(s) from server %s", len(tools), server_name)
         except Exception:
             logger.exception("Failed to list tools from server %s", server_name)
-            self._server_tools[server_name] = []
+            self._server_tools.pop(server_name, None)
+            raise
+
+    @staticmethod
+    def _config_identity(
+        config: SkillMCPConfig,
+    ) -> tuple[str, str, tuple[str, ...], tuple[tuple[str, str], ...], bool]:
+        """Return an immutable identity without exposing environment values."""
+        return (
+            config.server_name,
+            config.command,
+            tuple(config.args),
+            tuple(sorted(config.env.items())),
+            config.auto_start,
+        )
+
+    @staticmethod
+    def _copy_config(config: SkillMCPConfig) -> SkillMCPConfig:
+        return SkillMCPConfig(
+            server_name=config.server_name,
+            command=config.command,
+            args=list(config.args),
+            env=dict(config.env),
+            auto_start=config.auto_start,
+        )
 
     def _find_config_for_server(self, server_name: str) -> SkillMCPConfig | None:
         """Find the first SkillMCPConfig matching a server name."""

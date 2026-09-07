@@ -5,16 +5,13 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.secondary.persistence.models import CicdPipelineRunModel
-from src.infrastructure.adapters.secondary.persistence.plugin_config_repository import (
-    PluginConfigRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_cicd_pipeline import (
-    SqlCicdPipelineRepository,
+from src.infrastructure.adapters.secondary.persistence.models import (
+    CicdPipelineRunModel,
+    CicdPipelineStageRunModel,
 )
 from src.infrastructure.agent.workspace_plan.pipeline import (
     DRONE_PROVIDER,
@@ -25,6 +22,11 @@ from src.infrastructure.agent.workspace_plan.pipeline_provider_registry import (
     PipelineProviderUnavailableError,
     require_pipeline_provider,
 )
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.plugin_config_services import (
+        PluginConfigRepositoryProtocolV2,
+    )
 
 DRONE_PLUGIN_NAME = "drone-pipeline-plugin"
 
@@ -105,6 +107,57 @@ class PipelineProvider(Protocol):
 PipelineProviderFactory = Callable[[], PipelineProvider | Awaitable[PipelineProvider]]
 
 
+class CicdPipelineRepositoryProtocol(Protocol):
+    """Persistence required by ordinary-chat CI/CD orchestration."""
+
+    async def create_run(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        conversation_id: str,
+        provider: str,
+        repository: str,
+        branch: str | None,
+        commit_ref: str | None,
+        metadata: dict[str, Any] | None = None,
+    ) -> CicdPipelineRunModel: ...
+
+    async def finish_run(
+        self,
+        run: CicdPipelineRunModel,
+        *,
+        status: str,
+        reason: str | None = None,
+        external_id: str | None = None,
+        external_url: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> CicdPipelineRunModel: ...
+
+    async def create_stage_run(
+        self,
+        *,
+        run_id: str,
+        stage: str,
+        command: str | None,
+        metadata: dict[str, Any] | None = None,
+    ) -> CicdPipelineStageRunModel: ...
+
+    async def finish_stage_run(
+        self,
+        stage_run: CicdPipelineStageRunModel,
+        *,
+        status: str,
+        exit_code: int | None,
+        stdout_preview: str | None,
+        stderr_preview: str | None,
+        log_ref: str | None = None,
+        artifact_refs: list[str] | None = None,
+        duration_ms: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> CicdPipelineStageRunModel: ...
+
+
 class CicdPipelineService:
     """Runs configured repository CI/CD from ordinary chat turns."""
 
@@ -112,10 +165,13 @@ class CicdPipelineService:
         self,
         session: AsyncSession,
         *,
+        pipeline_repository: CicdPipelineRepositoryProtocol,
+        plugin_config_repository: PluginConfigRepositoryProtocolV2,
         provider_factory: PipelineProviderFactory | None = None,
     ) -> None:
         self._session = session
-        self._pipeline_repo = SqlCicdPipelineRepository(session)
+        self._pipeline_repo = pipeline_repository
+        self._plugin_config_repository = plugin_config_repository
         self._provider_factory = provider_factory
 
     async def run_pipeline(self, request: CicdPipelineRunRequest) -> CicdPipelineRunSummary:
@@ -225,7 +281,7 @@ class CicdPipelineService:
     ) -> PipelineContractSpec:
         if contract.provider != DRONE_PROVIDER:
             return contract
-        plugin_config = await PluginConfigRepository(self._session).get_by_tenant_and_plugin(
+        plugin_config = await self._plugin_config_repository.get_by_tenant_and_plugin(
             request.tenant_id, DRONE_PLUGIN_NAME
         )
         if plugin_config is None:
@@ -345,6 +401,7 @@ def _redacted_provider_config(provider_config: Mapping[str, Any]) -> dict[str, A
 
 __all__ = [
     "CicdPipelineError",
+    "CicdPipelineRepositoryProtocol",
     "CicdPipelineRunRequest",
     "CicdPipelineRunSummary",
     "CicdPipelineService",

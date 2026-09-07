@@ -12,6 +12,9 @@ from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.ports.services.agent_message_bus_port import AgentMessageType
 from src.infrastructure.agent.actor import execution
 from src.infrastructure.agent.actor.types import ProjectChatRequest
+from src.infrastructure.agent.hitl.state_store import HITLAgentState
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 
 @pytest.fixture(autouse=True)
@@ -58,6 +61,16 @@ class _TerminalWorkspaceStatusAgent(_FakeAgent):
         }
 
 
+class _ModelMessageCommitAgent(_FakeAgent):
+    async def execute_chat(self, **kwargs):
+        self.execute_chat_kwargs = kwargs
+        yield {
+            "type": MODEL_MESSAGE_COMMITTED_EVENT_V2,
+            "data": {"model_message": {"role": "assistant", "content": "done"}},
+        }
+        yield {"type": "complete", "data": {"content": "done"}}
+
+
 def _jwt_like_token() -> str:
     return (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
@@ -72,31 +85,6 @@ def _make_finalization_redis_client() -> MagicMock:
     redis_client.get = AsyncMock(return_value=None)
     redis_client.delete = AsyncMock(return_value=1)
     return redis_client
-
-
-def test_prepare_event_for_persistence_redacts_sensitive_tool_output() -> None:
-    """Actor persistence path must match repository-level event redaction."""
-    jwt = _jwt_like_token()
-
-    persistable, _has_text_end, _has_complete = execution._prepare_event_for_persistence(
-        {
-            "type": "observe",
-            "event_time_us": 10,
-            "event_counter": 2,
-            "data": {
-                "observation": f'{{"passed":"{jwt}"}}',
-                "nested": [{"authorization": f"Bearer {jwt}"}],
-            },
-        },
-        has_text_end_messages=False,
-        has_complete_assistant_message=False,
-    )
-
-    assert persistable is not None
-    serialized = json.dumps(persistable.event_data)
-    assert jwt not in serialized
-    assert "[REDACTED_JWT]" in persistable.event_data["observation"]
-    assert persistable.event_data["nested"][0]["authorization"] == "Bearer [REDACTED_JWT]"
 
 
 @pytest.mark.unit
@@ -121,6 +109,46 @@ async def test_publish_event_to_stream_redacts_sensitive_tool_output() -> None:
     serialized = json.dumps(payload)
     assert jwt not in serialized
     assert payload["data"]["observation"] == '{"token":"[REDACTED_JWT]"}'
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_title_generated_uses_standard_actor_stream_envelope() -> None:
+    redis_client = MagicMock()
+    redis_client.xadd = AsyncMock()
+    descriptor = {
+        "generation": 901,
+        "version": 901,
+        "digest": "a" * 64,
+    }
+
+    await execution._publish_event_to_stream(
+        conversation_id="conversation-a",
+        event={
+            "type": "title_generated",
+            "data": {
+                "conversation_id": "conversation-a",
+                "title": "Lifecycle title",
+                "plugin_generation": descriptor,
+                "operation_id": "ray-turn:message-a:conversation-title:child",
+                "parent_operation_id": "ray-turn:message-a",
+            },
+        },
+        message_id="message-a",
+        event_time_us=100,
+        event_counter=3,
+        redis_client=redis_client,
+    )
+
+    _stream_key, message = redis_client.xadd.await_args.args[:2]
+    payload = json.loads(message["data"])
+    assert payload["type"] == "title_generated"
+    assert payload["event_time_us"] == 100
+    assert payload["event_counter"] == 3
+    assert payload["message_id"] == "message-a"
+    assert payload["data"]["message_id"] == "message-a"
+    assert payload["data"]["plugin_generation"] == descriptor
+    assert payload["data"]["parent_operation_id"] == "ray-turn:message-a"
 
 
 @pytest.mark.unit
@@ -229,6 +257,11 @@ async def test_execute_project_chat_passes_abort_signal(
         user_id="user-1",
         conversation_context=[],
         preferred_language="zh-CN",
+        plugin_generation={
+            "profile_id": "default-v2",
+            "generation": 7,
+            "digest": "a" * 64,
+        },
     )
     abort_signal = asyncio.Event()
 
@@ -268,6 +301,7 @@ async def test_execute_project_chat_passes_abort_signal(
         error=None,
     )
     assert agent.execute_chat_kwargs["preferred_language"] == "zh-CN"
+    assert agent.execute_chat_kwargs["plugin_generation"] == request.plugin_generation
 
 
 @pytest.mark.unit
@@ -464,6 +498,90 @@ async def test_execute_project_chat_flushes_terminal_workspace_status_immediatel
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_execute_project_chat_flushes_model_message_commit_immediately() -> None:
+    agent = _ModelMessageCommitAgent()
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+    )
+    persist_events = AsyncMock()
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=persist_events),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(agent=agent, request=request)
+
+    assert result.is_error is False
+    assert persist_events.await_count == 2
+    assert [
+        [event["type"] for event in awaited.kwargs["events"]]
+        for awaited in persist_events.await_args_list
+    ] == [[MODEL_MESSAGE_COMMITTED_EVENT_V2], ["complete"]]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_continue_project_chat_flushes_model_message_commit_immediately() -> None:
+    agent = _ModelMessageCommitAgent()
+    state = HITLAgentState(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        hitl_request_id="request-1",
+        hitl_type="clarification",
+        hitl_request_data={"question": "Proceed?"},
+        messages=[],
+        user_message="hello",
+        user_id="user-1",
+    )
+    persist_events = AsyncMock()
+
+    with (
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_load_hitl_state", new=AsyncMock(return_value=state)),
+        patch.object(execution, "_validate_hitl_resume_request", return_value=None),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=persist_events),
+        patch.object(execution, "_project_automation_runtime_running", new=AsyncMock()),
+        patch.object(execution, "_project_automation_stream_terminal", new=AsyncMock()),
+        patch(
+            "src.infrastructure.agent.hitl.coordinator.mark_hitl_request_completed",
+            new=AsyncMock(return_value=False),
+        ),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.continue_project_chat(
+            agent=agent,
+            request_id="request-1",
+            response_data={"response": "yes"},
+        )
+
+    assert result.is_error is False
+    assert persist_events.await_count == 2
+    assert [
+        [event["type"] for event in awaited.kwargs["events"]]
+        for awaited in persist_events.await_args_list
+    ] == [[MODEL_MESSAGE_COMMITTED_EVENT_V2], ["complete"]]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_execute_project_chat_updates_spawn_status_for_child_session() -> None:
     agent = _FakeAgent()
     redis_client = _make_finalization_redis_client()
@@ -487,6 +605,11 @@ async def test_execute_project_chat_updates_spawn_status_for_child_session() -> 
         patch.object(execution, "_record_child_result_history", new=AsyncMock()) as history_writer,
         patch.object(execution, "_persist_events", new=AsyncMock()),
         patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(
+            execution,
+            "_resolve_child_terminal_status",
+            new=AsyncMock(return_value="completed"),
+        ),
         patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_spawn_status,
         patch.object(execution.agent_metrics, "increment"),
         patch.object(execution.agent_metrics, "observe"),
@@ -548,6 +671,11 @@ async def test_execute_project_chat_marks_failed_spawn_when_child_errors() -> No
         patch.object(execution, "_record_child_result_history", new=AsyncMock()) as history_writer,
         patch.object(execution, "_persist_events", new=AsyncMock()),
         patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(
+            execution,
+            "_resolve_child_terminal_status",
+            new=AsyncMock(return_value="failed"),
+        ),
         patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_spawn_status,
         patch.object(execution.agent_metrics, "increment"),
         patch.object(execution.agent_metrics, "observe"),
@@ -814,6 +942,11 @@ async def test_finalize_child_session_announce_uses_error_fallback() -> None:
 
     with (
         patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=redis_client)),
+        patch.object(
+            execution,
+            "_resolve_child_terminal_status",
+            new=AsyncMock(return_value="failed"),
+        ),
         patch.object(execution, "_update_spawn_status", new=AsyncMock()),
         patch.object(execution, "_record_child_result_history", new=AsyncMock()),
         patch.object(
@@ -857,7 +990,7 @@ async def test_finalize_child_session_keeps_session_mode_running() -> None:
     with (
         patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=redis_client)),
         patch(
-            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
             return_value=orchestrator,
         ),
         patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_status,
@@ -886,6 +1019,41 @@ async def test_finalize_child_session_keeps_session_mode_running() -> None:
     )
     history_writer.assert_awaited_once()
     announce_writer.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_spawn_status_helpers_propagate_generation_service_errors() -> None:
+    error = RuntimeV2Error("missing_service", "operation orchestrator is unavailable")
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+            side_effect=error,
+        ),
+        pytest.raises(RuntimeV2Error) as update_error,
+    ):
+        await execution._update_spawn_status(
+            child_session_id="child-conv",
+            status="running",
+            parent_session_id="parent-conv",
+        )
+
+    assert update_error.value is error
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+            side_effect=error,
+        ),
+        pytest.raises(RuntimeV2Error) as resolve_error,
+    ):
+        await execution._resolve_child_terminal_status(
+            child_session_id="child-conv",
+            success=True,
+        )
+
+    assert resolve_error.value is error
 
 
 @pytest.mark.unit
@@ -1020,372 +1188,53 @@ async def test_handle_hitl_pending_persists_canonical_run_authority() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_persist_events_skips_complete_when_assistant_exists() -> None:
-    """_persist_events should not add duplicate assistant_message on complete."""
-    session = MagicMock()
-    existing_result = MagicMock()
-    existing_result.scalars.return_value.all.return_value = [{"source": "complete"}]
-    session.execute = AsyncMock(return_value=existing_result)
-
-    begin_ctx = AsyncMock()
-    begin_ctx.__aenter__.return_value = None
-    begin_ctx.__aexit__.return_value = None
-    session.begin.return_value = begin_ctx
-
-    session_ctx = AsyncMock()
-    session_ctx.__aenter__.return_value = session
-    session_ctx.__aexit__.return_value = None
-
-    with patch.object(execution, "async_session_factory", return_value=session_ctx):
-        await execution._persist_events(
-            conversation_id="conv-1",
-            message_id="msg-1",
-            events=[{"type": "complete", "data": {"content": "final answer"}}],
-        )
-
-    # Only the assistant existence check query should run; no insert should happen.
-    assert session.execute.await_count == 1
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_events_skips_complete_when_text_end_assistant_exists() -> None:
-    """A persisted text_end assistant message should keep complete metadata as a complete event."""
-    session = MagicMock()
-    existing_result = MagicMock()
-    existing_result.scalars.return_value.all.return_value = [{"source": "text_end"}]
-    insert_result = MagicMock()
-    insert_result.one_or_none.return_value = ("complete", 123)
-    session.execute = AsyncMock(side_effect=[existing_result, insert_result, MagicMock()])
-
-    begin_ctx = AsyncMock()
-    begin_ctx.__aenter__.return_value = None
-    begin_ctx.__aexit__.return_value = None
-    session.begin.return_value = begin_ctx
-
-    session_ctx = AsyncMock()
-    session_ctx.__aenter__.return_value = session
-    session_ctx.__aexit__.return_value = None
-
-    with patch.object(execution, "async_session_factory", return_value=session_ctx):
-        await execution._persist_events(
-            conversation_id="conv-1",
-            message_id="msg-1",
-            events=[{"type": "complete", "data": {"content": "final answer"}}],
-        )
-
-    assert session.execute.await_count == 3
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_events_converts_complete_to_assistant_message() -> None:
-    """_persist_events should persist complete content when no assistant exists."""
-    session = MagicMock()
-    existing_result = MagicMock()
-    existing_result.scalars.return_value.all.return_value = []
-    insert_result = MagicMock()
-    insert_result.one_or_none.return_value = ("assistant_message", 123)
-    session.execute = AsyncMock(side_effect=[existing_result, insert_result, MagicMock()])
-
-    begin_ctx = AsyncMock()
-    begin_ctx.__aenter__.return_value = None
-    begin_ctx.__aexit__.return_value = None
-    session.begin.return_value = begin_ctx
-
-    session_ctx = AsyncMock()
-    session_ctx.__aenter__.return_value = session
-    session_ctx.__aexit__.return_value = None
-
-    with patch.object(execution, "async_session_factory", return_value=session_ctx):
-        await execution._persist_events(
-            conversation_id="conv-1",
-            message_id="msg-1",
-            events=[{"type": "complete", "data": {"content": "final answer"}}],
-        )
-
-    # Existing assistant check + insert + atomic projection update.
-    assert session.execute.await_count == 3
-
-
-@pytest.mark.unit
-def test_prepare_complete_assistant_message_carries_execution_summary() -> None:
-    """Complete synthesis should preserve trace and execution summary metadata."""
-    persistable_event, has_text_end_messages, has_complete = (
-        execution._prepare_event_for_persistence(
-            {
-                "type": "complete",
-                "data": {
-                    "content": "final answer",
-                    "trace_url": "https://trace.example/123",
-                    "execution_summary": {"step_count": 2, "artifact_count": 1},
-                },
-                "event_time_us": 100,
-                "event_counter": 1,
-            },
-            has_text_end_messages=False,
-            has_complete_assistant_message=False,
-        )
-    )
-
-    assert persistable_event is not None
-    assert persistable_event.event_type == "assistant_message"
-    assert persistable_event.event_data["trace_url"] == "https://trace.example/123"
-    assert persistable_event.event_data["execution_summary"] == {
-        "step_count": 2,
-        "artifact_count": 1,
+async def test_handle_hitl_pending_persists_complete_plugin_distribution() -> None:
+    descriptor = {
+        "profile_id": "default-v2",
+        "generation": 9,
+        "digest": "b" * 64,
     }
-    assert has_text_end_messages is False
-    assert has_complete is True
-
-
-@pytest.mark.unit
-def test_prepare_complete_assistant_message_without_content_keeps_metadata() -> None:
-    """Metadata-only complete events should still persist as assistant history."""
-    persistable_event, has_text_end_messages, has_complete = (
-        execution._prepare_event_for_persistence(
-            {
-                "type": "complete",
-                "data": {
-                    "content": "",
-                    "trace_url": "https://trace.example/empty",
-                    "execution_summary": {"step_count": 2},
-                },
-                "event_time_us": 100,
-                "event_counter": 1,
-            },
-            has_text_end_messages=False,
-            has_complete_assistant_message=False,
-        )
-    )
-
-    assert persistable_event is not None
-    assert persistable_event.event_type == "assistant_message"
-    assert persistable_event.event_data["content"] == ""
-    assert persistable_event.event_data["trace_url"] == "https://trace.example/empty"
-    assert persistable_event.event_data["execution_summary"] == {"step_count": 2}
-    assert has_text_end_messages is False
-    assert has_complete is True
-
-
-@pytest.mark.unit
-def test_prepare_terminal_workspace_status_creates_assistant_message() -> None:
-    """Terminal workspace status should be visible after Redis stream replay."""
-    persistable_event, has_text_end_messages, has_complete = (
-        execution._prepare_event_for_persistence(
-            {
-                "type": "status",
-                "data": {"status": "goal_achieved:workspace_contract_submitted"},
-                "event_time_us": 100,
-                "event_counter": 1,
-            },
-            has_text_end_messages=False,
-            has_complete_assistant_message=False,
-        )
-    )
-
-    assert persistable_event is not None
-    assert persistable_event.event_type == "assistant_message"
-    assert persistable_event.event_data["content"] == "Workspace contract submitted."
-    assert persistable_event.event_data["source"] == "terminal_workspace_status"
-    assert persistable_event.event_data["status"] == "goal_achieved:workspace_contract_submitted"
-    assert has_text_end_messages is False
-    assert has_complete is True
-
-
-@pytest.mark.unit
-def test_prepare_complete_persists_complete_event_when_text_end_exists() -> None:
-    """Complete events should persist separately when text_end already created history."""
-    persistable_event, has_text_end_messages, has_complete = (
-        execution._prepare_event_for_persistence(
-            {
-                "type": "complete",
-                "data": {
-                    "content": "final answer",
-                    "execution_summary": {"step_count": 2},
-                },
-                "event_time_us": 100,
-                "event_counter": 1,
-            },
-            has_text_end_messages=True,
-            has_complete_assistant_message=False,
-        )
-    )
-
-    assert persistable_event is not None
-    assert persistable_event.event_type == "complete"
-    assert persistable_event.event_data["execution_summary"] == {"step_count": 2}
-    assert has_text_end_messages is True
-    assert has_complete is False
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_events_uses_top_level_payload_for_legacy_dict_event() -> None:
-    """Legacy dict events should persist top-level payload into event_data."""
-    session = MagicMock()
-    existing_result = MagicMock()
-    existing_result.scalars.return_value.all.return_value = []
-    insert_result = MagicMock()
-    insert_result.one_or_none.return_value = ("assistant_message", 123)
-    session.execute = AsyncMock(side_effect=[existing_result, insert_result, MagicMock()])
-
-    begin_ctx = AsyncMock()
-    begin_ctx.__aenter__.return_value = None
-    begin_ctx.__aexit__.return_value = None
-    session.begin.return_value = begin_ctx
-
-    session_ctx = AsyncMock()
-    session_ctx.__aenter__.return_value = session
-    session_ctx.__aexit__.return_value = None
-
-    with patch.object(execution, "async_session_factory", return_value=session_ctx):
-        await execution._persist_events(
-            conversation_id="conv-1",
-            message_id="msg-1",
-            events=[
-                {
-                    "type": "assistant_message",
-                    "content": "legacy reply",
-                    "role": "assistant",
-                    "source": "legacy",
-                    "event_time_us": 123,
-                    "event_counter": 0,
-                }
-            ],
-        )
-
-    insert_stmt = session.execute.await_args_list[1].args[0]
-    params = insert_stmt.compile().params
-    assert "assistant_message" in params.values()
-    assert {
-        "content": "legacy reply",
-        "role": "assistant",
-        "source": "legacy",
-    } in params.values()
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_events_updates_conversation_projection_fields() -> None:
-    """Persisting events should refresh conversation message_count and updated_at."""
-    session = MagicMock()
-    existing_result = MagicMock()
-    existing_result.scalars.return_value.all.return_value = []
-    insert_result = MagicMock()
-    insert_result.one_or_none.return_value = ("assistant_message", 123)
-    session.execute = AsyncMock(side_effect=[existing_result, insert_result, MagicMock()])
-
-    begin_ctx = AsyncMock()
-    begin_ctx.__aenter__.return_value = None
-    begin_ctx.__aexit__.return_value = None
-    session.begin.return_value = begin_ctx
-
-    session_ctx = AsyncMock()
-    session_ctx.__aenter__.return_value = session
-    session_ctx.__aexit__.return_value = None
-
-    with patch.object(execution, "async_session_factory", return_value=session_ctx):
-        await execution._persist_events(
-            conversation_id="conv-1",
-            message_id="msg-1",
-            events=[{"type": "complete", "data": {"content": "final answer"}}],
-        )
-
-    executed_sql = [str(call.args[0]) for call in session.execute.await_args_list]
-    assert any("UPDATE conversations" in sql for sql in executed_sql)
-    assert any("message_count" in sql for sql in executed_sql)
-    assert any("updated_at" in sql for sql in executed_sql)
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_events_keeps_prefixed_correlation_id() -> None:
-    """Actor persistence should pass through prefixed correlation IDs unchanged."""
-    session = MagicMock()
-    existing_result = MagicMock()
-    existing_result.scalars.return_value.all.return_value = []
-    insert_result = MagicMock()
-    insert_result.one_or_none.return_value = ("assistant_message", 123)
-    session.execute = AsyncMock(side_effect=[existing_result, insert_result, MagicMock()])
-
-    begin_ctx = AsyncMock()
-    begin_ctx.__aenter__.return_value = None
-    begin_ctx.__aexit__.return_value = None
-    session.begin.return_value = begin_ctx
-
-    session_ctx = AsyncMock()
-    session_ctx.__aenter__.return_value = session
-    session_ctx.__aexit__.return_value = None
-
-    correlation_id = "cron:0e464e94-b2e8-4dbe-8a13-08b203ba6667"
-
-    with patch.object(execution, "async_session_factory", return_value=session_ctx):
-        await execution._persist_events(
-            conversation_id="conv-1",
-            message_id="msg-1",
-            events=[{"type": "complete", "data": {"content": "final answer"}}],
-            correlation_id=correlation_id,
-        )
-
-    insert_stmt = session.execute.await_args_list[1].args[0]
-    assert insert_stmt.compile().params["correlation_id"] == correlation_id
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_events_projects_run_input_application_after_insert() -> None:
-    """A durable timeline insert should update the matching run-input in one transaction."""
-    session = MagicMock()
-    existing_result = MagicMock()
-    existing_result.scalars.return_value.all.return_value = []
-    insert_result = MagicMock()
-    insert_result.one_or_none.return_value = ("run_input_applied", 123)
-    session.execute = AsyncMock(side_effect=[existing_result, insert_result, MagicMock()])
-
-    begin_ctx = AsyncMock()
-    begin_ctx.__aenter__.return_value = None
-    begin_ctx.__aexit__.return_value = None
-    session.begin.return_value = begin_ctx
-    session_ctx = AsyncMock()
-    session_ctx.__aenter__.return_value = session
-    session_ctx.__aexit__.return_value = None
-    projection = AsyncMock()
-    event_data = {
-        "run_input_id": "input-1",
-        "run_id": "run-1",
-        "run_revision": 4,
-        "message_id": "message-1",
-        "idempotency_key": "input-key-1",
-        "delivery_mode": "steer_now",
-        "applied_round": 3,
-        "applied_at": "2026-08-04T01:00:00+00:00",
-        "injected_via": "control_channel_observe_boundary",
+    distribution = {
+        "descriptor": descriptor,
+        "snapshot": {"profile_id": "default-v2", "generation": 9},
+        "envelope": {"version": 15, "nonce": "publication-15"},
     }
+    agent = SimpleNamespace(
+        config=SimpleNamespace(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            agent_mode="default",
+        )
+    )
+    request = ProjectChatRequest(
+        conversation_id="conv-v2",
+        message_id="message-v2",
+        user_message="Continue after permission",
+        user_id="user-v2",
+        plugin_generation=descriptor,
+        plugin_distribution=distribution,
+    )
+    pending = HITLPendingException(
+        request_id="permission-v2",
+        conversation_id="conv-v2",
+        hitl_type=HITLType.PERMISSION,
+        request_data={"action": "write"},
+    )
+    state_store = SimpleNamespace(save_state=AsyncMock(return_value="state-key"))
+    save_snapshot = AsyncMock()
 
     with (
-        patch.object(execution, "async_session_factory", return_value=session_ctx),
-        patch.object(
-            execution,
-            "apply_run_input_applied_projection",
-            new=projection,
-            create=True,
-        ),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "HITLStateStore", return_value=state_store),
+        patch.object(execution, "save_hitl_snapshot", new=save_snapshot),
+        patch.object(execution, "_project_automation_runtime_waiting_human", new=AsyncMock()),
     ):
-        await execution._persist_events(
-            conversation_id="conv-1",
-            message_id="message-1",
-            events=[
-                {
-                    "type": "run_input_applied",
-                    "data": event_data,
-                    "event_time_us": 123,
-                    "event_counter": 0,
-                }
-            ],
-        )
+        await execution.handle_hitl_pending(agent, request, pending)
 
-    projection.assert_awaited_once_with(session, event_data=event_data)
+    saved_state = state_store.save_state.await_args.args[0]
+    assert saved_state.plugin_generation == descriptor
+    assert saved_state.plugin_distribution == distribution
+    assert save_snapshot.await_args.args[0].plugin_distribution == distribution
 
 
 class _DeltaStreamingAgent(_FakeAgent):

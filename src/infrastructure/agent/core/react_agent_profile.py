@@ -5,7 +5,6 @@ This module owns:
 
 * ``AgentRuntimeProfile`` — the request-scoped profile snapshot used
   throughout :class:`ReActAgent`.
-* The provider-name normalization helpers.
 * ``_register_selected_agent_session`` — best-effort session registry call.
 * The workspace tool-name allow-lists (used by tool-policy filtering).
 
@@ -21,16 +20,15 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
 if TYPE_CHECKING:
     from src.domain.model.agent.agent_definition import Agent
     from src.domain.model.agent.skill import Skill
     from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 
 logger = logging.getLogger(__name__)
-
-_MODEL_PROVIDER_ALIASES: dict[str, str] = {
-    "azure_openai": "openai",
-}
 
 _WORKSPACE_WORKER_CODE_TOOL_NAMES: tuple[str, ...] = (
     "read",
@@ -66,35 +64,22 @@ class AgentRuntimeProfile:
     available_skills: list[Skill]
     allow_tools: list[str]
     deny_tools: list[str]
-    effective_model: str
+    effective_model_route: ModelRouteRef
     effective_temperature: float
     effective_max_tokens: int
     effective_max_steps: int
     primary_agent_prompt: str | None = None
     agent_definition_prompt: str | None = None
 
+    @property
+    def effective_model(self) -> str:
+        """Return the model identity retained for compatibility at consumers."""
+        return self.effective_model_route.model_id
 
-def _normalize_model_provider(provider: str | None) -> str | None:
-    """Normalize provider identifiers for cross-surface comparisons."""
-    if provider is None:
-        return None
-    normalized = provider.strip().lower()
-    if not normalized:
-        return None
-    if normalized.endswith("_coding"):
-        normalized = normalized.removesuffix("_coding")
-    return _MODEL_PROVIDER_ALIASES.get(normalized, normalized)
-
-
-def _infer_provider_from_model_name(model_name: str | None) -> str | None:
-    """Infer provider from explicit ``<provider>/<model>`` naming."""
-    if model_name is None:
-        return None
-    normalized_model = model_name.strip()
-    if not normalized_model or "/" not in normalized_model:
-        return None
-    provider_part = normalized_model.split("/", 1)[0]
-    return _normalize_model_provider(provider_part)
+    @property
+    def effective_provider_id(self) -> str:
+        """Return the explicit provider identity for this runtime profile."""
+        return self.effective_model_route.provider_id
 
 
 async def _register_selected_agent_session(
@@ -105,19 +90,18 @@ async def _register_selected_agent_session(
 ) -> None:
     """Best-effort registration of the resolved agent owning a conversation."""
     try:
-        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_orchestrator_v2,
+        )
 
-        orchestrator = get_agent_orchestrator()
-        if orchestrator is None:
-            return
-        session_registry = getattr(orchestrator, "_session_registry", None)
-        if session_registry is None:
-            return
-        await session_registry.register(
+        orchestrator = current_agent_orchestrator_v2()
+        _ = await orchestrator.register_agent_session(
             agent_id=selected_agent_id,
             conversation_id=conversation_id,
             project_id=project_id,
         )
+    except RuntimeV2Error:
+        raise
     except Exception:
         logger.warning(
             "[ReActAgent] Failed to register selected agent session: agent=%s conversation=%s "
@@ -130,12 +114,10 @@ async def _register_selected_agent_session(
 
 
 __all__ = [
-    "_MODEL_PROVIDER_ALIASES",
     "_WORKSPACE_LEADER_REPLAN_TOOL_NAMES",
     "_WORKSPACE_WORKER_CODE_TOOL_NAMES",
     "_WORKSPACE_WORKER_REPORT_TOOL_NAMES",
     "AgentRuntimeProfile",
-    "_infer_provider_from_model_name",
-    "_normalize_model_provider",
+    "ModelRouteRef",
     "_register_selected_agent_session",
 ]

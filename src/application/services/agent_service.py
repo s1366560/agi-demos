@@ -20,13 +20,12 @@ import json
 import logging
 import time as time_module
 import uuid
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.events.agent_events import AgentMessageEvent
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.model.agent import (
     AgentExecution,
@@ -35,6 +34,7 @@ from src.domain.model.agent import (
     ConversationStatus,
     ToolExecutionRecord,
 )
+from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 from src.domain.ports.repositories.agent_repository import (
     AgentExecutionEventRepository,
@@ -45,9 +45,16 @@ from src.domain.ports.repositories.agent_repository import (
 )
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
 from src.domain.ports.repositories.subagent_repository import SubAgentRepositoryPort
-from src.domain.ports.services.agent_service_port import AgentServicePort
-from src.domain.ports.services.graph_service_port import GraphServicePort
-from src.infrastructure.graph.neo4j_client import Neo4jClient
+from src.domain.ports.services.agent_service_port import (
+    AgentServicePort,
+    ModelVisibleToolSetView,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.session_event_log import (
+    SESSION_EVENT_LOG_SERVICE_V2,
+    TURN_ADMITTED_EVENT_V2,
+    SessionEventLogServiceV2,
+)
 
 if TYPE_CHECKING:
     from src.application.services.skill_service import SkillService
@@ -94,6 +101,19 @@ def canonical_agent_client_turn_payload_hash(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(_AGENT_CLIENT_TURN_PAYLOAD_VERSION + canonical_json).hexdigest()
 
 
+def _session_event_log_service_v2() -> SessionEventLogServiceV2:
+    """Resolve the sole turn-history authority from the pinned operation."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    provider = current_operation_context_v2().require(SESSION_EVENT_LOG_SERVICE_V2)
+    if not isinstance(provider, SessionEventLogServiceV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "v2 session event-log service has an invalid implementation",
+        )
+    return provider
+
+
 class AgentService(AgentServicePort):
     """
     Service for coordinating ReAct agent operations.
@@ -112,8 +132,6 @@ class AgentService(AgentServicePort):
         conversation_repository: ConversationRepository,
         execution_repository: AgentExecutionRepository,
         llm: LLMClient,
-        neo4j_client: Neo4jClient | None,
-        graph_service: GraphServicePort | None = None,
         execute_step_use_case: "ExecuteStepUseCase | None" = None,
         synthesize_results_use_case: "SynthesizeResultsUseCase | None" = None,
         workflow_learner: "WorkflowLearner | None" = None,
@@ -135,9 +153,7 @@ class AgentService(AgentServicePort):
         Args:
             conversation_repository: Repository for conversation data
             execution_repository: Repository for agent execution tracking
-            graph_service: Graph service for knowledge graph operations
             llm: LangChain chat model for LLM calls
-            neo4j_client: Neo4j client for direct graph database access
             execute_step_use_case: Optional use case for executing steps
             synthesize_results_use_case: Optional use case for synthesizing results
             workflow_learner: Optional service for learning workflow patterns
@@ -154,9 +170,7 @@ class AgentService(AgentServicePort):
         """
         self._conversation_repo = conversation_repository
         self._execution_repo = execution_repository
-        self._graph_service = graph_service
         self._llm = llm
-        self._neo4j_client = neo4j_client
         self._execute_step_uc = execute_step_use_case
         self._synthesize_uc = synthesize_results_use_case
         self._workflow_learner = workflow_learner
@@ -248,32 +262,17 @@ class AgentService(AgentServicePort):
         conversation: Conversation,
         exclude_event_id: str | None,
     ) -> tuple[list[dict[str, Any]], Any]:
-        """Load conversation context via context_loader or fallback.
+        """Materialize model-visible history from the pinned v2 session log.
 
         Returns:
             Tuple of (conversation_context_messages, context_summary_or_None).
         """
-        if self._context_loader:
-            load_result = await self._context_loader.load_context(
-                conversation_id=conversation.id,
-                exclude_event_id=exclude_event_id,
-            )
-            return load_result.messages, load_result.summary
-
-        # Fallback: direct message loading (no summary caching)
-        assert self._agent_execution_event_repo is not None
-        message_events = await self._agent_execution_event_repo.get_message_events(
-            conversation_id=conversation.id, limit=50
+        provider = _session_event_log_service_v2()
+        messages = await provider.materialize_model_messages(
+            conversation_id=conversation.id,
+            exclude_event_id=exclude_event_id,
         )
-        context = [
-            {
-                "role": event.event_data.get("role", "user"),
-                "content": event.event_data.get("content", ""),
-            }
-            for event in message_events
-            if event.id != exclude_event_id
-        ]
-        return context, None
+        return messages, None
 
     @override
     async def stream_chat_v2(
@@ -341,62 +340,49 @@ class AgentService(AgentServicePort):
 
             # Generate correlation ID for this request (used to track all events from this request)
             correlation_id = f"req_{uuid.uuid4().hex[:12]}"
+            created_at = datetime.now(UTC)
 
-            # Use Domain Event - include attachment_ids/file_metadata at creation time (model is frozen)
-            user_domain_event = AgentMessageEvent(
-                role="user",
-                content=user_message,
-                attachment_ids=attachment_ids if attachment_ids else None,
-                file_metadata=file_metadata if file_metadata else None,
-                forced_skill_name=forced_skill_name if forced_skill_name else None,
-                mentions=mentions if mentions else None,
+            # Rebuild only the history that predates this turn. The current user
+            # message is passed separately to the actor and must not appear twice.
+            conversation_context, context_summary = await self._load_conversation_context(
+                conversation=conversation,
+                exclude_event_id=None,
             )
 
-            # Get next event time
-            # Use EventTimeGenerator for monotonic ordering
-            from src.domain.model.agent.execution.event_time import EventTimeGenerator
-
-            if self._agent_execution_event_repo:
-                (
-                    last_time_us,
-                    last_counter,
-                ) = await self._agent_execution_event_repo.get_last_event_time(conversation_id)
-                time_gen = EventTimeGenerator(last_time_us=last_time_us, last_counter=last_counter)
-            else:
-                time_gen = EventTimeGenerator()
-            next_time_us, next_counter = time_gen.next()
-
-            # Convert to persistent entity
-            user_msg_event = AgentExecutionEvent.from_domain_event(
-                event=user_domain_event,
-                conversation_id=conversation_id,
-                message_id=user_msg_id,
-                event_time_us=next_time_us,
-                event_counter=next_counter,
-            )
-
-            # Set correlation_id on the event
-            user_msg_event.correlation_id = correlation_id  # type: ignore[attr-defined]
-
-            # Ensure ID is set (from_domain_event might not set it or might set None)
-            if not user_msg_event.id:
-                user_msg_event.id = str(uuid.uuid4())
-
-            # Additional data fixup if needed for compatibility
-            if not user_msg_event.event_data.get("message_id"):
-                user_msg_event.event_data["message_id"] = user_msg_id
-
-            assert self._agent_execution_event_repo is not None
-            await self._agent_execution_event_repo.save_and_commit(user_msg_event)
-
-            # Yield user message event
             user_event_data = self._build_user_event_data(
                 user_msg_id=user_msg_id,
                 user_message=user_message,
-                created_at_iso=user_msg_event.created_at.isoformat(),
+                created_at_iso=created_at.isoformat(),
                 attachment_ids=attachment_ids,
                 file_metadata=file_metadata,
                 forced_skill_name=forced_skill_name,
+            )
+            admitted_event_data = dict(user_event_data)
+            admitted_event_data["model_message"] = {
+                "role": "user",
+                "content": user_message,
+            }
+            if mentions:
+                admitted_event_data["mentions"] = mentions
+
+            provider = _session_event_log_service_v2()
+            tail = await provider.last_cursor(conversation_id=conversation_id)
+            next_time_us, next_counter = EventTimeGenerator(
+                last_time_us=tail.event_time_us,
+                last_counter=tail.event_counter,
+            ).next()
+            await provider.append(
+                conversation_id=conversation_id,
+                message_id=user_msg_id,
+                events=[
+                    {
+                        "type": TURN_ADMITTED_EVENT_V2,
+                        "data": admitted_event_data,
+                        "event_time_us": next_time_us,
+                        "event_counter": next_counter,
+                    }
+                ],
+                correlation_id=correlation_id,
             )
 
             yield {
@@ -406,11 +392,6 @@ class AgentService(AgentServicePort):
                 "timestamp": datetime.now(UTC).isoformat(),
             }
 
-            # Get conversation context with smart summary caching.
-            conversation_context, context_summary = await self._load_conversation_context(
-                conversation=conversation,
-                exclude_event_id=user_msg_event.id,
-            )
             await self._release_db_read_transaction()
 
             # Start Ray Actor
@@ -435,15 +416,30 @@ class AgentService(AgentServicePort):
                 f"[AgentService] Started actor {actor_id} for conversation {conversation_id}"
             )
 
-            # Connect to stream with message_id filtering
-            async for event in self.connect_chat_stream(
-                conversation_id,
-                message_id=user_msg_id,
-            ):
-                # Add correlation_id to streamed events
-                event["correlation_id"] = correlation_id
-                yield event
+            # Connect to stream with message_id filtering.  The live stream
+            # must close synchronously when an outer operation owner stops
+            # early so its generation and DB resources are still active while
+            # the stream's ``finally`` handlers run.
+            chat_stream = cast(
+                AsyncGenerator[dict[str, Any], None],
+                self.connect_chat_stream(
+                    conversation_id,
+                    message_id=user_msg_id,
+                ),
+            )
+            async with contextlib.aclosing(chat_stream) as events:
+                async for event in events:
+                    # Add correlation_id to streamed events
+                    event["correlation_id"] = correlation_id
+                    yield event
 
+        except RuntimeV2Error as e:
+            logger.error(f"[AgentService] Error in stream_chat_v2: {e}", exc_info=True)
+            yield {
+                "type": "error",
+                "data": {"code": e.code, "message": str(e)},
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
         except Exception as e:
             logger.error(f"[AgentService] Error in stream_chat_v2: {e}", exc_info=True)
             yield {
@@ -659,6 +655,8 @@ class AgentService(AgentServicePort):
                 str(event.event_type),
                 event.event_data,
             )
+            if event_type == TURN_ADMITTED_EVENT_V2:
+                event_type = "user_message"
             execution_message_id = getattr(event, "message_id", None)
             if isinstance(event_data, Mapping) and isinstance(execution_message_id, str):
                 event_data = {
@@ -714,76 +712,6 @@ class AgentService(AgentServicePort):
             }
             for event in stream_events
         ]
-
-    async def _handle_title_generation(
-        self,
-        conversation_id: str,
-        message_id: str | None,
-    ) -> None:
-        """Launch background title generation if applicable."""
-        try:
-            conv = await self._conversation_repo.find_by_id(conversation_id)
-            if not conv or conv.title not in ("New Conversation", "New Chat"):
-                return
-
-            first_user_msg, first_assistant_msg = await self._extract_title_seed_exchange(
-                conversation_id,
-                message_id,
-            )
-            if not first_user_msg:
-                return
-
-            _title_task = asyncio.create_task(
-                self._trigger_title_generation(
-                    conversation_id=conversation_id,
-                    project_id=conv.project_id,
-                    user_message=first_user_msg,
-                    assistant_response=first_assistant_msg,
-                )
-            )
-            _background_tasks.add(_title_task)
-            _title_task.add_done_callback(_background_tasks.discard)
-        except Exception as title_err:
-            logger.debug(f"Title generation check failed: {title_err}")
-
-    async def _extract_title_seed_exchange(
-        self,
-        conversation_id: str,
-        message_id: str | None,
-    ) -> tuple[str, str]:
-        """Extract the first user/assistant exchange for title generation."""
-        if not message_id:
-            return ("", "")
-
-        first_user_msg = ""
-        first_assistant_msg = ""
-        try:
-            assert self._agent_execution_event_repo is not None
-            msg_events = await self._agent_execution_event_repo.get_events_by_message(
-                conversation_id=conversation_id, message_id=message_id
-            )
-            for me in msg_events:
-                content = str(me.event_data.get("content", "")).strip()
-                if not content:
-                    continue
-                if me.event_type == "user_message" and not first_user_msg:
-                    first_user_msg = content
-                elif me.event_type == "assistant_message" and not first_assistant_msg:
-                    first_assistant_msg = content
-                if first_user_msg and first_assistant_msg:
-                    break
-        except Exception:
-            pass
-        return (first_user_msg, first_assistant_msg)
-
-    async def _extract_first_user_message(
-        self,
-        conversation_id: str,
-        message_id: str | None,
-    ) -> str:
-        """Extract the first user message content from event history."""
-        first_user_msg, _ = await self._extract_title_seed_exchange(conversation_id, message_id)
-        return first_user_msg
 
     def _is_event_already_seen(
         self,
@@ -1203,10 +1131,17 @@ class AgentService(AgentServicePort):
             f"last_event_time_us={last_event_time_us}, start_id={stream_start_id}"
         )
         live_event_count = 0
+        live_stream = cast(
+            AsyncGenerator[dict[str, Any], None],
+            self._event_bus.stream_read(
+                stream_key,
+                last_id=stream_start_id,
+                count=1000,
+                block_ms=1000,
+            ),
+        )
         try:
-            async for message in self._event_bus.stream_read(
-                stream_key, last_id=stream_start_id, count=1000, block_ms=1000
-            ):
+            async for message in live_stream:
                 live_event_count += 1
                 filtered = self._filter_live_event(
                     message,
@@ -1250,10 +1185,6 @@ class AgentService(AgentServicePort):
                         f"reading delayed events for up to 15 seconds"
                     )
 
-                    # Launch background title generation (fire-and-forget)
-                    if event_type == "complete":
-                        await self._handle_title_generation(conversation_id, message_id)
-
                     # Continue reading for a short time to catch delayed events
                     for ev in await self._read_delayed_events(
                         stream_key=stream_key,
@@ -1268,6 +1199,8 @@ class AgentService(AgentServicePort):
                     return
         except Exception as e:
             logger.error(f"[AgentService] Error streaming from Redis Stream: {e}", exc_info=True)
+        finally:
+            await live_stream.aclose()
 
     @override
     async def create_conversation(
@@ -1430,123 +1363,6 @@ class AgentService(AgentServicePort):
             await self._invalidate_conv_cache(project_id)
         return conversation
 
-    async def generate_conversation_title(self, first_message: str, llm: LLMClient) -> str:
-        """Generate a friendly, concise title for a conversation."""
-        return await self._conversation_mgr.generate_conversation_title(
-            first_message=first_message,
-            llm=llm,
-        )
-
-    def _generate_fallback_title(self, first_message: str) -> str:
-        """Generate a fallback title from the first message when LLM fails."""
-        content = first_message.strip()
-        if len(content) > 40:
-            truncated = content[:40]
-            last_space = truncated.rfind(" ")
-            if last_space > 20:
-                truncated = truncated[:last_space]
-            content = truncated + "..."
-        return content or "New Conversation"
-
-    async def _trigger_title_generation(
-        self,
-        conversation_id: str,
-        project_id: str,
-        user_message: str,
-        assistant_response: str = "",
-    ) -> None:
-        """
-        Generate a title for a new conversation and publish title_generated event.
-
-        Runs as a background task after the first assistant response completes.
-        Fire-and-forget: errors are logged but don't affect the chat flow.
-
-        Uses the same DB-configured LLM provider as the ReActAgent to ensure
-        model name and API endpoint consistency.
-        """
-        try:
-            conversation = await self._conversation_repo.find_by_id(conversation_id)
-            if not conversation:
-                return
-
-            # Only generate if title is still the default
-            if conversation.title not in ("New Conversation", "New Chat"):
-                return
-
-            # Only generate for early conversations (first few messages)
-            if conversation.message_count > 4:
-                return
-
-            # Use DB-configured provider (same as ReActAgent) instead of self._llm
-            llm = await self._get_title_llm()
-
-            title = await self._conversation_mgr.generate_conversation_title(
-                first_message=user_message,
-                llm=llm,
-                assistant_response=assistant_response,
-            )
-
-            # Update the conversation title in DB
-            conversation.update_title(title)
-            await self._conversation_repo.save_and_commit(conversation)  # type: ignore[attr-defined]
-
-            # Invalidate conversation list cache
-            await self._invalidate_conv_cache(project_id)
-
-            # Publish title_generated event to Redis stream
-            if self._redis_client:
-                now_us = int(time_module.time() * 1_000_000)
-                stream_event = {
-                    "type": "title_generated",
-                    "event_time_us": now_us,
-                    "event_counter": 0,
-                    "data": {
-                        "conversation_id": conversation_id,
-                        "title": title,
-                        "generated_at": datetime.now(UTC).isoformat(),
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "conversation_id": conversation_id,
-                }
-                stream_key = f"agent:events:{conversation_id}"
-                await self._redis_client.xadd(
-                    stream_key, {"data": json.dumps(stream_event)}, maxlen=1000
-                )
-                logger.info(
-                    f"[AgentService] Published title_generated event: "
-                    f"conversation={conversation_id}, title='{title}'"
-                )
-        except Exception as e:
-            logger.warning(f"[AgentService] Title generation failed (non-fatal): {e}")
-
-    async def _get_title_llm(self) -> "LLMClient":
-        """Get LLM client for title generation using DB provider config.
-
-        Uses the same provider configuration as the ReActAgent (from database)
-        to ensure model name and API endpoint consistency. Falls back to
-        the injected self._llm if DB provider is unavailable.
-        """
-        try:
-            from src.infrastructure.agent.state.agent_worker_state import (
-                get_or_create_llm_client,
-                get_or_create_provider_config,
-            )
-            from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
-
-            provider_config = await get_or_create_provider_config()
-            litellm_client = await get_or_create_llm_client(provider_config)
-            return UnifiedLLMClient(litellm_client=litellm_client)
-        except Exception as e:
-            logger.warning(
-                f"[AgentService] Failed to get DB provider for title generation, "
-                f"falling back to injected LLM: {e}"
-            )
-            return self._llm
-
-    async def get_title_llm(self) -> "LLMClient":
-        """Get LLM client for title generation (public accessor)."""
-        return await self._get_title_llm()
-
     async def get_conversation_messages(
         self,
         conversation_id: str,
@@ -1583,13 +1399,19 @@ class AgentService(AgentServicePort):
 
     @override
     async def get_available_tools(
-        self, project_id: str, tenant_id: str, agent_mode: str = "default"
+        self,
+        project_id: str,
+        tenant_id: str,
+        agent_mode: str = "default",
+        *,
+        tool_set: ModelVisibleToolSetView,
     ) -> list[dict[str, Any]]:
-        """Get list of available tools for the agent."""
+        """Project the exact ToolSet already resolved for the pinned turn."""
         return await self._tool_discovery.get_available_tools(
             project_id=project_id,
             tenant_id=tenant_id,
             agent_mode=agent_mode,
+            tool_set=tool_set,
         )
 
     @override

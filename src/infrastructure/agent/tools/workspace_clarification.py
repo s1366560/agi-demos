@@ -46,17 +46,19 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
-
 # correlation_id → Future[str]. Keyed by the request envelope correlation_id.
 _pending_clarifications: dict[str, asyncio.Future[str]] = {}
 
 DEFAULT_CLARIFICATION_TIMEOUT_SECONDS = 120.0
 
 
-def configure_workspace_clarification(orchestrator: AgentOrchestrator) -> None:
-    global _orchestrator
-    _orchestrator = orchestrator
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
+
+    return current_agent_orchestrator_v2()
 
 
 # --- runtime helpers ---------------------------------------------------------
@@ -80,9 +82,7 @@ async def _send_envelope_generic(
     *,
     to_agent_id: str,
 ) -> tuple[ToolResult, SendResult | None]:
-    if _orchestrator is None:
-        return _deny("workspace WTP not configured"), None
-
+    orchestrator = _current_agent_orchestrator_v2()
     sender_agent_ref = _runtime_string(ctx, "selected_agent_id") or ctx.agent_name
     sender_agent_name = _runtime_string(ctx, "selected_agent_name") or ctx.agent_name
 
@@ -94,7 +94,7 @@ async def _send_envelope_generic(
                 **metadata,
                 "workspace_agent_binding_id": worker_binding_id,
             }
-        result = await _orchestrator.send_message(
+        result = await orchestrator.send_message(
             from_agent_id=sender_agent_ref,
             to_agent_id=to_agent_id,
             message=envelope.to_content(),
@@ -173,9 +173,7 @@ def deliver_clarification_response(envelope: WtpEnvelope) -> bool:
         return False
     answer = envelope.payload.get("answer") or ""
     try:
-        future.get_loop().call_soon_threadsafe(
-            future.set_result, str(answer)
-        )
+        future.get_loop().call_soon_threadsafe(future.set_result, str(answer))
     except RuntimeError:
         try:
             future.set_result(str(answer))
@@ -253,9 +251,7 @@ async def workspace_request_clarification_tool(
     root_goal_task_id = _runtime_string(ctx, "root_goal_task_id") or None
 
     if not (task_id and attempt_id and leader_agent_id and question.strip()):
-        return _deny(
-            "task_id, attempt_id, leader_agent_id and non-empty question are required"
-        )
+        return _deny("task_id, attempt_id, leader_agent_id and non-empty question are required")
 
     correlation_id = str(uuid.uuid4())
     try:
@@ -281,9 +277,7 @@ async def workspace_request_clarification_tool(
     future: asyncio.Future[str] = loop.create_future()
     _pending_clarifications[correlation_id] = future
 
-    send_result, _ = await _send_envelope_generic(
-        ctx, envelope, to_agent_id=leader_agent_id
-    )
+    send_result, _ = await _send_envelope_generic(ctx, envelope, to_agent_id=leader_agent_id)
     if send_result.is_error:
         _pending_clarifications.pop(correlation_id, None)
         return send_result
@@ -399,14 +393,11 @@ async def workspace_respond_clarification_tool(
     except WtpValidationError as exc:
         return _deny(f"invalid clarification response payload: {exc}")
 
-    tool_result, _ = await _send_envelope_generic(
-        ctx, envelope, to_agent_id=worker_agent_id
-    )
+    tool_result, _ = await _send_envelope_generic(ctx, envelope, to_agent_id=worker_agent_id)
     return tool_result
 
 
 __all__ = [
-    "configure_workspace_clarification",
     "deliver_clarification_response",
     "workspace_request_clarification_tool",
     "workspace_respond_clarification_tool",

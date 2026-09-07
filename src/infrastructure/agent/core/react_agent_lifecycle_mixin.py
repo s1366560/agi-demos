@@ -13,13 +13,11 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
-from src.infrastructure.plugins.agent_events import create_agent_plugin_event_dispatcher
 
 from ..config import ExecutionConfig
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
 from ..plugins.policy_context import normalize_policy_layers
-from ..plugins.registry import get_plugin_registry
 from ..plugins.selection_pipeline import build_default_tool_selection_pipeline
 from ..prompts import SystemPromptManager
 from .processor import ProcessorConfig, ToolDefinition
@@ -72,8 +70,6 @@ class _LifecycleAgent(Protocol):
     _stream_execution_summary: dict[str, Any] | None
     _stream_success: Any
     _filesystem_skills_loaded: Any
-    _skill_mcp_manager: Any
-    _skill_mcp_tools: Any
     _enable_subagent_as_tool: Any
     _max_subagent_delegation_depth: Any
     _max_subagent_active_runs: Any
@@ -86,7 +82,7 @@ class _LifecycleAgent(Protocol):
     _subagent_lane_semaphore: Any
     _subagent_lifecycle_hook: Any
     _subagent_lifecycle_hook_failures: Any
-    _subagent_run_registry: Any
+    _detached_subagent_task_supervisor: Any
     _subagent_session_tasks: Any
     _event_converter: Any
     _background_executor: Any
@@ -100,7 +96,6 @@ class _LifecycleAgent(Protocol):
     def _launch_subagent_session(self, *args: Any, **kwargs: Any) -> Any: ...
     def _cancel_subagent_session(self, *args: Any, **kwargs: Any) -> Any: ...
     def _init_subagent_router(self, *args: Any, **kwargs: Any) -> None: ...
-    def _init_subagent_run_registry(self, *args: Any, **kwargs: Any) -> None: ...
 
 
 class LifecycleMixin:
@@ -119,10 +114,7 @@ class LifecycleMixin:
             tool_selection_pipeline or build_default_tool_selection_pipeline()
         )
         self._tool_selection_max_tools = max(8, int(tool_selection_max_tools))
-        normalized_backend = str(tool_selection_semantic_backend).strip().lower()
-        if normalized_backend not in {"keyword", "token_vector", "embedding_vector"}:
-            normalized_backend = "token_vector"
-        self._tool_selection_semantic_backend = normalized_backend
+        self._tool_selection_semantic_backend = "agent_decision"
         self._router_mode_tool_count_threshold = max(1, int(router_mode_tool_count_threshold))
         self._tool_policy_layers = normalize_policy_layers(
             {"policy_layers": dict(tool_policy_layers or {})}
@@ -214,12 +206,6 @@ class LifecycleMixin:
         self.skill_execution_timeout = skill_execution_timeout
         self._filesystem_skills_loaded = False
 
-        # Skill-embedded MCP manager (lazy import to avoid circular deps)
-        from ..mcp.skill_mcp_manager import SkillMCPManager
-
-        self._skill_mcp_manager = SkillMCPManager()
-        self._skill_mcp_tools: list[ToolDefinition] = []
-
     async def _load_filesystem_skills(
         self: _LifecycleAgent,
         tenant_id: str,
@@ -276,12 +262,6 @@ class LifecycleMixin:
         subagent_announce_max_retries: int,
         subagent_announce_retry_delay_ms: int,
         subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None,
-        subagent_run_registry_path: str | None,
-        subagent_run_postgres_dsn: str | None,
-        subagent_run_sqlite_path: str | None,
-        subagent_run_redis_cache_url: str | None,
-        subagent_run_redis_cache_ttl_seconds: int,
-        subagent_terminal_retention_seconds: int,
         span_service: Any | None = None,
         fork_merge_service: Any | None = None,
     ) -> None:
@@ -300,17 +280,10 @@ class LifecycleMixin:
         self._subagent_lane_semaphore = asyncio.Semaphore(self._max_subagent_lane_concurrency)
         self._subagent_lifecycle_hook = subagent_lifecycle_hook
         self._subagent_lifecycle_hook_failures = [0]
+        self._subagent_session_tasks = self._detached_subagent_task_supervisor.tasks
         self._span_service = span_service
         self._fork_merge_service = fork_merge_service
         self._init_subagent_router(subagents, execution_config, cached_subagent_router)
-        self._init_subagent_run_registry(
-            subagent_run_registry_path,
-            subagent_run_postgres_dsn,
-            subagent_run_sqlite_path,
-            subagent_run_redis_cache_url,
-            subagent_run_redis_cache_ttl_seconds,
-            subagent_terminal_retention_seconds,
-        )
 
     def _init_subagent_router(
         self: _LifecycleAgent,
@@ -329,28 +302,6 @@ class LifecycleMixin:
             )
         else:
             self.subagent_router = None
-
-    def _init_subagent_run_registry(
-        self: _LifecycleAgent,
-        subagent_run_registry_path: str | None,
-        subagent_run_postgres_dsn: str | None,
-        subagent_run_sqlite_path: str | None,
-        subagent_run_redis_cache_url: str | None,
-        subagent_run_redis_cache_ttl_seconds: int,
-        subagent_terminal_retention_seconds: int,
-    ) -> None:
-        """Initialize SubAgent run registry with persistence backend."""
-        from ..subagent.run_registry import get_shared_subagent_run_registry
-
-        self._subagent_run_registry = get_shared_subagent_run_registry(
-            persistence_path=subagent_run_registry_path,
-            postgres_persistence_dsn=subagent_run_postgres_dsn,
-            sqlite_persistence_path=subagent_run_sqlite_path,
-            redis_cache_url=subagent_run_redis_cache_url,
-            redis_cache_ttl_seconds=subagent_run_redis_cache_ttl_seconds,
-            terminal_retention_seconds=subagent_terminal_retention_seconds,
-        )
-        self._subagent_session_tasks: dict[str, asyncio.Task[Any]] = {}
 
     def _init_orchestrators(self: _LifecycleAgent) -> None:
         """Initialize orchestrators for modular components."""
@@ -419,8 +370,6 @@ class LifecycleMixin:
             max_tokens=max_tokens,
             max_steps=max_steps,
             llm_client=self._llm_client,
-            plugin_registry=get_plugin_registry(),
-            plugin_event_dispatcher=create_agent_plugin_event_dispatcher(get_plugin_registry()),
             skill_names=[s.name for s in (self.skills or [])],
             provider_options=_provider_opts,
             message_bus=message_bus,

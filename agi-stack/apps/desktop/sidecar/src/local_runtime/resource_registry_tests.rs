@@ -134,6 +134,63 @@ fn seeded_resources_are_scope_isolated_and_revision_guarded() {
 }
 
 #[test]
+fn new_resource_registry_never_seeds_legacy_plugin_authority() {
+    let store = DesktopSessionStore::in_memory().expect("store");
+    let connection = store.connection().expect("resource registry connection");
+
+    let plugin_rows: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM desktop_managed_resources WHERE kind = 'plugin'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count legacy plugin rows");
+
+    assert_eq!(plugin_rows, 0);
+}
+
+#[test]
+fn legacy_plugin_rows_remain_inert_during_registry_recovery() {
+    let store = DesktopSessionStore::in_memory().expect("store");
+    let connection = store.connection().expect("resource registry connection");
+    connection
+        .execute(
+            "INSERT INTO desktop_managed_resources(
+               kind, scope_kind, scope_id, id, status, revision,
+               created_at_ms, updated_at_ms, value_json, vault_refs_json
+             ) VALUES (
+               'plugin', 'tenant', 'local', 'legacy-plugin', 'active', 4,
+               1752384000000, 1752384000000,
+               '{\"id\":\"legacy-plugin\",\"enabled\":true,\"revision\":4}', '[]'
+             )",
+            [],
+        )
+        .expect("seed inert legacy plugin row");
+
+    initialize_resource_registry(&connection).expect("recover resource registry");
+
+    let persisted: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM desktop_managed_resources
+             WHERE kind = 'plugin' AND id = 'legacy-plugin'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count inert legacy plugin rows");
+    let recovered_versions: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM desktop_managed_resource_versions
+             WHERE kind = 'plugin' AND resource_id = 'legacy-plugin'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count recovered legacy plugin versions");
+
+    assert_eq!(persisted, 1);
+    assert_eq!(recovered_versions, 0);
+}
+
+#[test]
 fn legacy_disabled_builtin_resources_are_reconciled_on_initialization() {
     let store = DesktopSessionStore::in_memory().expect("store");
 
@@ -152,24 +209,6 @@ fn legacy_disabled_builtin_resources_are_reconciled_on_initialization() {
         "local",
         "implementation",
         skill,
-    );
-
-    let mut plugin = stored_resource(
-        &store,
-        ManagedResourceKind::Plugin,
-        "tenant",
-        "local",
-        "local-workspace",
-    );
-    plugin["enabled"] = json!(false);
-    plugin["status"] = json!("disabled");
-    write_legacy_resource(
-        &store,
-        ManagedResourceKind::Plugin,
-        "tenant",
-        "local",
-        "local-workspace",
-        plugin,
     );
 
     let mut agent = stored_resource(
@@ -220,18 +259,6 @@ fn legacy_disabled_builtin_resources_are_reconciled_on_initialization() {
     assert_eq!(skill["revision"], 5);
     assert_eq!(skill["status"], "active");
     assert_eq!(skill["is_system_skill"], true);
-
-    let plugin = stored_resource(
-        &store,
-        ManagedResourceKind::Plugin,
-        "tenant",
-        "local",
-        "local-workspace",
-    );
-    assert_eq!(plugin["revision"], 5);
-    assert_eq!(plugin["status"], "active");
-    assert_eq!(plugin["enabled"], true);
-    assert_eq!(plugin["source"], "builtin");
 
     let agent = stored_resource(
         &store,

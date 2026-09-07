@@ -36,7 +36,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 
 __all__ = ["SqlAgentExecutionEventRepository", "_workspace_progress_summary"]
 
-_MESSAGE_EVENT_TYPES = ("user_message", "assistant_message")
+_TURN_ADMITTED_EVENT_V2 = "turn_admitted"
+_MESSAGE_EVENT_TYPES = ("user_message", "assistant_message", _TURN_ADMITTED_EVENT_V2)
 _WORKSPACE_PROGRESS_NOTE_MAX = 320
 _WORKSPACE_PROGRESS_MARKER_CONTEXT = 180
 _WORKSPACE_PROGRESS_MARKER_LEAD = 80
@@ -639,14 +640,14 @@ class SqlAgentExecutionEventRepository(
         conversation_id: str,
         limit: int = 50,
     ) -> list[AgentExecutionEvent]:
-        """Get message events (user_message + assistant_message) for LLM context."""
+        """Get legacy messages and typed V2 user admissions for compatibility readers."""
         result = await self._session.execute(
             refresh_select_statement(
                 self._refresh_statement(
                     select(DBAgentExecutionEvent)
                     .where(
                         DBAgentExecutionEvent.conversation_id == conversation_id,
-                        DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+                        DBAgentExecutionEvent.event_type.in_(_MESSAGE_EVENT_TYPES),
                     )
                     .order_by(
                         DBAgentExecutionEvent.event_time_us.desc(),
@@ -673,7 +674,7 @@ class SqlAgentExecutionEventRepository(
                     select(DBAgentExecutionEvent)
                     .where(
                         DBAgentExecutionEvent.conversation_id == conversation_id,
-                        DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+                        DBAgentExecutionEvent.event_type.in_(_MESSAGE_EVENT_TYPES),
                         DBAgentExecutionEvent.event_time_us > after_time_us,
                     )
                     .order_by(
@@ -697,7 +698,7 @@ class SqlAgentExecutionEventRepository(
                     .select_from(DBAgentExecutionEvent)
                     .where(
                         DBAgentExecutionEvent.conversation_id == conversation_id,
-                        DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+                        DBAgentExecutionEvent.event_type.in_(_MESSAGE_EVENT_TYPES),
                     )
                 )
             )

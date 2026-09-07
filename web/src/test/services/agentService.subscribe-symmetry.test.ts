@@ -20,6 +20,8 @@ describe('agentService subscription symmetry', () => {
   };
 
   beforeEach(() => {
+    const context = { check: () => {}, signal: new AbortController().signal };
+    vi.spyOn(agentService, 'getOperationContext').mockReturnValue(context as any);
     service.subscriptions = new Set();
     service.subscriptionOptions = new Map();
     service.handlers = new Map();

@@ -1,4 +1,14 @@
+import {
+  isCloudSandboxDownloadPath,
+  requireCloudSandboxFileAuthority,
+} from '../../src/api/cloudSandboxDownloadAuthority';
+import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
+import {
+  cloudRunReviewTarget,
+  requireCloudRunSummaryScope,
+  requireCloudRunChangesScope,
+} from './cloudRunReviewAuthority';
 
 export type VaultBoundCloudRequestInput = Readonly<{
   path: string;
@@ -67,6 +77,9 @@ export type VaultBoundCloudRequestDependencies = Readonly<{
   loadTrustedSession(): Promise<unknown>;
   fetch(url: string, init: RequestInit): Promise<Response>;
   signal?: AbortSignal;
+  withContextSwitch?(
+    operation: () => Promise<VaultBoundCloudRequestResult>,
+  ): Promise<VaultBoundCloudRequestResult>;
 }>;
 
 export type CloudRequestExecutionLease = Readonly<{
@@ -203,6 +216,34 @@ export class CloudRequestExecutionRegistry {
   }
 }
 
+/** Main-only material; IPC callers must return opaque grants, never this value. */
+export async function authorizeVaultBoundSandboxDesktopGrant(
+  input: Readonly<{ tenantId: string; projectId: string }>,
+  dependencies: VaultBoundCloudRequestDependencies,
+): Promise<Readonly<{ apiBaseUrl: string; credential: string; expiresAt: string | null }>> {
+  dependencies.signal?.throwIfAborted();
+  const tenantId = identifier(input.tenantId, 'sandbox grant tenant scope is invalid');
+  const projectId = identifier(input.projectId, 'sandbox grant project scope is invalid');
+  const session = parseTrustedCloudSession(await dependencies.loadTrustedSession());
+  dependencies.signal?.throwIfAborted();
+  const response = await authorizedFetch(session, dependencies, {
+    path: '/api/v1/workspace-context', method: 'GET',
+  });
+  dependencies.signal?.throwIfAborted();
+  const body = await boundedJson(response, false, session.credential);
+  dependencies.signal?.throwIfAborted();
+  if (!response.ok) throw new Error('sandbox grant scope observation failed');
+  const observed = parseObservedContext(body);
+  if (observed.tenantId !== tenantId || observed.projectId !== projectId) {
+    throw new Error('sandbox grant scope mismatch');
+  }
+  return Object.freeze({
+    apiBaseUrl: session.api_base_url,
+    credential: session.credential,
+    expiresAt: session.expires_at,
+  });
+}
+
 export async function executeVaultBoundCloudRequest(
   input: unknown,
   dependencies: VaultBoundCloudRequestDependencies,
@@ -221,10 +262,37 @@ export async function executeVaultBoundCloudRequest(
   if (!contextResponse.ok) throw new Error('cloud request scope observation failed');
   const context = parseObservedContext(contextBody);
   assertEndpointScope(endpoint, context);
+  if (endpoint.kind === 'workspace-context-switch') {
+    const switchContext = async (): Promise<VaultBoundCloudRequestResult> => {
+      dependencies.signal?.throwIfAborted();
+      const response = await authorizedFetch(session, dependencies, request);
+      const body = await boundedJson(response, true, session.credential);
+      dependencies.signal?.throwIfAborted();
+      return Object.freeze({ status: response.status, body });
+    };
+    return dependencies.withContextSwitch
+      ? dependencies.withContextSwitch(switchContext)
+      : switchContext();
+  }
   if (endpoint.kind === 'workspace-context') {
     return Object.freeze({ status: contextResponse.status, body: contextBody });
   }
-  const response = await authorizedFetch(session, dependencies, request);
+  const runReview = cloudRunReviewTarget(request.path);
+  let summaryIdentity: Readonly<{ conversationId: string }> | null = null;
+  if (runReview?.action === 'changes') {
+    const summaryResponse = await authorizedFetch(session, dependencies, {
+      path: `/api/v1/agent/runs/${encodeURIComponent(runReview.runId)}/summary`, method: 'GET',
+    });
+    const summaryBody = await boundedJson(summaryResponse, true, session.credential);
+    dependencies.signal?.throwIfAborted();
+    if (!summaryResponse.ok) {
+      return Object.freeze({ status: summaryResponse.status, body: summaryBody });
+    }
+    summaryIdentity = requireCloudRunSummaryScope(summaryBody, runReview.runId, context);
+  }
+  const response = await authorizedFetch(
+    session, activityDeliveryDependencies(request, dependencies), request,
+  );
   if (request.response?.kind === 'binary' && response.ok) {
     return Object.freeze({
       status: response.status,
@@ -246,10 +314,37 @@ export async function executeVaultBoundCloudRequest(
       ),
     });
   }
-  return Object.freeze({
-    status: response.status,
-    body: await boundedJson(response, true, session.credential),
-  });
+  const body = await boundedJson(response, true, session.credential);
+  dependencies.signal?.throwIfAborted();
+  if (response.ok && runReview?.action === 'summary') {
+    requireCloudRunSummaryScope(body, runReview.runId, context);
+  } else if (response.ok && runReview?.action === 'changes' && summaryIdentity) {
+    requireCloudRunChangesScope(body, runReview, summaryIdentity);
+  }
+  return Object.freeze({ status: response.status, body });
+}
+
+function activityDeliveryDependencies(
+  request: VaultBoundCloudRequestInput,
+  dependencies: VaultBoundCloudRequestDependencies,
+): VaultBoundCloudRequestDependencies {
+  const segments = new URL(request.path, 'https://desktop.invalid').pathname.split('/');
+  if (request.method !== 'PUT' || segments.length !== 7 ||
+    segments[1] !== 'api' || segments[2] !== 'v1' || segments[3] !== 'projects' ||
+    segments[5] !== 'activity' || segments[6] !== 'read-state') return dependencies;
+  return {
+    ...dependencies,
+    async fetch(url, init) {
+      try {
+        return await dependencies.fetch(url, init);
+      } catch {
+        dependencies.signal?.throwIfAborted();
+        return new Response(JSON.stringify({
+          reason_code: 'activity_read_state_transport_unavailable',
+        }), { status: 503, headers: { 'content-type': 'application/json' } });
+      }
+    },
+  };
 }
 
 export async function projectVaultBoundCloudSession(
@@ -481,11 +576,11 @@ function parseRequest(input: unknown): VaultBoundCloudRequestInput {
   if (method === 'GET' && body !== undefined) {
     throw new Error('cloud request body is not allowed');
   }
-  if (
-    body !== undefined &&
-    new TextEncoder().encode(JSON.stringify(body)).byteLength > MAX_REQUEST_BYTES
-  ) {
-    throw new Error('cloud request body is too large');
+  if (body !== undefined) {
+    const bodyBytes = new TextEncoder().encode(JSON.stringify(body)).byteLength;
+    if (bodyBytes > MAX_REQUEST_BYTES && !allowsCloudSandboxImportBudget(record, body, bodyBytes)) {
+      throw new Error('cloud request body is too large');
+    }
   }
   const form = parseForm(record.form, method);
   if (body !== undefined && form !== null) {
@@ -842,6 +937,20 @@ async function boundedBinary(
   protectedCredential: string,
   requestPath: string,
 ): Promise<Readonly<Record<string, unknown>>> {
+  let fileAuthority;
+  if (isCloudSandboxDownloadPath(requestPath)) {
+    try {
+      fileAuthority = requireCloudSandboxFileAuthority({
+        contract_version:
+          response.headers.get('x-memstack-file-contract-version') === '1' ? 1 : null,
+        authority: response.headers.get('x-memstack-file-authority'),
+        isolation: response.headers.get('x-memstack-file-isolation'),
+      });
+    } catch (error) {
+      await cancelResponseBody(response);
+      throw error;
+    }
+  }
   const declaredLengthHeader = response.headers.get('content-length');
   const declaredLength = Number(declaredLengthHeader ?? '0');
   if (
@@ -868,6 +977,7 @@ async function boundedBinary(
     size_bytes: bytes.byteLength,
     mime_type: mimeType,
     filename,
+    ...(fileAuthority ? { file_authority: fileAuthority } : {}),
   });
 }
 

@@ -153,6 +153,7 @@ function ArtifactTimelineCardQa() {
           <div className="message-scroll">
             <div className="message-stack">
               <AgentTimeline
+                imagePreviewClient={null}
                 state={state}
                 expandedItems={{}}
                 onToggleItem={() => undefined}

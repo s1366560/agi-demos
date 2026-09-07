@@ -56,7 +56,8 @@ describe('projectSandboxService', () => {
 
     expect(mockHttpClient.post).toHaveBeenCalledWith(
       '/projects/project-1/sandbox/proxy-auth-cookie',
-      {}
+      {},
+      undefined
     );
   });
 
@@ -82,7 +83,8 @@ describe('projectSandboxService', () => {
     expect(mockHttpClient.post).toHaveBeenNthCalledWith(
       2,
       '/projects/project-1/sandbox/proxy-auth-cookie',
-      {}
+      {},
+      undefined
     );
     expect(result.url).toBe('/api/v1/projects/project-1/sandbox/desktop/proxy/');
     expect(result.wsUrl).toBe(

@@ -2,15 +2,20 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const {
-  createTenantAgentBindingsHttpClient,
+  applyDesktopTenantAgentBindingsAuthorityV2,
+  createDesktopTenantAgentBindingsClientV2,
+  createDesktopTenantAgentBindingsOperationsV2,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantAgentBindingsHttpClient.js'
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAgentBindingsAuthorityModuleV2.js'
 );
 
 const originalFetch = globalThis.fetch;
+const originalWindow = globalThis.window;
 
 test.afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalWindow === undefined) delete globalThis.window;
+  else globalThis.window = originalWindow;
 });
 
 test('Cloud Agent Bindings client loads tenant bindings, definitions and mutation authority', async () => {
@@ -47,7 +52,7 @@ test('Cloud Agent Bindings client loads tenant bindings, definitions and mutatio
     throw new Error(`Unexpected request ${parsed.pathname}`);
   };
 
-  const client = createTenantAgentBindingsHttpClient(runtimeConfig());
+  const client = bindingsClient(runtimeConfig());
   const snapshot = await client.list(scope());
 
   assert.deepEqual(
@@ -76,6 +81,67 @@ test('Cloud Agent Bindings client loads tenant bindings, definitions and mutatio
     'test',
   ]);
   assert.equal(snapshot.authorityRevision, 7);
+});
+
+test('Cloud Agent Bindings client uses the vault broker without a renderer bearer', async () => {
+  const commands = [];
+  globalThis.fetch = async () => assert.fail('vault-backed Cloud requests must not use fetch');
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      core: {
+        async invoke(command, args) {
+          commands.push({ command, args });
+          const path = new URL(args.request.path, 'https://desktop.invalid').pathname;
+          if (path === '/api/v1/agent/bindings') {
+            return { status: 200, body: [binding()] };
+          }
+          if (path === '/api/v1/agent/definitions') {
+            return {
+              status: 200,
+              body: [
+                {
+                  id: 'agent-1',
+                  tenant_id: 'tenant-1',
+                  project_id: null,
+                  name: 'support',
+                  display_name: 'Support',
+                  enabled: true,
+                },
+              ],
+            };
+          }
+          if (path === '/api/v1/workspace-context') {
+            return {
+              status: 200,
+              body: {
+                context: { tenant_id: 'tenant-1', revision: 9 },
+                membership_role: 'admin',
+              },
+            };
+          }
+          assert.fail(`Unexpected vault request ${args.request.path}`);
+        },
+      },
+    },
+  };
+
+  const snapshot = await bindingsClient(
+    runtimeConfig({ apiKey: '', localApiToken: '' }),
+  ).list(scope());
+
+  assert.equal(snapshot.authorityRevision, 9);
+  assert.deepEqual(
+    commands.map(({ command, args }) => [command, args.request.method]),
+    [
+      ['cloud_request', 'GET'],
+      ['cloud_request', 'GET'],
+      ['cloud_request', 'GET'],
+    ],
+  );
+  assert.doesNotMatch(
+    JSON.stringify(commands),
+    /Authorization|Bearer|cloud-token|launch-capability/u,
+  );
 });
 
 test('Cloud Agent Bindings client binds create, delete, enablement and resolution test only', async () => {
@@ -121,7 +187,7 @@ test('Cloud Agent Bindings client binds create, delete, enablement and resolutio
     return jsonResponse(binding(), 201);
   };
 
-  const client = createTenantAgentBindingsHttpClient(runtimeConfig());
+  const client = bindingsClient(runtimeConfig());
   await client.create(
     scope(),
     {
@@ -187,7 +253,7 @@ test('Local Agent Bindings client preserves stable structured unavailable author
     });
   };
 
-  const client = createTenantAgentBindingsHttpClient(
+  const client = bindingsClient(
     runtimeConfig({
       mode: 'local',
       tenantId: 'tenant-local',
@@ -224,11 +290,12 @@ test('Agent Bindings client fails closed on scope drift and malformed authority'
     calls += 1;
     return jsonResponse([{ id: 'malformed' }]);
   };
-  const client = createTenantAgentBindingsHttpClient(runtimeConfig());
+  const client = bindingsClient(runtimeConfig());
 
   await assert.rejects(
     client.list({ authority: 'cloud', tenantId: 'tenant-other' }),
-    /tenant_agent_bindings_runtime_scope_mismatch/u,
+    (error) =>
+      error?.code === 'desktop_tenant_agent_bindings_operation_input_invalid',
   );
   assert.equal(calls, 0);
 
@@ -236,6 +303,50 @@ test('Agent Bindings client fails closed on scope drift and malformed authority'
     client.list(scope()),
     /cloud_tenant_agent_bindings_contract_invalid/u,
   );
+});
+
+test('Agent Bindings mutations reject malformed create, delete, enablement and test payloads', async () => {
+  const createInput = {
+    agentId: 'agent-1',
+    channelType: 'slack',
+    channelId: 'channel-1',
+    accountId: null,
+    peerId: null,
+    groupId: null,
+    priority: 0,
+  };
+  const testInput = {
+    channelType: 'slack',
+    channelId: 'channel-1',
+    accountId: null,
+    peerId: null,
+  };
+  const cases = [
+    {
+      payload: { id: 'binding-1' },
+      invoke: (client) => client.create(scope(), createInput),
+    },
+    {
+      payload: { deleted: false, id: 'binding-1' },
+      invoke: (client) => client.delete(scope(), 'binding-1'),
+    },
+    {
+      payload: binding({ tenant_id: 'tenant-other' }),
+      invoke: (client) => client.setEnabled(scope(), 'binding-1', false),
+    },
+    {
+      payload: { matched: true },
+      invoke: (client) => client.test(scope(), testInput),
+    },
+  ];
+
+  for (const testCase of cases) {
+    globalThis.fetch = async () => jsonResponse(testCase.payload);
+    await assert.rejects(
+      testCase.invoke(bindingsClient(runtimeConfig())),
+      /cloud_tenant_agent_bindings_contract_invalid/u,
+    );
+  }
 });
 
 function runtimeConfig(overrides = {}) {
@@ -251,6 +362,35 @@ function runtimeConfig(overrides = {}) {
     workspaceRoot: '',
     ...overrides,
   };
+}
+
+function bindingsClient(config) {
+  let service = null;
+  applyDesktopTenantAgentBindingsAuthorityV2(
+    {
+      provide(_serviceKey, candidate) {
+        service = candidate;
+      },
+    },
+    { strategy: 'desktop-api-fetch' },
+  );
+  const operations = createDesktopTenantAgentBindingsOperationsV2(() => ({
+    async acquireServiceOperationLease() {
+      let released = false;
+      return {
+        status: 'accepted',
+        digest: 'tenant-agent-bindings-test',
+        useService(operation) {
+          if (released) throw new Error('lease_released');
+          return operation(service);
+        },
+        async release() {
+          released = true;
+        },
+      };
+    },
+  }));
+  return createDesktopTenantAgentBindingsClientV2(operations, config);
 }
 
 function scope() {

@@ -18,6 +18,10 @@ from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityProfile,
 )
+from src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2 import (
+    project_access_create_http_application_authority_dependency_v2,
+    project_access_query_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.agent import (
     conversations as conversations_router,
 )
@@ -33,6 +37,33 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     UserProject,
 )
+from src.infrastructure.plugins.v2.conversation_collection_repository import (
+    SqlConversationCollectionRepositoryV2,
+)
+from src.infrastructure.plugins.v2.conversation_collection_services import (
+    InvalidConversationAgentSelectionV2,
+)
+from src.infrastructure.plugins.v2.conversation_config_services import ConversationConfigServiceV2
+from src.infrastructure.plugins.v2.conversation_context_status_services import (
+    ConversationContextStatusV2,
+)
+from src.infrastructure.plugins.v2.conversation_generation_services import (
+    ConversationGenerationSourceMissingV2,
+)
+from src.infrastructure.plugins.v2.conversation_revision_services import (
+    ConversationRevisionAccessDeniedV2,
+    ConversationRevisionConversationNotFoundV2,
+    ConversationRevisionMessageNotFoundV2,
+    ConversationRevisionToolExecutionNotFoundV2,
+    EditedConversationMessageV2,
+    ForkedConversationV2,
+    ToolUndoRequestV2,
+)
+from src.infrastructure.plugins.v2.project_access_services import (
+    ProjectAccessDeniedV2,
+    ProjectAccessGrantV2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.workspace_core.authority import AvernetWorkspaceAuthority
 from src.infrastructure.workspace_core.client import WorkspaceCoreClient
 
@@ -49,9 +80,29 @@ class FailingAgentService:
     get_conversation = AsyncMock(side_effect=RuntimeError("internal conversation service secret"))
 
 
-class FailingDb:
-    get = AsyncMock(side_effect=RuntimeError("internal direct db secret"))
-    rollback = AsyncMock()
+class FailingConversationAccessService:
+    get_conversation = AsyncMock(side_effect=RuntimeError("internal conversation access secret"))
+    delete_conversation = AsyncMock(side_effect=RuntimeError("internal conversation access secret"))
+    update_conversation_title = AsyncMock(
+        side_effect=RuntimeError("internal conversation access secret")
+    )
+
+
+class FailingConversationConfigService:
+    update_conversation_config = AsyncMock(
+        side_effect=RuntimeError("internal conversation config secret")
+    )
+    access = SimpleNamespace(cache=SimpleNamespace(invalidate=AsyncMock()))
+
+
+class FailingConversationContextStatusService:
+    get_context_status = AsyncMock(side_effect=RuntimeError("internal context status secret"))
+
+
+class FailingConversationGenerationService:
+    generate_title = AsyncMock(side_effect=RuntimeError("internal title generation secret"))
+    generate_summary = AsyncMock(side_effect=RuntimeError("internal summary generation secret"))
+    after_update_committed = AsyncMock()
 
 
 class ListUseCase:
@@ -130,15 +181,90 @@ def _request_with_container(
     return request
 
 
+def _conversation_http_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
+def _conversation_collection_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
+def _conversation_config_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
+def _conversation_revision_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
+def _conversation_context_status_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
+def _conversation_generation_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
+def _sql_collection_service(
+    db: AsyncSession,
+    *,
+    default_use_case: object | None = None,
+) -> SimpleNamespace:
+    repository = SqlConversationCollectionRepositoryV2(db)
+    return SimpleNamespace(
+        list_conversations=(
+            default_use_case.execute if default_use_case is not None else repository.list_default
+        ),
+        count_conversations=(
+            default_use_case.count if default_use_case is not None else repository.count_default
+        ),
+        list_workspace_conversations=repository.list_workspace,
+        count_workspace_conversations=repository.count_workspace,
+        list_unbound_conversations=repository.list_unbound,
+        count_unbound_conversations=repository.count_unbound,
+    )
+
+
 def _db_with_project_access(
     *, allowed: bool = True, tenant_id: str = "tenant-1"
 ) -> SimpleNamespace:
+    async def require_access(*, project_id: str, user_id: str, **_kwargs: object) -> object:
+        if not allowed:
+            raise ProjectAccessDeniedV2(project_id)
+        return ProjectAccessGrantV2(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
     return SimpleNamespace(
+        service=SimpleNamespace(require_access=AsyncMock(side_effect=require_access)),
         execute=AsyncMock(
             return_value=SimpleNamespace(scalar_one_or_none=lambda: tenant_id if allowed else None)
         ),
         commit=AsyncMock(),
         rollback=AsyncMock(),
+    )
+
+
+def _project_access_authority_for_db(
+    db: object,
+    *,
+    tenant_id: str,
+    allowed: bool = True,
+) -> SimpleNamespace:
+    async def require_access(*, project_id: str, user_id: str, **_kwargs: object) -> object:
+        if not allowed:
+            raise ProjectAccessDeniedV2(project_id)
+        return ProjectAccessGrantV2(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
+    return SimpleNamespace(
+        service=SimpleNamespace(require_access=AsyncMock(side_effect=require_access)),
+        db=db,
     )
 
 
@@ -148,6 +274,18 @@ def _patch_llm_client(monkeypatch: pytest.MonkeyPatch) -> None:
         conversations_router,
         "create_llm_client",
         AsyncMock(return_value=object()),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        MagicMock(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "get_workspace_authority",
+        lambda request: request.app.state.workspace_authority,
     )
 
 
@@ -179,6 +317,20 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     request = _request_with_container(container)
     current_user = SimpleNamespace(id="user-1")
     db = _db_with_project_access()
+    conversation_http = _conversation_http_authority(FailingConversationAccessService(), db)
+    conversation_collection = _conversation_collection_authority(
+        SimpleNamespace(list_conversations=FailingListUseCase().execute),
+        db,
+    )
+    conversation_config = _conversation_config_authority(FailingConversationConfigService(), db)
+    conversation_context_status = _conversation_context_status_authority(
+        FailingConversationContextStatusService(),
+        db,
+    )
+    conversation_generation = _conversation_generation_authority(
+        FailingConversationGenerationService(),
+        db,
+    )
 
     route_calls: dict[str, Any] = {
         "list": lambda: conversations_router.list_conversations(
@@ -189,7 +341,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             offset=0,
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_collection=conversation_collection,
         ),
         "get": lambda: conversations_router.get_conversation(
             conversation_id="conversation-1",
@@ -197,7 +350,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=conversation_http,
         ),
         "context_status": lambda: conversations_router.get_context_status(
             conversation_id="conversation-1",
@@ -205,7 +359,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_context_status=conversation_context_status,
         ),
         "delete": lambda: conversations_router.delete_conversation(
             conversation_id="conversation-1",
@@ -213,7 +368,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=conversation_http,
         ),
         "title": lambda: conversations_router.update_conversation_title(
             conversation_id="conversation-1",
@@ -222,7 +378,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=conversation_http,
         ),
         "config": lambda: conversations_router.update_conversation_config(
             conversation_id="conversation-1",
@@ -231,7 +388,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_config=conversation_config,
         ),
         "mode": lambda: conversations_router.update_conversation_mode(
             conversation_id="conversation-1",
@@ -240,7 +398,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=conversation_http,
         ),
         "generate_title": lambda: conversations_router.generate_conversation_title(
             conversation_id="conversation-1",
@@ -248,7 +407,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_generation=conversation_generation,
         ),
         "summary": lambda: conversations_router.generate_summary(
             conversation_id="conversation-1",
@@ -256,7 +416,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_generation=conversation_generation,
         ),
     }
 
@@ -266,6 +427,263 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
+    if route_name in {"delete", "title", "config", "generate_title", "summary"}:
+        db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generate_title_uses_v2_generation_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-typed-title",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Typed admission title",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    generation_service = SimpleNamespace(
+        generate_title=AsyncMock(return_value=conversation),
+        after_update_committed=AsyncMock(),
+    )
+    db = _db_with_project_access()
+    static_container = MagicMock()
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        static_container,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+
+    response = await conversations_router.generate_conversation_title(
+        conversation_id=conversation.id,
+        request=_request_with_container(SimpleNamespace()),
+        project_id=conversation.project_id,
+        current_user=SimpleNamespace(id=conversation.user_id),
+        tenant_id=conversation.tenant_id,
+        project_access=db,
+        conversation_generation=_conversation_generation_authority(generation_service, db),
+    )
+
+    assert response.title == "Typed admission title"
+    generation_service.generate_title.assert_awaited_once_with(conversation_id=conversation.id)
+    db.commit.assert_awaited_once()
+    generation_service.after_update_committed.assert_awaited_once_with()
+    static_container.assert_not_called()
+    conversations_router.create_llm_client.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generate_summary_uses_v2_generation_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-typed-summary",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Typed summary",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    conversation.summary = "Typed admission summary"
+    generation_service = SimpleNamespace(
+        generate_summary=AsyncMock(return_value=conversation),
+        after_update_committed=AsyncMock(),
+    )
+    db = _db_with_project_access()
+    static_container = MagicMock()
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        static_container,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+
+    response = await conversations_router.generate_summary(
+        conversation_id=conversation.id,
+        request=_request_with_container(SimpleNamespace()),
+        project_id=conversation.project_id,
+        current_user=SimpleNamespace(id=conversation.user_id),
+        tenant_id=conversation.tenant_id,
+        project_access=db,
+        conversation_generation=_conversation_generation_authority(generation_service, db),
+    )
+
+    assert response.summary == "Typed admission summary"
+    generation_service.generate_summary.assert_awaited_once_with(conversation_id=conversation.id)
+    db.commit.assert_awaited_once()
+    generation_service.after_update_committed.assert_awaited_once_with()
+    static_container.assert_not_called()
+    conversations_router.create_llm_client.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_name", ["title", "summary"])
+async def test_conversation_generation_commits_before_cache_invalidation(
+    route_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-generation-order",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Generated title",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    order: list[str] = []
+
+    async def after_update_committed() -> None:
+        order.append("invalidate")
+
+    service = SimpleNamespace(
+        generate_title=AsyncMock(return_value=conversation),
+        generate_summary=AsyncMock(return_value=conversation),
+        after_update_committed=AsyncMock(side_effect=after_update_committed),
+    )
+    db = _db_with_project_access()
+
+    async def commit() -> None:
+        order.append("commit")
+
+    db.commit.side_effect = commit
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    kwargs = {
+        "conversation_id": conversation.id,
+        "request": MagicMock(),
+        "project_id": conversation.project_id,
+        "current_user": SimpleNamespace(id=conversation.user_id),
+        "tenant_id": conversation.tenant_id,
+        "project_access": db,
+        "conversation_generation": _conversation_generation_authority(service, db),
+    }
+
+    if route_name == "title":
+        await conversations_router.generate_conversation_title(**kwargs)
+    else:
+        await conversations_router.generate_summary(**kwargs)
+
+    assert order == ["commit", "invalidate"]
+    db.rollback.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("route_name", "expected_detail"),
+    [
+        ("title", "Failed to generate conversation title"),
+        ("summary", "Failed to generate conversation summary"),
+    ],
+)
+async def test_conversation_generation_commit_failure_never_invalidates_cache(
+    route_name: str,
+    expected_detail: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-generation-commit-failure",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Generated title",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    service = SimpleNamespace(
+        generate_title=AsyncMock(return_value=conversation),
+        generate_summary=AsyncMock(return_value=conversation),
+        after_update_committed=AsyncMock(),
+    )
+    db = _db_with_project_access()
+    db.commit.side_effect = RuntimeError("commit secret")
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    kwargs = {
+        "conversation_id": conversation.id,
+        "request": MagicMock(),
+        "project_id": conversation.project_id,
+        "current_user": SimpleNamespace(id=conversation.user_id),
+        "tenant_id": conversation.tenant_id,
+        "project_access": db,
+        "conversation_generation": _conversation_generation_authority(service, db),
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        if route_name == "title":
+            await conversations_router.generate_conversation_title(**kwargs)
+        else:
+            await conversations_router.generate_summary(**kwargs)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == expected_detail
+    assert "commit secret" not in exc_info.value.detail
+    service.after_update_committed.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("route_name", "expected_detail"),
+    [
+        ("title", "No user message found to generate title from"),
+        ("summary", "No messages found to generate summary from"),
+    ],
+)
+async def test_conversation_generation_maps_missing_sources_to_public_errors(
+    route_name: str,
+    expected_detail: str,
+) -> None:
+    service = SimpleNamespace(
+        generate_title=AsyncMock(side_effect=ConversationGenerationSourceMissingV2("title")),
+        generate_summary=AsyncMock(side_effect=ConversationGenerationSourceMissingV2("summary")),
+        after_update_committed=AsyncMock(),
+    )
+    db = _db_with_project_access()
+    authority = _conversation_generation_authority(service, db)
+    kwargs = {
+        "conversation_id": "conversation-1",
+        "request": MagicMock(),
+        "project_id": "project-1",
+        "current_user": SimpleNamespace(id="user-1"),
+        "tenant_id": "tenant-1",
+        "project_access": db,
+        "conversation_generation": authority,
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        if route_name == "title":
+            await conversations_router.generate_conversation_title(**kwargs)
+        else:
+            await conversations_router.generate_summary(**kwargs)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == expected_detail
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -302,6 +720,10 @@ async def test_list_conversations_expands_workspace_group_and_names(
     )
     use_case = ListUseCase([base_conversation], total=2)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session, default_use_case=use_case),
+        db_session,
+    )
     request = _request_with_container(
         container,
         authority=FakeWorkspaceAuthority(names={"ws-group": "Grouped Workspace"}),
@@ -323,7 +745,8 @@ async def test_list_conversations_expands_workspace_group_and_names(
         group_by_workspace=True,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
+        conversation_collection=collection,
     )
 
     assert [item.id for item in response.items] == [
@@ -352,6 +775,10 @@ async def test_create_conversation_persists_authorized_workspace_link(
         workspace_id="workspace-core-only",
     )
     use_case = SimpleNamespace(execute=AsyncMock(return_value=created))
+    collection_service = SimpleNamespace(
+        create_conversation=use_case.execute,
+        after_create_committed=AsyncMock(),
+    )
     container = SimpleNamespace(
         create_conversation_use_case=lambda _llm: use_case, redis=lambda: None
     )
@@ -375,7 +802,8 @@ async def test_create_conversation_persists_authorized_workspace_link(
         request=request,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db,
+        project_access=db,
+        conversation_collection=_conversation_collection_authority(collection_service, db),
     )
 
     membership.assert_awaited_once()
@@ -389,6 +817,7 @@ async def test_create_conversation_persists_authorized_workspace_link(
     )
     assert response.workspace_id == "workspace-core-only"
     db.commit.assert_awaited_once()
+    collection_service.after_create_committed.assert_awaited_once_with(created)
 
 
 @pytest.mark.unit
@@ -429,6 +858,10 @@ async def test_list_conversations_caps_workspace_group_expansion(
     )
     use_case = ListUseCase([base_conversation], total=81)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session, default_use_case=use_case),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -449,7 +882,8 @@ async def test_list_conversations_caps_workspace_group_expansion(
         group_by_workspace=True,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
+        conversation_collection=collection,
     )
 
     assert conversations_router._workspace_group_expansion_limit(5) == 5
@@ -578,6 +1012,10 @@ async def test_list_conversations_filters_unbound_before_pagination(
 
     use_case = ListUseCase([], total=6)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session, default_use_case=use_case),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -596,7 +1034,8 @@ async def test_list_conversations_filters_unbound_before_pagination(
         group_by_workspace=False,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
+        conversation_collection=collection,
     )
 
     assert [item.id for item in response.items] == [
@@ -621,7 +1060,8 @@ async def test_list_conversations_filters_unbound_before_pagination(
         group_by_workspace=False,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
+        conversation_collection=collection,
     )
 
     assert [item.id for item in final_page.items] == [
@@ -685,6 +1125,10 @@ async def test_unbound_filter_ignores_non_string_metadata_and_uses_legacy_fallba
     await db_session.flush()
 
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=5))
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -703,7 +1147,8 @@ async def test_unbound_filter_ignores_non_string_metadata_and_uses_legacy_fallba
         group_by_workspace=False,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
+        conversation_collection=collection,
     )
 
     assert {item.id for item in response.items} == {
@@ -715,12 +1160,13 @@ async def test_unbound_filter_ignores_non_string_metadata_and_uses_legacy_fallba
     assert {item.workspace_id for item in response.items} == {None}
     assert response.total == 4
 
-    legacy_rows = await conversations_router._list_workspace_conversations(
-        db_session,
+    legacy_rows = await SqlConversationCollectionRepositoryV2(db_session).list_workspace(
         project_id="project-1",
         tenant_id="tenant-1",
         workspace_ids={"ws-legacy-malformed"},
         status=ConversationStatus.ACTIVE,
+        limit=None,
+        offset=0,
     )
     assert [conversation.id for conversation in legacy_rows] == [
         "workspace-worker:ws-legacy-malformed:task-1:agent-1:attempt-1"
@@ -749,7 +1195,14 @@ async def test_list_conversations_rejects_combined_workspace_and_unbound_filters
             group_by_workspace=False,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db_session,
+            project_access=_project_access_authority_for_db(
+                db_session,
+                tenant_id="tenant-1",
+            ),
+            conversation_collection=_conversation_collection_authority(
+                SimpleNamespace(),
+                db_session,
+            ),
         )
 
     assert exc_info.value.status_code == 422
@@ -811,26 +1264,30 @@ async def test_workspace_filter_uses_same_precedence_as_response_projection(
     )
     await db_session.flush()
 
-    column_rows = await conversations_router._list_workspace_conversations(
-        db_session,
+    repository = SqlConversationCollectionRepositoryV2(db_session)
+    column_rows = await repository.list_workspace(
         project_id="project-1",
         tenant_id="tenant-1",
         workspace_ids={"ws-column"},
         status=ConversationStatus.ACTIVE,
+        limit=None,
+        offset=0,
     )
-    metadata_rows = await conversations_router._list_workspace_conversations(
-        db_session,
+    metadata_rows = await repository.list_workspace(
         project_id="project-1",
         tenant_id="tenant-1",
         workspace_ids={"ws-metadata"},
         status=ConversationStatus.ACTIVE,
+        limit=None,
+        offset=0,
     )
-    legacy_rows = await conversations_router._list_workspace_conversations(
-        db_session,
+    legacy_rows = await repository.list_workspace(
         project_id="project-1",
         tenant_id="tenant-1",
         workspace_ids={"ws-legacy"},
         status=ConversationStatus.ACTIVE,
+        limit=None,
+        offset=0,
     )
 
     assert [conversation.id for conversation in column_rows] == ["conversation-column-wins"]
@@ -930,6 +1387,10 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
     await db_session.flush()
 
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=3))
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -950,7 +1411,8 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
         group_by_workspace=True,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
+        conversation_collection=collection,
     )
 
     assert [item.id for item in response.items] == [
@@ -989,6 +1451,10 @@ async def test_list_workspace_conversations_requires_workspace_membership(
     await db_session.flush()
 
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=0))
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -1007,7 +1473,11 @@ async def test_list_workspace_conversations_requires_workspace_membership(
             group_by_workspace=False,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-workspace-list",
-            db=db_session,
+            project_access=_project_access_authority_for_db(
+                db_session,
+                tenant_id="tenant-workspace-list",
+            ),
+            conversation_collection=collection,
         )
 
     assert exc_info.value.status_code == 403
@@ -1053,6 +1523,10 @@ async def test_list_workspace_conversations_uses_avernet_membership_authority(
     request.app.state.workspace_core_client = client
     request.app.state.workspace_authority = AvernetWorkspaceAuthority(client)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=0))
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -1067,7 +1541,11 @@ async def test_list_workspace_conversations_uses_avernet_membership_authority(
         group_by_workspace=False,
         current_user=test_user,
         tenant_id=test_project_db.tenant_id,
-        db=db_session,
+        project_access=_project_access_authority_for_db(
+            db_session,
+            tenant_id=test_project_db.tenant_id,
+        ),
+        conversation_collection=collection,
     )
 
     assert response.items == []
@@ -1106,14 +1584,21 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
     expected_detail: str,
 ) -> None:
     current_user = SimpleNamespace(id="user-1")
-    db = FailingDb()
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        fork_conversation=AsyncMock(side_effect=RuntimeError("internal revision secret")),
+        edit_message=AsyncMock(side_effect=RuntimeError("internal revision secret")),
+        request_tool_undo=AsyncMock(side_effect=RuntimeError("internal revision secret")),
+        after_mutation_committed=AsyncMock(),
+    )
+    revision = _conversation_revision_authority(service, db)
     route_calls: dict[str, Any] = {
         "fork": lambda: conversations_router.fork_conversation(
             conversation_id="conversation-1",
             message_id="message-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            conversation_revision=revision,
         ),
         "edit_message": lambda: conversations_router.edit_message(
             conversation_id="conversation-1",
@@ -1121,14 +1606,14 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
             data={"content": "updated"},
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            conversation_revision=revision,
         ),
         "tool_undo": lambda: conversations_router.request_tool_undo(
             conversation_id="conversation-1",
             execution_id="execution-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            conversation_revision=revision,
         ),
     }
 
@@ -1138,133 +1623,300 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("route_name", "failure", "expected_status", "expected_detail"),
+    [
+        (
+            "fork",
+            ConversationRevisionAccessDeniedV2("conversation-1"),
+            403,
+            "Access denied",
+        ),
+        (
+            "fork",
+            ConversationRevisionMessageNotFoundV2("message-1"),
+            404,
+            "Message not found",
+        ),
+        (
+            "edit_message",
+            ConversationRevisionConversationNotFoundV2("conversation-1"),
+            404,
+            "Conversation not found",
+        ),
+        (
+            "edit_message",
+            ConversationRevisionMessageNotFoundV2("message-1"),
+            404,
+            "Message not found",
+        ),
+        (
+            "tool_undo",
+            ConversationRevisionToolExecutionNotFoundV2("execution-1"),
+            404,
+            "Tool execution not found",
+        ),
+    ],
+)
+async def test_conversation_revision_routes_map_scoped_failures(
+    route_name: str,
+    failure: Exception,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        fork_conversation=AsyncMock(side_effect=failure),
+        edit_message=AsyncMock(side_effect=failure),
+        request_tool_undo=AsyncMock(side_effect=failure),
+        after_mutation_committed=AsyncMock(),
+    )
+    current_user = SimpleNamespace(id="user-1")
+    revision = _conversation_revision_authority(service, db)
+    route_calls: dict[str, Any] = {
+        "fork": lambda: conversations_router.fork_conversation(
+            conversation_id="conversation-1",
+            message_id="message-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            conversation_revision=revision,
+        ),
+        "edit_message": lambda: conversations_router.edit_message(
+            conversation_id="conversation-1",
+            message_id="message-1",
+            data={"content": "updated"},
+            current_user=current_user,
+            tenant_id="tenant-1",
+            conversation_revision=revision,
+        ),
+        "tool_undo": lambda: conversations_router.request_tool_undo(
+            conversation_id="conversation-1",
+            execution_id="execution-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            conversation_revision=revision,
+        ),
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_calls[route_name]()
+
+    assert exc_info.value.status_code == expected_status
+    assert exc_info.value.detail == expected_detail
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route_name", ["fork", "edit_message", "tool_undo"])
-async def test_db_backed_conversation_routes_reject_non_owner(
+async def test_conversation_revision_routes_commit_then_invalidate_cache(
     route_name: str,
-    db_session: AsyncSession,
 ) -> None:
-    db_session.add(
-        DBConversation(
-            id="conversation-owned-elsewhere",
+    edited_at = datetime.now(UTC)
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        fork_conversation=AsyncMock(
+            return_value=ForkedConversationV2(
+                conversation_id="conversation-fork",
+                title="Fork",
+                parent_conversation_id="conversation-1",
+                project_id="project-1",
+            )
+        ),
+        edit_message=AsyncMock(
+            return_value=EditedConversationMessageV2(
+                message_id="message-1",
+                content="updated",
+                original_content="before",
+                version=2,
+                edited_at=edited_at,
+                project_id="project-1",
+            )
+        ),
+        request_tool_undo=AsyncMock(
+            return_value=ToolUndoRequestV2(
+                message_id="undo-message",
+                tool_name="write_file",
+                project_id="project-1",
+            )
+        ),
+        after_mutation_committed=AsyncMock(),
+    )
+    current_user = SimpleNamespace(id="user-1")
+    revision = _conversation_revision_authority(service, db)
+    route_calls: dict[str, Any] = {
+        "fork": lambda: conversations_router.fork_conversation(
+            conversation_id="conversation-1",
+            message_id="message-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            conversation_revision=revision,
+        ),
+        "edit_message": lambda: conversations_router.edit_message(
+            conversation_id="conversation-1",
+            message_id="message-1",
+            data={"content": "updated"},
+            current_user=current_user,
+            tenant_id="tenant-1",
+            conversation_revision=revision,
+        ),
+        "tool_undo": lambda: conversations_router.request_tool_undo(
+            conversation_id="conversation-1",
+            execution_id="execution-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            conversation_revision=revision,
+        ),
+    }
+
+    response = await route_calls[route_name]()
+
+    assert isinstance(response, dict)
+    db.commit.assert_awaited_once()
+    service.after_mutation_committed.assert_awaited_once_with("project-1")
+    db.rollback.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_edit_message_rejects_non_string_content_before_service_call() -> None:
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        edit_message=AsyncMock(),
+        after_mutation_committed=AsyncMock(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.edit_message(
+            conversation_id="conversation-1",
+            message_id="message-1",
+            data={"content": {"unexpected": True}},
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            conversation_revision=_conversation_revision_authority(service, db),
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Invalid message content"
+    service.edit_message.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+
+def test_conversation_revision_handlers_have_no_direct_sql_authority() -> None:
+    for handler in (
+        conversations_router.fork_conversation,
+        conversations_router.edit_message,
+        conversations_router.request_tool_undo,
+    ):
+        source = inspect.getsource(handler)
+        assert "_load_owned_conversation_row" not in source
+        assert "db.get(" not in source
+        assert "select(" not in source
+        assert "MessageModel" not in source
+        assert "ToolExecutionRecord" not in source
+
+
+@pytest.mark.unit
+def test_project_scoped_conversation_handlers_require_v2_project_access_authority() -> None:
+    create_parameter = inspect.signature(conversations_router.create_conversation).parameters[
+        "project_access"
+    ]
+    assert (
+        create_parameter.default.dependency
+        is project_access_create_http_application_authority_dependency_v2
+    )
+
+    for handler in (
+        conversations_router.list_conversations,
+        conversations_router.get_conversation,
+        conversations_router.get_context_status,
+        conversations_router.delete_conversation,
+        conversations_router.update_conversation_title,
+        conversations_router.update_conversation_config,
+        conversations_router.update_conversation_mode,
+        conversations_router.generate_conversation_title,
+        conversations_router.generate_summary,
+    ):
+        parameters = inspect.signature(handler).parameters
+        assert (
+            parameters["project_access"].default.dependency
+            is project_access_query_http_application_authority_dependency_v2
+        )
+        assert "db" not in parameters
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_project_access_helper_fails_closed_and_returns_exact_tenant() -> None:
+    service = SimpleNamespace(
+        require_access=AsyncMock(
+            return_value=ProjectAccessGrantV2(
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+            )
+        )
+    )
+    authority = SimpleNamespace(service=service)
+
+    tenant_id = await conversations_router._ensure_project_access(
+        authority,
+        current_user=SimpleNamespace(id="user-1"),
+        project_id="project-1",
+        tenant_id="tenant-1",
+    )
+
+    assert tenant_id == "tenant-1"
+    service.require_access.assert_awaited_once_with(
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+    )
+    service.require_access.side_effect = ProjectAccessDeniedV2("project-1")
+    with pytest.raises(HTTPException) as error:
+        await conversations_router._ensure_project_access(
+            authority,
+            current_user=SimpleNamespace(id="user-1"),
             project_id="project-1",
-            tenant_id="tenant-1",
-            user_id="other-user",
-            title="Private conversation",
-            status=ConversationStatus.ACTIVE.value,
-            agent_config={},
-            meta={},
-            message_count=0,
-            created_at=datetime.now(UTC),
-            current_mode="build",
-            participant_agents=[],
+            tenant_id="tenant-other",
         )
-    )
-    await db_session.flush()
 
-    current_user = SimpleNamespace(id="user-1")
-    route_calls: dict[str, Any] = {
-        "fork": lambda: conversations_router.fork_conversation(
-            conversation_id="conversation-owned-elsewhere",
-            message_id="message-1",
-            current_user=current_user,
-            tenant_id="tenant-1",
-            db=db_session,
-        ),
-        "edit_message": lambda: conversations_router.edit_message(
-            conversation_id="conversation-owned-elsewhere",
-            message_id="message-1",
-            data={"content": "updated"},
-            current_user=current_user,
-            tenant_id="tenant-1",
-            db=db_session,
-        ),
-        "tool_undo": lambda: conversations_router.request_tool_undo(
-            conversation_id="conversation-owned-elsewhere",
-            execution_id="execution-1",
-            current_user=current_user,
-            tenant_id="tenant-1",
-            db=db_session,
-        ),
-    }
-
-    with pytest.raises(HTTPException) as exc_info:
-        await route_calls[route_name]()
-
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Access denied"
+    assert error.value.status_code == 403
+    assert error.value.detail == "Access denied"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@pytest.mark.parametrize("route_name", ["fork", "edit_message", "tool_undo"])
-async def test_db_backed_conversation_routes_require_project_access_for_owner(
-    route_name: str,
-    db_session: AsyncSession,
-) -> None:
-    db_session.add(
-        Project(
-            id="project-private",
-            tenant_id="tenant-1",
-            name="Private project",
-            description="Project without current user membership",
-            owner_id="other-user",
-            memory_rules={},
-            graph_config={},
-        )
+async def test_conversation_revision_runtime_failure_is_structured_unavailable() -> None:
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        fork_conversation=AsyncMock(
+            side_effect=RuntimeV2Error("missing_service", "internal provider detail")
+        ),
+        after_mutation_committed=AsyncMock(),
     )
-    db_session.add(
-        DBConversation(
-            id="conversation-owned-without-project",
-            project_id="project-private",
-            tenant_id="tenant-1",
-            user_id="user-1",
-            title="Former project conversation",
-            status=ConversationStatus.ACTIVE.value,
-            agent_config={},
-            meta={},
-            message_count=0,
-            created_at=datetime.now(UTC),
-            current_mode="build",
-            participant_agents=[],
-        )
-    )
-    await db_session.flush()
-
-    current_user = SimpleNamespace(id="user-1")
-    route_calls: dict[str, Any] = {
-        "fork": lambda: conversations_router.fork_conversation(
-            conversation_id="conversation-owned-without-project",
-            message_id="message-1",
-            current_user=current_user,
-            tenant_id="tenant-1",
-            db=db_session,
-        ),
-        "edit_message": lambda: conversations_router.edit_message(
-            conversation_id="conversation-owned-without-project",
-            message_id="message-1",
-            data={"content": "updated"},
-            current_user=current_user,
-            tenant_id="tenant-1",
-            db=db_session,
-        ),
-        "tool_undo": lambda: conversations_router.request_tool_undo(
-            conversation_id="conversation-owned-without-project",
-            execution_id="execution-1",
-            current_user=current_user,
-            tenant_id="tenant-1",
-            db=db_session,
-        ),
-    }
 
     with pytest.raises(HTTPException) as exc_info:
-        await route_calls[route_name]()
+        await conversations_router.fork_conversation(
+            conversation_id="conversation-1",
+            message_id="message-1",
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            conversation_revision=_conversation_revision_authority(service, db),
+        )
 
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Access denied"
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "code": "missing_service",
+        "message": "Conversation revision authority is unavailable",
+    }
+    assert "internal provider detail" not in str(exc_info.value.detail)
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -1278,6 +1930,9 @@ async def test_create_conversation_validation_errors_are_sanitized() -> None:
         create_conversation_use_case=lambda _llm: FailingCreateUseCase(),
     )
     db = _db_with_project_access()
+    collection_service = SimpleNamespace(
+        create_conversation=FailingCreateUseCase().execute,
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.create_conversation(
@@ -1285,7 +1940,8 @@ async def test_create_conversation_validation_errors_are_sanitized() -> None:
             request=_request_with_container(container),
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_collection=_conversation_collection_authority(collection_service, db),
         )
 
     assert exc_info.value.status_code == 400
@@ -1310,7 +1966,7 @@ async def test_create_conversation_requires_project_access(
             request=_request_with_container(container),
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
         )
 
     assert exc_info.value.status_code == 403
@@ -1323,15 +1979,15 @@ async def test_create_conversation_requires_project_access(
 async def test_create_conversation_rejects_inaccessible_selected_agent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    create_use_case = SimpleNamespace(execute=AsyncMock())
-    registry = SimpleNamespace(get_by_id=AsyncMock(return_value=None))
-    container = SimpleNamespace(
-        agent_registry=lambda: registry,
-        create_conversation_use_case=lambda _llm: create_use_case,
+    create = AsyncMock(
+        side_effect=InvalidConversationAgentSelectionV2("agent-from-another-project")
     )
-    monkeypatch.setattr(
-        conversations_router, "get_container_with_db", lambda _request, _db: container
+    collection_service = SimpleNamespace(
+        create_conversation=create,
+        after_create_committed=AsyncMock(),
     )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
     db = _db_with_project_access()
 
     with pytest.raises(HTTPException) as exc_info:
@@ -1340,20 +1996,25 @@ async def test_create_conversation_rejects_inaccessible_selected_agent(
                 project_id="project-1",
                 agent_config={"selected_agent_id": "agent-from-another-project"},
             ),
-            request=_request_with_container(container),
+            request=_request_with_container(SimpleNamespace()),
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_collection=_conversation_collection_authority(collection_service, db),
         )
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Invalid agent selection"
-    registry.get_by_id.assert_awaited_once_with(
-        "agent-from-another-project",
-        tenant_id="tenant-1",
+    create.assert_awaited_once_with(
         project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
+        title="New Conversation",
+        agent_config={"selected_agent_id": "agent-from-another-project"},
+        workspace_id=None,
     )
-    create_use_case.execute.assert_not_awaited()
+    static_container.assert_not_called()
+    conversations_router.create_llm_client.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -1378,28 +2039,30 @@ async def test_create_conversation_uses_authorized_project_tenant(
             )
 
     create_use_case = CapturingCreateUseCase()
-    container = SimpleNamespace(
-        create_conversation_use_case=lambda _llm: create_use_case,
-        redis=lambda: None,
+    collection_service = SimpleNamespace(
+        create_conversation=create_use_case.execute,
+        after_create_committed=AsyncMock(),
     )
-    monkeypatch.setattr(
-        conversations_router, "get_container_with_db", lambda _request, _db: container
-    )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
     db = _db_with_project_access(tenant_id="tenant-project")
 
     response = await conversations_router.create_conversation(
         data=CreateConversationRequest(project_id="project-1", title="Cross tenant"),
-        request=_request_with_container(container),
+        request=_request_with_container(SimpleNamespace()),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-fallback",
-        db=db,
+        project_access=db,
+        conversation_collection=_conversation_collection_authority(collection_service, db),
     )
 
-    conversations_router.create_llm_client.assert_awaited_once_with("tenant-project")
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
     assert create_use_case.kwargs is not None
     assert create_use_case.kwargs["tenant_id"] == "tenant-project"
     assert response.tenant_id == "tenant-project"
     db.commit.assert_awaited_once()
+    collection_service.after_create_committed.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -1419,7 +2082,7 @@ async def test_list_conversations_requires_project_access() -> None:
             group_by_workspace=False,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
         )
 
     assert exc_info.value.status_code == 403
@@ -1468,13 +2131,15 @@ async def test_list_conversations_uses_authorized_project_tenant(
     await db_session.flush()
 
     list_use_case = CapturingListUseCase()
-    container = SimpleNamespace(list_conversations_use_case=lambda _llm: list_use_case)
-    monkeypatch.setattr(
-        conversations_router, "get_container_with_db", lambda _request, _db: container
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session, default_use_case=list_use_case),
+        db_session,
     )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
 
     response = await conversations_router.list_conversations(
-        request=_request_with_container(container),
+        request=_request_with_container(SimpleNamespace()),
         project_id=project.id,
         status=None,
         limit=50,
@@ -1482,21 +2147,26 @@ async def test_list_conversations_uses_authorized_project_tenant(
         workspace_id=None,
         group_by_workspace=False,
         current_user=SimpleNamespace(id="user-1"),
-        tenant_id="tenant-fallback",
-        db=db_session,
+        tenant_id="tenant-project",
+        project_access=_project_access_authority_for_db(
+            db_session,
+            tenant_id="tenant-project",
+        ),
+        conversation_collection=collection,
     )
 
-    conversations_router.create_llm_client.assert_awaited_once_with("tenant-project")
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
     assert list_use_case.execute_kwargs == {
         "project_id": project.id,
-        "user_id": "user-1",
+        "tenant_id": "tenant-project",
         "limit": 50,
         "offset": 0,
         "status": None,
     }
     assert list_use_case.count_kwargs == {
         "project_id": project.id,
-        "user_id": "user-1",
+        "tenant_id": "tenant-project",
         "status": None,
     }
     assert response.items == []
@@ -1528,6 +2198,19 @@ async def test_project_scoped_conversation_routes_require_project_access(
     request = _request_with_container(container)
     db = _db_with_project_access(allowed=False)
     current_user = SimpleNamespace(id="user-1")
+    conversation_service = SimpleNamespace(
+        get_conversation=AsyncMock(),
+        delete_conversation=AsyncMock(),
+        update_conversation_title=AsyncMock(),
+        update_conversation_config=AsyncMock(),
+        generate_title=AsyncMock(),
+        generate_summary=AsyncMock(),
+        after_update_committed=AsyncMock(),
+    )
+    conversation_http = _conversation_http_authority(conversation_service, db)
+    conversation_config = _conversation_config_authority(conversation_service, db)
+    conversation_context_status = _conversation_context_status_authority(conversation_service, db)
+    conversation_generation = _conversation_generation_authority(conversation_service, db)
     route_calls: dict[str, Any] = {
         "get": lambda: conversations_router.get_conversation(
             conversation_id="conversation-1",
@@ -1535,7 +2218,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=conversation_http,
         ),
         "context_status": lambda: conversations_router.get_context_status(
             conversation_id="conversation-1",
@@ -1543,7 +2227,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_context_status=conversation_context_status,
         ),
         "delete": lambda: conversations_router.delete_conversation(
             conversation_id="conversation-1",
@@ -1551,7 +2236,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=conversation_http,
         ),
         "title": lambda: conversations_router.update_conversation_title(
             conversation_id="conversation-1",
@@ -1560,7 +2246,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=conversation_http,
         ),
         "config": lambda: conversations_router.update_conversation_config(
             conversation_id="conversation-1",
@@ -1569,7 +2256,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_config=conversation_config,
         ),
         "mode": lambda: conversations_router.update_conversation_mode(
             conversation_id="conversation-1",
@@ -1578,7 +2266,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=conversation_http,
         ),
         "generate_title": lambda: conversations_router.generate_conversation_title(
             conversation_id="conversation-1",
@@ -1586,7 +2275,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_generation=conversation_generation,
         ),
         "summary": lambda: conversations_router.generate_summary(
             conversation_id="conversation-1",
@@ -1594,7 +2284,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_generation=conversation_generation,
         ),
     }
 
@@ -1604,13 +2295,245 @@ async def test_project_scoped_conversation_routes_require_project_access(
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Access denied"
     request.app.state.container.with_db.assert_not_called()
+    conversation_service.get_conversation.assert_not_awaited()
+    conversation_service.delete_conversation.assert_not_awaited()
+    conversation_service.update_conversation_title.assert_not_awaited()
+    conversation_service.update_conversation_config.assert_not_awaited()
+    conversation_service.generate_title.assert_not_awaited()
+    conversation_service.generate_summary.assert_not_awaited()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_update_conversation_config_distinguishes_omitted_fields_from_explicit_null(
+async def test_context_status_uses_v2_authority_without_llm_or_container(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    projected = ConversationContextStatusV2(
+        conversation_id="conversation-context",
+        message_count=17,
+        has_summary=True,
+        summary_tokens=321,
+        messages_in_summary=11,
+        compression_level="l2_summarize",
+        from_cache=True,
+    )
+    service = SimpleNamespace(get_context_status=AsyncMock(return_value=projected))
+    db = _db_with_project_access()
+    authority = _conversation_context_status_authority(service, db)
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
+    request = _request_with_container(SimpleNamespace())
+
+    response = await conversations_router.get_context_status(
+        conversation_id=projected.conversation_id,
+        request=request,
+        project_id="project-1",
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        project_access=db,
+        conversation_context_status=authority,
+    )
+
+    assert response == {
+        "conversation_id": "conversation-context",
+        "message_count": 17,
+        "has_summary": True,
+        "summary_tokens": 321,
+        "messages_in_summary": 11,
+        "compression_level": "l2_summarize",
+        "from_cache": True,
+    }
+    service.get_context_status.assert_awaited_once_with(
+        conversation_id="conversation-context",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+    )
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
+    request.app.state.container.with_db.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_status_hides_missing_or_cross_scope_conversation() -> None:
+    service = SimpleNamespace(get_context_status=AsyncMock(return_value=None))
+    db = _db_with_project_access()
+    authority = _conversation_context_status_authority(service, db)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.get_context_status(
+            conversation_id="conversation-other-scope",
+            request=_request_with_container(SimpleNamespace()),
+            project_id="project-1",
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            project_access=db,
+            conversation_context_status=authority,
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Conversation not found"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_conversation_get_delete_and_title_use_v2_access_without_llm_or_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-v2-crud",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Before",
+    )
+
+    async def update_title(**kwargs: Any) -> Conversation:
+        conversation.update_title(kwargs["title"])
+        return conversation
+
+    mutation_order: list[str] = []
+
+    async def commit() -> None:
+        mutation_order.append("commit")
+
+    async def invalidate(project_id: str) -> None:
+        assert project_id == conversation.project_id
+        mutation_order.append("invalidate")
+
+    service = SimpleNamespace(
+        get_conversation=AsyncMock(return_value=conversation),
+        delete_conversation=AsyncMock(return_value=True),
+        update_conversation_title=AsyncMock(side_effect=update_title),
+        cache=SimpleNamespace(invalidate=AsyncMock(side_effect=invalidate)),
+    )
+    db = _db_with_project_access()
+    db.commit.side_effect = commit
+    authority = _conversation_http_authority(service, db)
+    request = _request_with_container(SimpleNamespace())
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    current_user = SimpleNamespace(id="user-1")
+
+    get_response = await conversations_router.get_conversation(
+        conversation_id=conversation.id,
+        request=request,
+        project_id=conversation.project_id,
+        current_user=current_user,
+        tenant_id=conversation.tenant_id,
+        project_access=db,
+        conversation_http=authority,
+    )
+    await conversations_router.delete_conversation(
+        conversation_id=conversation.id,
+        request=request,
+        project_id=conversation.project_id,
+        current_user=current_user,
+        tenant_id=conversation.tenant_id,
+        project_access=db,
+        conversation_http=authority,
+    )
+    title_response = await conversations_router.update_conversation_title(
+        conversation_id=conversation.id,
+        data=UpdateConversationTitleRequest(title="After"),
+        request=request,
+        project_id=conversation.project_id,
+        current_user=current_user,
+        tenant_id=conversation.tenant_id,
+        project_access=db,
+        conversation_http=authority,
+    )
+
+    assert get_response.id == conversation.id
+    assert title_response.title == "After"
+    expected_scope = {
+        "conversation_id": conversation.id,
+        "project_id": conversation.project_id,
+        "user_id": conversation.user_id,
+    }
+    service.get_conversation.assert_awaited_once_with(**expected_scope)
+    service.delete_conversation.assert_awaited_once_with(**expected_scope)
+    service.update_conversation_title.assert_awaited_once_with(
+        **expected_scope,
+        title="After",
+    )
+    assert db.commit.await_count == 2
+    assert service.cache.invalidate.await_count == 2
+    assert mutation_order == ["commit", "invalidate", "commit", "invalidate"]
+    db.rollback.assert_not_awaited()
+    conversations_router.create_llm_client.assert_not_awaited()
+    request.app.state.container.with_db.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_name", ["delete", "title"])
+async def test_conversation_mutations_rollback_when_v2_scope_is_not_found(
+    route_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = SimpleNamespace(
+        delete_conversation=AsyncMock(return_value=False),
+        update_conversation_title=AsyncMock(return_value=None),
+    )
+    db = _db_with_project_access()
+    authority = _conversation_http_authority(service, db)
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    kwargs = {
+        "conversation_id": "conversation-missing",
+        "request": MagicMock(),
+        "project_id": "project-1",
+        "current_user": SimpleNamespace(id="user-1"),
+        "tenant_id": "tenant-1",
+        "project_access": db,
+        "conversation_http": authority,
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        if route_name == "delete":
+            await conversations_router.delete_conversation(**kwargs)
+        else:
+            await conversations_router.update_conversation_title(
+                data=UpdateConversationTitleRequest(title="After"),
+                **kwargs,
+            )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Conversation not found"
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+def test_conversation_crud_handlers_have_no_static_container_or_llm_fallback() -> None:
+    for handler in (
+        conversations_router.get_conversation,
+        conversations_router.delete_conversation,
+        conversations_router.update_conversation_title,
+        conversations_router.update_conversation_config,
+        conversations_router.update_conversation_mode,
+        conversations_router.generate_conversation_title,
+        conversations_router.generate_summary,
+    ):
+        source = inspect.getsource(handler)
+        assert "create_llm_client" not in source
+        assert "get_container_with_db" not in source
+        assert ".agent_service(" not in source
+        assert "_conversation_repo" not in source
+        assert ".save_and_commit(" not in source
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_conversation_config_distinguishes_omitted_fields_from_explicit_null() -> None:
     original_config = {
         "selected_agent_id": "agent-1",
         "llm_model_override": "gpt-reasoning",
@@ -1625,18 +2548,21 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
         title="Config clear contract",
         agent_config=dict(original_config),
     )
-    conversation_repo = SimpleNamespace(save=AsyncMock())
-    agent_service = SimpleNamespace(
+
+    async def save_conversation(**kwargs: Any) -> Conversation:
+        return kwargs["conversation"]
+
+    access = SimpleNamespace(
         get_conversation=AsyncMock(return_value=conversation),
-        _conversation_repo=conversation_repo,
+        save_scoped_conversation=AsyncMock(side_effect=save_conversation),
+        cache=SimpleNamespace(invalidate=AsyncMock()),
     )
-    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
-    monkeypatch.setattr(
-        conversations_router,
-        "get_container_with_db",
-        lambda _request, _db: container,
+    config_service = ConversationConfigServiceV2(
+        access=access,
+        agent_definitions=SimpleNamespace(resolve=AsyncMock()),
     )
     db = _db_with_project_access()
+    authority = _conversation_config_authority(config_service, db)
     omitted = UpdateConversationConfigRequest()
     explicit_clear = UpdateConversationConfigRequest(
         selected_agent_id=None,
@@ -1658,7 +2584,8 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
         project_id=conversation.project_id,
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
+        conversation_config=authority,
     )
 
     assert conversation.agent_config == original_config
@@ -1671,7 +2598,8 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
         project_id=conversation.project_id,
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
+        conversation_config=authority,
     )
 
     expected_cleared_config = {
@@ -1682,11 +2610,42 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
     }
     assert conversation.agent_config == expected_cleared_config
     assert cleared_response.agent_config == expected_cleared_config
-    assert conversation_repo.save.await_args_list == [
-        ((conversation,), {}),
-        ((conversation,), {}),
-    ]
+    assert access.save_scoped_conversation.await_count == 2
     assert db.commit.await_count == 2
+    assert access.cache.invalidate.await_args_list == [
+        ((conversation.project_id,), {}),
+        ((conversation.project_id,), {}),
+    ]
+    conversations_router.create_llm_client.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_conversation_config_rejects_inaccessible_selected_agent() -> None:
+    service = SimpleNamespace(
+        update_conversation_config=AsyncMock(
+            side_effect=InvalidConversationAgentSelectionV2("agent-from-another-project")
+        ),
+        access=SimpleNamespace(cache=SimpleNamespace(invalidate=AsyncMock())),
+    )
+    db = _db_with_project_access()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.update_conversation_config(
+            conversation_id="conversation-1",
+            data=UpdateConversationConfigRequest(selected_agent_id="agent-from-another-project"),
+            request=MagicMock(),
+            project_id="project-1",
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            project_access=db,
+            conversation_config=_conversation_config_authority(service, db),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid agent selection"
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -1715,8 +2674,7 @@ async def test_conversation_invariant_errors_are_sanitized() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_workspace_roster_invariant_errors_are_sanitized(
-) -> None:
+async def test_workspace_roster_invariant_errors_are_sanitized() -> None:
     conversation = SimpleNamespace(
         conversation_mode=None,
         tenant_id="tenant-1",
@@ -1758,35 +2716,38 @@ async def test_update_conversation_mode_requires_workspace_membership(
         status=ConversationStatus.ACTIVE,
         created_at=datetime.now(UTC),
     )
-    conversation_repo = SimpleNamespace(save=AsyncMock())
-    agent_service = SimpleNamespace(
+    conversation_service = SimpleNamespace(
         get_conversation=AsyncMock(return_value=conversation),
-        _conversation_repo=conversation_repo,
+        save_scoped_conversation=AsyncMock(),
+        cache=SimpleNamespace(invalidate=AsyncMock()),
     )
-    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
-    monkeypatch.setattr(
-        conversations_router,
-        "get_container_with_db",
-        lambda _request, _db: container,
-    )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
+    authority = _conversation_http_authority(conversation_service, db_session)
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.update_conversation_mode(
             conversation_id=conversation.id,
             data=UpdateConversationModeRequest(workspace_id="workspace-mode-private"),
             request=_request_with_container(
-                container,
+                SimpleNamespace(),
                 authority=FakeWorkspaceAuthority(denied=True),
             ),
             project_id=test_project_db.id,
             current_user=test_user,
             tenant_id=test_project_db.tenant_id,
-            db=db_session,
+            project_access=_project_access_authority_for_db(
+                db_session,
+                tenant_id=test_project_db.tenant_id,
+            ),
+            conversation_http=authority,
         )
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Workspace access required"
-    conversation_repo.save.assert_not_awaited()
+    conversation_service.save_scoped_conversation.assert_not_awaited()
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
 
 
 @pytest.mark.unit
@@ -1847,17 +2808,14 @@ async def test_update_conversation_mode_accepts_accessible_workspace_task_linkag
         status=ConversationStatus.ACTIVE,
         created_at=datetime.now(UTC),
     )
-    conversation_repo = SimpleNamespace(save=AsyncMock())
-    agent_service = SimpleNamespace(
+    conversation_service = SimpleNamespace(
         get_conversation=AsyncMock(return_value=conversation),
-        _conversation_repo=conversation_repo,
+        save_scoped_conversation=AsyncMock(return_value=conversation),
+        cache=SimpleNamespace(invalidate=AsyncMock()),
     )
-    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
-    monkeypatch.setattr(
-        conversations_router,
-        "get_container_with_db",
-        lambda _request, _db: container,
-    )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
+    authority = _conversation_http_authority(conversation_service, db_session)
 
     response = await conversations_router.update_conversation_mode(
         conversation_id=conversation.id,
@@ -1866,18 +2824,35 @@ async def test_update_conversation_mode_accepts_accessible_workspace_task_linkag
             linked_workspace_task_id="workspace-mode-linkage-task",
         ),
         request=_request_with_container(
-            container,
+            SimpleNamespace(),
             authority=FakeWorkspaceAuthority(linked_tasks=True),
         ),
         project_id=test_project_db.id,
         current_user=test_user,
         tenant_id=test_project_db.tenant_id,
-        db=db_session,
+        project_access=_project_access_authority_for_db(
+            db_session,
+            tenant_id=test_project_db.tenant_id,
+        ),
+        conversation_http=authority,
     )
 
     assert response.workspace_id == "workspace-mode-linkage"
     assert response.linked_workspace_task_id == "workspace-mode-linkage-task"
-    conversation_repo.save.assert_awaited_once_with(conversation)
+    conversation_service.get_conversation.assert_awaited_once_with(
+        conversation_id=conversation.id,
+        project_id=test_project_db.id,
+        user_id=test_user.id,
+    )
+    conversation_service.save_scoped_conversation.assert_awaited_once_with(
+        conversation=conversation,
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+    )
+    conversation_service.cache.invalidate.assert_awaited_once_with(test_project_db.id)
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
 
 
 @pytest.mark.unit
@@ -1893,19 +2868,15 @@ async def test_update_conversation_mode_value_errors_are_sanitized(
         updated_at=None,
         assert_autonomous_invariants=MagicMock(),
     )
-    agent_service = SimpleNamespace(
+    conversation_service = SimpleNamespace(
         get_conversation=AsyncMock(return_value=conversation),
-        _conversation_repo=SimpleNamespace(
-            save=AsyncMock(side_effect=ValueError("secret persistence validation"))
-        ),
+        save_scoped_conversation=AsyncMock(side_effect=ValueError("secret persistence validation")),
+        cache=SimpleNamespace(invalidate=AsyncMock()),
     )
-    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
     db = _db_with_project_access()
-    monkeypatch.setattr(
-        conversations_router,
-        "get_container_with_db",
-        lambda _request, _db: container,
-    )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
+    authority = _conversation_http_authority(conversation_service, db)
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.update_conversation_mode(
@@ -1915,10 +2886,13 @@ async def test_update_conversation_mode_value_errors_are_sanitized(
             project_id="project-1",
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
+            conversation_http=authority,
         )
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "Invalid conversation mode update"
     assert "secret" not in exc_info.value.detail
     db.rollback.assert_awaited_once()
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()

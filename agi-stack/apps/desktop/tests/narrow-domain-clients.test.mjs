@@ -87,7 +87,9 @@ test('narrow domain clients expose only their contract and preserve authority ca
       return { content: [], is_error: false };
     },
   });
-  assert.deepEqual(Object.keys(host), ['callMCPAppTool']);
+  assert.deepEqual(Object.keys(host).sort(), [
+    'callMCPAppTool', 'callMCPAppToolDirect', 'listMCPAppResources', 'listMCPApps', 'readMCPAppResource',
+  ]);
   await host.callMCPAppTool('app-1', 'render', {}, 'desktop-mcp-tool-call:narrow-1');
 
   assert.deepEqual(

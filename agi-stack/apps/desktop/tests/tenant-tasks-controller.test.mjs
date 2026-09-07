@@ -6,10 +6,10 @@ const { DesktopApiError } =
 const { createTenantTasksController } =
   await import('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantTasksController.js');
 
-test('Tenant Tasks suppresses stale completion after a project scope switch', async () => {
+test('Tenant Tasks suppresses stale completion after a Local project scope switch', async () => {
   const pending = new Map();
   const controller = createTenantTasksController({
-    authority: 'cloud',
+    authority: 'local',
     client: {
       load(scope, _query, options) {
         const request = deferred();
@@ -17,22 +17,22 @@ test('Tenant Tasks suppresses stale completion after a project scope switch', as
         return request.promise;
       },
     },
-    initialScope: scope('project-1'),
+    initialScope: localScope('project-1'),
   });
 
-  const first = controller.load(scope('project-1'));
-  const second = controller.load(scope('project-2'));
+  const first = controller.load(localScope('project-1'));
+  const second = controller.load(localScope('project-2'));
   assert.equal(pending.get('project-1').signal.aborted, true);
   assert.equal(controller.getSnapshot().state, 'scope_switch');
 
-  pending.get('project-1').resolve(snapshot('project-1'));
+  pending.get('project-1').resolve(localSnapshot('project-1'));
   await first;
   assert.equal(controller.getSnapshot().scope.projectId, 'project-2');
 
-  pending.get('project-2').resolve(snapshot('project-2'));
+  pending.get('project-2').resolve(localSnapshot('project-2'));
   await second;
-  assert.equal(controller.getSnapshot().state, 'ready');
-  assert.equal(controller.getSnapshot().tasks[0].projectId, null);
+  assert.equal(controller.getSnapshot().state, 'degraded');
+  assert.equal(controller.getSnapshot().tasks[0].projectId, 'project-2');
 });
 
 test('Tenant Tasks retains authoritative rows as stale after a retryable refresh failure', async () => {
@@ -49,10 +49,10 @@ test('Tenant Tasks retains authoritative rows as stale after a retryable refresh
         return snapshot(scopeValue.projectId);
       },
     },
-    initialScope: scope('project-1'),
+    initialScope: scope(),
   });
 
-  await controller.load(scope('project-1'));
+  await controller.load(scope());
   fail = true;
   await controller.retry();
 
@@ -71,7 +71,7 @@ test('Tenant Tasks exposes structured conflict and forbidden mutation states', a
       reason_code: 'task_revision_conflict',
     }),
   );
-  await conflict.load(scope('project-1'));
+  await conflict.load(scope());
   await assert.rejects(conflict.retryTask('task-1'), /conflict/u);
   assert.equal(conflict.getSnapshot().state, 'conflict');
   assert.equal(conflict.getSnapshot().reasonCode, 'task_revision_conflict');
@@ -81,7 +81,7 @@ test('Tenant Tasks exposes structured conflict and forbidden mutation states', a
       reason_code: 'task_access_forbidden',
     }),
   );
-  await forbidden.load(scope('project-1'));
+  await forbidden.load(scope());
   await assert.rejects(forbidden.stopTask('task-1'), /forbidden/u);
   assert.equal(forbidden.getSnapshot().state, 'forbidden');
   assert.equal(forbidden.getSnapshot().reasonCode, 'task_access_forbidden');
@@ -103,21 +103,37 @@ function controllerWithMutationError(error) {
         throw error;
       },
     },
-    initialScope: scope('project-1'),
+    initialScope: scope(),
   });
 }
 
-function scope(projectId) {
+function scope() {
   return {
     authority: 'cloud',
     tenantId: 'tenant-1',
-    projectId,
+    projectId: null,
+  };
+}
+
+function localScope(projectId) {
+  return { authority: 'local', tenantId: 'tenant-1', projectId };
+}
+
+function localSnapshot(projectId) {
+  return {
+    ...snapshot(null),
+    scope: localScope(projectId),
+    authority: 'local',
+    availability: 'degraded',
+    reasonCode: 'local_task_dashboard_partial',
+    allowedActions: ['view', 'list', 'search', 'filter', 'paginate', 'refresh', 'open-workspace'],
+    tasks: [task(projectId)],
   };
 }
 
 function snapshot(projectId, overrides = {}) {
   return {
-    scope: scope(projectId),
+    scope: scope(),
     authority: 'cloud',
     availability: 'available',
     reasonCode: null,

@@ -1,7 +1,35 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
+import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
+import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
+import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
+import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 require.extensions['.css'] = () => {};
@@ -18,6 +46,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 
 const ROUTE_IDS = Object.freeze([
   'project-project-team',
@@ -26,7 +58,6 @@ const ROUTE_IDS = Object.freeze([
   'project-project-communities',
   'project-project-graph',
 ]);
-
 const cloudConfig = Object.freeze({
   apiBaseUrl: 'https://cloud.memstack.test',
   deviceAuthorizationBaseUrl: 'https://cloud.memstack.test',
@@ -45,9 +76,7 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
   }
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders(
-      Object.fromEntries(
-        ROUTE_IDS.map((routeId) => [routeId, implementedLoader(routeId)]),
-      ),
+      Object.fromEntries(ROUTE_IDS.map((routeId) => [routeId, implementedLoader(routeId)])),
     ),
   });
   for (const routeId of ROUTE_IDS) {
@@ -67,17 +96,47 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     'createProjectCommunitiesController',
     'createProjectGraphController',
   ]) {
-    assert.match(appSource, new RegExp(symbol, 'u'), symbol);
+    assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
+    assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
   }
   assert.doesNotMatch(
-    appSource,
+    registrySource,
     /project-knowledge[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
   );
+  assert.match(registrySource, /createDesktopProjectGraphClientV2/u);
+  assert.match(registrySource, /createDesktopProjectCommunitiesClientV2/u);
+  assert.match(registrySource, /createDesktopProjectEntitiesClientV2/u);
+  assert.match(registrySource, /createDesktopProjectMemoriesClientV2/u);
+  assert.match(registrySource, /createDesktopProjectTeamClientV2/u);
+  assert.match(registrySource, /projectCommunitiesOperationsV2/u);
+  assert.match(registrySource, /projectEntitiesOperationsV2/u);
+  assert.match(registrySource, /projectGraphOperationsV2/u);
+  assert.match(registrySource, /projectMemoriesOperationsV2/u);
+  assert.match(registrySource, /projectTeamOperationsV2/u);
+  assert.match(
+    appSource,
+    /projectCommunitiesOperationsV2:\s*desktopProjectCommunitiesOperationsV2/gu,
+  );
+  assert.match(appSource, /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/gu);
+  assert.match(appSource, /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/gu);
+  assert.match(appSource, /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/gu);
+  assert.match(appSource, /projectTeamOperationsV2:\s*desktopProjectTeamOperationsV2/gu);
+  assert.doesNotMatch(registrySource, /createProjectGraphClient/u);
+  assert.doesNotMatch(registrySource, /createProjectCommunitiesClient/u);
+  assert.doesNotMatch(registrySource, /createProjectEntitiesClient/u);
+  assert.doesNotMatch(registrySource, /createProjectMemoriesClient/u);
+  assert.doesNotMatch(registrySource, /createProjectTeamClient/u);
 });
 
 test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities', async () => {
-  const clients = projectKnowledgeClients('cloud');
-  const snapshot = await loadSnapshot(cloudConfig, clients);
+  const snapshot = await loadSnapshot(
+    cloudConfig,
+    projectTeamOperationsV2Fixture({ scopeRevision: 7 }),
+    projectMemoriesOperationsV2Fixture({ scopeRevision: 7 }),
+    projectEntitiesOperationsV2Fixture({ scopeRevision: 7 }),
+    projectCommunitiesOperationsV2Fixture({ scopeRevision: 7 }),
+    projectGraphOperationsV2Fixture({ scopeRevision: 7 }),
+  );
 
   for (const routeId of ROUTE_IDS) {
     const capability = snapshot.capabilities[routeId];
@@ -88,38 +147,75 @@ test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities',
     assert.equal(capability.contract_version, '4.0.0', routeId);
   }
   assert.deepEqual(pick(snapshot, 'project-project-team'), {
-    availability: 'available',
-    reason_code: null,
-    allowed_actions: ['view', 'list'],
+    availability: 'degraded',
+    reason_code: 'desktop_project_team_actions_partial',
+    allowed_actions: ['view', 'list-members', 'list-agent-teammates'],
   });
   assert.deepEqual(pick(snapshot, 'project-project-memories'), {
     availability: 'degraded',
-    reason_code: 'project_memories_export_file_ipc_unavailable',
+    reason_code: 'desktop_project_memories_actions_partial',
     allowed_actions: ['view', 'list'],
   });
   assert.deepEqual(pick(snapshot, 'project-project-entities'), {
-    availability: 'available',
-    reason_code: null,
+    availability: 'degraded',
+    reason_code: 'desktop_project_entities_actions_partial',
     allowed_actions: ['view', 'list'],
+  });
+  assert.deepEqual(pick(snapshot, 'project-project-communities'), {
+    availability: 'degraded',
+    reason_code: 'desktop_project_communities_actions_partial',
+    allowed_actions: ['view', 'list'],
+  });
+  assert.deepEqual(pick(snapshot, 'project-project-graph'), {
+    availability: 'degraded',
+    reason_code: 'desktop_project_graph_actions_partial',
+    allowed_actions: ['view'],
   });
 });
 
 test('Local Snapshot keeps Project Knowledge unavailable until sidecar authority is observed', async () => {
   let loadCalls = 0;
-  const clients = Object.fromEntries(
-    ROUTE_IDS.map((routeId) => [
-      routeId,
-      {
-        async load() {
-          loadCalls += 1;
-          throw new Error('Local static clients must not manufacture observed authority');
-        },
-      },
-    ]),
-  );
+  const teamOperations = {
+    async loadProjectTeam() {
+      loadCalls += 1;
+      throw new Error('Local Team V2 authority must not be probed');
+    },
+  };
+  const graphOperations = {
+    async loadProjectGraph() {
+      loadCalls += 1;
+      throw new Error('Local Graph V2 authority must not be probed');
+    },
+  };
+  const entitiesOperations = {
+    async loadProjectEntities() {
+      loadCalls += 1;
+      throw new Error('Local Entities V2 authority must not be probed');
+    },
+    async loadProjectEntityRelationships() {
+      loadCalls += 1;
+      throw new Error('Local Entities V2 authority must not be probed');
+    },
+  };
+  const communitiesOperations = {
+    async loadProjectCommunities() {
+      loadCalls += 1;
+      throw new Error('Local Communities V2 authority must not be probed');
+    },
+  };
+  const memoriesOperations = {
+    async loadProjectMemories() {
+      loadCalls += 1;
+      throw new Error('Local Memories V2 authority must not be probed');
+    },
+  };
   const snapshot = await loadSnapshot(
     { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
-    clients,
+    teamOperations,
+    memoriesOperations,
+    entitiesOperations,
+    communitiesOperations,
+    graphOperations,
   );
   const reasons = {
     'project-project-team': 'local_project_team_authority_unavailable',
@@ -145,7 +241,14 @@ test('Capability catalog contains every Project Knowledge ID exactly once per de
   }
 });
 
-async function loadSnapshot(config, projectKnowledgeClients) {
+async function loadSnapshot(
+  config,
+  projectTeamOperationsV2,
+  projectMemoriesOperationsV2,
+  projectEntitiesOperationsV2,
+  projectCommunitiesOperationsV2,
+  projectGraphOperationsV2,
+) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ reason_code: 'unrelated_authority_unavailable' }), {
@@ -160,43 +263,91 @@ async function loadSnapshot(config, projectKnowledgeClients) {
         },
       },
       config,
-      { projectKnowledgeClients },
+      {
+        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+        projectCommunitiesOperationsV2,
+        projectTeamOperationsV2,
+        projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+        projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+        projectMemoriesOperationsV2,
+        projectEntitiesOperationsV2,
+        projectGraphOperationsV2,
+        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+        projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+        runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+        runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+        runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        deadLetterQueueOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        backendStoresOperationsV2: {
+          async probeBackendStores({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  authorityRevision: 23,
+                };
+          },
+        },
+        projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+        tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      },
     ).loadSnapshot();
   } finally {
     globalThis.fetch = originalFetch;
   }
-}
-
-function projectKnowledgeClients(authority) {
-  const degradedReasons = {
-    'project-project-memories': 'project_memories_export_file_ipc_unavailable',
-    'project-project-communities':
-      'project_communities_trusted_task_stream_unavailable',
-    'project-project-graph': 'project_graph_export_file_ipc_unavailable',
-  };
-  return Object.fromEntries(
-    ROUTE_IDS.map((routeId) => [
-      routeId,
-      {
-        async load(scope) {
-          assert.deepEqual(scope, {
-            authority,
-            tenantId: 'tenant-1',
-            projectId: 'project-1',
-          });
-          const reasonCode = degradedReasons[routeId] ?? null;
-          return {
-            scope,
-            scopeRevision: 7,
-            authority,
-            availability: reasonCode ? 'degraded' : 'available',
-            reasonCode,
-            allowedActions: ['view', 'list'],
-          };
-        },
-      },
-    ]),
-  );
 }
 
 function implementedLoader(routeId) {

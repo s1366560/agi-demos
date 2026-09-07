@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../../plugins/webOperationAdmissionV2';
 /**
  * HITL (Human-In-The-Loop) response actions extracted from agentV3.ts.
  *
@@ -61,13 +62,9 @@ const THOUGHT_BATCH_INTERVAL_MS = 80;
  * Uses createStreamEventHandlers for complete event coverage (tool calls,
  * work plans, artifacts, etc.) instead of the minimal simple handler.
  */
-async function ensureConnectedAndSubscribe(
-  conversationId: string,
-  deps: HITLActionDeps
-): Promise<void> {
-  if (!agentService.isConnected()) {
-    await agentService.connect();
-  }
+async function ensureConnectedAndSubscribe(conversationId: string, deps: HITLActionDeps) {
+  const operation = await agentService.connectSession();
+  agentService.assertSession(operation);
 
   bindTimelineBufferDeps(conversationId, {
     getConversationState: deps.get().getConversationState,
@@ -75,6 +72,7 @@ async function ensureConnectedAndSubscribe(
   });
 
   const handler: AgentStreamHandler = createStreamEventHandlers(conversationId, undefined, {
+    operation,
     get: deps.get,
     set: deps.set as StreamHandlerDeps['set'],
     getDeltaBuffer: deps.getDeltaBuffer,
@@ -91,7 +89,8 @@ async function ensureConnectedAndSubscribe(
     },
   });
 
-  agentService.subscribe(conversationId, handler);
+  agentService.subscribe(conversationId, handler, undefined, operation);
+  return operation;
 }
 
 /**
@@ -104,11 +103,15 @@ export function createHITLActions(deps: HITLActionDeps) {
     respondToClarification: async (requestId: string, answer: string): Promise<void> => {
       const { activeConversationId } = get();
       if (!activeConversationId) return;
+      const owner = getWebOperationAvailabilityV2().owner;
 
       try {
-        await ensureConnectedAndSubscribe(activeConversationId, deps);
+        const operation = await ensureConnectedAndSubscribe(activeConversationId, deps);
+        agentService.assertSession(operation);
 
         await agentService.respondToClarification(requestId, answer);
+        agentService.assertSession(operation);
+        if (get().activeConversationId !== activeConversationId) return;
         clearAllDeltaBuffers();
 
         // Update conversation state (timeline + HITL field)
@@ -142,6 +145,11 @@ export function createHITLActions(deps: HITLActionDeps) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'clarification');
         }
       } catch (error) {
+        if (
+          getWebOperationAvailabilityV2().owner !== owner ||
+          !getWebOperationAvailabilityV2().available
+        )
+          return;
         console.error('Failed to respond to clarification:', error);
         useExecutionStore.getState().setAgentExecutionState('idle');
         useStreamingStore.getState().setAgentIsStreaming(false);
@@ -152,11 +160,15 @@ export function createHITLActions(deps: HITLActionDeps) {
     respondToDecision: async (requestId: string, decision: string | string[]): Promise<void> => {
       const { activeConversationId } = get();
       if (!activeConversationId) return;
+      const owner = getWebOperationAvailabilityV2().owner;
 
       try {
-        await ensureConnectedAndSubscribe(activeConversationId, deps);
+        const operation = await ensureConnectedAndSubscribe(activeConversationId, deps);
+        agentService.assertSession(operation);
 
         await agentService.respondToDecision(requestId, decision);
+        agentService.assertSession(operation);
+        if (get().activeConversationId !== activeConversationId) return;
         clearAllDeltaBuffers();
 
         const convState = get().getConversationState(activeConversationId);
@@ -188,6 +200,11 @@ export function createHITLActions(deps: HITLActionDeps) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'decision');
         }
       } catch (error) {
+        if (
+          getWebOperationAvailabilityV2().owner !== owner ||
+          !getWebOperationAvailabilityV2().available
+        )
+          return;
         console.error('Failed to respond to decision:', error);
         useExecutionStore.getState().setAgentExecutionState('idle');
         useStreamingStore.getState().setAgentIsStreaming(false);
@@ -198,11 +215,15 @@ export function createHITLActions(deps: HITLActionDeps) {
     respondToEnvVar: async (requestId: string, values: Record<string, string>): Promise<void> => {
       const { activeConversationId } = get();
       if (!activeConversationId) return;
+      const owner = getWebOperationAvailabilityV2().owner;
 
       try {
-        await ensureConnectedAndSubscribe(activeConversationId, deps);
+        const operation = await ensureConnectedAndSubscribe(activeConversationId, deps);
+        agentService.assertSession(operation);
 
         await agentService.respondToEnvVar(requestId, values);
+        agentService.assertSession(operation);
+        if (get().activeConversationId !== activeConversationId) return;
         clearAllDeltaBuffers();
 
         const convState = get().getConversationState(activeConversationId);
@@ -234,6 +255,11 @@ export function createHITLActions(deps: HITLActionDeps) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'env_var');
         }
       } catch (error) {
+        if (
+          getWebOperationAvailabilityV2().owner !== owner ||
+          !getWebOperationAvailabilityV2().available
+        )
+          return;
         console.error('Failed to respond to env var request:', error);
         useExecutionStore.getState().setAgentExecutionState('idle');
         useStreamingStore.getState().setAgentIsStreaming(false);
@@ -244,11 +270,15 @@ export function createHITLActions(deps: HITLActionDeps) {
     respondToPermission: async (requestId: string, granted: boolean): Promise<void> => {
       const { activeConversationId } = get();
       if (!activeConversationId) return;
+      const owner = getWebOperationAvailabilityV2().owner;
 
       try {
-        await ensureConnectedAndSubscribe(activeConversationId, deps);
+        const operation = await ensureConnectedAndSubscribe(activeConversationId, deps);
+        agentService.assertSession(operation);
 
         await agentService.respondToPermission(requestId, granted);
+        agentService.assertSession(operation);
+        if (get().activeConversationId !== activeConversationId) return;
         clearAllDeltaBuffers();
 
         const convState = get().getConversationState(activeConversationId);
@@ -280,6 +310,11 @@ export function createHITLActions(deps: HITLActionDeps) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'permission');
         }
       } catch (error) {
+        if (
+          getWebOperationAvailabilityV2().owner !== owner ||
+          !getWebOperationAvailabilityV2().available
+        )
+          return;
         console.error('Failed to respond to permission request:', error);
         useExecutionStore.getState().setAgentExecutionState('idle');
         useStreamingStore.getState().setAgentIsStreaming(false);

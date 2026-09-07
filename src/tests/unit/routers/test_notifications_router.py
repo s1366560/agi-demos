@@ -5,14 +5,60 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.notification_application_authority_v2 import (
+    notification_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.routers import notifications as notifications_router
 from src.infrastructure.adapters.primary.web.routers.notifications import (
     create_notification,
-    mark_all_read,
 )
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Notification
+from src.infrastructure.plugins.v2.notification_services import (
+    NotificationApplicationServicesV2,
+    SqlNotificationPersistenceV2,
+)
+
+
+@pytest.fixture
+def client(test_engine, test_user) -> TestClient:
+    """Exercise the HTTP handlers with their real V2 application service."""
+    app = FastAPI()
+    app.include_router(notifications_router.router)
+    session_factory = async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def override_get_db():
+        async with session_factory() as session:
+            yield session
+
+    async def override_get_current_user():
+        return test_user
+
+    async def override_notification_application(
+        db: AsyncSession = Depends(get_db),
+    ):
+        yield SimpleNamespace(
+            services=NotificationApplicationServicesV2(
+                persistence=SqlNotificationPersistenceV2(_session=db)
+            )
+        )
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[notification_application_authority_dependency_v2] = (
+        override_notification_application
+    )
+    return TestClient(app)
 
 
 class TestListNotifications:
@@ -224,11 +270,11 @@ class TestMarkAllRead:
             commit=AsyncMock(),
         )
 
-        result = await mark_all_read(current_user=SimpleNamespace(id="user_bulk"), db=db)
+        result = await SqlNotificationPersistenceV2(_session=db).mark_all_read(user_id="user_bulk")
 
         statement = db.execute.await_args.args[0]
         assert statement.is_update is True
-        assert result == {"success": True, "count": 7}
+        assert result == 7
         db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -413,7 +459,11 @@ class TestCreateNotification:
                     "message": "Should be rejected",
                 },
                 current_user=test_user,
-                db=test_db,
+                notification_application=SimpleNamespace(
+                    services=NotificationApplicationServicesV2(
+                        persistence=SqlNotificationPersistenceV2(_session=test_db)
+                    )
+                ),
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -432,10 +482,16 @@ class TestCreateNotification:
                 "message": "Created by admin",
             },
             current_user=test_user,
-            db=test_db,
+            notification_application=SimpleNamespace(
+                services=NotificationApplicationServicesV2(
+                    persistence=SqlNotificationPersistenceV2(_session=test_db)
+                )
+            ),
         )
 
-        result = await test_db.execute(select(Notification).where(Notification.id == response["id"]))
+        result = await test_db.execute(
+            select(Notification).where(Notification.id == response["id"])
+        )
         notification = result.scalar_one()
         assert notification.user_id == another_user.id
 
@@ -446,7 +502,11 @@ class TestCreateNotification:
             await create_notification(
                 {"message": "Bad expiry", "expires_at": "not-a-date"},
                 current_user=test_user,
-                db=test_db,
+                notification_application=SimpleNamespace(
+                    services=NotificationApplicationServicesV2(
+                        persistence=SqlNotificationPersistenceV2(_session=test_db)
+                    )
+                ),
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST

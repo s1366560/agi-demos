@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -17,6 +17,7 @@ from src.infrastructure.adapters.primary.web.routers.cron import (
     _require_project_access,
     get_cron_job_capabilities,
 )
+from src.infrastructure.plugins.v2.cron_services import CronProjectAccessDeniedV2
 
 pytestmark = pytest.mark.unit
 
@@ -54,41 +55,36 @@ def test_manual_run_contract_selects_v2_only_with_an_explicit_valid_version() ->
 
 
 async def test_require_project_access_accepts_explicit_membership() -> None:
-    db = AsyncMock()
-    db.execute.return_value = Mock(scalar_one_or_none=Mock(return_value="membership-1"))
+    services = SimpleNamespace(require_project_access=AsyncMock())
+    authority = SimpleNamespace(user_id="user-1", services=services)
 
-    await _require_project_access(
-        "project-1",
-        SimpleNamespace(id="user-1"),
-        db,
+    await _require_project_access(authority, "project-1")
+
+    services.require_project_access.assert_awaited_once_with(
+        project_id="project-1",
+        user_id="user-1",
     )
-
-    db.execute.assert_awaited_once()
 
 
 async def test_require_project_access_rejects_non_members() -> None:
-    db = AsyncMock()
-    db.execute.return_value = Mock(scalar_one_or_none=Mock(return_value=None))
+    services = SimpleNamespace(
+        require_project_access=AsyncMock(side_effect=CronProjectAccessDeniedV2),
+    )
+    authority = SimpleNamespace(user_id="user-1", services=services)
 
     with pytest.raises(HTTPException) as exc_info:
-        await _require_project_access(
-            "project-1",
-            SimpleNamespace(id="user-1"),
-            db,
-        )
+        await _require_project_access(authority, "project-1")
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Access denied to project"
 
 
 async def test_capabilities_fail_closed_with_stable_reason_codes() -> None:
-    db = AsyncMock()
-    db.execute.return_value = Mock(scalar_one_or_none=Mock(return_value="membership-1"))
+    services = SimpleNamespace(require_project_access=AsyncMock())
 
     response = await get_cron_job_capabilities(
-        "project-1",
-        SimpleNamespace(id="user-1"),
-        db,
+        project_id="project-1",
+        cron_application=SimpleNamespace(user_id="user-1", services=services),
     )
 
     assert response.service_version == "0.1.0"
@@ -104,9 +100,8 @@ async def test_capabilities_fail_closed_with_stable_reason_codes() -> None:
     assert response.run_now.reason_code == "durable_automation_execution_unavailable"
 
 
-async def test_manual_run_v2_returns_one_durable_receipt(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_manual_run_v2_returns_one_durable_receipt() -> None:
     db = AsyncMock()
-    db.execute.return_value = Mock(scalar_one_or_none=Mock(return_value="membership-1"))
     job = CronJob(
         project_id="project-1",
         tenant_id="tenant-1",
@@ -128,16 +123,12 @@ async def test_manual_run_v2_returns_one_durable_receipt(monkeypatch: pytest.Mon
             )
         )
     )
-    monkeypatch.setattr(
-        cron_router,
-        "_container",
-        lambda _db: SimpleNamespace(cron_job_service=Mock(return_value=cron_service)),
+    services = SimpleNamespace(
+        require_project_access=AsyncMock(),
+        cron_jobs=cron_service,
+        commands=command_service,
     )
-    monkeypatch.setattr(
-        cron_router,
-        "_automation_command_service",
-        lambda _db: command_service,
-    )
+    authority = SimpleNamespace(db=db, user_id="user-1", services=services)
 
     response = await cron_router.trigger_manual_run(
         project_id="project-1",
@@ -148,8 +139,7 @@ async def test_manual_run_v2_returns_one_durable_receipt(monkeypatch: pytest.Mon
             idempotency_key="run-now-1",
             conversation_id="conversation-1",
         ),
-        current_user=SimpleNamespace(id="user-1"),
-        db=db,
+        cron_application=authority,
     )
 
     assert response.model_dump() == {
@@ -173,11 +163,8 @@ async def test_manual_run_v2_returns_one_durable_receipt(monkeypatch: pytest.Mon
     db.commit.assert_awaited_once()
 
 
-async def test_manual_run_without_contract_version_keeps_legacy_unavailable_behavior(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_manual_run_without_contract_version_keeps_legacy_unavailable_behavior() -> None:
     db = AsyncMock()
-    db.execute.return_value = Mock(scalar_one_or_none=Mock(return_value="membership-1"))
     job = CronJob(
         project_id="project-1",
         tenant_id="tenant-1",
@@ -190,24 +177,19 @@ async def test_manual_run_without_contract_version_keeps_legacy_unavailable_beha
         ),
     )
     command_service = SimpleNamespace(queue_manual_run=AsyncMock())
-    monkeypatch.setattr(
-        cron_router,
-        "_container",
-        lambda _db: SimpleNamespace(cron_job_service=Mock(return_value=cron_service)),
+    services = SimpleNamespace(
+        require_project_access=AsyncMock(),
+        cron_jobs=cron_service,
+        commands=command_service,
     )
-    monkeypatch.setattr(
-        cron_router,
-        "_automation_command_service",
-        lambda _db: command_service,
-    )
+    authority = SimpleNamespace(db=db, user_id="user-1", services=services)
 
     with pytest.raises(HTTPException) as exc_info:
         await cron_router.trigger_manual_run(
             project_id="project-1",
             job_id=job.id,
             body=ManualRunRequest(conversation_id="conversation-1"),
-            current_user=SimpleNamespace(id="user-1"),
-            db=db,
+            cron_application=authority,
         )
 
     assert exc_info.value.status_code == 503

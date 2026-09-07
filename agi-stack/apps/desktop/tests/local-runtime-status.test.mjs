@@ -560,9 +560,9 @@ test('Desktop runtime configuration and sidecar configure payload contain no LLM
     appSource,
     /value: config\.mode === 'local' \? localRuntimeModelLabel : 'server managed'/,
   );
-  assert.match(appSource, /modelLabel=\{chatRuntimeModelSelection\.displayLabel\}/);
-  assert.match(appSource, /onModelChange=\{selectChatRuntimeModel\}/);
-  assert.match(appSource, /onModelReset=\{[\s\S]{0,180}resetChatRuntimeModel/);
+  assert.match(appSource, /modelLabel:\s*chatRuntimeModelSelection\.displayLabel/);
+  assert.match(appSource, /onModelChange:\s*selectChatRuntimeModel/);
+  assert.match(appSource, /onModelReset:\s*[\s\S]{0,180}resetChatRuntimeModel/);
   assert.doesNotMatch(
     workspaceRuntimeProviderHookSource,
     /config\.mode !== 'local'/,

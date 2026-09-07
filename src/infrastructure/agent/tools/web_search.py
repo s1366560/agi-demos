@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -17,7 +19,7 @@ from pydantic import BaseModel, field_validator
 
 from src.configuration.config import get_settings
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -55,19 +57,26 @@ class WebSearchResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Module-level state
+# Operation-bound runtime
 # ---------------------------------------------------------------------------
 
-_ws_redis_client: Any = None
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class WebSearchRuntime:
+    """Optional cache dependency captured by one tool contribution."""
+
+    redis_client: Any
 
 
-def configure_web_search(redis_client: Any = None) -> None:
-    """Configure the web search tool with its dependencies.
+_web_search_runtime: ContextVar[WebSearchRuntime | None] = ContextVar(
+    f"{__name__}.web_search_runtime",
+    default=None,
+)
 
-    Called at agent startup to inject the Redis client for caching.
-    """
-    global _ws_redis_client
-    _ws_redis_client = redis_client
+
+def _current_web_search_redis() -> Any:
+    runtime = _web_search_runtime.get()
+    return runtime.redis_client if runtime is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +233,7 @@ async def web_search_tool(
     search_depth = settings.tavily_search_depth
 
     # Check cache
-    redis = _ws_redis_client
+    redis = _current_web_search_redis()
     cache_key = _generate_ws_cache_key(query, max_results)
     if redis is not None:
         cached_response = await _get_ws_cached_results(
@@ -305,3 +314,25 @@ async def web_search_tool(
             output="Error: An unexpected error occurred during web search",
             is_error=True,
         )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundWebSearchExecutor:
+    template: ToolInfo
+    runtime: WebSearchRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _web_search_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _web_search_runtime.reset(token)
+
+
+def make_web_search_tool(redis_client: Any = None) -> ToolInfo:
+    """Return a Web Search ToolInfo bound to one generation dependency set."""
+    runtime = WebSearchRuntime(redis_client=redis_client)
+    return replace(
+        web_search_tool,
+        execute=_BoundWebSearchExecutor(template=web_search_tool, runtime=runtime),
+    )

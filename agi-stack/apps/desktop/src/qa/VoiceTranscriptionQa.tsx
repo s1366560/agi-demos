@@ -1,3 +1,4 @@
+import { createVoiceSessionOperationsQa } from './voiceSessionOperationsQa';
 import '@radix-ui/themes/styles.css';
 import React, { useMemo, useState, useSyncExternalStore } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -34,8 +35,13 @@ const qaApi: ComposerCatalogClient = {
   listWorkspaceAgents: async () => [],
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
-  listManagedPlugins: async () => [],
+  listMarketplacePlugins: async () => [],
   listManagedSubAgents: async () => [],
+  listPromptTemplates: async () => [],
+  createPromptTemplate: async () => {
+    throw new Error('qa_prompt_templates_unavailable');
+  },
+  deletePromptTemplate: async () => {},
 };
 
 const conversations: AgentConversation[] = [
@@ -275,6 +281,7 @@ function VoiceTranscriptionQa() {
   const [conversationIndex, setConversationIndex] = useState(0);
   const [sentMessages, setSentMessages] = useState<string[]>([]);
   const runtime = useMemo(() => new QaVoiceRuntime(), []);
+  const voiceSessionOperations = useMemo(() => createVoiceSessionOperationsQa({ transcription: runtime }), [runtime]);
   useSyncExternalStore(runtime.subscribe, runtime.getSnapshot, runtime.getSnapshot);
   const conversation = conversations[conversationIndex];
 
@@ -392,6 +399,7 @@ function VoiceTranscriptionQa() {
           </header>
           <div className="session-steering-qa-content compose-ahead-qa-content">
             <ChatPanel
+              imagePreviewClient={null}
               api={qaApi}
               conversations={conversations}
               selectedConversationId={conversation.id}
@@ -421,7 +429,7 @@ function VoiceTranscriptionQa() {
               runInputAuthorityRunId={null}
               references={[]}
               voiceTranscriptionConfig={cloudConfig}
-              voiceTranscriptionRuntime={runtime}
+              voiceSessionOperations={voiceSessionOperations}
               onRunInputDeliveryChange={() => undefined}
               onPromoteRunInput={() => undefined}
               onRemoveReference={() => undefined}

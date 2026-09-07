@@ -1,101 +1,112 @@
-# Platform Plugin Kernel
+# Platform Plugin Kernel V2
 
 ## Decision
 
-MemStack adopts a platform capability kernel instead of porting Cordis or rewriting the
-Python service in TypeScript. The kernel keeps the current FastAPI, Ray, React, Electron,
-and Rust deployment surfaces while making capability ownership declarative and reversible.
+MemStack uses a protocol-v2 capability kernel while retaining FastAPI, Rust, React, Electron,
+Ray, and the existing security boundaries. Production composition is V2-only: every business
+capability enters a target through an explicit module contract and an ordered Profile entry.
+Protocol-v1 profiles, snapshots, discovery, route bridges, and mutation APIs are retired.
 
-The implementation is split into four contracts:
+The kernel is deliberately small. It owns only:
 
-1. A pure manifest model in `src/domain/model/plugins`.
-2. A reversible `PluginContext` and `CapabilityRegistry` in `src/infrastructure/plugins`.
-3. A profile composer that emits canonical, digest-stable JSON snapshots.
-4. A Rust serde contract in `agi-stack/crates/plugin-host/src/snapshot.rs`.
+- Loader/Fiber/generation lifecycle and immutable generation leases;
+- authentication, authorization, tenant/project isolation, and permission enforcement;
+- Alembic schema authority and transaction boundaries;
+- application vault, secret grants, sandbox enforcement, and trust verification;
+- protocol-v2 publication, receipt/readiness aggregation, and append-only audit records.
 
-The legacy agent plugin registry remains the Phase 1 compatibility facade. The new
-`unregister_plugin` operation removes only one plugin's owned registrations, and the
-built-in registration bridge records the same capabilities in both generations before
-returning a single disposer.
+The kernel does not implement dynamic Host+Client self-modification packages such as
+`inspect/define/run/stop`.
 
-## Trust and runtime boundaries
+## Authoritative contracts
 
-| Runtime | Allowed trust | Enforcement |
-| --- | --- | --- |
-| `python-trusted` | builtin or signed | Same process only for first-party packages. |
-| `wasm` | signed, tenant-approved, untrusted | Rust Wasmtime on server/desktop; platform fallback elsewhere. |
-| `mcp` | signed, tenant-approved, untrusted | Protocol access only. |
-| `subprocess` | signed, tenant-approved, untrusted | Process boundary and protocol access only. |
-| `frontend` | signed, tenant-approved, untrusted | UI slots/renderers only; no server secrets. |
+The generated V2 artifacts are the source of truth:
 
-`agent_loop` and `credential_source` are kernel capabilities and can only be claimed by a
-builtin manifest. Tenant plugins may implement ordinary providers and consumers, but cannot
-replace authentication, authorization, migrations, tenant isolation, or the credential vault.
-
-Secrets are not passed through `PluginContext`. A context exposes authorized references
-such as `vault://...`; an execution boundary owned by the host resolves the value with the
-least privilege required.
-
-## Capability ownership
-
-A capability is identified by:
-
-```text
-(plugin_id, capability_kind, capability_id)
-```
-
-Registrations are effects. Every context registration returns or retains a disposer, and
-`close()` releases effects in reverse acquisition order. Default registrations are
-plugin-namespaced so multiple runtime plugins can expose hooks with the same event name.
-A subsystem can choose a singleton key when exactly one active provider is required.
-
-Manifest capability contracts are plugin-owned (`contract@plugin_id`) for dependency checks.
-This preserves multiple observers on the same hook contract while making a required provider
-contract unique to its owning plugin.
-
-## Profile composition
-
-`config/plugin-profiles/memstack-default.yaml` is the first declarative default profile.
-Rows have stable plugin ids. A patch addresses a row id and replaces the complete config;
-it never deep-merges. Later layers and patches win.
-
-The composer:
-
-- rejects unknown manifest ids and unknown patch targets;
-- validates whole-row configuration against declared JSON Schemas;
-- validates requirements and minimum versions;
-- rejects dependency cycles;
-- orders providers before consumers;
-- computes a SHA-256 digest over canonical JSON.
-
-A control-plane envelope carries `version`, `nonce`, `snapshot_digest`, and `type_url`.
-Data planes retain their last-good snapshot on NACK. Control flow carries the envelope;
-LLM tokens, tool I/O, and retrieval payloads stay on the data path.
-
-## Persistence
-
-The first control-plane migration adds:
-
-- `platform_plugin_catalog`: authoritative manifests.
-- `platform_plugin_desired_states`: scoped desired activation/config and revisions.
-- `platform_plugin_snapshots`: immutable effective profile snapshots.
-- `platform_plugin_capability_audits`: append-only capability ownership transitions.
-- `platform_plugin_apply_states`: latest ACK/NACK version per data plane.
-
-Repositories never commit. Endpoint or scheduler callers own the transaction and commit
-after desired state and audit records are consistent.
-
-## Phase map
-
-| Phase | Status in this change |
+| Authority | Path |
 | --- | --- |
-| 0 capability inventory and architecture decision | Implemented as an architecture contract and inventory. |
-| 1 reversible kernel and legacy facade | Implemented for capability ownership and trusted builtins. |
-| 2 profile/control-plane foundation | Implemented for composition, persistence, snapshot envelope, and Rust contract. |
-| 3 agent runtime migration | Ports, typed event bus, tool generation cache, prompt/subagent/loop contracts implemented. Legacy processor and tool cache cutover remains incremental behind feature flags. |
-| 4 provider/channel/storage migration | Provider route/credential lease, channel/backend/HTTP route contracts, desired-state tables, and route mount service implemented. Existing manager/router cutover remains incremental. |
-| 5 Rust, desktop, and Web UI surfaces | Rust full-profile reconciler with ACK/NACK and last-good, desktop builtin UI slot registry, and generated platform capability inventory implemented. Native sidecar wiring and external renderer loading remain future work. |
-| 6 external ecosystem and hardening | Ed25519 package verification, SLSA provenance checks, permission gate, quota accounting, package/revocation persistence, and pure marketplace decisions implemented. OCI distribution and public catalog remain future work. |
+| Shared protocol schema | `shared/schemas/plugin-protocol-v2.schema.json` |
+| Module declarations | `config/plugin-manifests-v2/*.v2.json` |
+| Ordered default composition | `config/plugin-profiles/memstack-default.v2.yaml` |
+| Target module catalog | `shared/catalogs/plugin-module-catalog.v2.json` |
+| Service dependency graph | `shared/graphs/plugin-service-dependencies.v2.json` |
+| Typed event graph | `shared/graphs/plugin-events.v2.json` |
+| Cross-language fixtures | `shared/fixtures/plugin-protocol-v2/` |
 
-Full migration remains deliberately incremental. Every phase must preserve the current
-default behavior when the new profile has no active external plugins.
+`scripts/generate_plugin_protocol_v2.py` generates Python, Rust, and TypeScript protocol/catalog
+surfaces from those declarations. `make plugin-v2-contract-gate` rejects missing declarations,
+stale output, digest drift, undeclared service/event use, and target-catalog gaps.
+
+## Contract and injection model
+
+Each module publishes an exact `contract` containing:
+
+- versioned services it provides and requires;
+- typed events it emits and handles, including fixed dispatch mode and JSON Schemas;
+- a JSON Schema 2020-12 configuration contract;
+- a canonical `contract_digest`.
+
+`PluginDefinitionV2` contains only `module_ref`, `contract_digest`, and `apply`. The Loader verifies
+manifest, generated catalog, artifact, and runtime definition digests before executing an
+entrypoint. Consumers receive declared aliases from the active Profile; they do not import or name
+provider implementations.
+
+Providers are unique by service key, version, scope, and isolation. Required services never use an
+implicit builtin fallback. Optional behavior is represented by a separate Profile entry.
+
+## Scope and lifecycle
+
+The persistent scope tree is `root -> tenant -> project -> session`. Request, turn, and operation
+work use `OperationContextV2` beneath a pinned generation. Every effect registers a disposer.
+Candidate failure and normal shutdown release effects in LIFO and reverse dependency order.
+
+HTTP requests, agent turns, WebSocket sessions, Rust/sidecar operations, and renderer boundaries
+hold immutable generation leases. A new generation can be selected only at a new boundary; one
+operation never mixes generations.
+
+## Profiles, Bundles, and HMR
+
+Composition order is deterministic:
+
+1. base Bundles in declaration order;
+2. Profile;
+3. tenant overlay;
+4. project overlay;
+5. session overlay.
+
+A duplicate entry is invalid unless the later layer explicitly uses `replace` or `disable`.
+`.mspkg` archives contain only V2 manifests, target artifacts, layers, digest/signature, and
+provenance. Marketplace changes update `DesiredBundleSetV2`; they never write a V1 YAML profile.
+
+HMR builds a complete candidate generation, verifies every artifact and contract, activates every
+Fiber, and runs health checks before an atomic local switch. Any failure produces a NACK, disposes
+the entire candidate, and leaves the target's last-good generation unchanged. Module-level in-place
+patching is not supported.
+
+## Publication and readiness
+
+Each immutable publication records a finite `required_data_plane_ids` roster and ACK deadline.
+Receipts bind the publication nonce, registered data-plane ID, and exact version/digest. Status is
+`reconciling`, `ready`, or `degraded`.
+
+Targets switch independently. A NACK or timeout keeps that target on its own last-good generation;
+other ACKed targets continue on the new generation. Late valid ACKs can converge a degraded
+publication to ready. Administrators roll back by creating a new audited publication from the most
+recent globally-ready snapshot; the control plane does not silently roll back all targets.
+
+## Target composition
+
+- Python/FastAPI obtains routes, repositories, services, agent capabilities, background tasks, and
+  lifespan resources from V2 effects.
+- Rust server and desktop sidecar validate a generated non-empty target catalog and NACK unknown or
+  mismatched modules.
+- Web and Desktop renderer roots retain only authentication/error/generation hosting; business
+  routes, navigation, and UI slots come from `@agistack/plugin-runtime` contributions.
+- Agent turns resolve the complete service set from their pinned generation and rebuild
+  model-visible state from the ordered session event log.
+
+## Protocol-v1 retirement
+
+Known V1 HTTP paths return `410 plugin_protocol_v1_retired`. Unknown `/v2/*` descendants remain
+normal 404s. V1 packages and schemas are incompatible and are not converted at runtime. The only
+supported desired-state conversion is the audited offline workflow documented in
+`plugin-protocol-v1-to-v2-conversion.md`.

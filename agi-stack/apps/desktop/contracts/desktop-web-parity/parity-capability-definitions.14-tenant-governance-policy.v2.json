@@ -134,8 +134,10 @@
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
@@ -144,13 +146,18 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantTrustPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantTrustPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTrustAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTrustHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTrustOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_trust_governance_not_applicable",
       "local_deviation": "Local execution permissions remain governed by explicit sidecar and Electron capability contracts; they do not create an offline copy of tenant trust policy authority.",
-      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Web remains degraded because its empty workspace filter becomes the invalid workspace_id 'default'. Desktop now has a real Cloud loader, App binding, typed policy client, controller and create/revoke page that require an explicit workspace scope. The observation still omits authorityRevision, so snapshot v4 closes the active result to capability_authority_revision_unavailable and no Cloud action is currently route-reachable. Local tenant trust governance remains intentionally not applicable."
+      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Web remains degraded because its empty workspace filter becomes the invalid workspace_id 'default'. Desktop Cloud list, create and revoke now resolve through the declared tenant-trust V2 service under a tenant operation lease while requiring an explicit workspace scope. The backend remains the permission authority and mutations are never retried automatically. The observation still omits authorityRevision, so snapshot v4 closes the active result to capability_authority_revision_unavailable and no Cloud action is currently route-reachable. Local tenant trust governance rejects before network access and remains intentionally not applicable."
     },
     {
       "id": "tenant-tenant-decision-records",
@@ -281,10 +288,12 @@
         "resolve-approval"
       ],
       "cloud_entries": [
-        "agi-stack/apps/desktop/src/App.tsx",
-        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
-        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+    "agi-stack/apps/desktop/src/App.tsx",
+    "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+    "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+    "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+    "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+    "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
@@ -292,13 +301,18 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantDecisionRecordsPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantDecisionRecordsPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_decision_ledger_not_applicable",
       "local_deviation": "Local HITL responses and sealed replay metadata remain scoped runtime records; they must not be promoted into the Cloud tenant decision ledger without its authority.",
-      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals. Web remains degraded because its default workspace placeholder is not a valid tenant workspace. Desktop has a real Cloud route, scoped list/filter/inspect UI and administrator-only resolution controller. Its resource load is now bounded by stable tenant, workspace, membership and scope-revision observations, so the full routed action set is available without converting the scope revision into a decision-record version. Local HITL records remain distinct from this Cloud ledger and the Local surface stays not applicable."
+      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals. Web remains degraded because its default workspace placeholder is not a valid tenant workspace. Desktop now resolves route and workbench reads plus administrator-only approval resolution through one Decision Records V2 Provider, with each operation pinned to a tenant generation and an exact workspace input. The Cloud projection preserves stable tenant, workspace, membership and scope-revision observations without converting the scope revision into a record version. Local uses the same generation authority but fails before network access with cloud_tenant_decision_ledger_not_applicable; Local HITL records remain distinct and the Local surface stays not applicable."
     },
     {
       "id": "tenant-tenant-billing",
@@ -435,16 +449,21 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteModuleFactory.tsx",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingClient.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingController.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantBillingPage.tsx"
+    "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingClient.ts",
+    "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingController.ts",
+    "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingPresentationModel.ts",
+    "agi-stack/apps/desktop/src/features/tenant-admin/TenantBillingPage.tsx",
+    "agi-stack/apps/desktop/src/plugins/desktopTenantBillingAuthorityModuleV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopTenantBillingHttpProjectionV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopTenantBillingOperationContractV2.ts",
+    "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_billing_authority_not_applicable",
       "local_deviation": "Billing, invoices, payment methods, and plan upgrades are held by the Cloud service authority. Local Desktop never caches or emulates payment data.",
-      "judgment_rationale": "Billing is a canonical commercial route with tenant usage, invoice and upgrade authority. Desktop now has a real Cloud loader, App binding, typed billing and invoice client, controller and role-gated page; invoice download is intentionally absent until the allowlisted native file IPC is connected. The observed active snapshot still has no authorityRevision, so v4 closes it to capability_authority_revision_unavailable before any Cloud action can be promoted. Local billing has no single-machine equivalent and remains not applicable."
+  "judgment_rationale": "Billing is a canonical commercial route with tenant usage, invoice and upgrade authority. Desktop Cloud load and plan upgrade now resolve through the declared tenant-billing V2 service under a tenant operation lease, while preserving the typed controller and role-gated page. Invoice download is intentionally absent until the allowlisted native file IPC is connected. The observed active snapshot still has no authorityRevision, so v4 closes it to capability_authority_revision_unavailable before any Cloud action can be promoted. Local billing fails before network access because it has no single-machine equivalent and remains not applicable."
     }
   ],
   "source_ownership": {

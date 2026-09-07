@@ -258,9 +258,39 @@ fn is_desktop_route_source_file(file_name: &str) -> bool {
     file_name.ends_with("Client.ts")
         || file_name.ends_with("client.ts")
         || file_name.ends_with("Contract.ts")
+        || file_name.ends_with("AuthorityModuleV2.ts")
+        || file_name.ends_with("HttpProjectionV2.ts")
+        || file_name.ends_with("OperationContractV2.ts")
 }
 
-fn source_path_suffix(source: &str) -> Option<&'static str> {
+#[test]
+fn route_source_discovery_includes_v2_transports_and_keeps_explicit_module_binding() {
+    assert!(is_desktop_route_source_file(
+        "desktopTenantProvidersHttpProjectionV2.ts"
+    ));
+    assert!(is_desktop_route_source_file(
+        "desktopTenantProvidersOperationContractV2.ts"
+    ));
+    assert!(!is_desktop_route_source_file(
+        "desktopTenantProvidersHttpProjectionV2.test.ts"
+    ));
+    let sources = vec![DesktopRouteSource {
+        relative_path: "plugins/desktopTenantProvidersHttpProjectionV2.ts".to_owned(),
+        content: "/api/v1/llm-providers/".to_owned(),
+    }];
+    assert!(source_contains_marker(
+        &sources,
+        "plugins/desktopTenantProvidersHttpProjectionV2.ts",
+        "/api/v1/llm-providers/",
+    ));
+    assert!(!source_contains_marker(
+        &sources,
+        "plugins/desktopTenantSkillDefinitionsHttpProjectionV2.ts",
+        "/api/v1/llm-providers/",
+    ));
+}
+
+fn source_path_suffix(source: &str) -> Option<&str> {
     match source {
         "client" => None,
         "artifact" => Some("features/chat/desktopArtifactClient.ts"),
@@ -269,8 +299,10 @@ fn source_path_suffix(source: &str) -> Option<&'static str> {
         "search" => Some("api/searchContract.ts"),
         "sandbox" => Some("features/sandbox/sandboxRuntimeClient.ts"),
         "sandbox_surface" => Some("features/sandbox/sandboxRuntimeSurfaceClient.ts"),
-        "tenant_overview" => Some("features/tenant/tenantOverviewHttpClient.ts"),
-        "tenant_projects" => Some("features/tenant/tenantProjectsHttpClient.ts"),
+        "tenant_overview" => Some("plugins/desktopTenantOverviewAuthorityModuleV2.ts"),
+        "tenant_projects" => Some("plugins/desktopTenantProjectsAuthorityModuleV2.ts"),
+        // V2 projections are declared explicitly by path, never matched against an unrelated module.
+        path if path.starts_with("plugins/") && path.ends_with(".ts") => Some(path),
         other => panic!("unsupported route source {other}"),
     }
 }
@@ -502,7 +534,11 @@ fn native_equivalent_desktop_client_inventory_is_covered_by_executable_local_rou
         .filter(|source| source.content.contains(NATIVE_EQUIVALENT_REQUEST_MARKER))
         .filter(|source| {
             !contract.routes.iter().any(|route| {
-                route.source == "client" && source.content.contains(&route.source_marker)
+                source_contains_marker(
+                    std::slice::from_ref(*source),
+                    &route.source,
+                    &route.source_marker,
+                )
             })
         })
         .map(|source| source.relative_path.clone())
@@ -671,7 +707,9 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
     let mut trusted_session_id = None;
 
     for route in contract.routes {
-        if !source_contains_marker(&sources, &route.source, &route.source_marker) {
+        if route.authority != "retired_v1"
+            && !source_contains_marker(&sources, &route.source, &route.source_marker)
+        {
             missing_client_markers.push(format!(
                 "{} {} [{} marker {}]",
                 route.method, route.uri, route.area, route.source_marker
@@ -767,6 +805,20 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
             assert_eq!(
                 payload["reason_code"],
                 "local_agent_binding_routing_authority_unavailable"
+            );
+        } else if route.authority == "retired_v1" {
+            assert_eq!(
+                response.status(),
+                StatusCode::GONE,
+                "{} {} must reject the retired V1 plugin protocol",
+                route.method,
+                route.uri
+            );
+            let payload = response_json(response).await;
+            assert_eq!(payload["detail"]["code"], "plugin_protocol_v1_retired");
+            assert_eq!(
+                payload["detail"]["migration_target"],
+                "/api/v1/plugin-marketplace"
             );
         } else if route.authority == "structured_unavailable" {
             assert_eq!(

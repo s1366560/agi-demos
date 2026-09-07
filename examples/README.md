@@ -50,57 +50,27 @@ MemStack API 使用示例
 - `hybrid_search.py` - 混合检索示例
 - `multi_tenant.py` - 多租户使用示例
 
-## 插件打包模板
+## Protocol V2 插件分发
 
-目录：`examples/plugins/memstack-plugin-template/`
+V1 Python entry point 与 `.memstack/plugins/*/plugin.py` 本地发现机制已经退役。V2
+插件必须通过精确 contract、目标 catalog、Profile layer 和签名 Bundle 进入 generation，
+不得在运行时扫描或调用任意 `setup(api)`。
 
-该模板演示如何把插件独立打包为 Python wheel，并通过 entry point 让 MemStack 运行时发现：
+仓库内可执行示例以生产基线为准：
 
-```toml
-[project.entry-points."memstack.agent_plugins"]
-template = "memstack_plugin_template.plugin:TemplatePlugin"
-```
+- `config/plugin-manifests-v2/`：跨目标 manifest 与公开 contract
+- `config/plugin-profiles/memstack-default.v2.yaml`：基础 Profile entries
+- `shared/catalogs/plugin-module-catalog.v2.json`：生成式目标 catalog
+- `src/infrastructure/plugins/v2/production_bundle.py`：确定性 `.mspkg` 组装
 
-基础流程：
-
-```bash
-# 1) 构建 wheel
-cd examples/plugins/memstack-plugin-template
-uv build . --wheel --out-dir ./dist
-
-# 2) 安装到运行环境
-python -m pip install dist/*.whl
-
-# 3) 在 Agent 中刷新插件运行时
-# plugin_manager(action="reload")
-# plugin_manager(action="list")
-```
-
-更多发布细节（包含私有索引示例）见
-[examples/plugins/memstack-plugin-template/README.md](plugins/memstack-plugin-template/README.md)。
-
-## 飞书本地插件目录（已迁移）
-
-目录：`.memstack/plugins/feishu/`（本地运行时目录）。示例插件包文档见
-[examples/plugins/memstack-plugin-feishu/README.md](plugins/memstack-plugin-feishu/README.md)。
-
-飞书插件已迁移为本地目录发现模式，无需 wheel 打包，运行时会自动扫描：
-
-```text
-.memstack/plugins/feishu/plugin.py
-```
-
-基础流程：
+修改 V2 contract、manifest 或 Profile 后运行：
 
 ```bash
-# 1) 确认本地插件目录存在
-ls .memstack/plugins/feishu/plugin.py
-
-# 2) 运行时加载
-# plugin_manager(action="reload")
-# plugin_manager(action="enable", plugin_name="feishu-channel-plugin")
-# plugin_manager(action="list")
+make plugin-build-all
 ```
+
+Marketplace 安装只更新 `DesiredBundleSetV2`；数据面在完整 candidate 验证和健康检查通过后，
+才会于新的 generation boundary 原子切换。
 
 ## 注意事项
 

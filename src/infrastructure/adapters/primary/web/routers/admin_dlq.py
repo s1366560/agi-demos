@@ -8,23 +8,22 @@ Provides administrative endpoints for managing the Dead Letter Queue:
 """
 
 import logging
-from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from src.domain.ports.services.dead_letter_queue_port import (
     DeadLetterMessage,
-    DeadLetterQueuePort,
     DLQMessageNotFoundError,
     DLQMessageStatus,
 )
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
+from src.infrastructure.adapters.primary.web.admin_dlq_application_authority_v2 import (
+    AdminDlqApplicationAuthorityV2,
+    admin_dlq_application_authority_dependency_v2,
+    require_admin as require_admin,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -143,57 +142,6 @@ class CleanupResponse(BaseModel):
 
 
 # =============================================================================
-# Dependencies
-# =============================================================================
-
-_ADMIN_ROLE_NAMES = frozenset({"admin", "system_admin", "super_admin"})
-
-
-async def get_dlq(request: Request) -> DeadLetterQueuePort:
-    """Get the DLQ port from DI container."""
-    try:
-        container = request.app.state.container
-        dlq = container.get(DeadLetterQueuePort)
-        if dlq is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_("DLQ service not available"),
-            )
-        return cast(DeadLetterQueuePort, dlq)
-    except AttributeError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_("Application container not initialized"),
-        ) from None
-
-
-def _user_has_admin_access(current_user: User) -> bool:
-    """Return whether the authenticated user has global admin-level access."""
-    if bool(getattr(current_user, "is_superuser", False)):
-        return True
-
-    legacy_role = getattr(current_user, "role", None)
-    if isinstance(legacy_role, str) and legacy_role in _ADMIN_ROLE_NAMES:
-        return True
-
-    user_roles = cast(Iterable[Any], getattr(current_user, "roles", []) or [])
-    return any(
-        getattr(getattr(user_role, "role", None), "name", None) in _ADMIN_ROLE_NAMES
-        for user_role in user_roles
-    )
-
-
-def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Require admin role for endpoint access."""
-    if not _user_has_admin_access(current_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Admin access required"),
-        )
-    return current_user
-
-
-# =============================================================================
 # Endpoints
 # =============================================================================
 
@@ -210,13 +158,16 @@ async def list_messages(
     routing_key: str | None = Query(None, description="Filter by routing key pattern"),
     limit: int = Query(50, ge=1, le=100, description="Maximum messages to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> DLQListResponse:
     """List DLQ messages with optional filtering.
 
     Admin only endpoint for viewing failed events in the dead letter queue.
     """
+    dlq = admin_dlq.services.queue
+
     # Parse status filter
     status_filter = None
     if filter_status:
@@ -256,14 +207,15 @@ async def list_messages(
 @router.get("/messages/{message_id}", response_model=DLQMessageResponse)
 async def get_message(
     message_id: str,
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> DLQMessageResponse:
     """Get a specific DLQ message by ID.
 
     Admin only endpoint for viewing detailed information about a failed event.
     """
-    message = await dlq.get_message(message_id)
+    message = await admin_dlq.services.queue.get_message(message_id)
     if message is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -276,15 +228,16 @@ async def get_message(
 @router.post("/messages/{message_id}/retry")
 async def retry_message(
     message_id: str,
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Retry a single DLQ message.
 
     Admin only endpoint for retrying a failed event.
     """
     try:
-        success = await dlq.retry_message(message_id)
+        success = await admin_dlq.services.queue.retry_message(message_id)
         return {
             "message_id": message_id,
             "success": success,
@@ -300,15 +253,16 @@ async def retry_message(
 @router.post("/messages/retry", response_model=RetryResponse)
 async def retry_messages(
     request: RetryRequest,
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> RetryResponse:
     """Retry multiple DLQ messages in batch.
 
     Admin only endpoint for batch retrying failed events.
     Maximum 100 messages per request.
     """
-    results = await dlq.retry_batch(request.message_ids)
+    results = await admin_dlq.services.queue.retry_batch(request.message_ids)
 
     success_count = sum(1 for v in results.values() if v)
     failure_count = len(results) - success_count
@@ -324,15 +278,16 @@ async def retry_messages(
 async def discard_message(
     message_id: str,
     reason: str = Query(..., min_length=1, max_length=500, description="Reason for discarding"),
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Discard a single DLQ message.
 
     Admin only endpoint for permanently discarding a failed event.
     """
     try:
-        success = await dlq.discard_message(message_id, reason)
+        success = await admin_dlq.services.queue.discard_message(message_id, reason)
         return {
             "message_id": message_id,
             "success": success,
@@ -348,15 +303,16 @@ async def discard_message(
 @router.post("/messages/discard", response_model=DiscardResponse)
 async def discard_messages(
     request: DiscardRequest,
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> DiscardResponse:
     """Discard multiple DLQ messages in batch.
 
     Admin only endpoint for batch discarding failed events.
     Maximum 100 messages per request.
     """
-    results = await dlq.discard_batch(request.message_ids, request.reason)
+    results = await admin_dlq.services.queue.discard_batch(request.message_ids, request.reason)
 
     success_count = sum(1 for v in results.values() if v)
     failure_count = len(results) - success_count
@@ -370,14 +326,15 @@ async def discard_messages(
 
 @router.get("/stats", response_model=DLQStatsResponse)
 async def get_stats(
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> DLQStatsResponse:
     """Get DLQ statistics.
 
     Admin only endpoint for viewing queue health metrics.
     """
-    stats = await dlq.get_stats()
+    stats = await admin_dlq.services.queue.get_stats()
 
     return DLQStatsResponse(
         total_messages=stats.total_messages,
@@ -397,15 +354,16 @@ async def cleanup_expired(
     older_than_hours: int = Query(
         168, ge=1, le=720, description="Clean messages older than this (hours)"
     ),
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> CleanupResponse:
     """Clean up expired DLQ messages.
 
     Admin only endpoint for removing old expired messages.
     Default: messages older than 168 hours (1 week).
     """
-    cleaned = await dlq.cleanup_expired(older_than_hours)
+    cleaned = await admin_dlq.services.queue.cleanup_expired(older_than_hours)
 
     logger.info(f"Cleaned up {cleaned} expired DLQ messages older than {older_than_hours} hours")
 
@@ -417,15 +375,16 @@ async def cleanup_resolved(
     older_than_hours: int = Query(
         24, ge=1, le=168, description="Clean resolved messages older than this (hours)"
     ),
-    dlq: DeadLetterQueuePort = Depends(get_dlq),
-    _user: User = Depends(require_admin),
+    admin_dlq: AdminDlqApplicationAuthorityV2 = Depends(
+        admin_dlq_application_authority_dependency_v2
+    ),
 ) -> CleanupResponse:
     """Clean up resolved DLQ messages.
 
     Admin only endpoint for removing old successfully retried messages.
     Default: messages older than 24 hours.
     """
-    cleaned = await dlq.cleanup_resolved(older_than_hours)
+    cleaned = await admin_dlq.services.queue.cleanup_resolved(older_than_hours)
 
     logger.info(f"Cleaned up {cleaned} resolved DLQ messages older than {older_than_hours} hours")
 

@@ -84,6 +84,7 @@ class MockWebSocket {
 
 describe('unifiedEventService', () => {
   let _mockWebSocket: MockWebSocket;
+  let uninstallAdmission: () => Promise<void>;
   let unifiedEventService: typeof import('@/services/unifiedEventService').unifiedEventService;
 
   beforeEach(async () => {
@@ -95,12 +96,18 @@ describe('unifiedEventService', () => {
 
     // Dynamic import to get fresh instance
     vi.resetModules();
+    const { installHttpAdmissionFixtureV2 } = await import('./webHttpAdmissionFixtureV2');
+    uninstallAdmission = installHttpAdmissionFixtureV2();
     const module = await import('@/services/unifiedEventService');
     unifiedEventService = module.unifiedEventService;
+    (unifiedEventService as unknown as { owner: object }).owner = (
+      await import('@/plugins/webOperationAdmissionV2')
+    ).getWebOperationAvailabilityV2().owner;
   });
 
-  afterEach(() => {
-    unifiedEventService.disconnect();
+  afterEach(async () => {
+    await unifiedEventService.disconnect();
+    await uninstallAdmission();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     vi.useRealTimers();
@@ -129,6 +136,7 @@ describe('unifiedEventService', () => {
       vi.useFakeTimers();
 
       const firstConnect = unifiedEventService.connect();
+      await vi.advanceTimersByTimeAsync(0);
       expect(MockWebSocket.instances).toHaveLength(1);
 
       MockWebSocket.instances[0]?.close(1006, 'network-reset');
@@ -392,6 +400,7 @@ describe('unifiedEventService', () => {
 });
 
 describe('unifiedEventService - Topic Management', () => {
+  let uninstallAdmission: () => Promise<void>;
   let unifiedEventService: typeof import('@/services/unifiedEventService').unifiedEventService;
 
   beforeEach(async () => {
@@ -401,12 +410,18 @@ describe('unifiedEventService - Topic Management', () => {
     });
 
     vi.resetModules();
+    const { installHttpAdmissionFixtureV2 } = await import('./webHttpAdmissionFixtureV2');
+    uninstallAdmission = installHttpAdmissionFixtureV2();
     const module = await import('@/services/unifiedEventService');
     unifiedEventService = module.unifiedEventService;
+    (unifiedEventService as unknown as { owner: object }).owner = (
+      await import('@/plugins/webOperationAdmissionV2')
+    ).getWebOperationAvailabilityV2().owner;
   });
 
-  afterEach(() => {
-    unifiedEventService.disconnect();
+  afterEach(async () => {
+    await unifiedEventService.disconnect();
+    await uninstallAdmission();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     vi.useRealTimers();
@@ -441,21 +456,20 @@ describe('unifiedEventService - Topic Management', () => {
     unsub2();
   });
 
-  it('disconnects after the last topic is removed', () => {
+  it('disconnects after the last topic is removed', async () => {
     vi.useFakeTimers();
     const handler = vi.fn();
-    const closeSpy = vi.fn();
-    const sendSpy = vi.fn();
+    const connected = unifiedEventService.connect();
+    await vi.advanceTimersByTimeAsync(10);
+    await connected;
+    const socket = MockWebSocket.instances.at(-1)!;
+    const closeSpy = vi.spyOn(socket, 'close');
+    const sendSpy = vi.spyOn(socket, 'send');
     const internal = unifiedEventService as unknown as {
       subscriptions: Map<string, Set<(event: unknown) => void>>;
       ws: { readyState: number; send: (data: string) => void; close: () => void } | null;
     };
     internal.subscriptions.set('project:proj-idle', new Set([handler]));
-    internal.ws = {
-      readyState: MockWebSocket.OPEN,
-      send: sendSpy,
-      close: closeSpy,
-    };
 
     unifiedEventService.unsubscribe('project:proj-idle', handler);
 
@@ -474,21 +488,20 @@ describe('unifiedEventService - Topic Management', () => {
     expect(closeSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the connection open when a topic is added during the idle grace window', () => {
+  it('keeps the connection open when a topic is added during the idle grace window', async () => {
     vi.useFakeTimers();
     const handler = vi.fn();
-    const closeSpy = vi.fn();
-    const sendSpy = vi.fn();
+    const connected = unifiedEventService.connect();
+    await vi.advanceTimersByTimeAsync(10);
+    await connected;
+    const socket = MockWebSocket.instances.at(-1)!;
+    const closeSpy = vi.spyOn(socket, 'close');
+    const sendSpy = vi.spyOn(socket, 'send');
     const internal = unifiedEventService as unknown as {
       subscriptions: Map<string, Set<(event: unknown) => void>>;
       ws: { readyState: number; send: (data: string) => void; close: () => void } | null;
     };
     internal.subscriptions.set('project:proj-old', new Set([handler]));
-    internal.ws = {
-      readyState: MockWebSocket.OPEN,
-      send: sendSpy,
-      close: closeSpy,
-    };
 
     unifiedEventService.unsubscribe('project:proj-old', handler);
     unifiedEventService.subscribeProject('proj-new', vi.fn());

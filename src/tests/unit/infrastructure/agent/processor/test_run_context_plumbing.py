@@ -14,12 +14,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.processor.run_context import RunContext
+from src.infrastructure.plugins.v2.agent_loop import (
+    AgentLoopRunContextV2,
+    BuiltinAgentLoopResolverV2,
+)
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
+
+class _NativeLoop:
+    @staticmethod
+    def run(context: AgentLoopRunContextV2):
+        return context.run_native()
 
 
 @pytest.fixture
@@ -28,6 +39,13 @@ def minimal_config() -> ProcessorConfig:
     return ProcessorConfig(
         model="test-model",
         api_key="test-key",
+        provider_id="test-provider",
+        loop_resolver=BuiltinAgentLoopResolverV2(
+            loop_id="builtin-react",
+            plugin_id="memstack-kernel",
+            implementation=_NativeLoop(),
+            lifecycle_notifier=MagicMock(),
+        ),
     )
 
 
@@ -77,6 +95,7 @@ class TestRunContextDataclass:
         assert ctx.trace_id is None
         assert ctx.langfuse_context is None
         assert ctx.start_time > 0
+        assert ctx.plugin_generation is None
 
     def test_all_fields_set(self) -> None:
         """RunContext accepts all fields."""
@@ -87,11 +106,18 @@ class TestRunContextDataclass:
             conversation_id="conv-1",
             trace_id="trace-1",
             langfuse_context=lf_ctx,
+            plugin_generation=PluginGenerationDescriptorV2(
+                profile_id="default-v2",
+                generation=7,
+                digest="a" * 64,
+            ),
         )
         assert ctx.abort_signal is event
         assert ctx.conversation_id == "conv-1"
         assert ctx.trace_id == "trace-1"
         assert ctx.langfuse_context is lf_ctx
+        assert ctx.plugin_generation is not None
+        assert ctx.plugin_generation.generation == 7
 
     def test_start_time_auto_set(self) -> None:
         """RunContext auto-generates start_time."""

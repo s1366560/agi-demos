@@ -45,27 +45,32 @@ export function composerFileDropAction({
 
 export async function uploadComposerFilesSequentially(
   files: readonly ComposerUploadFile[],
-  uploadFile: (file: ComposerUploadFile) => Promise<AgentInputFileMetadata>,
+  uploadFile: (file: ComposerUploadFile, signal?: AbortSignal) => Promise<AgentInputFileMetadata>,
   onRemainingChange?: (count: number) => void,
+  signal?: AbortSignal,
 ): Promise<ComposerFileUploadBatchResult> {
   const uploaded: ComposerFileUploadBatchResult['uploaded'] = [];
   const failures: ComposerFileUploadFailure[] = [];
 
   for (const [index, file] of files.entries()) {
+    signal?.throwIfAborted();
     try {
       if (file.size > MAX_COMPOSER_ATTACHMENT_BYTES) {
         failures.push({ filename: file.name, reason: 'too_large' });
         continue;
       }
-      uploaded.push({ file, metadata: await uploadFile(file) });
+      const metadata = await uploadFile(file, signal);
+      signal?.throwIfAborted();
+      uploaded.push({ file, metadata });
     } catch (caught) {
+      signal?.throwIfAborted();
       failures.push({
         filename: file.name,
         reason: 'upload_failed',
         error: caught instanceof Error ? caught.message : String(caught),
       });
     } finally {
-      onRemainingChange?.(files.length - index - 1);
+      if (!signal?.aborted) onRemainingChange?.(files.length - index - 1);
     }
   }
 

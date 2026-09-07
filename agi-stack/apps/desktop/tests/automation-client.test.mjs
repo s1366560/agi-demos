@@ -22,16 +22,29 @@ const sidebarSource = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
   'utf8',
 );
+const rendererArtifactCatalogSource = readFileSync(
+  new URL('../src/plugins/desktopRendererArtifactCatalogV2.ts', import.meta.url),
+  'utf8',
+);
 
-test('Automations is a visible first-class primary navigation destination', () => {
+test('Automations navigation is contributed by the V2 renderer catalog, not the shell', () => {
   const primaryItems = sidebarSource.match(/const primaryItems = \[[\s\S]*?\] as const;/u)?.[0] ?? '';
-  assert.match(primaryItems, /id: 'automations'/u);
-  assert.match(primaryItems, /labelKey: 'nav\.automations'/u);
+  assert.doesNotMatch(primaryItems, /id: 'automations'/u);
+  assert.match(rendererArtifactCatalogSource, /PROJECT_CRON_JOBS_ROUTE_ID/u);
 });
 
-test('App composes the narrow automation API and the page invokes guarded run-now', () => {
-  assert.match(appSource, /createDesktopAutomationApi/u);
-  assert.match(appSource, /api=\{automationApi\}/u);
+test('App projects the narrow automation API into the route binding and the page invokes guarded run-now', () => {
+  assert.match(appSource, /createDesktopAutomationOperationsV2\(/u);
+  assert.match(appSource, /desktopPluginMarketplaceGenerationActionsRefV2\.current/u);
+  assert.match(appSource, /\(\) => configRef\.current/u);
+  assert.doesNotMatch(appSource, /desktopAutomationApiProviderV2/u);
+  assert.doesNotMatch(appSource, /createDesktopAutomationApi\(/u);
+  assert.match(
+    appSource,
+    /projectCronJobsRouteBindingProviderV2\.publish\([\s\S]*api: desktopAutomationApiV2/u,
+  );
+  assert.doesNotMatch(appSource, /projectCronJobsRouteBindingRef/u);
+  assert.doesNotMatch(appSource, /api=\{automationApi\}/u);
   assert.match(automationsPageSource, /api\.runAutomation/u);
   assert.match(automationsPageSource, /expected_revision: job\.revision/u);
   assert.match(automationsPageSource, /onRun=\{\(\) => void runJob\(selectedJob\)\}/u);

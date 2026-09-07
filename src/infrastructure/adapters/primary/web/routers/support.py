@@ -1,70 +1,54 @@
-"""Support ticket management router."""
+"""Support ticket management backed exclusively by a pinned V2 generation."""
 
-from datetime import UTC, datetime
+from collections.abc import Awaitable
 from typing import Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import SupportTicket, User, UserTenant
+from src.infrastructure.adapters.primary.web.support_ticket_application_authority_v2 import (
+    SupportTicketApplicationAuthorityV2,
+    support_ticket_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.support_ticket_services import (
+    SupportTenantAccessDeniedV2,
+    SupportTicketNotFoundV2,
+    SupportTicketSnapshotV2,
+)
 
 router = APIRouter(prefix="/support", tags=["support"])
 
 
-async def _require_support_tenant_access(
-    db: AsyncSession,
-    current_user: User,
-    tenant_id: str | None,
-) -> None:
-    """Allow tenant-scoped ticket actions only for members of that tenant."""
-    if tenant_id is None or current_user.is_superuser:
-        return
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserTenant.id).where(
-                UserTenant.user_id == current_user.id,
-                UserTenant.tenant_id == tenant_id,
-            )
-        )
-    )
-    if result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied"))
+async def _support_call[ResultT](operation: Awaitable[ResultT]) -> ResultT:
+    try:
+        return await operation
+    except SupportTicketNotFoundV2 as error:
+        raise HTTPException(status_code=404, detail=_("Ticket not found")) from error
+    except SupportTenantAccessDeniedV2 as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied"),
+        ) from error
 
 
 @router.post("/tickets")
 async def create_support_ticket(
     ticket_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    support_application: SupportTicketApplicationAuthorityV2 = Depends(
+        support_ticket_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Create a new support ticket."""
-
-    tenant_id_raw = ticket_data.get("tenant_id")
-    tenant_id = tenant_id_raw if isinstance(tenant_id_raw, str) else None
-    await _require_support_tenant_access(db, current_user, tenant_id)
-
-    ticket_id = str(uuid4())
-    ticket = SupportTicket(
-        id=ticket_id,
-        tenant_id=tenant_id,
-        user_id=current_user.id,
-        subject=ticket_data.get("subject"),
-        message=ticket_data.get("message"),
-        priority=ticket_data.get("priority", "medium"),
-        status="open",
+    ticket = await _support_call(
+        support_application.services.create_ticket(
+            user_id=current_user.id,
+            is_superuser=bool(current_user.is_superuser),
+            data=ticket_data,
+        )
     )
-
-    db.add(ticket)
-    await db.commit()
-    await db.refresh(ticket)
-
     return {
         "id": ticket.id,
         "subject": ticket.subject,
@@ -83,54 +67,29 @@ async def list_support_tickets(
     limit: int = Query(25, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    support_application: SupportTicketApplicationAuthorityV2 = Depends(
+        support_ticket_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """List support tickets for the current user."""
-
-    filters = [SupportTicket.user_id == current_user.id]
-
-    if tenant_id:
-        await _require_support_tenant_access(db, current_user, tenant_id)
-        filters.append(SupportTicket.tenant_id == tenant_id)
-
-    if status:
-        filters.append(SupportTicket.status == status)
-
-    total_result = await db.execute(
-        refresh_select_statement(select(func.count()).select_from(SupportTicket).where(*filters))
+    page = await _support_call(
+        support_application.services.list_tickets(
+            user_id=current_user.id,
+            is_superuser=bool(current_user.is_superuser),
+            tenant_id=tenant_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
     )
-    total = int(total_result.scalar_one())
-
-    query = (
-        select(SupportTicket)
-        .where(*filters)
-        .order_by(SupportTicket.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-
-    result = await db.execute(refresh_select_statement(query))
-    tickets = result.scalars().all()
-
     return {
         "tickets": [
-            {
-                "id": ticket.id,
-                "tenant_id": ticket.tenant_id,
-                "subject": ticket.subject,
-                "message": ticket.message,
-                "priority": ticket.priority,
-                "status": ticket.status,
-                "created_at": ticket.created_at.isoformat(),
-                "updated_at": ticket.updated_at.isoformat(),
-                "resolved_at": ticket.resolved_at.isoformat() if ticket.resolved_at else None,
-            }
-            for ticket in tickets
+            _support_ticket_payload(ticket, include_tenant=True) for ticket in page.tickets
         ],
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "has_more": offset + len(tickets) < total,
+        "total": page.total,
+        "limit": page.limit,
+        "offset": page.offset,
+        "has_more": page.offset + len(page.tickets) < page.total,
     }
 
 
@@ -138,33 +97,18 @@ async def list_support_tickets(
 async def get_support_ticket(
     ticket_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    support_application: SupportTicketApplicationAuthorityV2 = Depends(
+        support_ticket_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get a specific support ticket."""
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(SupportTicket).where(
-                SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
-            )
+    ticket = await _support_call(
+        support_application.services.get_ticket(
+            user_id=current_user.id,
+            ticket_id=ticket_id,
         )
     )
-    ticket = result.scalar_one_or_none()
-
-    if not ticket:
-        raise HTTPException(status_code=404, detail=_("Ticket not found"))
-
-    return {
-        "id": ticket.id,
-        "tenant_id": ticket.tenant_id,
-        "subject": ticket.subject,
-        "message": ticket.message,
-        "priority": ticket.priority,
-        "status": ticket.status,
-        "created_at": ticket.created_at.isoformat(),
-        "updated_at": ticket.updated_at.isoformat(),
-        "resolved_at": ticket.resolved_at.isoformat() if ticket.resolved_at else None,
-    }
+    return _support_ticket_payload(ticket, include_tenant=True)
 
 
 @router.put("/tickets/{ticket_id}")
@@ -172,34 +116,49 @@ async def update_support_ticket(
     ticket_id: str,
     update_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    support_application: SupportTicketApplicationAuthorityV2 = Depends(
+        support_ticket_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Update a support ticket."""
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(SupportTicket).where(
-                SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
-            )
+    ticket = await _support_call(
+        support_application.services.update_ticket(
+            user_id=current_user.id,
+            ticket_id=ticket_id,
+            data=update_data,
         )
     )
-    ticket = result.scalar_one_or_none()
+    return _support_ticket_payload(ticket, include_tenant=False)
 
-    if not ticket:
-        raise HTTPException(status_code=404, detail=_("Ticket not found"))
 
-    # Update allowed fields
-    if "subject" in update_data:
-        ticket.subject = update_data["subject"]
-    if "message" in update_data:
-        ticket.message = update_data["message"]
-    if "priority" in update_data:
-        ticket.priority = update_data["priority"]
-
-    await db.commit()
-    await db.refresh(ticket)
-
+@router.post("/tickets/{ticket_id}/close")
+async def close_support_ticket(
+    ticket_id: str,
+    current_user: User = Depends(get_current_user),
+    support_application: SupportTicketApplicationAuthorityV2 = Depends(
+        support_ticket_application_authority_dependency_v2
+    ),
+) -> dict[str, Any]:
+    """Close a support ticket."""
+    ticket = await _support_call(
+        support_application.services.close_ticket(
+            user_id=current_user.id,
+            ticket_id=ticket_id,
+        )
+    )
     return {
+        "id": ticket.id,
+        "status": ticket.status,
+        "resolved_at": ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+    }
+
+
+def _support_ticket_payload(
+    ticket: SupportTicketSnapshotV2,
+    *,
+    include_tenant: bool,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "id": ticket.id,
         "subject": ticket.subject,
         "message": ticket.message,
@@ -209,32 +168,6 @@ async def update_support_ticket(
         "updated_at": ticket.updated_at.isoformat(),
         "resolved_at": ticket.resolved_at.isoformat() if ticket.resolved_at else None,
     }
-
-
-@router.post("/tickets/{ticket_id}/close")
-async def close_support_ticket(
-    ticket_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Close a support ticket."""
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(SupportTicket).where(
-                SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
-            )
-        )
-    )
-    ticket = result.scalar_one_or_none()
-
-    if not ticket:
-        raise HTTPException(status_code=404, detail=_("Ticket not found"))
-
-    ticket.status = "closed"
-    ticket.resolved_at = datetime.now(UTC)
-
-    await db.commit()
-    await db.refresh(ticket)
-
-    return {"id": ticket.id, "status": ticket.status, "resolved_at": ticket.resolved_at.isoformat()}
+    if include_tenant:
+        payload = {"id": ticket.id, "tenant_id": ticket.tenant_id, **payload}
+    return payload

@@ -5,16 +5,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.infrastructure.adapters.primary.web.startup.sandbox_reaper import (
-    initialize_sandbox_idle_reaper,
+    start_sandbox_idle_reaper_v2,
+    stop_sandbox_idle_reaper_v2,
 )
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_initialize_sandbox_idle_reaper_disabled_by_flag() -> None:
+async def test_start_sandbox_idle_reaper_disabled_by_flag() -> None:
     """Reaper should not start when SANDBOX_IDLE_REAPER_ENABLED is false."""
-    container = MagicMock()
-    container.sandbox_adapter = MagicMock(return_value=MagicMock())
+    sandbox_adapter = MagicMock()
 
     settings = MagicMock()
     settings.sandbox_idle_reaper_enabled = False
@@ -26,21 +26,19 @@ async def test_initialize_sandbox_idle_reaper_disabled_by_flag() -> None:
         "src.infrastructure.adapters.primary.web.startup.sandbox_reaper.get_settings",
         return_value=settings,
     ):
-        reaper = await initialize_sandbox_idle_reaper(container)
+        reaper = await start_sandbox_idle_reaper_v2(sandbox_adapter)
 
     assert reaper is None
-    container.sandbox_adapter.assert_not_called()
+    sandbox_adapter.set_access_persist_callback.assert_not_called()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_initialize_sandbox_idle_reaper_starts_when_enabled() -> None:
+async def test_start_sandbox_idle_reaper_starts_when_enabled() -> None:
     """Reaper should start when enable flag is true and timeout is positive."""
-    container = MagicMock()
     sandbox_adapter = MagicMock()
     sandbox_adapter.set_access_persist_callback = MagicMock()
     sandbox_adapter.is_recently_active = AsyncMock(return_value=True)
-    container.sandbox_adapter = MagicMock(return_value=sandbox_adapter)
 
     settings = MagicMock()
     settings.sandbox_idle_reaper_enabled = True
@@ -61,9 +59,18 @@ async def test_initialize_sandbox_idle_reaper_starts_when_enabled() -> None:
             return_value=reaper_instance,
         ),
     ):
-        reaper = await initialize_sandbox_idle_reaper(container)
+        reaper = await start_sandbox_idle_reaper_v2(sandbox_adapter)
 
     assert reaper is reaper_instance
-    container.sandbox_adapter.assert_called_once_with()
     sandbox_adapter.set_access_persist_callback.assert_called_once()
     reaper_instance.start.assert_called_once_with()
+
+
+@pytest.mark.unit
+async def test_stop_sandbox_idle_reaper_stops_exact_generation_instance() -> None:
+    reaper = MagicMock()
+    reaper.stop = AsyncMock()
+
+    await stop_sandbox_idle_reaper_v2(reaper)
+
+    reaper.stop.assert_awaited_once_with()

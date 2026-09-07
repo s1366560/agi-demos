@@ -1,29 +1,42 @@
 import type { CurrentUser, DesktopRuntimeConfig } from '../../types';
-import { createChannelsRouteClient } from './channelsRouteClient';
+import {
+  createDesktopProjectChannelsClientV2,
+  type DesktopProjectChannelsOperationsV2,
+} from '../../plugins/desktopProjectChannelsAuthorityModuleV2';
 import { createChannelsRouteController } from './channelsRouteController';
 import type {
   ChannelsRouteBinding,
   ChannelsRouteContext,
 } from './channelsRouteModule';
-import { createEvolutionRouteClient } from './evolutionRouteClient';
+import {
+  createDesktopTenantEvolutionClientV2,
+  type DesktopTenantEvolutionOperationsV2,
+} from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import { createEvolutionRouteController } from './evolutionRouteController';
 import type {
   EvolutionRouteBinding,
   EvolutionRouteContext,
 } from './evolutionRouteModule';
-import { createProfileRouteClient } from './profileRouteClient';
 import { createProfileRouteController } from './profileRouteController';
 import type { ProfileRouteBinding } from './profileRouteModule';
-import { createTemplatesRouteClient } from './templatesRouteClient';
+import {
+  createDesktopTenantTemplatesClientV2,
+  type DesktopTenantTemplatesOperationsV2,
+} from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import { createTemplatesRouteController } from './templatesRouteController';
 import type {
   TemplatesRouteBinding,
   TemplatesRouteContext,
 } from './templatesRouteModule';
+import {
+  createDesktopUserProfileClientV2,
+  type DesktopUserProfileOperationsV2,
+} from '../../plugins/desktopUserProfileAuthorityModuleV2';
 
 export function createEvolutionRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: EvolutionRouteContext,
+  operations: DesktopTenantEvolutionOperationsV2,
 ): EvolutionRouteBinding {
   const scope = Object.freeze({
     authority: config.mode,
@@ -31,7 +44,7 @@ export function createEvolutionRouteBindingForRuntime(
   });
   return Object.freeze({
     controller: createEvolutionRouteController({
-      client: createEvolutionRouteClient(config),
+      client: createDesktopTenantEvolutionClientV2(operations, config),
       initialScope: scope,
     }),
     scope,
@@ -41,6 +54,7 @@ export function createEvolutionRouteBindingForRuntime(
 export function createChannelsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ChannelsRouteContext,
+  operations: DesktopProjectChannelsOperationsV2,
 ): ChannelsRouteBinding {
   const scope = Object.freeze({
     authority: config.mode,
@@ -49,7 +63,7 @@ export function createChannelsRouteBindingForRuntime(
   });
   return Object.freeze({
     controller: createChannelsRouteController({
-      client: createChannelsRouteClient(config),
+      client: createDesktopProjectChannelsClientV2(operations, config),
       initialScope: scope,
     }),
     scope,
@@ -59,6 +73,7 @@ export function createChannelsRouteBindingForRuntime(
 export function createTemplatesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TemplatesRouteContext,
+  operations: DesktopTenantTemplatesOperationsV2,
 ): TemplatesRouteBinding {
   const scope = Object.freeze({
     authority: config.mode,
@@ -66,7 +81,7 @@ export function createTemplatesRouteBindingForRuntime(
   });
   return Object.freeze({
     controller: createTemplatesRouteController({
-      client: createTemplatesRouteClient(config),
+      client: createDesktopTenantTemplatesClientV2(operations, config),
       initialScope: scope,
     }),
     scope,
@@ -75,10 +90,11 @@ export function createTemplatesRouteBindingForRuntime(
 
 export function createProfileRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
+  operations: DesktopUserProfileOperationsV2,
   onUserObserved?: (user: CurrentUser) => void,
 ): ProfileRouteBinding {
   const scope = Object.freeze({ authority: config.mode });
-  const source = createProfileRouteClient(config);
+  const source = createDesktopUserProfileClientV2(operations, config);
   const client = Object.freeze({
     ...source,
     async observe(currentScope: typeof scope, signal?: AbortSignal) {

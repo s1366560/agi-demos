@@ -104,14 +104,12 @@ async def test_list_agent_tools_sanitizes_internal_errors(
         async def get_sandbox_tools(self, sandbox_id: str) -> list[str] | None:
             raise RuntimeError(f"internal registry secret for {sandbox_id}")
 
-    class FakeDIContainer:
-        def sandbox_tool_registry(self) -> FailingToolRegistry:
-            return FailingToolRegistry()
-
-    import src.configuration.di_container as di_container
-
     monkeypatch.setattr(tools_router, "assert_caller_owns_sandbox", _allow_sandbox_access)
-    monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
+    monkeypatch.setattr(
+        tools_router,
+        "get_sandbox_tool_registry",
+        lambda: FailingToolRegistry(),
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await tools_router.list_agent_tools(

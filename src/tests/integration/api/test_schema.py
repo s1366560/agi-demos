@@ -1,9 +1,14 @@
+from collections.abc import AsyncIterator
+
 import pytest
-from fastapi import status
+from fastapi import FastAPI, status
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from src.infrastructure.adapters.primary.web.main import create_app
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     EdgeType,
     EdgeTypeMap,
@@ -11,7 +16,18 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
 )
 
-app = create_app()
+pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+async def _schema_v2_runtime(test_app: FastAPI) -> AsyncIterator[None]:
+    """Exercise schema requests through the production generation dispatcher."""
+    await initialize_plugin_runtime_v2(test_app)
+    assert "schema" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 @pytest.mark.asyncio

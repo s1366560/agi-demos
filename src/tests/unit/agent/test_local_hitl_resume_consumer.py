@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,14 +16,66 @@ from src.infrastructure.adapters.secondary.persistence import (
 from src.infrastructure.agent.actor import execution as execution_mod
 from src.infrastructure.agent.actor.state import snapshot_repo as snapshot_repo_mod
 from src.infrastructure.agent.core import project_react_agent as project_agent_mod
-from src.infrastructure.agent.hitl import coordinator as coordinator_mod, utils as hitl_utils
+from src.infrastructure.agent.hitl import (
+    coordinator as coordinator_mod,
+    generation_recovery_v2 as generation_recovery_mod,
+    utils as hitl_utils,
+)
 from src.infrastructure.agent.hitl.local_resume_consumer import LocalHITLResumeConsumer
+from src.infrastructure.agent.hitl.state_store import HITLAgentState
+
+
+def _persisted_state() -> HITLAgentState:
+    descriptor = {
+        "profile_id": "default-v2",
+        "generation": 7,
+        "digest": "a" * 64,
+    }
+    return HITLAgentState(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_id="user-1",
+        hitl_request_id="req-1",
+        hitl_type="clarification",
+        hitl_request_data={"question": "Continue?"},
+        plugin_generation=descriptor,
+        plugin_distribution={
+            "descriptor": descriptor,
+            "snapshot": {"profile_id": "default-v2", "generation": 7},
+            "envelope": {"version": 7, "nonce": "publication-7"},
+        },
+    )
+
+
+@pytest.fixture(autouse=True)
+def _stub_persisted_generation_recovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    @asynccontextmanager
+    async def _admit_state(
+        _state: HITLAgentState,
+        *,
+        request_id: str,
+    ) -> AsyncIterator[object]:
+        del request_id
+        yield object()
+
+    monkeypatch.setattr(
+        execution_mod,
+        "load_hitl_state_for_resume",
+        AsyncMock(return_value=_persisted_state()),
+    )
+    monkeypatch.setattr(
+        generation_recovery_mod,
+        "admit_persisted_hitl_state_v2",
+        _admit_state,
+    )
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resume_agent_does_not_fallback_on_rejected_response(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     resume_mock = AsyncMock()
     reopen_mock = AsyncMock(return_value=True)
     monkeypatch.setattr(consumer, "_resume_via_continue", resume_mock)
@@ -48,7 +102,7 @@ async def test_resume_agent_does_not_fallback_on_rejected_response(monkeypatch) 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resume_agent_falls_back_only_when_coordinator_missing(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     resume_mock = AsyncMock()
     monkeypatch.setattr(consumer, "_resume_via_continue", resume_mock)
     monkeypatch.setattr(
@@ -79,9 +133,10 @@ async def test_resume_agent_falls_back_only_when_coordinator_missing(monkeypatch
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_handle_message_acks_only_after_successful_resume(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     consumer._ack = AsyncMock()
     monkeypatch.setattr(consumer, "_resume_agent", AsyncMock(return_value=True))
+    monkeypatch.setattr(consumer, "_schedule_resume_and_ack", consumer._resume_and_ack)
     monkeypatch.setattr(
         hitl_utils,
         "load_persisted_hitl_request",
@@ -121,9 +176,9 @@ async def test_handle_message_acks_only_after_successful_resume(monkeypatch) -> 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_handle_message_prefers_persisted_scope_over_payload(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     resume_and_ack = AsyncMock()
-    monkeypatch.setattr(consumer, "_resume_and_ack", resume_and_ack)
+    monkeypatch.setattr(consumer, "_schedule_resume_and_ack", resume_and_ack)
     monkeypatch.setattr(
         hitl_utils,
         "load_persisted_hitl_request",
@@ -175,9 +230,10 @@ async def test_handle_message_prefers_persisted_scope_over_payload(monkeypatch) 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_handle_message_keeps_stream_pending_when_resume_fails(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     consumer._ack = AsyncMock()
     monkeypatch.setattr(consumer, "_resume_agent", AsyncMock(return_value=False))
+    monkeypatch.setattr(consumer, "_schedule_resume_and_ack", consumer._resume_and_ack)
     monkeypatch.setattr(
         hitl_utils,
         "load_persisted_hitl_request",
@@ -217,7 +273,7 @@ async def test_handle_message_keeps_stream_pending_when_resume_fails(monkeypatch
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_handle_message_skips_processing_requests_without_ack(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     consumer._ack = AsyncMock()
     resume_and_ack = AsyncMock()
     monkeypatch.setattr(consumer, "_resume_and_ack", resume_and_ack)
@@ -252,11 +308,11 @@ async def test_handle_message_skips_processing_requests_without_ack(monkeypatch)
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_handle_message_recovers_stale_processing_requests(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     consumer._ack = AsyncMock()
     resume_and_ack = AsyncMock()
     recover_processing = AsyncMock(return_value=True)
-    monkeypatch.setattr(consumer, "_resume_and_ack", resume_and_ack)
+    monkeypatch.setattr(consumer, "_schedule_resume_and_ack", resume_and_ack)
     monkeypatch.setattr(consumer, "_recover_stale_processing_request", recover_processing)
     monkeypatch.setattr(
         hitl_utils,
@@ -292,7 +348,7 @@ async def test_handle_message_recovers_stale_processing_requests(monkeypatch) ->
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resume_agent_waits_for_durable_completion(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     wait_completion = AsyncMock()
     monkeypatch.setattr(
         coordinator_mod,
@@ -328,9 +384,10 @@ async def test_reclaim_pending_messages_claims_idle_entries() -> None:
         ]
     )
     redis.xclaim = AsyncMock(return_value=[("1-0", {"data": '{"request_id":"req-1"}'})])
-    consumer = LocalHITLResumeConsumer(redis)
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     consumer._projects.add(("tenant-1", "project-1"))
     consumer._handle_message = AsyncMock()
+    consumer._redis_generation.current = MagicMock(return_value=redis)
 
     await consumer._reclaim_pending_messages(min_idle_ms=1_000)
 
@@ -346,9 +403,21 @@ async def test_reclaim_pending_messages_claims_idle_entries() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_listen_loop_uses_positive_idle_threshold_on_first_reclaim(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     consumer._projects.add(("tenant-1", "project-1"))
-    consumer._redis.xreadgroup = AsyncMock(return_value=[])
+    redis = MagicMock()
+    redis.xreadgroup = AsyncMock(return_value=[])
+    monkeypatch.setattr(consumer._redis_generation, "current", lambda: redis)
+
+    @asynccontextmanager
+    async def _lease_current_redis() -> AsyncIterator[None]:
+        yield
+
+    monkeypatch.setattr(
+        consumer._redis_generation,
+        "lease_current",
+        _lease_current_redis,
+    )
     reclaim_calls: list[int] = []
 
     async def _reclaim_pending_messages(*, min_idle_ms: int) -> None:
@@ -366,7 +435,7 @@ async def test_listen_loop_uses_positive_idle_threshold_on_first_reclaim(monkeyp
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resume_via_continue_reverts_processing_request_on_error(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     repo = MagicMock()
     repo.claim_for_processing = AsyncMock(return_value=SimpleNamespace(id="req-1"))
     repo.revert_to_answered = AsyncMock(return_value=SimpleNamespace(id="req-1"))
@@ -392,7 +461,6 @@ async def test_resume_via_continue_reverts_processing_request_on_error(monkeypat
         "load_hitl_snapshot_agent_mode",
         AsyncMock(return_value="plan"),
     )
-    monkeypatch.setattr(consumer, "_has_recoverable_hitl_state", AsyncMock(return_value=True))
     monkeypatch.setattr(project_agent_mod, "ProjectReActAgent", lambda _config: fake_agent)
     monkeypatch.setattr(
         execution_mod,
@@ -418,7 +486,7 @@ async def test_resume_via_continue_reverts_processing_request_on_error(monkeypat
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resume_via_continue_completes_orphaned_missing_state(monkeypatch) -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
     repo = MagicMock()
     repo.claim_for_processing = AsyncMock(return_value=SimpleNamespace(id="req-1"))
     repo.revert_to_answered = AsyncMock()
@@ -433,7 +501,11 @@ async def test_resume_via_continue_completes_orphaned_missing_state(monkeypatch)
 
     monkeypatch.setattr(database_mod, "async_session_factory", lambda: session_cm)
     monkeypatch.setattr(hitl_repo_mod, "SqlHITLRequestRepository", lambda _session: repo)
-    monkeypatch.setattr(consumer, "_has_recoverable_hitl_state", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        execution_mod,
+        "load_hitl_state_for_resume",
+        AsyncMock(return_value=None),
+    )
     monkeypatch.setattr(coordinator_mod, "complete_hitl_request", complete_request)
     monkeypatch.setattr(project_agent_mod, "ProjectReActAgent", agent_factory)
 
@@ -455,8 +527,98 @@ async def test_resume_via_continue_completes_orphaned_missing_state(monkeypatch)
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_resume_via_continue_uses_snapshot_authority_inside_admission(monkeypatch) -> None:
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
+    state = _persisted_state()
+    state.tenant_id = "tenant-state"
+    state.project_id = "project-state"
+    state.conversation_id = "conv-state"
+    state.message_id = "msg-state"
+    state.user_id = "user-state"
+    admission_active = False
+
+    @asynccontextmanager
+    async def _admit_state(
+        admitted_state: HITLAgentState,
+        *,
+        request_id: str,
+    ) -> AsyncIterator[object]:
+        nonlocal admission_active
+        assert admitted_state is state
+        assert request_id == "req-1"
+        admission_active = True
+        try:
+            yield object()
+        finally:
+            admission_active = False
+
+    repo = MagicMock()
+    repo.claim_for_processing = AsyncMock(return_value=SimpleNamespace(id="req-1"))
+    session = AsyncMock()
+    session_cm = AsyncMock()
+    session_cm.__aenter__.return_value = session
+    session_cm.__aexit__.return_value = False
+    created_agents: list[object] = []
+
+    class _FakeAgent:
+        def __init__(self, config) -> None:
+            self.config = config
+            created_agents.append(self)
+
+        async def initialize(self) -> None:
+            assert admission_active
+
+        async def stop(self) -> None:
+            assert admission_active
+
+    async def _continue(*_args: object, **kwargs: object) -> object:
+        assert admission_active
+        assert kwargs["tenant_id"] == "tenant-state"
+        assert kwargs["project_id"] == "project-state"
+        assert kwargs["conversation_id"] == "conv-state"
+        assert kwargs["message_id"] == "msg-state"
+        return SimpleNamespace(is_error=False, error_message=None, event_count=2)
+
+    monkeypatch.setattr(database_mod, "async_session_factory", lambda: session_cm)
+    monkeypatch.setattr(hitl_repo_mod, "SqlHITLRequestRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        execution_mod,
+        "load_hitl_state_for_resume",
+        AsyncMock(return_value=state),
+    )
+    monkeypatch.setattr(
+        generation_recovery_mod,
+        "admit_persisted_hitl_state_v2",
+        _admit_state,
+    )
+    monkeypatch.setattr(project_agent_mod, "ProjectReActAgent", _FakeAgent)
+    monkeypatch.setattr(execution_mod, "continue_project_chat", AsyncMock(side_effect=_continue))
+    monkeypatch.setattr(
+        snapshot_repo_mod,
+        "load_hitl_snapshot_agent_mode",
+        AsyncMock(return_value="plan"),
+    )
+
+    result = await consumer._resume_via_continue(
+        "tenant-caller",
+        "project-caller",
+        "req-1",
+        {"answer": "yes"},
+        "conv-caller",
+        "msg-caller",
+    )
+
+    assert result is True
+    assert admission_active is False
+    assert len(created_agents) == 1
+    assert created_agents[0].config.tenant_id == "tenant-state"
+    assert created_agents[0].config.project_id == "project-state"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_stop_cancels_background_tasks() -> None:
-    consumer = LocalHITLResumeConsumer(MagicMock())
+    consumer = LocalHITLResumeConsumer(generation_host=MagicMock())
 
     async def _never_finishes() -> None:
         await asyncio.sleep(3600)

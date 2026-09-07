@@ -1,46 +1,38 @@
 """Tenant agent configuration endpoints for Agent API."""
 
-import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn
 
-import jsonschema
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.config import get_settings
 from src.domain.model.agent.tenant_agent_config import (
     ConfigType,
-    HookExecutorKind,
-    RuntimeHookConfig,
     TenantAgentConfig,
 )
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
+from src.infrastructure.adapters.primary.web.tenant_agent_config_application_authority_v2 import (
+    tenant_agent_config_application_authority_context_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_authority_repository import (
-    SqlTenantAgentConfigAuthorityRepository,
     TenantAgentConfigRevisionConflictError,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
-    SqlTenantAgentConfigRepository,
-)
-from src.infrastructure.agent.plugins.hook_security_policy import (
-    ALLOWED_ISOLATION_MODES,
-    HOST_ISOLATION_MODE,
-    ISOLATION_MODE_SETTING_KEY,
-    MAX_CUSTOM_HOOK_TIMEOUT_SECONDS,
-    MIN_CUSTOM_HOOK_TIMEOUT_SECONDS,
-    TIMEOUT_SETTING_KEY,
-    is_executor_allowed_for_family,
-    normalize_hook_family,
-)
-from src.infrastructure.agent.plugins.registry import RegisteredHookMetadata, get_plugin_registry
 from src.infrastructure.agent.state.agent_session_pool import invalidate_agent_session
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v1_retirement import (
+    PLUGIN_MARKETPLACE_V2_PATH,
+    PLUGIN_PROTOCOL_V1_RETIRED_CODE,
+)
+from src.infrastructure.plugins.v2.boundary import current_generation_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_hook_catalog import runtime_hook_catalog_v2
 
 from .access import has_tenant_admin_access, require_tenant_access
 from .schemas import (
@@ -56,10 +48,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-MAX_RUNTIME_HOOK_OVERRIDES = 32
-MAX_RUNTIME_HOOK_SETTINGS_KEYS = 16
-MAX_RUNTIME_HOOK_SETTINGS_BYTES = 4096
-MAX_RUNTIME_HOOK_PRIORITY = 1000
 MAX_TOOL_POLICY_ITEMS = 128
 MAX_TOOL_NAME_LENGTH = 128
 INTERNAL_ERROR_DETAIL = "Internal server error"
@@ -106,211 +94,42 @@ def _build_config_response(
     )
 
 
-def _validate_runtime_hooks(
-    runtime_hooks: list[RuntimeHookConfig],
-    *,
-    allowed_unknown_hook_keys: set[tuple[str, str, str, str]] | None = None,
-) -> None:
-    """Reject invalid runtime hook overrides before they reach execution."""
-    if len(runtime_hooks) > MAX_RUNTIME_HOOK_OVERRIDES:
-        raise HTTPException(
-            status_code=422,
-            detail=_("runtime_hooks cannot exceed the maximum number of entries"),
-        )
-
-    allowed_unknown_keys = allowed_unknown_hook_keys or set()
-    catalog = {
-        (entry.plugin_name.strip().lower(), entry.hook_name.strip().lower()): entry
-        for entry in get_plugin_registry().list_hook_catalog()
-    }
-    seen_hooks: set[tuple[str, str, str, str]] = set()
-
-    for hook in runtime_hooks:
-        _validate_runtime_hook_override(
-            hook,
-            catalog_entry=catalog.get(hook.catalog_key),
-            seen_hooks=seen_hooks,
-            allowed_unknown_keys=allowed_unknown_keys,
-        )
-
-
-def _validate_runtime_hook_override(
-    hook: RuntimeHookConfig,
-    *,
-    catalog_entry: RegisteredHookMetadata | None,
-    seen_hooks: set[tuple[str, str, str, str]],
-    allowed_unknown_keys: set[tuple[str, str, str, str]],
-) -> None:
-    """Validate one runtime hook override against the catalog."""
-    hook_label = f"{hook.plugin_name}:{hook.hook_name}"
-    if hook.key in seen_hooks:
-        raise HTTPException(status_code=422, detail=_("Duplicate runtime hook override"))
-    seen_hooks.add(hook.key)
-
-    _validate_runtime_hook_priority(hook, hook_label)
-    _validate_runtime_hook_identity(hook, hook_label, catalog_entry)
-    _validate_runtime_hook_settings_size(hook, hook_label)
-    _validate_runtime_hook_security_boundary(hook, hook_label, catalog_entry)
-
-    if catalog_entry is None:
-        registry = get_plugin_registry()
-        if (
-            hook.key not in allowed_unknown_keys
-            and hook.hook_name not in registry.list_well_known_hooks()
-        ):
-            raise HTTPException(status_code=422, detail=_("Unknown runtime hook"))
-        return
-
-    _validate_runtime_hook_settings_schema(hook, catalog_entry, hook_label)
-
-
-def _validate_runtime_hook_priority(hook: RuntimeHookConfig, hook_label: str) -> None:
-    """Validate runtime hook priority bounds."""
-    if hook.priority is None or abs(hook.priority) <= MAX_RUNTIME_HOOK_PRIORITY:
-        return
-
+def _raise_runtime_hook_v1_retired() -> NoReturn:
+    """Reject mutation of runtime hooks that are now V2 Profile entries."""
     raise HTTPException(
-        status_code=422,
-        detail=_("Runtime hook priority must be within the allowed range"),
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": PLUGIN_PROTOCOL_V1_RETIRED_CODE,
+            "message": _(
+                "Runtime hook V1 mutation is retired; manage lifecycle modules through V2 Profiles"
+            ),
+            "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
+        },
     )
 
 
-def _validate_runtime_hook_identity(
-    hook: RuntimeHookConfig,
-    hook_label: str,
-    catalog_entry: RegisteredHookMetadata | None,
-) -> None:
-    """Validate runtime hook identity and executor fields."""
-    normalized_executor_kind = hook.executor_kind.strip().lower()
-    if normalized_executor_kind not in {item.value for item in HookExecutorKind}:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook has unsupported executor_kind"),
-        )
-    if normalized_executor_kind == HookExecutorKind.BUILTIN.value:
-        if not hook.plugin_name.strip():
-            raise HTTPException(
-                status_code=422,
-                detail=_("Builtin runtime hook requires plugin_name"),
-            )
-        return
-
-    if not (hook.source_ref or "").strip():
-        raise HTTPException(
-            status_code=422,
-            detail=_("Custom runtime hook requires source_ref"),
-        )
-    if not (hook.entrypoint or "").strip():
-        raise HTTPException(
-            status_code=422,
-            detail=_("Custom runtime hook requires entrypoint"),
-        )
-    effective_family = (
-        hook.hook_family or (catalog_entry.hook_family if catalog_entry else "")
-    ).strip()
-    if not effective_family:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Custom runtime hook requires hook_family"),
-        )
+def _raise_tenant_agent_config_runtime_unavailable(error: RuntimeV2Error) -> NoReturn:
+    """Preserve the structured V2 failure code at the HTTP boundary."""
+    logger.warning("Tenant agent config V2 authority unavailable: code=%s", error.code)
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": error.code,
+            "message": _("Tenant agent config service is unavailable"),
+        },
+    ) from error
 
 
-def _validate_runtime_hook_security_boundary(
-    hook: RuntimeHookConfig,
-    hook_label: str,
-    catalog_entry: RegisteredHookMetadata | None,
-) -> None:
-    """Validate executor/family permission boundaries for runtime hooks."""
-    normalized_executor_kind = hook.executor_kind.strip().lower()
-    if normalized_executor_kind == HookExecutorKind.BUILTIN.value:
-        return
-
-    effective_family = normalize_hook_family(
-        hook.hook_family or (catalog_entry.hook_family if catalog_entry else "")
-    )
-    if not is_executor_allowed_for_family(
-        executor_kind=normalized_executor_kind,
-        hook_family=effective_family,
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook cannot use executor_kind for hook_family"),
-        )
-
-    timeout_override = hook.settings.get(TIMEOUT_SETTING_KEY)
-    if timeout_override is not None and not isinstance(timeout_override, (int, float)):
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook timeout_seconds must be numeric"),
-        )
-    if timeout_override is not None:
-        timeout_seconds = float(timeout_override)
-        if not (
-            MIN_CUSTOM_HOOK_TIMEOUT_SECONDS <= timeout_seconds <= MAX_CUSTOM_HOOK_TIMEOUT_SECONDS
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail=_("Runtime hook timeout_seconds must be between the allowed bounds"),
-            )
-
-    isolation_mode = hook.settings.get(ISOLATION_MODE_SETTING_KEY, HOST_ISOLATION_MODE)
-    if not isinstance(isolation_mode, str):
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook isolation_mode must be a string"),
-        )
-    normalized_isolation_mode = isolation_mode.strip().lower()
-    if normalized_isolation_mode not in ALLOWED_ISOLATION_MODES:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook isolation_mode must be allowed"),
-        )
-
-
-def _validate_runtime_hook_settings_size(hook: RuntimeHookConfig, hook_label: str) -> None:
-    """Validate runtime hook settings size limits."""
-    if len(hook.settings) > MAX_RUNTIME_HOOK_SETTINGS_KEYS:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook settings cannot exceed the maximum number of keys"),
-        )
-
-    serialized_settings = json.dumps(hook.settings, separators=(",", ":"))
-    if len(serialized_settings.encode("utf-8")) > MAX_RUNTIME_HOOK_SETTINGS_BYTES:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook settings cannot exceed the maximum size"),
-        )
-
-
-def _validate_runtime_hook_settings_schema(
-    hook: RuntimeHookConfig,
-    catalog_entry: RegisteredHookMetadata,
-    hook_label: str,
-) -> None:
-    """Validate runtime hook settings against the catalog schema."""
-    schema = dict(catalog_entry.settings_schema)
-    if not schema:
-        if hook.settings:
-            raise HTTPException(
-                status_code=422,
-                detail=_("Runtime hook does not accept custom settings"),
-            )
-        return
-
-    try:
-        jsonschema.validate(instance=hook.settings, schema=schema)
-    except jsonschema.ValidationError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Invalid settings for runtime hook"),
-        ) from exc
-    except jsonschema.SchemaError as exc:
-        logger.error("Invalid hook schema for %s: %s", hook_label, exc)
-        raise HTTPException(
-            status_code=500,
-            detail=_("Runtime hook schema is invalid"),
-        ) from exc
+def _raise_tenant_agent_config_persistence_unavailable(error: SQLAlchemyError) -> NoReturn:
+    """Return a stable failure shape without leaking database diagnostics."""
+    logger.exception("Tenant agent config persistence failed")
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "tenant_agent_config_persistence_failed",
+            "message": _("Tenant agent config persistence is unavailable"),
+        },
+    ) from error
 
 
 def _normalize_tool_policy_list(
@@ -401,26 +220,41 @@ async def get_tenant_agent_config(
     All authenticated users can read the configuration (FR-021).
     """
     try:
-        await require_tenant_access(db, current_user, tenant_id)
+        async with tenant_agent_config_application_authority_context_v2(
+            request=request,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            db=db,
+        ) as authority:
+            await require_tenant_access(
+                authority.db,
+                authority.current_user,
+                authority.tenant_id,
+            )
 
-        config_repo = SqlTenantAgentConfigRepository(db)
-        authority_repo = SqlTenantAgentConfigAuthorityRepository(db)
+            config = await authority.services.configs.get_by_tenant(authority.tenant_id)
+            if not config:
+                config = TenantAgentConfig.create_default(tenant_id=authority.tenant_id)
 
-        # Get config or return default
-        config = await config_repo.get_by_tenant(tenant_id)
-        if not config:
-            # Return default config
-            config = TenantAgentConfig.create_default(tenant_id=tenant_id)
-
-        can_view_runtime_hook_settings = await has_tenant_admin_access(db, current_user, tenant_id)
-        return _build_config_response(
-            config,
-            authority_revision=await authority_repo.get_revision(tenant_id),
-            redact_runtime_hook_settings=not can_view_runtime_hook_settings,
-        )
+            can_view_runtime_hook_settings = await has_tenant_admin_access(
+                authority.db,
+                authority.current_user,
+                authority.tenant_id,
+            )
+            return _build_config_response(
+                config,
+                authority_revision=await authority.services.authority.get_revision(
+                    authority.tenant_id
+                ),
+                redact_runtime_hook_settings=not can_view_runtime_hook_settings,
+            )
 
     except HTTPException:
         raise
+    except RuntimeV2Error as e:
+        _raise_tenant_agent_config_runtime_unavailable(e)
+    except SQLAlchemyError as e:
+        _raise_tenant_agent_config_persistence_unavailable(e)
     except Exception as e:
         logger.error(f"Error getting tenant agent config: {e}")
         raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from e
@@ -431,22 +265,37 @@ async def get_tenant_agent_config(
     response_model=TenantAgentConfigAuthorityRevisionResponse,
 )
 async def get_tenant_agent_config_authority_revision(
+    request: Request,
     tenant_id: str = Query(..., description="Tenant ID to get config revision for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TenantAgentConfigAuthorityRevisionResponse:
     """Return the current tenant agent configuration authority revision."""
     try:
-        await require_tenant_access(db, current_user, tenant_id)
-        authority_revision = await SqlTenantAgentConfigAuthorityRepository(db).get_revision(
-            tenant_id
-        )
-        return TenantAgentConfigAuthorityRevisionResponse(
+        async with tenant_agent_config_application_authority_context_v2(
+            request=request,
+            current_user=current_user,
             tenant_id=tenant_id,
-            authority_revision=authority_revision,
-        )
+            db=db,
+        ) as authority:
+            await require_tenant_access(
+                authority.db,
+                authority.current_user,
+                authority.tenant_id,
+            )
+            authority_revision = await authority.services.authority.get_revision(
+                authority.tenant_id
+            )
+            return TenantAgentConfigAuthorityRevisionResponse(
+                tenant_id=authority.tenant_id,
+                authority_revision=authority_revision,
+            )
     except HTTPException:
         raise
+    except RuntimeV2Error as e:
+        _raise_tenant_agent_config_runtime_unavailable(e)
+    except SQLAlchemyError as e:
+        _raise_tenant_agent_config_persistence_unavailable(e)
     except Exception as e:
         logger.error(f"Error getting tenant agent config authority revision: {e}")
         raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from e
@@ -458,7 +307,7 @@ async def get_hook_catalog(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> HookCatalogResponse:
-    """Return the runtime hook catalog for tenant admins."""
+    """Return lifecycle modules active in the request's pinned V2 generation."""
     await require_tenant_access(db, current_user, tenant_id, require_admin=True)
     hooks = [
         HookCatalogEntryResponse(
@@ -468,14 +317,14 @@ async def get_hook_catalog(
             display_name=entry.display_name,
             description=entry.description,
             default_priority=entry.default_priority,
-            default_enabled=entry.default_enabled,
-            default_executor_kind=entry.default_executor_kind,
-            default_source_ref=entry.default_source_ref,
-            default_entrypoint=entry.default_entrypoint,
+            default_enabled=True,
+            default_executor_kind="builtin",
+            default_source_ref=entry.module_ref,
+            default_entrypoint=None,
             default_settings=dict(entry.default_settings),
             settings_schema=dict(entry.settings_schema),
         )
-        for entry in get_plugin_registry().list_hook_catalog()
+        for entry in runtime_hook_catalog_v2(current_generation_v2())
     ]
     return HookCatalogResponse(hooks=hooks)
 
@@ -499,106 +348,96 @@ async def update_tenant_agent_config(
     Only tenant admins can modify the configuration (FR-022).
     """
     try:
-        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
-        authority_repo = SqlTenantAgentConfigAuthorityRepository(db)
+        async with tenant_agent_config_application_authority_context_v2(
+            request=request,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            db=db,
+        ) as authority:
+            await require_tenant_access(
+                authority.db,
+                authority.current_user,
+                authority.tenant_id,
+                require_admin=True,
+            )
+            if update_request.runtime_hooks is not None:
+                _raise_runtime_hook_v1_retired()
 
-        snapshot = await authority_repo.lock_for_update(
-            tenant_id,
-            expected_revision=expected_revision,
-        )
-        config = snapshot.config
-        if not config:
-            config = TenantAgentConfig.create_default(tenant_id=tenant_id)
+            snapshot = await authority.services.authority.lock_for_update(
+                authority.tenant_id,
+                expected_revision=expected_revision,
+            )
+            config = snapshot.config
+            if not config:
+                config = TenantAgentConfig.create_default(tenant_id=authority.tenant_id)
 
-        # Apply updates - collect all parameters
-        llm_model = (
-            update_request.llm_model if update_request.llm_model is not None else config.llm_model
-        )
-        llm_temperature = (
-            update_request.llm_temperature
-            if update_request.llm_temperature is not None
-            else config.llm_temperature
-        )
-        pattern_learning_enabled = (
-            update_request.pattern_learning_enabled
-            if update_request.pattern_learning_enabled is not None
-            else config.pattern_learning_enabled
-        )
-        multi_level_thinking_enabled = (
-            update_request.multi_level_thinking_enabled
-            if update_request.multi_level_thinking_enabled is not None
-            else config.multi_level_thinking_enabled
-        )
-        max_work_plan_steps = (
-            update_request.max_work_plan_steps
-            if update_request.max_work_plan_steps is not None
-            else config.max_work_plan_steps
-        )
-        tool_timeout_seconds = (
-            update_request.tool_timeout_seconds
-            if update_request.tool_timeout_seconds is not None
-            else config.tool_timeout_seconds
-        )
-        enabled_tools = (
-            update_request.enabled_tools
-            if update_request.enabled_tools is not None
-            else list(config.enabled_tools)
-        )
-        disabled_tools = (
-            update_request.disabled_tools
-            if update_request.disabled_tools is not None
-            else list(config.disabled_tools)
-        )
-        enabled_tools, disabled_tools = _validate_tool_policy(enabled_tools, disabled_tools)
-        runtime_hooks = (
-            [
-                RuntimeHookConfig(
-                    hook_name=item.hook_name,
-                    plugin_name=item.plugin_name,
-                    hook_family=item.hook_family,
-                    executor_kind=item.executor_kind,
-                    source_ref=item.source_ref,
-                    entrypoint=item.entrypoint,
-                    enabled=item.enabled,
-                    priority=item.priority,
-                    settings=dict(item.settings),
-                )
-                for item in update_request.runtime_hooks
-            ]
-            if update_request.runtime_hooks is not None
-            else list(config.runtime_hooks)
-        )
-        if update_request.runtime_hooks is not None:
-            _validate_runtime_hooks(
-                runtime_hooks,
-                allowed_unknown_hook_keys={hook.key for hook in config.runtime_hooks},
+            llm_model = (
+                update_request.llm_model
+                if update_request.llm_model is not None
+                else config.llm_model
+            )
+            llm_temperature = (
+                update_request.llm_temperature
+                if update_request.llm_temperature is not None
+                else config.llm_temperature
+            )
+            pattern_learning_enabled = (
+                update_request.pattern_learning_enabled
+                if update_request.pattern_learning_enabled is not None
+                else config.pattern_learning_enabled
+            )
+            multi_level_thinking_enabled = (
+                update_request.multi_level_thinking_enabled
+                if update_request.multi_level_thinking_enabled is not None
+                else config.multi_level_thinking_enabled
+            )
+            max_work_plan_steps = (
+                update_request.max_work_plan_steps
+                if update_request.max_work_plan_steps is not None
+                else config.max_work_plan_steps
+            )
+            tool_timeout_seconds = (
+                update_request.tool_timeout_seconds
+                if update_request.tool_timeout_seconds is not None
+                else config.tool_timeout_seconds
+            )
+            enabled_tools = (
+                update_request.enabled_tools
+                if update_request.enabled_tools is not None
+                else list(config.enabled_tools)
+            )
+            disabled_tools = (
+                update_request.disabled_tools
+                if update_request.disabled_tools is not None
+                else list(config.disabled_tools)
+            )
+            enabled_tools, disabled_tools = _validate_tool_policy(enabled_tools, disabled_tools)
+            runtime_hooks = list(config.runtime_hooks)
+
+            updated_config = TenantAgentConfig(
+                id=config.id,
+                tenant_id=config.tenant_id,
+                config_type=ConfigType.CUSTOM,
+                llm_model=llm_model,
+                llm_temperature=llm_temperature,
+                pattern_learning_enabled=pattern_learning_enabled,
+                multi_level_thinking_enabled=multi_level_thinking_enabled,
+                max_work_plan_steps=max_work_plan_steps,
+                tool_timeout_seconds=tool_timeout_seconds,
+                enabled_tools=enabled_tools,
+                disabled_tools=disabled_tools,
+                runtime_hooks=runtime_hooks,
+                created_at=config.created_at,
+                updated_at=datetime.now(UTC),
             )
 
-        # Create updated config
-        updated_config = TenantAgentConfig(
-            id=config.id,
-            tenant_id=config.tenant_id,
-            config_type=ConfigType.CUSTOM,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            pattern_learning_enabled=pattern_learning_enabled,
-            multi_level_thinking_enabled=multi_level_thinking_enabled,
-            max_work_plan_steps=max_work_plan_steps,
-            tool_timeout_seconds=tool_timeout_seconds,
-            enabled_tools=enabled_tools,
-            disabled_tools=disabled_tools,
-            runtime_hooks=runtime_hooks,
-            created_at=config.created_at,
-            updated_at=datetime.now(UTC),
-        )
-
-        write = await authority_repo.persist(snapshot, updated_config)
-        await db.commit()
-        invalidate_agent_session(tenant_id=tenant_id)
-        return _build_config_response(
-            write.config,
-            authority_revision=write.authority_revision,
-        )
+            write = await authority.services.authority.persist(snapshot, updated_config)
+            await authority.db.commit()
+            invalidate_agent_session(tenant_id=authority.tenant_id)
+            return _build_config_response(
+                write.config,
+                authority_revision=write.authority_revision,
+            )
 
     except HTTPException:
         raise
@@ -611,6 +450,10 @@ async def update_tenant_agent_config(
                 "authority_revision": e.authority_revision,
             },
         ) from e
+    except RuntimeV2Error as e:
+        _raise_tenant_agent_config_runtime_unavailable(e)
+    except SQLAlchemyError as e:
+        _raise_tenant_agent_config_persistence_unavailable(e)
     except ValueError as e:
         # Validation error from entity
         raise HTTPException(status_code=422, detail=_("Invalid tenant agent config")) from e

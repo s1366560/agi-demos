@@ -1,6 +1,7 @@
 """Unit tests for memory edit permission checks."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -44,6 +45,13 @@ def _make_memory(memory_id: str, project: Project, author: User) -> Memory:
         meta={},
         created_at=now,
         updated_at=now,
+    )
+
+
+def _memory_application(db: AsyncSession, graph_service: object | None) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        services=SimpleNamespace(graph_service=graph_service),
     )
 
 
@@ -121,8 +129,7 @@ class TestMemoryCreateRouter:
                 ),
                 background_tasks=BackgroundTasks(),
                 current_user=test_user,
-                db=test_db,
-                graph_service=None,
+                memory_application=_memory_application(test_db, None),
                 workflow_engine=workflow_engine,
             )
 
@@ -215,8 +222,7 @@ class TestMemoryReadRouter:
         response = await get_memory(
             memory.id,
             current_user=test_user,
-            db=test_db,
-            graph_service=graph_service,
+            memory_application=_memory_application(test_db, graph_service),
         )
 
         assert len(response.entities) == 2
@@ -257,8 +263,7 @@ class TestMemoryDeletePermission:
         response = await delete_memory(
             memory.id,
             current_user=another_user,
-            db=test_db,
-            graph_service=graph_service,
+            memory_application=_memory_application(test_db, graph_service),
         )
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
@@ -288,8 +293,7 @@ class TestMemoryDeletePermission:
         response = await delete_memory(
             memory.id,
             current_user=another_user,
-            db=test_db,
-            graph_service=graph_service,
+            memory_application=_memory_application(test_db, graph_service),
         )
 
         assert response.status_code == status.HTTP_204_NO_CONTENT

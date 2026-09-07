@@ -1,18 +1,14 @@
 import { useI18n } from '../../i18n';
-import type { RegisteredUiSlot } from '../../plugins/uiSlotRegistry';
-import { SignedUiModuleBoundary } from './SignedUiModuleBoundary';
-import type { DesktopRuntimeConfig } from '../../types';
+import type { UiSlotDefinition } from '../../plugins/uiSlotRegistry';
 
 export function PlatformPluginUiSlots({
   slots,
   error,
   loading,
-  config,
 }: {
-  slots: readonly RegisteredUiSlot[];
+  slots: readonly UiSlotDefinition[];
   error: string | null;
   loading: boolean;
-  config: DesktopRuntimeConfig;
 }) {
   const { t } = useI18n();
   if (!loading && !error && slots.length === 0) return null;
@@ -35,13 +31,7 @@ export function PlatformPluginUiSlots({
           <strong>{slot.id}</strong>
           <span>{t(`settings.platformPluginUi.slot.${slot.slot}`)}</span>
           <code>{slot.moduleRef}</code>
-          {slot.slot === 'tool_result_renderer' && slot.moduleRef.startsWith('signed:') ? (
-            <SignedUiModuleBoundary
-              config={config}
-              pluginId={slot.pluginId}
-              expectedDigest={slot.moduleRef.slice('signed:'.length)}
-            />
-          ) : slot.slot === 'tool_result_renderer' ? (
+          {slot.slot === 'tool_result_renderer' ? (
             <pre aria-label={t('settings.platformPluginUi.rendererPreview')}>
               {JSON.stringify({ contract: 1, kind: 'tool_result', renderer: slot.id }, null, 2)}
             </pre>

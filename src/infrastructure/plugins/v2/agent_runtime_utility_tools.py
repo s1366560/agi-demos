@@ -1,0 +1,249 @@
+"""Generation-owned contributions for prepared Agent runtime utility tools."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Any, cast
+
+from src.infrastructure.agent.core.tool_converter import convert_tools
+from src.infrastructure.agent.tools.skill_sync import bind_skill_sync_repository_authority_v2
+
+from .runtime import (
+    ContextV2,
+    PluginDefinitionV2,
+    RuntimeV2Error,
+    generated_contract_digest_v2,
+)
+from .skill_repository_services import SkillRepositoryApplicationResolverProtocolV2
+from .tool_set import (
+    PreparedToolProviderV2,
+    ToolContributionDisposerV2,
+    ToolSetCatalogProtocolV2,
+    ToolSetV2,
+)
+
+AGENT_WEB_TOOLS_MODULE_V2 = "builtin://memstack/agent/tool/web"
+AGENT_WEB_TOOLS_SOURCE_V2 = "builtin-agent-web-tools"
+AGENT_WEB_TOOL_NAMES_V2 = frozenset({"web_scrape", "web_search"})
+
+AGENT_SKILL_MANAGEMENT_TOOLS_MODULE_V2 = "builtin://memstack/agent/tool/skill-management"
+AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2 = "builtin-agent-skill-management-tools"
+AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2 = frozenset(
+    {
+        "skill_installer",
+        "skill_loader",
+        "skill_sync",
+    }
+)
+
+AGENT_ENV_VAR_TOOLS_MODULE_V2 = "builtin://memstack/agent/tool/env-var"
+AGENT_ENV_VAR_TOOLS_SOURCE_V2 = "builtin-agent-env-var-tools"
+AGENT_ENV_VAR_TOOL_NAMES_V2 = frozenset(
+    {
+        "check_env_vars",
+        "get_env_var",
+        "request_env_var",
+    }
+)
+
+AGENT_MCP_REGISTRATION_TOOL_MODULE_V2 = "builtin://memstack/agent/tool/mcp-registration"
+AGENT_MCP_REGISTRATION_TOOL_SOURCE_V2 = "builtin-agent-mcp-registration-tool"
+AGENT_MCP_REGISTRATION_TOOL_NAMES_V2 = frozenset({"register_mcp_server"})
+
+
+def _prepared_runtime_utility_tool_group_v2(
+    *,
+    agent: object,
+    selection_context: object | None,
+    prepared_tool_provider: PreparedToolProviderV2,
+    label: str,
+    required_tool_names: frozenset[str],
+) -> ToolSetV2:
+    """Select exact Worker-prepared instances for one declared utility group."""
+    _ = agent, selection_context
+    prepared_tools = prepared_tool_provider.tools
+    missing = sorted(required_tool_names.difference(prepared_tools))
+    if missing:
+        raise RuntimeV2Error(
+            "missing_prepared_tool_contribution",
+            f"{label} contribution is missing prepared tools: {', '.join(missing)}",
+        )
+    tools = {name: prepared_tools[name] for name in sorted(required_tool_names)}
+    return ToolSetV2(
+        tools=MappingProxyType(tools),
+        definitions=tuple(convert_tools(tools)),
+    )
+
+
+def _prepared_skill_management_tool_group_v2(
+    *,
+    agent: object,
+    selection_context: object | None,
+    prepared_tool_provider: PreparedToolProviderV2,
+    skill_repository_resolver: SkillRepositoryApplicationResolverProtocolV2,
+) -> ToolSetV2:
+    """Bind Skill persistence to the prepared sync tool from one exact generation."""
+    prepared = _prepared_runtime_utility_tool_group_v2(
+        agent=agent,
+        selection_context=selection_context,
+        prepared_tool_provider=prepared_tool_provider,
+        label="Skill-management tool",
+        required_tool_names=AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2,
+    )
+    tools = dict(prepared.tools)
+    tools["skill_sync"] = bind_skill_sync_repository_authority_v2(
+        tools["skill_sync"],
+        resolver=skill_repository_resolver,
+    )
+    return ToolSetV2(
+        tools=MappingProxyType(tools),
+        definitions=tuple(convert_tools(tools)),
+    )
+
+
+def _register_runtime_utility_tool_group_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+    *,
+    expected_source_id: str,
+    label: str,
+    required_tool_names: frozenset[str],
+) -> ToolContributionDisposerV2:
+    source_id = config.get("source_id")
+    if source_id != expected_source_id:
+        raise ValueError(f"{label} contribution requires source_id {expected_source_id}")
+    catalog = context.require("catalog")
+    if not isinstance(catalog, ToolSetCatalogProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            f"{label} contribution received an invalid tool catalog",
+        )
+
+    def contribution(**kwargs: object) -> ToolSetV2:
+        return _prepared_runtime_utility_tool_group_v2(
+            agent=kwargs["agent"],
+            selection_context=kwargs.get("selection_context"),
+            prepared_tool_provider=cast("PreparedToolProviderV2", kwargs["prepared_tool_provider"]),
+            label=label,
+            required_tool_names=required_tool_names,
+        )
+
+    return catalog.register_tools(expected_source_id, contribution)
+
+
+def _apply_agent_web_tool_contribution_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+) -> ToolContributionDisposerV2:
+    return _register_runtime_utility_tool_group_v2(
+        context,
+        config,
+        expected_source_id=AGENT_WEB_TOOLS_SOURCE_V2,
+        label="Web tool",
+        required_tool_names=AGENT_WEB_TOOL_NAMES_V2,
+    )
+
+
+def _apply_agent_skill_management_tool_contribution_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+) -> ToolContributionDisposerV2:
+    source_id = config.get("source_id")
+    if source_id != AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2:
+        raise ValueError(
+            "Skill-management tool contribution requires source_id "
+            + AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2
+        )
+    catalog = context.require("catalog")
+    if not isinstance(catalog, ToolSetCatalogProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "Skill-management tool contribution received an invalid tool catalog",
+        )
+    skills = context.require("skills")
+    if not isinstance(skills, SkillRepositoryApplicationResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "Skill-management tool contribution received an invalid Skill repository resolver",
+        )
+
+    def contribution(**kwargs: object) -> ToolSetV2:
+        return _prepared_skill_management_tool_group_v2(
+            agent=kwargs["agent"],
+            selection_context=kwargs.get("selection_context"),
+            prepared_tool_provider=cast("PreparedToolProviderV2", kwargs["prepared_tool_provider"]),
+            skill_repository_resolver=skills,
+        )
+
+    return catalog.register_tools(AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2, contribution)
+
+
+def _apply_agent_env_var_tool_contribution_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+) -> ToolContributionDisposerV2:
+    return _register_runtime_utility_tool_group_v2(
+        context,
+        config,
+        expected_source_id=AGENT_ENV_VAR_TOOLS_SOURCE_V2,
+        label="Environment-variable tool",
+        required_tool_names=AGENT_ENV_VAR_TOOL_NAMES_V2,
+    )
+
+
+def _apply_agent_mcp_registration_tool_contribution_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+) -> ToolContributionDisposerV2:
+    return _register_runtime_utility_tool_group_v2(
+        context,
+        config,
+        expected_source_id=AGENT_MCP_REGISTRATION_TOOL_SOURCE_V2,
+        label="MCP-registration tool",
+        required_tool_names=AGENT_MCP_REGISTRATION_TOOL_NAMES_V2,
+    )
+
+
+def builtin_agent_runtime_utility_tool_contribution_definitions_v2() -> tuple[
+    PluginDefinitionV2, ...
+]:
+    return (
+        PluginDefinitionV2(
+            module_ref=AGENT_WEB_TOOLS_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(AGENT_WEB_TOOLS_MODULE_V2),
+            apply=_apply_agent_web_tool_contribution_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=AGENT_SKILL_MANAGEMENT_TOOLS_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(AGENT_SKILL_MANAGEMENT_TOOLS_MODULE_V2),
+            apply=_apply_agent_skill_management_tool_contribution_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=AGENT_ENV_VAR_TOOLS_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(AGENT_ENV_VAR_TOOLS_MODULE_V2),
+            apply=_apply_agent_env_var_tool_contribution_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=AGENT_MCP_REGISTRATION_TOOL_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(AGENT_MCP_REGISTRATION_TOOL_MODULE_V2),
+            apply=_apply_agent_mcp_registration_tool_contribution_v2,
+        ),
+    )
+
+
+__all__ = [
+    "AGENT_ENV_VAR_TOOLS_MODULE_V2",
+    "AGENT_ENV_VAR_TOOLS_SOURCE_V2",
+    "AGENT_ENV_VAR_TOOL_NAMES_V2",
+    "AGENT_MCP_REGISTRATION_TOOL_MODULE_V2",
+    "AGENT_MCP_REGISTRATION_TOOL_NAMES_V2",
+    "AGENT_MCP_REGISTRATION_TOOL_SOURCE_V2",
+    "AGENT_SKILL_MANAGEMENT_TOOLS_MODULE_V2",
+    "AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2",
+    "AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2",
+    "AGENT_WEB_TOOLS_MODULE_V2",
+    "AGENT_WEB_TOOLS_SOURCE_V2",
+    "AGENT_WEB_TOOL_NAMES_V2",
+    "builtin_agent_runtime_utility_tool_contribution_definitions_v2",
+]

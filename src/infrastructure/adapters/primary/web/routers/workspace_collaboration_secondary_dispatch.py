@@ -9,17 +9,12 @@ from typing import TypedDict
 from fastapi import BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.schemas.workspace_cyber_schemas import CyberGeneCreate, CyberGeneUpdate
-from src.application.services.topology_service import TopologyService
 from src.application.services.workspace_collaboration_authority import (
     WorkspaceCollaborationActor,
     WorkspaceCollaborationMutationCommand,
 )
-from src.application.services.workspace_service import WorkspaceService
 from src.infrastructure.adapters.primary.web.routers import (
     blackboard,
-    cyber_genes,
-    topology,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_payload import (
     require_workspace_payload_keys,
@@ -38,9 +33,9 @@ class _RosterRouteArguments(TypedDict):
     project_id: str
     workspace_id: str
     background_tasks: BackgroundTasks
+    request: Request
     current_user: User
     db: AsyncSession
-    workspace_service: WorkspaceService
 
 
 class _ScopedRouteArguments(TypedDict):
@@ -50,14 +45,6 @@ class _ScopedRouteArguments(TypedDict):
     request: Request
     current_user: User
     db: AsyncSession
-
-
-class _TopologyRouteArguments(TypedDict):
-    workspace_id: str
-    request: Request
-    current_user: User
-    db: AsyncSession
-    topology_service: TopologyService
 
 
 async def dispatch_secondary_workspace_mutation(
@@ -81,29 +68,9 @@ async def dispatch_secondary_workspace_mutation(
             db=db,
         )
         return True
-    if command.surface == "genes":
-        await _dispatch_gene(
-            actor=actor,
-            action=command.action,
-            payload=command.payload,
-            request=request,
-            current_user=current_user,
-            db=db,
-        )
-        return True
     if command.surface == "files":
         await _dispatch_file(
             actor=actor,
-            action=command.action,
-            payload=command.payload,
-            request=request,
-            current_user=current_user,
-            db=db,
-        )
-        return True
-    if command.surface == "topology":
-        await _dispatch_topology(
-            workspace_id=actor.workspace_id,
             action=command.action,
             payload=command.payload,
             request=request,
@@ -136,15 +103,14 @@ async def _dispatch_workspace_roster(
 ) -> None:
     from src.infrastructure.adapters.primary.web.routers import workspaces
 
-    service = workspaces.get_workspace_service(request, db)
     common: _RosterRouteArguments = {
         "tenant_id": actor.tenant_id,
         "project_id": actor.project_id,
         "workspace_id": actor.workspace_id,
         "background_tasks": background_tasks,
+        "request": request,
         "current_user": current_user,
         "db": db,
-        "workspace_service": service,
     }
     if action == "bind_agent":
         await workspaces.bind_workspace_agent(
@@ -192,46 +158,6 @@ async def _dispatch_workspace_roster(
         await workspaces.remove_workspace_member(user_id=user_id, **common)
     else:
         raise ValueError("workspace roster action is unavailable")
-
-
-async def _dispatch_gene(
-    *,
-    actor: WorkspaceCollaborationActor,
-    action: str,
-    payload: Mapping[str, object],
-    request: Request,
-    current_user: User,
-    db: AsyncSession,
-) -> None:
-    common: _ScopedRouteArguments = {
-        "tenant_id": actor.tenant_id,
-        "project_id": actor.project_id,
-        "workspace_id": actor.workspace_id,
-        "request": request,
-        "current_user": current_user,
-        "db": db,
-    }
-    if action == "create_gene":
-        await cyber_genes.create_gene(
-            payload=workspace_payload_model(CyberGeneCreate, payload),
-            **common,
-        )
-    elif action == "update_gene":
-        await cyber_genes.update_gene(
-            gene_id=workspace_payload_id(payload, "gene_id"),
-            payload=workspace_payload_model(
-                CyberGeneUpdate,
-                payload,
-                excluded=("gene_id",),
-            ),
-            **common,
-        )
-    elif action == "delete_gene":
-        gene_id = workspace_payload_id(payload, "gene_id")
-        require_workspace_payload_keys(payload, {"gene_id"})
-        await cyber_genes.delete_gene(gene_id=gene_id, **common)
-    else:
-        raise ValueError("gene action is unavailable")
 
 
 async def _dispatch_file(
@@ -317,8 +243,10 @@ async def _journal_blackboard_file_delete(
     descendants = []
     try:
         bb_file = await service._file_repo.find_by_id(file_id)
-        if bb_file is not None and bb_file.workspace_id == workspace_id and (
-            bb_file.is_directory and recursive
+        if (
+            bb_file is not None
+            and bb_file.workspace_id == workspace_id
+            and (bb_file.is_directory and recursive)
         ):
             child_path = file_service_module._join_child_path(
                 bb_file.parent_path,
@@ -336,11 +264,7 @@ async def _journal_blackboard_file_delete(
         return
     storage_root = file_service_module.STORAGE_ROOT.resolve()
     workspace_root = (storage_root / workspace_id).resolve()
-    files = [
-        item
-        for item in (bb_file, *descendants)
-        if not item.is_directory and item.storage_key
-    ]
+    files = [item for item in (bb_file, *descendants) if not item.is_directory and item.storage_key]
     for item in files:
         storage_path = (storage_root / workspace_id / item.storage_key).resolve()
 
@@ -353,65 +277,6 @@ async def _journal_blackboard_file_delete(
             journal.stage_delete(path, storage_root=root)
 
         journal_workspace_file_mutation(stage_deleted_file)
-
-
-async def _dispatch_topology(
-    *,
-    workspace_id: str,
-    action: str,
-    payload: Mapping[str, object],
-    request: Request,
-    current_user: User,
-    db: AsyncSession,
-) -> None:
-    service = topology.get_topology_service(request, db)
-    common: _TopologyRouteArguments = {
-        "workspace_id": workspace_id,
-        "request": request,
-        "current_user": current_user,
-        "db": db,
-        "topology_service": service,
-    }
-    if action == "create_node":
-        await topology.create_node(
-            body=workspace_payload_model(topology.TopologyNodeCreate, payload),
-            **common,
-        )
-    elif action == "update_node":
-        await topology.update_node(
-            node_id=workspace_payload_id(payload, "node_id"),
-            body=workspace_payload_model(
-                topology.TopologyNodeUpdate,
-                payload,
-                excluded=("node_id",),
-            ),
-            **common,
-        )
-    elif action == "delete_node":
-        node_id = workspace_payload_id(payload, "node_id")
-        require_workspace_payload_keys(payload, {"node_id"})
-        await topology.delete_node(node_id=node_id, **common)
-    elif action == "create_edge":
-        await topology.create_edge(
-            body=workspace_payload_model(topology.TopologyEdgeCreate, payload),
-            **common,
-        )
-    elif action == "update_edge":
-        await topology.update_edge(
-            edge_id=workspace_payload_id(payload, "edge_id"),
-            body=workspace_payload_model(
-                topology.TopologyEdgeUpdate,
-                payload,
-                excluded=("edge_id",),
-            ),
-            **common,
-        )
-    elif action == "delete_edge":
-        edge_id = workspace_payload_id(payload, "edge_id")
-        require_workspace_payload_keys(payload, {"edge_id"})
-        await topology.delete_edge(edge_id=edge_id, **common)
-    else:
-        raise ValueError("topology action is unavailable")
 
 
 async def _dispatch_workspace_settings(
@@ -431,7 +296,7 @@ async def _dispatch_workspace_settings(
         workspace_id=actor.workspace_id,
         payload=workspace_payload_model(workspaces.WorkspaceUpdateRequest, payload),
         background_tasks=background_tasks,
+        request=request,
         current_user=current_user,
         db=db,
-        workspace_service=workspaces.get_workspace_service(request, db),
     )

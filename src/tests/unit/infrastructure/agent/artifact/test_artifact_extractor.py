@@ -10,13 +10,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.infrastructure.agent.artifact import extractor as extractor_module
 from src.infrastructure.agent.artifact.extractor import (
     ArtifactData,
     ArtifactExtractionResult,
     ArtifactExtractor,
     ExtractionContext,
-    get_artifact_extractor,
-    set_artifact_extractor,
 )
 
 LOGGER_NAME = "src.infrastructure.agent.artifact.extractor"
@@ -612,35 +611,17 @@ class TestCategoryDetection:
 
 
 # ============================================================
-# Test Singleton Functions
+# Retired Process-Global Authority
 # ============================================================
 
 
 @pytest.mark.unit
-class TestSingletonFunctions:
-    """Test singleton getter/setter functions."""
-
-    def test_get_artifact_extractor(self):
-        """Test getting default extractor."""
-        ext = get_artifact_extractor()
-        assert isinstance(ext, ArtifactExtractor)
-
-    def test_get_returns_same_instance(self):
-        """Test that getter returns same instance."""
-        ext1 = get_artifact_extractor()
-        ext2 = get_artifact_extractor()
-        assert ext1 is ext2
-
-    def test_set_artifact_extractor(self):
-        """Test setting custom extractor."""
-        custom = ArtifactExtractor(debug_logging=True)
-        set_artifact_extractor(custom)
-
-        result = get_artifact_extractor()
-        assert result is custom
-
-        # Cleanup
-        set_artifact_extractor(ArtifactExtractor())
+@pytest.mark.parametrize(
+    "authority_name",
+    ("_default_extractor", "get_artifact_extractor", "set_artifact_extractor"),
+)
+def test_process_global_artifact_extractor_authority_is_retired(authority_name: str) -> None:
+    assert not hasattr(extractor_module, authority_name)
 
 
 # ============================================================

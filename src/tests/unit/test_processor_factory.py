@@ -9,14 +9,16 @@ Tests for:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
+from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.processor.factory import ProcessorFactory
 from src.infrastructure.agent.processor.processor import ProcessorConfig, ToolDefinition
 from src.infrastructure.agent.processor.run_context import RunContext
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 # ============================================================================
 # Fixtures
@@ -106,6 +108,7 @@ def factory(
         permission_manager=mock_permission_manager,
         artifact_service=mock_artifact_service,
         base_model="gemini-2.0-flash",
+        base_provider_id="gemini",
         base_api_key="test-key",
         base_url="https://api.example.com",
     )
@@ -134,6 +137,7 @@ class TestProcessorFactoryImmutability:
         assert f.base_model == ""
         assert f.base_api_key is None
         assert f.base_url is None
+        assert f.base_provider_id == ""
 
 
 # ============================================================================
@@ -144,6 +148,42 @@ class TestProcessorFactoryImmutability:
 @pytest.mark.unit
 class TestCreateForSubagent:
     """Tests for ProcessorFactory.create_for_subagent()."""
+
+    @pytest.fixture(autouse=True)
+    def _pin_v2_runtime_services(self):
+        with (
+            patch(
+                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                return_value=MagicMock(),
+            ) as loop_resolver,
+            patch(
+                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                return_value=MagicMock(),
+            ) as runtime_dispatcher,
+        ):
+            yield loop_resolver, runtime_dispatcher
+
+    def test_pinned_v2_loop_resolver_and_provider_are_propagated(
+        self,
+        inherit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+        _pin_v2_runtime_services: tuple[MagicMock, MagicMock],
+    ) -> None:
+        loop_resolver, runtime_dispatcher = _pin_v2_runtime_services
+        factory = ProcessorFactory(
+            base_model="gemini-2.0-flash",
+            base_provider_id="gemini",
+        )
+
+        processor = factory.create_for_subagent(inherit_subagent, sample_tools)
+
+        assert processor.config.loop_resolver is loop_resolver.return_value
+        assert not hasattr(processor.config, "plugin_registry")
+        assert processor.config.plugin_event_dispatcher is runtime_dispatcher.return_value
+        assert not hasattr(processor.config, "runtime_hook_overrides")
+        assert processor.config.provider_id == "gemini"
+        loop_resolver.assert_called_once_with()
+        runtime_dispatcher.assert_called_once_with()
 
     def test_inherit_model_uses_base_model(
         self,
@@ -156,31 +196,86 @@ class TestCreateForSubagent:
 
         assert processor.config.model == "gemini-2.0-flash"
 
-    def test_inherit_model_with_override(
+    def test_inherit_model_with_bare_override_fails_closed(
         self,
         factory: ProcessorFactory,
         inherit_subagent: SubAgent,
         sample_tools: list[ToolDefinition],
     ) -> None:
-        """model_override takes precedence over base_model for INHERIT."""
+        """A retry/spawn override cannot inherit the base provider implicitly."""
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            factory.create_for_subagent(
+                inherit_subagent,
+                sample_tools,
+                model_override="gpt-4o-mini",
+            )
+
+        assert exc_info.value.code == "subagent_model_override_route_missing"
+
+    def test_inherit_model_with_structured_override_uses_exact_route(
+        self,
+        factory: ProcessorFactory,
+        inherit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+    ) -> None:
+        route = ModelRouteRef(provider_id="openai", model_id="gpt-4o-mini")
+
         processor = factory.create_for_subagent(
-            inherit_subagent, sample_tools, model_override="gpt-4o-mini"
+            inherit_subagent,
+            sample_tools,
+            model_override="gpt-4o-mini",
+            model_route_override=route,
         )
 
         assert processor.config.model == "gpt-4o-mini"
+        assert processor.config.provider_id == "openai"
 
-    def test_explicit_model_ignores_base_and_override(
+    def test_explicit_model_without_configured_route_fails_closed(
         self,
         factory: ProcessorFactory,
         explicit_subagent: SubAgent,
         sample_tools: list[ToolDefinition],
     ) -> None:
-        """SubAgent with explicit model should use its own model."""
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            factory.create_for_subagent(explicit_subagent, sample_tools)
+
+        assert exc_info.value.code == "subagent_model_route_missing"
+
+    def test_explicit_model_uses_configured_route(
+        self,
+        factory: ProcessorFactory,
+        explicit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+    ) -> None:
+        route = ModelRouteRef(provider_id="openai", model_id=AgentModel.GPT4O.value)
+
         processor = factory.create_for_subagent(
-            explicit_subagent, sample_tools, model_override="ignored-model"
+            explicit_subagent,
+            sample_tools,
+            configured_model_route=route,
         )
 
         assert processor.config.model == AgentModel.GPT4O.value
+        assert processor.config.provider_id == "openai"
+
+    def test_structured_override_model_mismatch_fails_closed(
+        self,
+        factory: ProcessorFactory,
+        inherit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+    ) -> None:
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            factory.create_for_subagent(
+                inherit_subagent,
+                sample_tools,
+                model_override="gpt-4o-mini",
+                model_route_override=ModelRouteRef(
+                    provider_id="openai",
+                    model_id="gpt-4.1-mini",
+                ),
+            )
+
+        assert exc_info.value.code == "subagent_model_override_route_mismatch"
 
     def test_subagent_settings_propagated(
         self,
@@ -189,7 +284,14 @@ class TestCreateForSubagent:
         sample_tools: list[ToolDefinition],
     ) -> None:
         """SubAgent temperature, max_tokens, max_steps should be propagated."""
-        processor = factory.create_for_subagent(explicit_subagent, sample_tools)
+        processor = factory.create_for_subagent(
+            explicit_subagent,
+            sample_tools,
+            configured_model_route=ModelRouteRef(
+                provider_id="openai",
+                model_id=AgentModel.GPT4O.value,
+            ),
+        )
 
         assert processor.config.temperature == explicit_subagent.temperature
         assert processor.config.max_tokens == explicit_subagent.max_tokens
@@ -231,6 +333,28 @@ class TestCreateForSubagent:
 class TestCreateForMain:
     """Tests for ProcessorFactory.create_for_main()."""
 
+    @pytest.fixture(autouse=True)
+    def _pin_v2_loop_resolver(self):
+        with patch(
+            "src.infrastructure.agent.processor.factory._default_loop_resolver",
+            return_value=MagicMock(),
+        ) as resolver:
+            yield resolver
+
+    def test_stale_caller_resolver_is_replaced_from_pinned_operation(
+        self,
+        factory: ProcessorFactory,
+        sample_tools: list[ToolDefinition],
+        _pin_v2_loop_resolver: MagicMock,
+    ) -> None:
+        stale_resolver = object()
+        config = ProcessorConfig(model="custom-model", loop_resolver=stale_resolver)
+
+        processor = factory.create_for_main(config, sample_tools)
+
+        assert processor.config.loop_resolver is _pin_v2_loop_resolver.return_value
+        _pin_v2_loop_resolver.assert_called_once_with()
+
     def test_config_passed_through(
         self,
         factory: ProcessorFactory,
@@ -243,6 +367,7 @@ class TestCreateForMain:
             temperature=0.3,
             max_tokens=2048,
             max_steps=5,
+            loop_resolver=object(),
         )
 
         processor = factory.create_for_main(config, sample_tools)
@@ -259,7 +384,7 @@ class TestCreateForMain:
         mock_artifact_service: MagicMock,
     ) -> None:
         """Shared deps should be injected for main processor too."""
-        config = ProcessorConfig(model="test-model")
+        config = ProcessorConfig(model="test-model", loop_resolver=object())
         processor = factory.create_for_main(config, sample_tools)
 
         assert processor.permission_manager is mock_permission_manager
@@ -271,7 +396,7 @@ class TestCreateForMain:
         sample_tools: list[ToolDefinition],
     ) -> None:
         """Forced skill name/tools on config should be preserved."""
-        config = ProcessorConfig(model="test-model")
+        config = ProcessorConfig(model="test-model", loop_resolver=object())
         config.forced_skill_name = "my-skill"
         config.forced_skill_tools = ["tool_a", "tool_b"]
 
@@ -279,6 +404,17 @@ class TestCreateForMain:
 
         assert processor.config.forced_skill_name == "my-skill"
         assert processor.config.forced_skill_tools == ["tool_a", "tool_b"]
+
+    def test_react_agent_propagates_provider_to_subagent_factory(self) -> None:
+        from src.infrastructure.agent.core.react_agent import ReActAgent
+
+        agent = ReActAgent(
+            model="test-model",
+            tools={},
+            provider_id="test-provider",
+        )
+
+        assert agent._processor_factory.base_provider_id == "test-provider"
 
 
 # ============================================================================

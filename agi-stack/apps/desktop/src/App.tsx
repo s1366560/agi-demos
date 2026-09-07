@@ -1,17 +1,19 @@
+import { waitForDesktopWorkspaceCoreReadyV2 } from './hooks/desktopWorkspaceCoreReadinessV2';
+import { useDesktopModalBackgroundV2 } from './hooks/useDesktopModalBackgroundV2';
+import { useDesktopRendererRuntimeAdmissionV2 } from './hooks/useDesktopRendererRuntimeAdmissionV2';
+import { createDesktopBrowserBridgeManagementOperationsV2, createDesktopBrowserBridgeManagementClientV2 } from './plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
+import { createDesktopVoiceSessionOperationsV2 } from './plugins/desktopVoiceSessionAuthorityModuleV2';
+import { createDesktopConversationMessagingOperationsV2 } from './plugins/desktopConversationMessagingAuthorityModuleV2';
 import {
-  type CSSProperties,
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { createPortal } from 'react-dom';
-import { Text, Theme } from '@radix-ui/themes';
+import { Theme } from '@radix-ui/themes';
 import {
-  ActivityLogIcon,
   DashboardIcon,
   GearIcon,
   GridIcon,
@@ -20,8 +22,6 @@ import {
 } from '@radix-ui/react-icons';
 
 import {
-  desktopApiCredential,
-  desktopLaunchCapability,
   DesktopApiClient,
   DesktopApiError,
 } from './api/client';
@@ -42,18 +42,15 @@ import {
   hasNativeTrustedSessionBroker,
   loadLocalTrustedSession,
   saveLocalTrustedSession,
+  selectPlatformPluginAuthorityV2,
 } from './api/trustedSession';
 import type { CloudSessionProjection } from './api/cloudSessionProjectionClient';
-import { ResizeHandle, useResizablePanelWidth } from './components/ResizeHandle';
-import { createDesktopAgentAuthorityAdapter } from './features/agent-authority/cloudAgentAuthorityClient';
-import type {
-  CloudAgentAuthorityScope,
-  RunChangeScope,
-} from './features/agent-authority/agentAuthorityTypes';
+import { useResizablePanelWidth } from './components/ResizeHandle';
+import type { RunChangeScope } from './features/agent-authority/agentAuthorityTypes';
+import { useRunReviewAuthorityV2 } from './features/session/useRunReviewAuthorityV2';
 import {
-  desktopChangeSnapshotFromCloud,
-  desktopRunInputFromCloud,
-} from './features/agent-authority/agentAuthorityProjection';
+  createDesktopAgentAuthorityProviderV2,
+} from './features/agent-authority/desktopAgentAuthorityProviderV2';
 import {
   findWorkspaceProject,
   isCurrentContextRevision,
@@ -64,9 +61,6 @@ import {
   isWorkspaceReady,
   workspaceContextMatchesSelection,
 } from './features/auth/authContextModel';
-import { deviceApprovalCapability } from './features/device-approval/deviceApprovalCapability';
-import { tenantCreationCapability } from './features/tenant-creation/tenantCreationCapability';
-import { invitationAcceptanceCapability } from './features/invitation-acceptance/invitationAcceptanceCapability';
 import { ForcePasswordChangeScreen } from './features/auth/ForcePasswordChangeScreen';
 import {
   completeForcedPasswordChangeOutcome,
@@ -74,21 +68,203 @@ import {
 } from './features/auth/forcePasswordChangeModel';
 import { LoginScreen, type WorkspaceSsoPresentation } from './features/auth/LoginScreen';
 import {
-  createDesktopAutomationApi,
-  type DesktopAutomationApi,
-} from './features/automations/automationClient';
+  createProjectCronJobsRouteBindingProviderV2,
+} from './features/automations/projectCronJobsRouteBindingProviderV2';
 import { initialDesktopRuntimeConfig } from './features/auth/loginRuntimeModel';
 import { resolveNativeOAuthResumePath } from './features/auth/nativeOAuthSessionModel';
+import type { ChatWorkflowTarget } from './features/chat/ChatWorkflowStrip';
+import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuthorityStateV2';
+import type { DesktopAuthenticatedShellViewModelV2 } from './plugins/DesktopAuthenticatedShellSurfaceV2';
+import type { DesktopSessionCanvasInputV2 } from './plugins/DesktopSessionCanvasSurfaceV2';
+import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRendererAppCompositionV2';
 import {
-  ChatPanel,
-  type AgentTaskSignal,
-  type ChatWorkflowTarget,
-} from './features/chat/ChatPanel';
-import { PlatformPluginConversationSlots } from './features/chat/PlatformPluginConversationSlots';
+  createDesktopPluginMarketplaceOperationsV2,
+} from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import {
+  createDesktopArtifactContentClientV2,
+} from './plugins/desktopArtifactContentAuthorityModuleV2';
+import { createDesktopStructuredImagePreviewClientV2 } from './plugins/desktopStructuredImagePreviewAuthorityModuleV2';
+import { createDesktopAutomationOperationsV2 } from './plugins/desktopAutomationAuthorityModuleV2';
+import { createDesktopConversationLifecycleOperationsV2 } from './plugins/desktopConversationLifecycleAuthorityModuleV2';
+import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
+import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
+import { createDesktopMyWorkOperationsV2 } from './plugins/desktopMyWorkAuthorityModuleV2';
+import {
+  createDesktopNewTaskFlowOperationsV2,
+  type DesktopNewTaskFlowClientV2,
+} from './plugins/desktopNewTaskFlowAuthorityModuleV2';
+import {
+  createDesktopNewThreadCreationOperationsV2,
+} from './plugins/desktopNewThreadCreationAuthorityModuleV2';
+import {
+  createDesktopProjectOverviewOperationsV2,
+} from './plugins/desktopProjectOverviewAuthorityModuleV2';
+import {
+  createDesktopProjectAgentDashboardOperationsV2,
+} from './plugins/desktopProjectAgentDashboardAuthorityModuleV2';
+import {
+  createDesktopProjectAgentLogsOperationsV2,
+} from './plugins/desktopProjectAgentLogsAuthorityModuleV2';
+import {
+  createDesktopProjectAgentPatternsOperationsV2,
+} from './plugins/desktopProjectAgentPatternsAuthorityModuleV2';
+import {
+  createDesktopProjectCommunitiesOperationsV2,
+} from './plugins/desktopProjectCommunitiesAuthorityModuleV2';
+import {
+  createDesktopProjectEntitiesOperationsV2,
+} from './plugins/desktopProjectEntitiesAuthorityModuleV2';
+import {
+  createDesktopProjectGraphOperationsV2,
+} from './plugins/desktopProjectGraphAuthorityModuleV2';
+import {
+  createDesktopProjectMemoriesOperationsV2,
+} from './plugins/desktopProjectMemoriesAuthorityModuleV2';
+import {
+  createDesktopProjectTeamOperationsV2,
+} from './plugins/desktopProjectTeamAuthorityModuleV2';
+import { createDesktopProjectSchemaOperationsV2 } from './plugins/desktopProjectSchemaAuthorityModuleV2';
+import { createDesktopProjectMaintenanceOperationsV2 } from './plugins/desktopProjectMaintenanceAuthorityModuleV2';
+import { createDesktopProjectSettingsOperationsV2 } from './plugins/desktopProjectSettingsAuthorityModuleV2';
+import { createDesktopProjectChannelsOperationsV2 } from './plugins/desktopProjectChannelsAuthorityModuleV2';
+import { createDesktopProjectSupportOperationsV2 } from './plugins/desktopProjectSupportAuthorityModuleV2';
+import { createDesktopProjectPlaybooksReadOperationsV2 } from './plugins/desktopProjectPlaybooksReadAuthorityModuleV2';
+import { createDesktopProjectPlaybooksEventsOperationsV2 } from './plugins/desktopProjectPlaybooksEventsAuthorityModuleV2';
+import { createDesktopBackendStoresOperationsV2 } from './plugins/desktopBackendStoresAuthorityModuleV2';
+import { createDesktopDeadLetterQueueOperationsV2 } from './plugins/desktopDeadLetterQueueAuthorityModuleV2';
+import { createDesktopInstanceTemplatesOperationsV2 } from './plugins/desktopInstanceTemplatesAuthorityModuleV2';
+import { createDesktopUnifiedRuntimesOperationsV2 } from './plugins/desktopUnifiedRuntimesAuthorityModuleV2';
+import { createDesktopTenantEventsOperationsV2 } from './plugins/desktopTenantEventsAuthorityModuleV2';
+import { createDesktopTenantPatternsOperationsV2 } from './plugins/desktopTenantPatternsAuthorityModuleV2';
+import { createDesktopTenantEvolutionOperationsV2 } from './plugins/desktopTenantEvolutionAuthorityModuleV2';
+import { createDesktopTenantTemplatesOperationsV2 } from './plugins/desktopTenantTemplatesAuthorityModuleV2';
+import {
+  createDesktopTenantAgentDefinitionsClientV2,
+  createDesktopTenantAgentDefinitionsOperationsV2,
+} from './plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
+import {
+  createDesktopTenantPromptTemplatesClientV2,
+  createDesktopTenantPromptTemplatesOperationsV2,
+} from './plugins/desktopTenantPromptTemplatesAuthorityModuleV2';
+import {
+  createDesktopTenantSubAgentDefinitionsClientV2,
+  createDesktopTenantSubAgentDefinitionsOperationsV2,
+} from './plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
+import {
+  createDesktopProjectMcpAppsOperationsV2,
+  createDesktopProjectMcpAppsClientV2,
+} from './plugins/desktopProjectMcpAppsAuthorityModuleV2';
+import {
+  createDesktopProjectActivityReadStateOperationsV2,
+  createDesktopProjectActivityReadStateClientV2,
+} from './plugins/desktopProjectActivityReadStateAuthorityModuleV2';
+import {
+  createDesktopProjectSandboxSurfaceOperationsV2,
+  createDesktopProjectSandboxSurfaceClientV2,
+} from './plugins/desktopProjectSandboxSurfaceAuthorityModuleV2';
+import {
+  createDesktopProjectSandboxUploadOperationsV2,
+} from './plugins/desktopProjectSandboxUploadAuthorityModuleV2';
+import { createDesktopBrowserIntegrationOperationsV2 } from './plugins/desktopBrowserIntegrationAuthorityModuleV2';
+import { createDesktopProjectMcpServersOperationsV2 } from './plugins/desktopProjectMcpServersAuthorityModuleV2';
+import {
+  createDesktopTenantProvidersClientV2,
+  createDesktopTenantProvidersOperationsV2,
+} from './plugins/desktopTenantProvidersAuthorityModuleV2';
+import {
+  createDesktopWorkspaceAgentPolicyClientV2,
+  createDesktopWorkspaceAgentPolicyOperationsV2,
+} from './plugins/desktopWorkspaceAgentPolicyAuthorityModuleV2';
+import { createDesktopTenantSkillDefinitionsClientV2, createDesktopTenantSkillDefinitionsOperationsV2 } from './plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
+import { createDesktopTenantSkillPackagesOperationsV2 } from './plugins/desktopTenantSkillPackagesAuthorityModuleV2';
+import { createDesktopTenantSkillEvolutionOperationsV2 } from './plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
+import { createDesktopTenantGenesOperationsV2 } from './plugins/desktopTenantGenesAuthorityModuleV2';
+import { createDesktopTenantOrganizationSettingsOperationsV2 } from './plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
+import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAuthorityModuleV2';
+import { createDesktopTenantDecisionRecordsOperationsV2 } from './plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
+import { createDesktopTenantSettingsOperationsV2 } from './plugins/desktopTenantSettingsAuthorityModuleV2';
+import { createDesktopTenantWebhooksOperationsV2 } from './plugins/desktopTenantWebhooksAuthorityModuleV2';
+import { createDesktopTenantBillingOperationsV2 } from './plugins/desktopTenantBillingAuthorityModuleV2';
+import { createDesktopTenantAuditOperationsV2 } from './plugins/desktopTenantAuditAuthorityModuleV2';
+import { createDesktopTenantGovernanceOperationsV2 } from './plugins/desktopTenantGovernanceAuthorityModuleV2';
+import { createDesktopTenantTrustOperationsV2 } from './plugins/desktopTenantTrustAuthorityModuleV2';
+import { createDesktopUserProfileOperationsV2 } from './plugins/desktopUserProfileAuthorityModuleV2';
+import {
+  createDesktopProjectBlackboardOperationsV2,
+  createDesktopWorkspaceCollaborationClientV2,
+} from './plugins/desktopProjectBlackboardAuthorityModuleV2';
+import { createDesktopRuntimePoolOperationsV2 } from './plugins/desktopRuntimePoolAuthorityModuleV2';
+import { createDesktopRuntimeClustersOperationsV2 } from './plugins/desktopRuntimeClustersAuthorityModuleV2';
+import { createDesktopRuntimeInstancesOperationsV2 } from './plugins/desktopRuntimeInstancesAuthorityModuleV2';
+import { createDesktopRuntimeDeploymentsOperationsV2 } from './plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
+import {
+  createDesktopProjectSearchOperationsV2,
+} from './plugins/desktopProjectSearchAuthorityModuleV2';
+import {
+  createDesktopSessionArtifactActionOperationsV2,
+} from './plugins/desktopSessionArtifactActionAuthorityModuleV2';
+import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
+import { createDesktopSessionRunControlOperationsV2 } from './plugins/desktopSessionRunControlAuthorityModuleV2';
+import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
+import { createDesktopSessionRunInputOperationsV2 } from './plugins/desktopSessionRunInputAuthorityModuleV2';
+import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
+import { createDesktopTenantAgentBindingsOperationsV2 } from './plugins/desktopTenantAgentBindingsAuthorityModuleV2';
+import { createDesktopTenantAgentDashboardOperationsV2 } from './plugins/desktopTenantAgentDashboardAuthorityModuleV2';
+import { createDesktopTenantAnalyticsOperationsV2 } from './plugins/desktopTenantAnalyticsAuthorityModuleV2';
+import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
+import { createDesktopTenantCreationOperationsV2 } from './plugins/desktopTenantCreationAuthorityModuleV2';
+import { createDesktopTenantOverviewOperationsV2 } from './plugins/desktopTenantOverviewAuthorityModuleV2';
+import { createDesktopTenantProjectsOperationsV2 } from './plugins/desktopTenantProjectsAuthorityModuleV2';
+import { createDesktopTenantTasksOperationsV2 } from './plugins/desktopTenantTasksAuthorityModuleV2';
+import {
+  createDesktopWorkspaceAgentBindingOperationsV2,
+} from './plugins/desktopWorkspaceAgentBindingAuthorityModuleV2';
+import {
+  createDesktopWorkspaceAutonomyAttentionOperationsV2,
+} from './plugins/desktopWorkspaceAutonomyAttentionAuthorityModuleV2';
+import {
+  createDesktopWorkspaceMemberMutationOperationsV2,
+} from './plugins/desktopWorkspaceMemberMutationAuthorityModuleV2';
+import {
+  createDesktopWorkspaceMessageCatalogOperationsV2,
+} from './plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2';
+import {
+  createDesktopWorkspaceConversationCatalogOperationsV2,
+} from './plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2';
+import {
+  createDesktopWorkspaceCatalogOperationsV2,
+} from './plugins/desktopWorkspaceCatalogAuthorityModuleV2';
+import {
+  createDesktopWorkspaceLifecycleOperationsV2,
+} from './plugins/desktopWorkspaceLifecycleAuthorityModuleV2';
+import {
+  createDesktopWorkspaceRosterOperationsV2,
+} from './plugins/desktopWorkspaceRosterAuthorityModuleV2';
+import {
+  createDesktopWorkspaceExecutionSnapshotOperationsV2,
+} from './plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2';
+import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
+import {
+  acquireDesktopTerminalLifecycleAuthorityV2,
+  type DesktopTerminalLifecycleAuthorityV2,
+} from './plugins/desktopTerminalLifecycleAuthorityModuleV2';
+import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
+import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
+import {
+  DesktopRendererGenerationProviderV2,
+  useDesktopRendererGenerationHostV2,
+} from './plugins/DesktopRendererGenerationHostV2';
+import { withDesktopWorkspaceContextAuthorityOperationV2 } from './plugins/desktopWorkspaceContextAuthorityModuleV2';
+import type {
+  DesktopWorkbenchSurfaceViewModelV2,
+  DesktopWorkbenchViewV2,
+} from './plugins/DesktopWorkbenchSurfaceV2';
 import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
-import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
+import {
+  reconcileAgentTaskSignals,
+  type AgentTaskSignal,
+} from './features/chat/agentTaskSignalModel';
 import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
-import { createHttpDesktopArtifactClient } from './features/chat/desktopArtifactClient';
 import {
   applyArtifactCanvasStreamEvent,
   emptyArtifactCanvasState,
@@ -96,6 +272,7 @@ import {
   selectArtifactCanvasTab,
   type LiveArtifactCanvasState,
 } from './features/chat/artifactCanvasEventModel';
+import { createDesktopChatComposerCatalogClientV2 } from './features/chat/desktopChatComposerCatalogClientV2';
 import { unboundComposerCatalogClient } from './features/chat/composerCatalogModel';
 import {
   applyConversationTitleUpdate,
@@ -124,11 +301,7 @@ import {
   type MCPAppCanvasState,
 } from './features/chat/mcpAppCanvasEventModel';
 import { useToast } from './features/feedback/ToastCenter';
-import { DesktopStatusBar } from './features/chrome/DesktopStatusBar';
-import { DesktopRightSidebar } from './features/chrome/DesktopRightSidebar';
 import type { DesktopRightPanel } from './features/chrome/DesktopRightSidebar';
-import { DesktopTitlebar } from './features/chrome/DesktopTitlebar';
-import { WorkbenchTabBar } from './features/chrome/WorkbenchTabBar';
 import {
   clearConversationTabs,
   closeTab,
@@ -139,7 +312,6 @@ import {
   tabKey,
   type WorkbenchTab,
 } from './features/chrome/workbenchTabBarModel';
-import { SessionWorkspace } from './features/session/SessionWorkspace';
 import { buildRunCompletionSummary } from './features/session/runCompletionSummaryModel';
 import { deriveSessionUsage } from './features/session/sessionUsageModel';
 import {
@@ -149,6 +321,7 @@ import {
   type ArtifactVersionAction,
 } from './features/session/sessionArtifactModel';
 import {
+  chatWorkflowTargetForReviewTab,
   defaultSessionCanvasTab,
   shouldShowSessionCanvas,
   type SessionCanvasTabId,
@@ -201,7 +374,6 @@ import {
   respondableHitlRequestsForProjection,
   type SessionRunAction,
 } from './features/session/sessionViewModel';
-import { type SessionCanvasControls } from './features/session/workspaceReviewPanelModel';
 import { socketEventMatchesSessionScope } from './features/session/sessionScope';
 import { sessionActivityPresence } from './features/session/sessionNarrativeModel';
 import {
@@ -212,16 +384,15 @@ import {
   failEarlierTimelinePage,
   resolveEarlierTimelinePage,
 } from './features/session/sessionTimelinePaginationModel';
-import { MyWorkQueue } from './features/my-work/MyWorkQueue';
-import { ActivityInbox } from './features/activity/ActivityInbox';
 import { useActivityInbox } from './features/activity/useActivityInbox';
 import { useCompletionNotifications } from './features/activity/useCompletionNotifications';
 import {
-  desktopCapability,
-  type DesktopCapabilityView,
-} from './features/runtime/capabilitySnapshot';
+  createDesktopWorkbenchCapabilityClientProviderV2,
+} from './features/runtime/desktopWorkbenchCapabilityClientProviderV2';
+import { desktopCapability } from './features/runtime/capabilitySnapshot';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
-import { createDesktopWorkbenchCapabilityClient } from './features/runtime/workbenchCapabilityClient';
+import { createDesktopWorkbenchSnapshotOperationsV2 } from './plugins/desktopWorkbenchSnapshotAuthorityModuleV2';
+import { createProjectSearchRouteBindingProviderV2 } from './features/search/projectSearchRouteBindingProviderV2';
 import {
   countMyWorkGroups,
   myWorkConversationMatchesScope,
@@ -229,39 +400,10 @@ import {
   socketEventInvalidatesMyWork,
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
-import { AuxiliaryView } from './features/navigation/AuxiliaryView';
-import { DesktopProductionRouter } from './features/navigation/DesktopProductionRouter';
-import { DesktopSidebar } from './features/navigation/DesktopSidebar';
-import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcutsDialog';
-import { CANONICAL_DESKTOP_ROUTE_IDS } from './features/navigation/desktopCanonicalRouteCatalog';
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
-import {
-  DEVICE_APPROVAL_ROUTE_ID,
-  INVITATION_ACCEPTANCE_ROUTE_ID,
-  TENANT_CREATION_ROUTE_ID,
-  BACKEND_STORES_ROUTE_ID,
-  PROJECT_PLAYBOOKS_ROUTE_ID,
-  PROJECT_SEARCH_ROUTE_ID,
-  PROJECT_SUPPORT_ROUTE_ID,
-} from './features/navigation/desktopProductionRouteRegistry';
-import {
-  buildDesktopRoutePath,
-  restoreDesktopRoute,
-} from './features/navigation/desktopRouteRegistry';
-import {
-  desktopRouteBasePermissionsForAuth,
-  resolveDesktopRouteCapability,
-} from './features/navigation/desktopProductionRouteRuntime';
-import {
-  createCloudDesktopRoutePermissionResolver,
-  createLocalDesktopRoutePermissionResolver,
-  type DesktopRoutePermissionSnapshotResolver,
-} from './features/navigation/desktopRoutePermissionAuthority';
-import {
-  createCloudDesktopRoutePermissionClient,
-  createLocalDesktopRoutePermissionClient,
-  createVaultBoundCloudDesktopRoutePermissionClient,
-} from './features/navigation/desktopRoutePermissionHttpClient';
+import { DEVICE_APPROVAL_ROUTE_ID } from './features/navigation/desktopProductionRouteRegistry';
+import { restoreDesktopRoute } from './features/navigation/desktopRouteRegistry';
+import { createDesktopProductionRouteAuthorityProviderV2 } from './features/navigation/desktopProductionRouteAuthorityProviderV2';
 import { createDesktopRouteScopeTransaction } from './features/navigation/desktopRouteScopeTransaction';
 import {
   deriveDesktopNavigationDiscoveryEntries,
@@ -272,59 +414,12 @@ import {
   shortcutById,
   shortcutChordFor,
 } from './features/navigation/keyboardShortcutModel';
-import { createProjectAgentDashboardController } from './features/project-agent/projectAgentDashboardController';
-import { createProjectAgentDashboardRouteModuleLoader } from './features/project-agent/projectAgentDashboardRouteModule';
-import { createProjectAgentLogsController } from './features/project-agent/projectAgentLogsController';
-import { createProjectAgentLogsRouteModuleLoader } from './features/project-agent/projectAgentLogsRouteModule';
-import { createProjectAgentPatternsController } from './features/project-agent/projectAgentPatternsController';
-import { createProjectAgentPatternsRouteModuleLoader } from './features/project-agent/projectAgentPatternsRouteModule';
 import {
-  createLocalProjectOverviewClient,
   isCurrentLocalConversationStatusRequest,
   nextLocalConversationStatusRequest,
   type LocalConversationStatusSummary,
   type LocalConversationStatusRequest,
 } from './features/project/projectOverviewLocalClient';
-import { createProjectMaintenanceController } from './features/project-administration/projectMaintenanceController';
-import { createProjectMaintenanceRouteModuleLoader } from './features/project-administration/projectMaintenanceRouteModule';
-import { createProjectSchemaController } from './features/project-administration/projectSchemaController';
-import { createProjectSchemaRouteModuleLoader } from './features/project-administration/projectSchemaRouteModule';
-import { createProjectSettingsController } from './features/project-administration/projectSettingsController';
-import { createProjectSettingsRouteModuleLoader } from './features/project-administration/projectSettingsRouteModule';
-import { createProjectCommunitiesController } from './features/project-knowledge/projectCommunitiesController';
-import { createProjectCommunitiesRouteModuleLoader } from './features/project-knowledge/projectCommunitiesRouteModule';
-import { createProjectEntitiesController } from './features/project-knowledge/projectEntitiesController';
-import { createProjectEntitiesRouteModuleLoader } from './features/project-knowledge/projectEntitiesRouteModule';
-import { createProjectGraphController } from './features/project-knowledge/projectGraphController';
-import { createProjectGraphRouteModuleLoader } from './features/project-knowledge/projectGraphRouteModule';
-import { createProjectMemoriesController } from './features/project-knowledge/projectMemoriesController';
-import { createProjectMemoriesRouteModuleLoader } from './features/project-knowledge/projectMemoriesRouteModule';
-import { createProjectTeamController } from './features/project-knowledge/projectTeamController';
-import { createProjectTeamRouteModuleLoader } from './features/project-knowledge/projectTeamRouteModule';
-import { createTenantGovernanceRouteModuleLoader } from './features/tenant-admin/tenantGovernanceRouteModule';
-import { createTenantBillingRouteModuleLoader } from './features/tenant-admin/tenantBillingRouteModule';
-import { createTenantAuditRouteModuleLoader } from './features/tenant-admin/tenantAuditRouteModule';
-import { createTenantTrustRouteModuleLoader } from './features/tenant-admin/tenantTrustRouteModule';
-import { readTenantDecisionRecordsRouteQuery } from './features/tenant-admin/tenantDecisionRecordsRouteQuery';
-import {
-  createTenantAuditRouteBindingForRuntime,
-  createTenantBillingRouteBindingForRuntime,
-  createTenantGovernanceRouteBindingForRuntime,
-  createTenantTrustRouteBindingForRuntime,
-} from './features/tenant-admin/tenantAdminRouteRuntime';
-import {
-  createTenantAcpRouteBindingForRuntime,
-  createTenantDecisionRecordsRouteBindingForRuntime,
-  createTenantEventsRouteBindingForRuntime,
-  createTenantGenesRouteBindingForRuntime,
-  createTenantOrganizationSettingsRouteBindingForRuntime,
-  createTenantPatternsRouteBindingForRuntime,
-  createTenantSettingsRouteBindingForRuntime,
-  createTenantWebhooksRouteBindingForRuntime,
-} from './features/tenant-admin/tenantRemainingRouteRuntime';
-import { createChannelsRouteModuleLoader } from './features/settings-routes/channelsRouteModule';
-import { createEvolutionRouteModuleLoader } from './features/settings-routes/evolutionRouteModule';
-import { createTemplatesRouteModuleLoader } from './features/settings-routes/templatesRouteModule';
 import {
   createAgentDefinitionsRouteBindingForRuntime,
   createMcpServersRouteBindingForRuntime,
@@ -332,29 +427,16 @@ import {
   createProvidersRouteBindingForRuntime,
   createSkillsRouteBindingForRuntime,
 } from './features/settings-routes/settingsRouteRuntime';
-import { DesktopSearch } from './features/search/DesktopSearch';
 import { terminalInteractiveCapability as resolveTerminalInteractiveCapability } from './features/sandbox/sandboxRuntimeClient';
-import {
-  terminalSessionV2SocketUrl,
-  type TerminalSessionV2,
-} from './features/sandbox/terminalSessionV2';
 import { useSandboxRuntimeSurface } from './features/sandbox/useSandboxRuntimeSurface';
 import {
   settingsSectionForEntry,
   type SettingsEntry,
 } from './features/settings/settingsEntryRouting';
-import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
+import type { SettingsSection } from './features/settings/SettingsWindow';
 import {
-  createProfileFilteredHashLocationPort,
-  matchProfileAuxiliaryRoute,
+  createProfileGenerationHashLocationPort,
 } from './features/settings-routes/profileAuxiliaryRoute';
-import { createProfileRouteModuleLoader } from './features/settings-routes/profileRouteModule';
-import {
-  createChannelsRouteBindingForRuntime,
-  createEvolutionRouteBindingForRuntime,
-  createProfileRouteBindingForRuntime,
-  createTemplatesRouteBindingForRuntime,
-} from './features/settings-routes/p2ThirdBatchRouteRuntime';
 import { latestAgentDefinitionEvent } from './features/settings/agentDefinitionEventModel';
 import { useWorkspaceAgentPolicy } from './features/settings/useWorkspaceAgentPolicy';
 import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
@@ -363,8 +445,10 @@ import {
   latestConversationRuntimeModelEvent,
   projectRuntimeModelOptions,
 } from './features/settings/workspaceRuntimeProviderModel';
-import { NewTaskFlow, type NewTaskResumeDraft } from './features/task/NewTaskFlow';
-import { NewThreadComposer } from './features/task/NewThreadComposer';
+import type { NewTaskResumeDraft } from './features/task/NewTaskFlow';
+import {
+  createDesktopNewThreadComposerCatalogClientProviderV2,
+} from './features/task/desktopNewThreadComposerCatalogClientProviderV2';
 import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
@@ -376,10 +460,6 @@ import {
   type NewTaskAgentTurnOutcome,
 } from './features/task/newTaskPlanModel';
 import { resolveNewTaskWorkspaceAuthority } from './features/task/newTaskSessionModel';
-import { WorkspaceCollaborationCanvas } from './features/workspace/WorkspaceCollaborationCanvas';
-import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
-import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialog';
-import { WorkspaceSettingsDialog } from './features/workspace/WorkspaceSettingsDialog';
 import {
   currentWorkspaceAutonomyAttentionResolveAttempt,
   discardWorkspaceAutonomyAttentionResolveAttempt,
@@ -388,7 +468,6 @@ import {
   type WorkspaceAutonomyAttentionResolveAttempt,
 } from './features/workspace/autonomyAttentionResolveAttemptModel';
 import { createCapabilityWorkspaceCollaborationClient } from './features/workspace/capabilityWorkspaceCollaborationClient';
-import { createHttpWorkspaceCollaborationClient } from './features/workspace/httpWorkspaceCollaborationClient';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
 import type {
   WorkspaceAuthorityInvalidation,
@@ -527,19 +606,8 @@ import {
   type RuntimeHealthState,
   type RuntimeTarget,
 } from './features/runtime/runStatusModel';
-import {
-  WorkspaceReviewPanel,
-  chatWorkflowTargetForReviewTab,
-} from './features/session/WorkspaceReviewPanel';
-import { CommandPalette } from './features/navigation/CommandPalette';
-import { createAppRouteRegistry } from './features/navigation/appRouteRegistry';
 import { useDesktopAuth } from './hooks/useDesktopAuth';
 import { useAgentConversation } from './hooks/useAgentConversation';
-
-const LazyAutomationsPage = lazy(async () => {
-  const { AutomationsPage } = await import('./features/automations/AutomationsPage');
-  return { default: AutomationsPage };
-});
 
 const emptyConversationTimeline: ConversationTimelineState = {
   conversationId: null,
@@ -704,7 +772,8 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [sandboxBusy, setSandboxBusy] = useState(false);
   const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(null);
-  const [terminalV2, setTerminalV2] = useState<TerminalSessionV2 | null>(null);
+  const [terminalLifecycle, setTerminalLifecycle] =
+    useState<DesktopTerminalLifecycleAuthorityV2 | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
   const agentConversationSessionRef = useRef(agentConversationSession);
@@ -810,35 +879,655 @@ export function App() {
     requestId: string;
   } | null>(null);
   const terminalStartGenerationRef = useRef(0);
+  const terminalLifecycleRef = useRef<DesktopTerminalLifecycleAuthorityV2 | null>(null);
   const currentArtifactRunRef = useRef<DesktopRun | null>(null);
   const artifactCanvasStateRef = useRef(artifactCanvasState);
   const mcpAppCanvasStateRef = useRef(mcpAppCanvasState);
   const terminalRunScopeKeyRef = useRef('');
   const workbenchRef = useRef<HTMLElement>(null);
   const settingsRouteCloseNavigationRef = useRef<(() => void) | null>(null);
-  const profileAuxiliaryRouteActiveRef = useRef(false);
   const productionRouteRefreshRef = useRef<
     ((nextConfig: DesktopRuntimeConfig, projects: ProjectSummary[]) => Promise<boolean>) | null
   >(null);
-  const projectSearchRouteBindingRef = useRef<Readonly<{
-    api: DesktopApiClient;
-    config: DesktopRuntimeConfig;
-    project: ProjectSummary | null;
-    capability: DesktopCapabilityView;
-    capabilityLoading: boolean;
-    onRetryCapability: () => void;
-  }> | null>(null);
-  const projectCronJobsRouteBindingRef = useRef<Readonly<{
-    api: DesktopAutomationApi;
-    config: DesktopRuntimeConfig;
-    project: ProjectSummary | null;
-    runCapability: DesktopCapabilityView;
-    onOpenProjectSettings: () => void;
-    onOpenConnection: () => void;
-  }> | null>(null);
+  const projectSearchRouteBindingProviderV2 = useMemo(
+    () => createProjectSearchRouteBindingProviderV2(),
+    [],
+  );
+  const projectCronJobsRouteBindingProviderV2 = useMemo(
+    () => createProjectCronJobsRouteBindingProviderV2(),
+    [],
+  );
+  const desktopWorkbenchCapabilityClientProviderV2 = useMemo(
+    () => createDesktopWorkbenchCapabilityClientProviderV2(),
+    [],
+  );
+  const desktopPluginMarketplaceGenerationActionsRefV2 =
+    useRef<DesktopRendererGenerationActionsV2 | null>(null);
+  const desktopWorkbenchSnapshotOperationsV2 = useMemo(
+    () => createDesktopWorkbenchSnapshotOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopProjectBlackboardOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectBlackboardOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceCollaborationClientV2 = useMemo(
+    () =>
+      createDesktopWorkspaceCollaborationClientV2(
+        desktopProjectBlackboardOperationsV2,
+        () => configRef.current,
+        'workspace-collaboration',
+      ),
+    [desktopProjectBlackboardOperationsV2],
+  );
+  const desktopArtifactClientV2 = useMemo(
+    () =>
+      createDesktopArtifactContentClientV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+        () => configRef.current,
+      ),
+    [],
+  );
+  const desktopAutomationApiV2 = useMemo(
+    () =>
+      createDesktopAutomationOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+        () => configRef.current,
+      ),
+    [],
+  );
+  const desktopPluginMarketplaceOperationsV2 = useMemo(
+    () =>
+      createDesktopPluginMarketplaceOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantCatalogOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantCatalogOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantOverviewOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantOverviewOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantAnalyticsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAnalyticsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantAgentDashboardOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAgentDashboardOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantAgentBindingsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAgentBindingsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantProjectsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantProjectsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantTasksOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantTasksOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectOverviewOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectOverviewOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectAgentDashboardOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectAgentDashboardOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectAgentLogsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectAgentLogsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectAgentPatternsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectAgentPatternsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectCommunitiesOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectCommunitiesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectMemoriesOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectMemoriesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectTeamOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectTeamOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectSchemaOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectSchemaOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectMaintenanceOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectMaintenanceOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectSettingsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectSettingsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectSupportOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectSupportOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectPlaybooksReadOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectPlaybooksReadOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectPlaybooksEventsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectPlaybooksEventsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopBackendStoresOperationsV2 = useMemo(
+    () =>
+      createDesktopBackendStoresOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopDeadLetterQueueOperationsV2 = useMemo(
+    () =>
+      createDesktopDeadLetterQueueOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopInstanceTemplatesOperationsV2 = useMemo(
+    () =>
+      createDesktopInstanceTemplatesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopUnifiedRuntimesOperationsV2 = useMemo(
+    () =>
+      createDesktopUnifiedRuntimesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantEventsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantEventsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantPatternsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantPatternsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantEvolutionOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantEvolutionOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantTemplatesOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantTemplatesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantAgentDefinitionsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAgentDefinitionsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectActivityReadStateOperationsV2 = useMemo(
+    () => createDesktopProjectActivityReadStateOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopProjectSandboxSurfaceOperationsV2 = useMemo(
+    () => createDesktopProjectSandboxSurfaceOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopProjectSandboxUploadOperationsV2 = useMemo(
+    () => createDesktopProjectSandboxUploadOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopBrowserIntegrationOperationsV2 = useMemo(
+    () => createDesktopBrowserIntegrationOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopProjectMcpAppsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectMcpAppsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectMcpServersOperationsV2 = useMemo(
+    () => createDesktopProjectMcpServersOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopTenantProvidersOperationsV2 = useMemo(
+    () => createDesktopTenantProvidersOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopWorkspaceAgentPolicyOperationsV2 = useMemo(
+    () => createDesktopWorkspaceAgentPolicyOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopTenantSkillDefinitionsOperationsV2 = useMemo(
+    () => createDesktopTenantSkillDefinitionsOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopTenantSkillPackagesOperationsV2 = useMemo(
+    () => createDesktopTenantSkillPackagesOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopTenantSkillEvolutionOperationsV2 = useMemo(
+    () => createDesktopTenantSkillEvolutionOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopTenantSubAgentDefinitionsOperationsV2 = useMemo(
+    () => createDesktopTenantSubAgentDefinitionsOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopTenantPromptTemplatesOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantPromptTemplatesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopUserProfileOperationsV2 = useMemo(
+    () =>
+      createDesktopUserProfileOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectChannelsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectChannelsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantGenesOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantGenesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantOrganizationSettingsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantOrganizationSettingsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantAcpOperationsV2 = useMemo(
+    () => createDesktopTenantAcpOperationsV2(() => desktopPluginMarketplaceGenerationActionsRefV2.current),
+    [],
+  );
+  const desktopTenantDecisionRecordsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantDecisionRecordsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantSettingsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantSettingsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantWebhooksOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantWebhooksOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantBillingOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantBillingOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantAuditOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAuditOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantGovernanceOperationsV2 = useMemo(
+    () => createDesktopTenantGovernanceOperationsV2(() => desktopPluginMarketplaceGenerationActionsRefV2.current),
+    [],
+  );
+  const desktopTenantTrustOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantTrustOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopTenantCreationOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantCreationOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectEntitiesOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectEntitiesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectGraphOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectGraphOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopRuntimePoolOperationsV2 = useMemo(
+    () =>
+      createDesktopRuntimePoolOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopRuntimeClustersOperationsV2 = useMemo(
+    () =>
+      createDesktopRuntimeClustersOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopRuntimeInstancesOperationsV2 = useMemo(
+    () =>
+      createDesktopRuntimeInstancesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopRuntimeDeploymentsOperationsV2 = useMemo(
+    () =>
+      createDesktopRuntimeDeploymentsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopConversationConfigOperationsV2 = useMemo(
+    () =>
+      createDesktopConversationConfigOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopConversationLifecycleOperationsV2 = useMemo(
+    () =>
+      createDesktopConversationLifecycleOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceMessageCatalogOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceMessageCatalogOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceConversationCatalogOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceConversationCatalogOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceAgentBindingOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceAgentBindingOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceAutonomyAttentionOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceAutonomyAttentionOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceMemberMutationOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceMemberMutationOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceCatalogOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceCatalogOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceLifecycleOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceLifecycleOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceExecutionSnapshotOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceExecutionSnapshotOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopMyWorkOperationsV2 = useMemo(
+    () =>
+      createDesktopMyWorkOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopNewTaskFlowClientV2 = useMemo(
+    () =>
+      createDesktopNewTaskFlowOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopNewThreadCreationOperationsV2 = useMemo(
+    () =>
+      createDesktopNewThreadCreationOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopProjectSearchOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectSearchOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+        () => configRef.current,
+      ),
+    [],
+  );
+  const desktopSessionArtifactActionOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionArtifactActionOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopSessionRunControlOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionRunControlOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopHitlResponseOperationsV2 = useMemo(
+    () =>
+      createDesktopHitlResponseOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopSessionProjectionOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionProjectionOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopSessionTimelineOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionTimelineOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopSessionRunChangesOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionRunChangesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopSessionRunInputOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionRunInputOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopAgentAuthorityProviderV2 = useMemo(
+    () => createDesktopAgentAuthorityProviderV2(),
+    [],
+  );
+  const desktopProductionRouteAuthorityProviderV2 = useMemo(
+    () => createDesktopProductionRouteAuthorityProviderV2(),
+    [],
+  );
+  const desktopWorkspaceRosterOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceRosterOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopNewThreadComposerCatalogClientProviderV2 = useMemo(
+    () => createDesktopNewThreadComposerCatalogClientProviderV2(),
+    [],
+  );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
   const desktopProductionRouteLocation = useMemo(
-    () => createProfileFilteredHashLocationPort(desktopBrowserHashLocation),
+    () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
     [desktopBrowserHashLocation],
   );
   const desktopProductionRouteNavigation = useMemo(
@@ -853,43 +1542,6 @@ export function App() {
       }),
     [],
   );
-  const profileRouteModuleLoader = useMemo(
-    () =>
-      createProfileRouteModuleLoader({
-        createBinding: () =>
-          createProfileRouteBindingForRuntime(configRef.current, (user) =>
-            setAuth((current) =>
-              current.user?.user_id === user.user_id ? { ...current, user } : current,
-            ),
-          ),
-      }),
-    [],
-  );
-
-  useEffect(() => {
-    const synchronizeProfileRoute = () => {
-      const match = matchProfileAuxiliaryRoute(desktopBrowserHashLocation.readHash());
-      if (!match) {
-        if (profileAuxiliaryRouteActiveRef.current) {
-          profileAuxiliaryRouteActiveRef.current = false;
-          if (
-            settingsRouteCloseNavigationRef.current === desktopProductionRouteNavigation.clearHash
-          ) {
-            settingsRouteCloseNavigationRef.current = null;
-          }
-          setSettingsWindowOpen(false);
-        }
-        return;
-      }
-      profileAuxiliaryRouteActiveRef.current = true;
-      settingsRouteCloseNavigationRef.current = desktopProductionRouteNavigation.clearHash;
-      setSettingsInitialSection('account');
-      if (auth.status === 'signed_in') setSettingsWindowOpen(true);
-    };
-    synchronizeProfileRoute();
-    return desktopBrowserHashLocation.subscribe(synchronizeProfileRoute);
-  }, [auth.status, desktopBrowserHashLocation, desktopProductionRouteNavigation.clearHash]);
-
   useEffect(() => {
     datasetRef.current = dataset;
   }, [dataset]);
@@ -983,60 +1635,266 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
-  const desktopProductionRouteRegistry = useMemo(
-    () =>
-      createAppRouteRegistry({
-        api,
-        authRef,
-        configRef,
-        desktopProductionRouteLocation,
-        desktopProductionRouteNavigation,
-        projectCronJobsRouteBindingRef,
-        projectSearchRouteBindingRef,
-        setAuth,
-        setInvitationSignInRequested,
-        setSettingsInitialSection,
-        setSettingsWindowOpen,
-        commitRuntimeConfig,
-        settingsRouteCloseNavigationRef,
-      }),
-    [],
+  const desktopProjectActivityReadStateClientV2 = useMemo(
+    () => createDesktopProjectActivityReadStateClientV2(
+      desktopProjectActivityReadStateOperationsV2, config,
+    ),
+    [config, desktopProjectActivityReadStateOperationsV2],
   );
-  const desktopCanonicalNavigationRegistry = useMemo(
-    () =>
-      Object.freeze({
-        definitions: Object.freeze(
-          CANONICAL_DESKTOP_ROUTE_IDS.map((routeId) => {
-            const definition = desktopProductionRouteRegistry.byId.get(routeId);
-            if (!definition) {
-              throw new Error(`desktop_navigation_discovery_route_missing:${routeId}`);
-            }
-            return definition;
-          }),
-        ),
-        byId: desktopProductionRouteRegistry.byId,
-      }),
-    [desktopProductionRouteRegistry],
+  const desktopProjectMcpAppsClientV2 = useMemo(
+    () => createDesktopProjectMcpAppsClientV2(desktopProjectMcpAppsOperationsV2, config),
+    [config, desktopProjectMcpAppsOperationsV2],
   );
-  const automationApi = useMemo(() => createDesktopAutomationApi(api, config), [api, config]);
-  const artifactApi = useMemo(() => createHttpDesktopArtifactClient(config), [config]);
-  const workbenchCapabilityClient = useMemo(
-    () => createDesktopWorkbenchCapabilityClient(automationApi, config),
-    [automationApi, config],
+  const desktopTenantAgentDefinitionsClientV2 = useMemo(
+    () =>
+      createDesktopTenantAgentDefinitionsClientV2(
+        desktopTenantAgentDefinitionsOperationsV2,
+        config,
+      ),
+    [config, desktopTenantAgentDefinitionsOperationsV2],
+  );
+  const desktopTenantProvidersClientV2 = useMemo(
+    () => createDesktopTenantProvidersClientV2(desktopTenantProvidersOperationsV2, config),
+    [config, desktopTenantProvidersOperationsV2],
+  );
+  const desktopTenantSkillDefinitionsClientV2 = useMemo(
+    () => createDesktopTenantSkillDefinitionsClientV2(
+      desktopTenantSkillDefinitionsOperationsV2, config,
+    ),
+    [config, desktopTenantSkillDefinitionsOperationsV2],
+  );
+  const desktopTenantSubAgentDefinitionsClientV2 = useMemo(
+    () => createDesktopTenantSubAgentDefinitionsClientV2(
+      desktopTenantSubAgentDefinitionsOperationsV2, config,
+    ),
+    [config, desktopTenantSubAgentDefinitionsOperationsV2],
+  );
+  const desktopTenantPromptTemplatesClientV2 = useMemo(
+    () =>
+      createDesktopTenantPromptTemplatesClientV2(
+        desktopTenantPromptTemplatesOperationsV2,
+        config,
+      ),
+    [config, desktopTenantPromptTemplatesOperationsV2],
+  );
+  const desktopRendererRouteRefsV2 = useMemo(
+    () => ({
+      authRef,
+      configRef,
+      desktopProductionRouteLocation,
+      desktopProductionRouteNavigation,
+      pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+      projectBlackboardOperationsV2: desktopProjectBlackboardOperationsV2,
+      projectAgentDashboardOperationsV2: desktopProjectAgentDashboardOperationsV2,
+      projectAgentLogsOperationsV2: desktopProjectAgentLogsOperationsV2,
+      projectAgentPatternsOperationsV2: desktopProjectAgentPatternsOperationsV2,
+      projectCommunitiesOperationsV2: desktopProjectCommunitiesOperationsV2,
+      projectEntitiesOperationsV2: desktopProjectEntitiesOperationsV2,
+      projectGraphOperationsV2: desktopProjectGraphOperationsV2,
+      projectMemoriesOperationsV2: desktopProjectMemoriesOperationsV2,
+      projectTeamOperationsV2: desktopProjectTeamOperationsV2,
+      projectSchemaOperationsV2: desktopProjectSchemaOperationsV2,
+      projectMaintenanceOperationsV2: desktopProjectMaintenanceOperationsV2,
+      projectSettingsOperationsV2: desktopProjectSettingsOperationsV2,
+      projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
+      projectSupportOperationsV2: desktopProjectSupportOperationsV2,
+      projectPlaybooksReadOperationsV2: desktopProjectPlaybooksReadOperationsV2,
+      projectPlaybooksEventsOperationsV2: desktopProjectPlaybooksEventsOperationsV2,
+      backendStoresOperationsV2: desktopBackendStoresOperationsV2,
+      deadLetterQueueOperationsV2: desktopDeadLetterQueueOperationsV2,
+      instanceTemplatesOperationsV2: desktopInstanceTemplatesOperationsV2,
+      unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
+      tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
+      tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
+      tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
+      tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
+      tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
+      projectMcpServersOperationsV2: desktopProjectMcpServersOperationsV2,
+      tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
+      tenantAgentDefinitionsOperationsV2:
+        desktopTenantAgentDefinitionsOperationsV2,
+      userProfileOperationsV2: desktopUserProfileOperationsV2,
+      tenantGenesOperationsV2: desktopTenantGenesOperationsV2,
+      tenantOrganizationSettingsOperationsV2:
+        desktopTenantOrganizationSettingsOperationsV2,
+      tenantAcpOperationsV2: desktopTenantAcpOperationsV2,
+      tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
+      tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
+      tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
+      tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
+      tenantAuditOperationsV2: desktopTenantAuditOperationsV2,
+      tenantGovernanceOperationsV2: desktopTenantGovernanceOperationsV2,
+      tenantTrustOperationsV2: desktopTenantTrustOperationsV2,
+      projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
+      runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
+      runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
+      runtimeInstancesOperationsV2: desktopRuntimeInstancesOperationsV2,
+      runtimeDeploymentsOperationsV2: desktopRuntimeDeploymentsOperationsV2,
+      tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
+      tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
+      tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
+      tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
+      tenantCreationOperationsV2: desktopTenantCreationOperationsV2,
+      tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
+      tenantProjectsOperationsV2: desktopTenantProjectsOperationsV2,
+      tenantTasksOperationsV2: desktopTenantTasksOperationsV2,
+      desktopWorkspaceCatalogOperationsV2,
+      desktopWorkspaceLifecycleOperationsV2,
+      projectCronJobsRouteBindingProviderV2,
+      projectSearchOperationsV2: desktopProjectSearchOperationsV2,
+      projectSearchRouteBindingProviderV2,
+      setAuth,
+      setInvitationSignInRequested,
+      setSettingsInitialSection,
+      setSettingsWindowOpen,
+      commitRuntimeConfig,
+      settingsRouteCloseNavigationRef,
+    }),
+    [
+      desktopPluginMarketplaceOperationsV2,
+      desktopProjectBlackboardOperationsV2,
+      desktopProjectAgentDashboardOperationsV2,
+      desktopProjectAgentLogsOperationsV2,
+      desktopProjectAgentPatternsOperationsV2,
+      desktopProjectCommunitiesOperationsV2,
+      desktopProjectEntitiesOperationsV2,
+      desktopProjectGraphOperationsV2,
+      desktopProjectMemoriesOperationsV2,
+      desktopProjectTeamOperationsV2,
+      desktopProjectSchemaOperationsV2,
+      desktopProjectMaintenanceOperationsV2,
+      desktopProjectSettingsOperationsV2,
+      desktopProjectChannelsOperationsV2,
+      desktopProjectSupportOperationsV2,
+      desktopProjectPlaybooksReadOperationsV2,
+      desktopProjectPlaybooksEventsOperationsV2,
+      desktopBackendStoresOperationsV2,
+      desktopDeadLetterQueueOperationsV2,
+      desktopInstanceTemplatesOperationsV2,
+      desktopProjectOverviewOperationsV2,
+      desktopProjectSearchOperationsV2,
+      desktopRuntimePoolOperationsV2,
+      desktopRuntimeClustersOperationsV2,
+      desktopRuntimeDeploymentsOperationsV2,
+      desktopTenantAgentBindingsOperationsV2,
+      desktopTenantAgentDashboardOperationsV2,
+      desktopTenantAnalyticsOperationsV2,
+      desktopTenantCatalogOperationsV2,
+      desktopTenantCreationOperationsV2,
+      desktopTenantGenesOperationsV2,
+      desktopTenantTemplatesOperationsV2,
+      desktopTenantAgentDefinitionsOperationsV2,
+      desktopTenantSkillDefinitionsOperationsV2,
+      desktopTenantProvidersOperationsV2,
+      desktopProjectMcpServersOperationsV2,
+      desktopUserProfileOperationsV2,
+      desktopTenantOrganizationSettingsOperationsV2,
+      desktopTenantOverviewOperationsV2,
+      desktopTenantProjectsOperationsV2,
+      desktopTenantTasksOperationsV2,
+      desktopWorkspaceCatalogOperationsV2,
+      desktopWorkspaceLifecycleOperationsV2,
+    ],
+  );
+  const desktopRendererCompositionV2 = useMemo(
+    () => createDesktopRendererAppCompositionPortV2(desktopRendererRouteRefsV2),
+    [desktopRendererRouteRefsV2],
+  );
+  const desktopRendererGenerationV2 = useDesktopRendererGenerationHostV2(
+    config,
+    identityAuthenticated,
+    desktopRendererCompositionV2,
+  );
+  const desktopProjectSandboxSurfaceClientV2 = useMemo(
+    () => createDesktopProjectSandboxSurfaceClientV2(desktopProjectSandboxSurfaceOperationsV2, config),
+    [config, desktopProjectSandboxSurfaceOperationsV2, desktopRendererGenerationV2.actions, auth.user?.user_id],
+  );
+  const desktopBrowserBridgeManagementClientV2 = useMemo(() => {
+    const actions = desktopRendererGenerationV2.actions;
+    return createDesktopBrowserBridgeManagementClientV2(
+      createDesktopBrowserBridgeManagementOperationsV2(() => actions), config,
+    );
+  }, [config, desktopRendererGenerationV2.actions, auth.user?.user_id]);
+  const desktopVoiceSessionOperationsV2 = useMemo(() => {
+    const actions = desktopRendererGenerationV2.actions;
+    return createDesktopVoiceSessionOperationsV2(() => actions);
+  }, [desktopRendererGenerationV2.actions, auth.user?.user_id]);
+  const desktopConversationMessagingOperationsV2 = useMemo(() => {
+    const actions = desktopRendererGenerationV2.actions;
+    return createDesktopConversationMessagingOperationsV2(() => actions);
+  }, [desktopRendererGenerationV2.actions]);
+  useLayoutEffect(() => {
+    const actions = desktopRendererGenerationV2.actions;
+    desktopPluginMarketplaceGenerationActionsRefV2.current = actions;
+    return () => {
+      if (desktopPluginMarketplaceGenerationActionsRefV2.current === actions) {
+        desktopPluginMarketplaceGenerationActionsRefV2.current = null;
+      }
+    };
+  }, [desktopRendererGenerationV2.actions]);
+  const isDesktopRendererRuntimeAdmittedV2 = useDesktopRendererRuntimeAdmissionV2(
+    identityAuthenticated,
+    desktopRendererGenerationV2.meta.digest,
+    () => {
+      const runtimeConfig = configRef.current;
+      if (!runtimeConfig.tenantId.trim() || !runtimeConfig.projectId.trim()) return;
+      void productionRouteRefreshRef.current?.(runtimeConfig, auth.projects);
+    },
+  );
+  const {
+    authority: desktopRendererAuthorityV2,
+    navigationRegistry: desktopCanonicalNavigationRegistry,
+    routeRegistry: desktopProductionRouteRegistry,
+  } = desktopRendererGenerationV2.state;
+  const desktopWorkbenchCapabilityClientV2 = useMemo(
+    () => desktopWorkbenchCapabilityClientProviderV2.publish({
+      config,
+      snapshotOperationsV2: desktopWorkbenchSnapshotOperationsV2,
+    }),
+    [
+      config,
+      desktopWorkbenchSnapshotOperationsV2,
+      desktopWorkbenchCapabilityClientProviderV2,
+      desktopRendererGenerationV2.actions,
+    ],
   );
   const sandboxRuntime = useSandboxRuntimeSurface(
     config,
     showRuntimeConfig && connection === 'ready' && Boolean(config.projectId.trim()),
+    desktopProjectSandboxSurfaceClientV2,
   );
-  const chatComposerApi = useMemo(
-    () => (config.workspaceId.trim() ? api : unboundComposerCatalogClient(api)),
-    [api, config.workspaceId],
-  );
+  const chatComposerApi = useMemo(() => {
+    const client = createDesktopChatComposerCatalogClientV2({
+      config,
+      projectSandboxUploadOperationsV2: desktopProjectSandboxUploadOperationsV2,
+      pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+      workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
+      tenantAgentDefinitionsOperationsV2: desktopTenantAgentDefinitionsOperationsV2,
+      tenantPromptTemplatesOperationsV2: desktopTenantPromptTemplatesOperationsV2,
+      tenantSubAgentDefinitionsOperationsV2: desktopTenantSubAgentDefinitionsOperationsV2,
+      tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
+      workspaceConversationCatalogOperationsV2: desktopWorkspaceConversationCatalogOperationsV2,
+      newTaskFlowOperationsV2: desktopNewTaskFlowClientV2,
+    });
+    return config.workspaceId.trim() ? client : unboundComposerCatalogClient(client);
+  }, [
+    config,
+    desktopProjectSandboxUploadOperationsV2,
+    desktopPluginMarketplaceOperationsV2,
+    desktopWorkspaceRosterOperationsV2,
+    desktopTenantAgentDefinitionsOperationsV2,
+    desktopTenantPromptTemplatesOperationsV2,
+    desktopTenantSubAgentDefinitionsOperationsV2,
+    desktopTenantSkillDefinitionsOperationsV2,
+    desktopWorkspaceConversationCatalogOperationsV2,
+    desktopNewTaskFlowClientV2,
+  ]);
   const socket = useAgentSocket(
     config,
     showRuntimeConfig && connection === 'ready',
     auth.context?.revision ?? null,
     scopedConversation?.id ?? null,
+    desktopRendererGenerationV2.actions.acquireOperationLease,
   );
   const invalidateWorkspaceCollaborationAuthority = useCallback(
     (trigger: WorkspaceAuthorityInvalidationTrigger) => {
@@ -1086,139 +1944,74 @@ export function App() {
     settingsWindowOpen ||
     shortcutsDialogOpen;
   const localRuntimeMode = config.mode === 'local' && runsInNativeDesktop;
-  const activityAuthorityAdapter = useMemo(
-    () => createDesktopAgentAuthorityAdapter(config),
-    [config],
+  const desktopAgentAuthorityV2 = useMemo(
+    () =>
+      desktopAgentAuthorityProviderV2.publish({
+        config,
+        principalId: auth.user?.user_id,
+      }),
+    [auth.user?.user_id, config, desktopAgentAuthorityProviderV2],
   );
-  const activityAuthorityScope = useMemo<CloudAgentAuthorityScope | undefined>(() => {
-    if (
-      config.mode !== 'cloud' ||
-      !auth.user?.user_id ||
-      config.tenantId.trim().length === 0 ||
-      config.projectId.trim().length === 0
-    ) {
-      return undefined;
-    }
-    return Object.freeze({
-      authority: 'cloud',
-      principalId: auth.user.user_id,
-      tenantId: config.tenantId,
-      projectId: config.projectId,
-    });
-  }, [auth.user?.user_id, config.mode, config.projectId, config.tenantId]);
+  const {
+    adapter: activityAuthorityAdapter,
+    cloudScope: activityAuthorityScope,
+  } = desktopAgentAuthorityV2;
+  const listMyWorkForConfig = useCallback(
+    (requestConfig: DesktopRuntimeConfig, signal?: AbortSignal) =>
+      desktopMyWorkOperationsV2.listMyWork({
+        config: requestConfig,
+        principalId: authRef.current.user?.user_id,
+        signal,
+      }),
+    [desktopMyWorkOperationsV2],
+  );
   const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
     config,
     localRuntimeStatus,
     runsInNativeDesktop,
   );
   const desktopCapabilityState = useDesktopCapabilitySnapshot(
-    workbenchCapabilityClient,
+    desktopWorkbenchCapabilityClientV2.client,
     identityAuthenticated && showRuntimeConfig,
   );
-  const observedRouteRuntimeMode = desktopCapabilityState.snapshot?.runtime_state;
-  const productionRouteRuntimeMode =
-    observedRouteRuntimeMode && observedRouteRuntimeMode !== 'native'
-      ? observedRouteRuntimeMode
-      : config.mode;
-  const productionRouteBasePermissions = useMemo(
-    () => desktopRouteBasePermissionsForAuth(auth),
-    [auth],
-  );
-  const productionRoutePermissionClient = useMemo(
+  const desktopProductionRouteAuthorityV2 = useMemo(
     () =>
-      config.mode === 'cloud'
-        ? createCloudDesktopRoutePermissionClient(
-            config,
-            desktopVaultBoundCloudRequestBroker(),
-          )
-        : createLocalDesktopRoutePermissionClient(config),
-    [config],
+      desktopProductionRouteAuthorityProviderV2.publish({
+        auth,
+        config,
+        capabilitySnapshot: desktopCapabilityState.snapshot,
+        cloudRequestBroker: desktopVaultBoundCloudRequestBroker(),
+        workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
+      }),
+    [
+      auth,
+      config,
+      desktopCapabilityState.snapshot,
+      desktopProductionRouteAuthorityProviderV2,
+      desktopWorkspaceRosterOperationsV2,
+    ],
   );
-  const resolveProductionRoutePermissionSnapshot =
-    useMemo<DesktopRoutePermissionSnapshotResolver>(() => {
-      const options = Object.freeze({
-        client: productionRoutePermissionClient,
-      });
-      if (config.mode === 'cloud') {
-        return createCloudDesktopRoutePermissionResolver(options);
-      }
-      const localResolver = createLocalDesktopRoutePermissionResolver(options);
-      const broker = desktopVaultBoundCloudRequestBroker();
-      const localOnlineCloudResolver = broker
-        ? createCloudDesktopRoutePermissionResolver({
-            client: createVaultBoundCloudDesktopRoutePermissionClient(config, broker),
-          })
-        : null;
-      return (context, signal, match) => {
-        if (
-          productionRouteRuntimeMode === 'local_online' &&
-          match.definition.localPolicy === 'cloud_only'
-        ) {
-          if (!localOnlineCloudResolver) {
-            return Promise.reject(new Error('cloud_request_broker_missing'));
-          }
-          return localOnlineCloudResolver(context, signal, match);
-        }
-        return localResolver(context, signal, match);
-      };
-    }, [config, productionRoutePermissionClient, productionRouteRuntimeMode]);
-  const resolveProductionRouteCapability = useCallback(
-    (capability: string, context: Parameters<typeof resolveDesktopRouteCapability>[2]) => {
-      if (capability === DEVICE_APPROVAL_ROUTE_ID) {
-        return deviceApprovalCapability(config);
-      }
-      if (capability === TENANT_CREATION_ROUTE_ID) {
-        return tenantCreationCapability(config);
-      }
-      if (capability === INVITATION_ACCEPTANCE_ROUTE_ID) {
-        return invitationAcceptanceCapability(config);
-      }
-      return resolveDesktopRouteCapability(desktopCapabilityState.snapshot, capability, context);
-    },
-    [config, desktopCapabilityState.snapshot],
-  );
-  const searchCapability = desktopCapability(desktopCapabilityState.snapshot, 'search');
-  const projectSearchCapability = desktopCapability(
-    desktopCapabilityState.snapshot,
-    PROJECT_SEARCH_ROUTE_ID,
-  );
-  projectSearchRouteBindingRef.current = Object.freeze({
-    api,
-    config,
-    project:
-      auth.projects.find((project) => project.id === config.projectId) ??
-      projectSummaryFromConfig(config),
-    capability: projectSearchCapability,
+  projectSearchRouteBindingProviderV2.publish({
+    scope: Object.freeze({
+      tenantId: config.tenantId,
+      projectId: config.projectId,
+    }),
+    projects: auth.projects,
+    capabilitySnapshot: desktopCapabilityState.snapshot,
     capabilityLoading: desktopCapabilityState.loading,
     onRetryCapability: desktopCapabilityState.reload,
   });
-  const automationRunCapability = desktopCapability(
-    desktopCapabilityState.snapshot,
-    'automation_run',
-  );
-  const workspaceCollaborationCapability = desktopCapability(
-    desktopCapabilityState.snapshot,
-    'workspace_collaboration',
-  );
-  const workspaceCollaborationAuthority = useMemo(
-    () => createHttpWorkspaceCollaborationClient(config),
-    [config],
-  );
-  const workspaceCollaborationClient = useMemo(
+  const workspaceCollaborationClientV2 = useMemo(
     () =>
       createCapabilityWorkspaceCollaborationClient(
-        workspaceCollaborationAuthority,
-        workspaceCollaborationCapability,
+        desktopWorkspaceCollaborationClientV2,
+        desktopCapability(desktopCapabilityState.snapshot, 'workspace_collaboration'),
         config.mode,
       ),
     [
       config.mode,
-      workspaceCollaborationAuthority,
-      workspaceCollaborationCapability.available,
-      workspaceCollaborationCapability.contract_version,
-      workspaceCollaborationCapability.reason_code,
-      workspaceCollaborationCapability.service_version,
-      workspaceCollaborationCapability.status,
+      desktopCapabilityState.snapshot,
+      desktopWorkspaceCollaborationClientV2,
     ],
   );
   const runtimeModelRole: LlmRoutingRole =
@@ -1237,6 +2030,7 @@ export function App() {
       connection === 'ready' &&
       (config.mode === 'cloud' || (localRuntimeMode && localRuntimeAuthorityReady)),
     runtimeProjectionRefreshRevision,
+    desktopTenantProvidersClientV2,
     runtimeModelRole,
   );
   const newThreadWorkspaces = dataset.workspacesByProject[config.projectId] ?? [];
@@ -1255,17 +2049,51 @@ export function App() {
     () => ({ ...config, workspaceId: newThreadWorkspaceId }),
     [config, newThreadWorkspaceId],
   );
-  const newThreadApi = useMemo(
-    () => new DesktopApiClient(newThreadRuntimeConfig),
-    [newThreadRuntimeConfig],
+  const desktopNewThreadComposerCatalogClientV2 = useMemo(
+    () =>
+      desktopNewThreadComposerCatalogClientProviderV2.publish({
+        config: newThreadRuntimeConfig,
+        projectSandboxUploadOperationsV2: desktopProjectSandboxUploadOperationsV2,
+        pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
+        tenantAgentDefinitionsOperationsV2:
+          desktopTenantAgentDefinitionsOperationsV2,
+        tenantPromptTemplatesOperationsV2:
+          desktopTenantPromptTemplatesOperationsV2,
+        tenantSubAgentDefinitionsOperationsV2:
+          desktopTenantSubAgentDefinitionsOperationsV2,
+        tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
+      }),
+    [
+      desktopProjectSandboxUploadOperationsV2,
+      desktopNewThreadComposerCatalogClientProviderV2,
+      desktopPluginMarketplaceOperationsV2,
+      desktopTenantAgentDefinitionsOperationsV2,
+      desktopTenantPromptTemplatesOperationsV2,
+      desktopTenantSubAgentDefinitionsOperationsV2,
+      desktopTenantSkillDefinitionsOperationsV2,
+      desktopWorkspaceRosterOperationsV2,
+      newThreadRuntimeConfig,
+    ],
   );
-  const newThreadComposerApi = useMemo(() => {
-    if (newThreadWorkspaceId) return newThreadApi;
-    return unboundComposerCatalogClient(newThreadApi);
-  }, [newThreadApi, newThreadWorkspaceId]);
+  const newThreadWorkspaceAgentPolicyClientV2 = useMemo(
+    () => createDesktopWorkspaceAgentPolicyClientV2(
+      desktopWorkspaceAgentPolicyOperationsV2, newThreadRuntimeConfig,
+    ),
+    [desktopWorkspaceAgentPolicyOperationsV2, newThreadRuntimeConfig],
+  );
+  const newThreadTenantProvidersClientV2 = useMemo(
+    () => createDesktopTenantProvidersClientV2(
+      desktopTenantProvidersOperationsV2, newThreadRuntimeConfig,
+    ),
+    [desktopTenantProvidersOperationsV2, newThreadRuntimeConfig],
+  );
   const workspaceAgentPolicy = useWorkspaceAgentPolicy(
     newThreadRuntimeConfig,
     identityAuthenticated && showRuntimeConfig && connection === 'ready',
+    desktopWorkspaceRosterOperationsV2,
+    newThreadWorkspaceAgentPolicyClientV2,
+    newThreadTenantProvidersClientV2,
   );
   const canManageWorkspacePolicy = useMemo(() => {
     if (auth.user?.roles.some((role) => role === 'admin' || role === 'owner')) return true;
@@ -1338,12 +2166,13 @@ export function App() {
     setSessionProjectionRefreshRevision((revision) => revision + 1);
   }, [scopedConversationId]);
   useEffect(() => {
-    if (!scopedConversationId) {
+    if (!scopedConversation) {
       sessionProjectionRequestRef.current += 1;
       setSessionProjectionState(emptySessionProjectionState);
       setSessionDisplayProjection(null);
       return;
     }
+    const requestConfig = configRef.current;
     const requestId = sessionProjectionRequestRef.current + 1;
     sessionProjectionRequestRef.current = requestId;
     const controller = new AbortController();
@@ -1356,16 +2185,11 @@ export function App() {
       projection: null,
       error: null,
     });
-    void api
-      .getConversationSession(
-        scopedConversationId,
-        {
-          tenantId: config.tenantId,
-          projectId: config.projectId,
-          workspaceId: config.workspaceId || null,
-        },
-        controller.signal,
-      )
+    void desktopSessionProjectionOperationsV2.getConversationSession({
+      config: requestConfig,
+      conversation: scopedConversation,
+      signal: controller.signal,
+    })
       .then((payload) => {
         if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
         // A schema_version 1 snapshot_revision is the canonical digest of the payload,
@@ -1373,9 +2197,9 @@ export function App() {
         // skip the canonicalize + SHA-256 + validate pass entirely in that case.
         const scopeKey = [
           scopedConversationId,
-          config.tenantId,
-          config.projectId,
-          config.workspaceId || '',
+          requestConfig.tenantId,
+          requestConfig.projectId,
+          requestConfig.workspaceId || '',
         ].join('\n');
         const payloadRevision = signedSessionSnapshotRevision(payload);
         const seen = sessionProjectionRevisionRef.current;
@@ -1387,9 +2211,9 @@ export function App() {
             ? seen.projection
             : decodeConversationSessionProjection(payload, {
                 conversationId: scopedConversationId,
-                projectId: config.projectId,
-                tenantId: config.tenantId,
-                workspaceId: config.workspaceId || null,
+                projectId: requestConfig.projectId,
+                tenantId: requestConfig.tenantId,
+                workspaceId: requestConfig.workspaceId || null,
               });
         if (projection) {
           sessionProjectionRevisionRef.current = {
@@ -1421,16 +2245,13 @@ export function App() {
           status: 'error',
           conversationId: scopedConversationId,
           projection: null,
-          error: formatConnectionError(caught, config.apiBaseUrl),
+          error: formatConnectionError(caught, requestConfig.apiBaseUrl),
         });
       });
     return () => controller.abort();
   }, [
-    api,
-    config.apiBaseUrl,
-    config.projectId,
-    config.tenantId,
-    config.workspaceId,
+    desktopSessionProjectionOperationsV2,
+    scopedConversation,
     scopedConversationId,
     sessionProjectionRefreshRevision,
   ]);
@@ -1706,8 +2527,12 @@ export function App() {
         loading: true,
       });
       try {
-        const client = new DesktopApiClient(requestConfig);
-        const response = await client.getConversationMessages(conversation.id, projectId, {
+        const response = await desktopSessionTimelineOperationsV2.getConversationMessages({
+          config: {
+            ...requestConfig,
+            projectId,
+          },
+          conversation,
           limit: 50,
         });
         if (!requestIsCurrent()) return;
@@ -1762,13 +2587,14 @@ export function App() {
         );
       }
     },
-    [],
+    [desktopSessionTimelineOperationsV2],
   );
 
   const loadEarlierTimeline = useCallback(async () => {
     const conversation = scopedConversation;
     const cursor = conversationTimeline.firstCursor;
     if (!conversation || !cursor || conversationTimeline.loadingEarlier) return;
+    const requestConfig = configRef.current;
     const requestId = timelineRequestRef.current + 1;
     timelineRequestRef.current = requestId;
     const expectedRequest = {
@@ -1786,7 +2612,9 @@ export function App() {
         : current,
     );
     try {
-      const response = await api.getConversationMessages(conversation.id, config.projectId, {
+      const response = await desktopSessionTimelineOperationsV2.getConversationMessages({
+        config: requestConfig,
+        conversation,
         limit: 50,
         beforeTimeUs: cursor.timeUs,
         beforeCounter: cursor.counter,
@@ -1821,47 +2649,50 @@ export function App() {
     } catch (caught) {
       setConversationTimeline((current) =>
         requestIsCurrent() && current.conversationId === conversation.id
-          ? failEarlierTimelinePage(current, formatConnectionError(caught, config.apiBaseUrl))
+          ? failEarlierTimelinePage(
+              current,
+              formatConnectionError(caught, requestConfig.apiBaseUrl),
+            )
           : current,
       );
     }
   }, [
-    api,
-    config.apiBaseUrl,
-    config.projectId,
     conversationTimeline.firstCursor,
     conversationTimeline.loadingEarlier,
+    desktopSessionTimelineOperationsV2,
     scopedConversation,
     t,
   ]);
 
   const respondToHitl = useCallback(
     async (submission: HitlResponseSubmission) => {
-      if (scopedConversation) {
-        const request = sessionProjection?.pendingHitl.find(
-          (candidate) => candidate.id === submission.requestId,
-        );
-        const revisionMatches =
-          submission.expectedRevision === undefined
-            ? request?.authority_revision === undefined || request.authority_revision === null
-            : request?.authority_revision === submission.expectedRevision;
-        if (
-          !request ||
-          request.status !== 'pending' ||
-          request.kind !== submission.hitlType ||
-          !revisionMatches ||
-          !respondableHitlRequestIdSet.has(submission.requestId)
-        ) {
-          throw new Error(t('session.authorityActionUnavailable'));
-        }
+      const requestConfig = configRef.current;
+      if (!scopedConversation) {
+        throw new Error(t('session.authorityActionUnavailable'));
+      }
+      const request = sessionProjection?.pendingHitl.find(
+        (candidate) => candidate.id === submission.requestId,
+      );
+      if (
+        !request ||
+        request.status !== 'pending' ||
+        request.kind !== submission.hitlType ||
+        request.authority_revision !== submission.expectedRevision ||
+        !respondableHitlRequestIdSet.has(submission.requestId)
+      ) {
+        throw new Error(t('session.authorityActionUnavailable'));
       }
       setError(null);
       try {
-        await api.respondToHitl(submission);
+        await desktopHitlResponseOperationsV2.respond({
+          config: requestConfig,
+          conversation: scopedConversation,
+          submission,
+        });
         invalidateSessionAuthority();
         const conversation = agentConversationSession?.conversation;
         if (conversation) {
-          await loadConversationTimeline(conversation, config.projectId);
+          await loadConversationTimeline(conversation, requestConfig.projectId);
         }
       } catch (caught) {
         const recovery = classifyHitlAuthorityRecovery(caught);
@@ -1869,20 +2700,18 @@ export function App() {
           invalidateSessionAuthority();
           const conversation = agentConversationSession?.conversation;
           if (conversation) {
-            await loadConversationTimeline(conversation, config.projectId);
+            await loadConversationTimeline(conversation, requestConfig.projectId);
           }
           if (recovery.settledByAuthority) return;
         }
-        const message = formatConnectionError(caught, config.apiBaseUrl);
+        const message = formatConnectionError(caught, requestConfig.apiBaseUrl);
         setError(message);
         throw new Error(message, { cause: caught });
       }
     },
     [
       agentConversationSession?.conversation,
-      api,
-      config.apiBaseUrl,
-      config.projectId,
+      desktopHitlResponseOperationsV2,
       invalidateSessionAuthority,
       loadConversationTimeline,
       respondableHitlRequestIdSet,
@@ -2098,27 +2927,7 @@ export function App() {
     shortcutsDialogOpen,
   ]);
 
-  useEffect(() => {
-    const shell = appShellRef.current;
-    if (!shell) return;
-    const backgroundRoots = [document.getElementById('root'), shell.parentElement, shell].filter(
-      (element, index, elements): element is HTMLElement =>
-        element instanceof HTMLElement && elements.indexOf(element) === index,
-    );
-
-    if (modalOpen) {
-      backgroundRoots.forEach((element) => {
-        element.setAttribute('aria-hidden', 'true');
-        element.setAttribute('inert', '');
-      });
-      return;
-    }
-
-    backgroundRoots.forEach((element) => {
-      element.removeAttribute('aria-hidden');
-      element.removeAttribute('inert');
-    });
-  }, [modalOpen]);
+  useDesktopModalBackgroundV2(appShellRef, identityAuthenticated && modalOpen);
 
   useEffect(() => {
     if (!runActionsMenuOpen) return;
@@ -2495,6 +3304,8 @@ export function App() {
 
   const resetProjectScopedState = () => {
     runtimeRefreshRequestRef.current += 1;
+    terminalStartGenerationRef.current += 1;
+    terminalLifecycleRef.current = null;
     activeRuntimeConversationRequestsRef.current = new Map();
     workspaceConversationRequestGenerationsRef.current = new Map();
     myWorkAbortRef.current?.abort();
@@ -2527,7 +3338,7 @@ export function App() {
     setReviewTab('overview');
     closeRightCanvasPanel();
     setTerminal(null);
-    setTerminalV2(null);
+    setTerminalLifecycle(null);
     setAgentConversationSession(null);
     setOpenTabs((tabs) => clearConversationTabs(tabs));
     setSessionProjectionState(emptySessionProjectionState);
@@ -2562,6 +3373,7 @@ export function App() {
         refreshRequestGeneration === runtimeRefreshRequestRef.current;
       setConnection('loading');
       setError(null);
+      if (!isDesktopRendererRuntimeAdmittedV2()) return false;
       let refreshProjectId = nextConfig.projectId.trim();
       let localConversationStatusRequest: LocalConversationStatusRequest | null = null;
       let conversationRequestGenerations = supersedeWorkspaceConversationRequests(
@@ -2570,6 +3382,15 @@ export function App() {
       );
       activeRuntimeConversationRequestsRef.current = conversationRequestGenerations;
       try {
+        if (nextConfig.mode === 'local' && window.__MEMSTACK_DESKTOP__?.runtime === 'electron') {
+          const invoke = window.__MEMSTACK_DESKTOP__.core?.invoke;
+          if (!invoke) throw new Error('workspace_core_status_unavailable');
+          const ready = await waitForDesktopWorkspaceCoreReadyV2({
+            readStatus: () => invoke<unknown>('workspace_core_status'),
+            isCurrent: () => contextIsCurrent() && isDesktopRendererRuntimeAdmittedV2(),
+          });
+          if (!ready) return false;
+        }
         const runtimeConfig = await syncLocalRuntimeConfig(nextConfig);
         if (!contextIsCurrent()) return false;
         const availableProjects =
@@ -2628,14 +3449,16 @@ export function App() {
         const workspaceResults = await Promise.all(
           projects.map(async (project) => {
             const projectTenantId = project.tenant_id || runtimeConfig.tenantId;
-            const client = new DesktopApiClient({
-              ...runtimeConfig,
-              tenantId: projectTenantId,
-              projectId: project.id,
-              workspaceId: '',
-            });
             try {
-              const workspaces = await client.listWorkspacesForProject(project.id, projectTenantId);
+              const workspaces =
+                await desktopWorkspaceCatalogOperationsV2.listWorkspacesForProject({
+                  config: {
+                    ...runtimeConfig,
+                    tenantId: projectTenantId,
+                    projectId: project.id,
+                    workspaceId: '',
+                  },
+                });
               return { project, workspaces, error: null };
             } catch (caught) {
               return {
@@ -2702,7 +3525,6 @@ export function App() {
           projectId: resolvedProjectId,
           workspaceId,
         };
-        const scopedClient = new DesktopApiClient(resolvedConfig);
         if (!contextIsCurrent()) return false;
         const autonomyAttentionScopeKey = workspaceAutonomyAttentionScopeKey(resolvedConfig);
         setWorkspaceAutonomyAttentionState({
@@ -2752,15 +3574,13 @@ export function App() {
           conversationLoadTargets.map(async (targetWorkspaceId) => {
             const requestGeneration = conversationRequestGenerations.get(targetWorkspaceId);
             const isUnboundGroup = targetWorkspaceId === UNBOUND_CONVERSATIONS_KEY;
-            const client = new DesktopApiClient({
-              ...resolvedConfig,
-              workspaceId: isUnboundGroup ? '' : targetWorkspaceId,
-            });
             try {
-              const response = await client.listConversations(resolvedProjectId, {
-                workspaceId: isUnboundGroup ? null : targetWorkspaceId,
-                unboundOnly: isUnboundGroup,
-              });
+              const response =
+                await desktopWorkspaceConversationCatalogOperationsV2.listConversations({
+                  config: resolvedConfig,
+                  workspaceId: isUnboundGroup ? null : targetWorkspaceId,
+                  unboundOnly: isUnboundGroup,
+                });
               return {
                 workspaceId: targetWorkspaceId,
                 requestGeneration,
@@ -2788,21 +3608,45 @@ export function App() {
           conversationResults,
           localConversationStatusSummary,
         ] = await Promise.all([
-          workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
-          workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
-          workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
           workspaceId
-            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceMembers())
+            ? desktopWorkspaceMessageCatalogOperationsV2.listMessages({
+                config: resolvedConfig,
+              })
+            : Promise.resolve([]),
+          workspaceId
+            ? desktopWorkspaceExecutionSnapshotOperationsV2.listTasks({
+                config: resolvedConfig,
+              })
+            : Promise.resolve([]),
+          workspaceId
+            ? desktopWorkspaceExecutionSnapshotOperationsV2
+                .getPlanSnapshot({ config: resolvedConfig })
+                .catch(() => null)
+            : Promise.resolve(null),
+          workspaceId
+            ? resolveWorkspaceAuthority(
+                desktopWorkspaceRosterOperationsV2.listWorkspaceMembers({
+                  config: resolvedConfig,
+                }),
+              )
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
           workspaceId
-            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAgents())
+            ? resolveWorkspaceAuthority(
+                desktopWorkspaceRosterOperationsV2.listWorkspaceAgents({
+                  config: resolvedConfig,
+                }),
+              )
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
           workspaceId
-            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAutonomyAttentions())
+            ? resolveWorkspaceAuthority(
+                desktopWorkspaceAutonomyAttentionOperationsV2.listWorkspaceAutonomyAttentions({
+                  config: resolvedConfig,
+                  workspaceId,
+                }),
+              )
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>()),
           resolvedProjectId
-            ? scopedClient
-                .listMyWork(resolvedProjectId)
+            ? listMyWorkForConfig(resolvedConfig)
                 .then((response) => ({ items: response.items, error: null }))
                 .catch((caught) => ({
                   items: [] as ProjectWorkItem[],
@@ -2811,13 +3655,20 @@ export function App() {
             : Promise.resolve({ items: [] as ProjectWorkItem[], error: null }),
           conversationResultsPromise,
           localConversationStatusRequest
-            ? createLocalProjectOverviewClient(resolvedConfig)
-                .load({
-                  authority: 'local',
-                  tenantId: resolvedConfig.tenantId,
-                  projectId: resolvedConfig.projectId,
+            ? desktopProjectOverviewOperationsV2
+                .loadProjectOverview({
+                  config: resolvedConfig,
+                  scope: {
+                    authority: 'local',
+                    tenantId: resolvedConfig.tenantId,
+                    projectId: resolvedConfig.projectId,
+                  },
                 })
-                .then((snapshot) => snapshot.conversationStatusSummary.value)
+                .then((result) =>
+                  result.kind === 'local-ready'
+                    ? result.snapshot.conversationStatusSummary.value
+                    : null,
+                )
                 .catch(() => null)
             : Promise.resolve(null),
         ]);
@@ -3015,6 +3866,15 @@ export function App() {
       clearMissingConversationSelection,
       commitRuntimeConfig,
       config,
+      desktopProjectOverviewOperationsV2,
+      desktopWorkspaceAutonomyAttentionOperationsV2,
+      desktopWorkspaceCatalogOperationsV2,
+      desktopWorkspaceConversationCatalogOperationsV2,
+      desktopWorkspaceExecutionSnapshotOperationsV2,
+      desktopWorkspaceMessageCatalogOperationsV2,
+      desktopWorkspaceRosterOperationsV2,
+      listMyWorkForConfig,
+      isDesktopRendererRuntimeAdmittedV2,
       syncLocalRuntimeConfig,
       t,
       updateDataset,
@@ -3049,12 +3909,17 @@ export function App() {
         requestScope,
       );
       conversationStatusRequestRef.current = statusRequest.generation;
-      let request: ReturnType<ReturnType<typeof createLocalProjectOverviewClient>['load']>;
+      let request: ReturnType<
+        typeof desktopProjectOverviewOperationsV2.loadProjectOverview
+      >;
       try {
-        request = createLocalProjectOverviewClient(runtimeConfig).load({
-          authority: 'local',
-          tenantId: runtimeConfig.tenantId,
-          projectId: runtimeConfig.projectId,
+        request = desktopProjectOverviewOperationsV2.loadProjectOverview({
+          config: runtimeConfig,
+          scope: {
+            authority: 'local',
+            tenantId: runtimeConfig.tenantId,
+            projectId: runtimeConfig.projectId,
+          },
         });
       } catch {
         if (
@@ -3070,7 +3935,9 @@ export function App() {
         return;
       }
       void request
-        .then((snapshot) => {
+        .then((result) => {
+          if (result.kind !== 'local-ready') return;
+          const snapshot = result.snapshot;
           if (
             active &&
             isCurrentLocalConversationStatusRequest(
@@ -3119,6 +3986,7 @@ export function App() {
     config.tenantId,
     connection,
     conversationStatusRefreshRevision,
+    desktopProjectOverviewOperationsV2,
   ]);
   productionRouteRefreshRef.current = (nextConfig, projects) =>
     refreshRuntime(nextConfig, projects);
@@ -3129,28 +3997,12 @@ export function App() {
           config: configRef.current,
           authRevision: authAttemptRevisionRef.current,
         }),
-        createAuthority: (authorityConfig) => {
-          const authority = new DesktopApiClient(authorityConfig);
-          return Object.freeze({
-            listProjects: (tenantId: string, signal: AbortSignal) =>
-              authority.listProjects(tenantId, signal),
-            getWorkspaceContext: (signal: AbortSignal) => authority.getWorkspaceContext(signal),
-            switchWorkspaceContext: (
-              tenantId: string,
-              projectId: string,
-              expectedRevision: number,
-              idempotencyKey: string,
-              signal: AbortSignal,
-            ) =>
-              authority.switchWorkspaceContext(
-                tenantId,
-                projectId,
-                expectedRevision,
-                idempotencyKey,
-                signal,
-              ),
-          });
-        },
+        createAuthority: (authorityConfig, operation) =>
+          withDesktopWorkspaceContextAuthorityOperationV2(
+            desktopRendererGenerationV2.actions,
+            authorityConfig,
+            operation,
+          ),
         commit: ({ config: nextConfig, context, projects }) => {
           contextRevisionRef.current = context.revision;
           commitRuntimeConfig(nextConfig);
@@ -3170,7 +4022,7 @@ export function App() {
           }
         },
       }),
-    [commitRuntimeConfig],
+    [commitRuntimeConfig, desktopRendererGenerationV2.actions],
   );
   const switchProductionRouteScope = useCallback(
     async (
@@ -3297,14 +4149,12 @@ export function App() {
       }));
 
       try {
-        const client = new DesktopApiClient({
-          ...requestConfig,
-          workspaceId: isUnboundGroup ? '' : workspaceId,
-        });
-        const response = await client.listConversations(projectId, {
-          workspaceId: isUnboundGroup ? null : workspaceId,
-          unboundOnly: isUnboundGroup,
-        });
+        const response =
+          await desktopWorkspaceConversationCatalogOperationsV2.listConversations({
+            config: requestConfig,
+            workspaceId: isUnboundGroup ? null : workspaceId,
+            unboundOnly: isUnboundGroup,
+          });
         const refreshedConversations = response.items;
         if (!requestIsCurrent()) return;
         updateDataset((current) => {
@@ -3367,12 +4217,17 @@ export function App() {
         });
       }
     },
-    [clearMissingConversationSelection, updateDataset],
+    [
+      clearMissingConversationSelection,
+      desktopWorkspaceConversationCatalogOperationsV2,
+      updateDataset,
+    ],
   );
 
   const refreshMyWork = useCallback(
     async (scheduledScope?: MyWorkRefreshScope) => {
-      const projectId = config.projectId.trim();
+      const requestConfig = configRef.current;
+      const projectId = requestConfig.projectId.trim();
       if (!projectId) return;
       const expectedScope = scheduledScope ?? {
         contextRevision: contextRevisionRef.current,
@@ -3391,16 +4246,7 @@ export function App() {
       myWorkAbortRef.current = controller;
       setMyWorkRefreshing(true);
       try {
-        const response =
-          config.mode === 'cloud'
-            ? activityAuthorityAdapter.client && activityAuthorityScope
-              ? await activityAuthorityAdapter.client.listMyWork(activityAuthorityScope, {
-                  signal: controller.signal,
-                })
-              : (() => {
-                  throw new Error('cloud_my_work_authority_scope_unavailable');
-                })()
-            : await api.listMyWork(projectId, controller.signal);
+        const response = await listMyWorkForConfig(requestConfig, controller.signal);
         if (
           controller.signal.aborted ||
           myWorkRequestRef.current !== requestId ||
@@ -3432,7 +4278,7 @@ export function App() {
         }
       }
     },
-    [activityAuthorityAdapter, activityAuthorityScope, api, config.mode, config.projectId],
+    [listMyWorkForConfig],
   );
 
   useEffect(() => {
@@ -3498,18 +4344,16 @@ export function App() {
     if (!workspaceCreateScopeIsCurrent(submittedScope, currentScope)) {
       throw new WorkspaceCreateScopeChangedError();
     }
-    const creationClient = new DesktopApiClient({
-      ...configRef.current,
-      tenantId: submittedScope.tenantId,
-      projectId: submittedScope.projectId,
-      workspaceId: '',
-    });
-    const created = await creationClient.createWorkspaceForProject(
-      submittedScope.projectId,
+    const created = await desktopWorkspaceLifecycleOperationsV2.createWorkspace({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: '',
+      },
       input,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     const committedScope = {
       tenantId: configRef.current.tenantId,
       projectId: configRef.current.projectId,
@@ -3552,19 +4396,17 @@ export function App() {
     if (!scopedWorkspace || !workspaceSettingsScopeIsCurrent(submittedScope, currentScope)) {
       throw new WorkspaceSettingsScopeChangedError();
     }
-    const settingsClient = new DesktopApiClient({
-      ...configRef.current,
-      tenantId: submittedScope.tenantId,
-      projectId: submittedScope.projectId,
+    const updated = await desktopWorkspaceLifecycleOperationsV2.updateWorkspace({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: submittedScope.workspaceId,
+      },
       workspaceId: submittedScope.workspaceId,
-    });
-    const updated = await settingsClient.updateWorkspaceForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
       input,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     const committedScope = {
       tenantId: configRef.current.tenantId,
       projectId: configRef.current.projectId,
@@ -3602,14 +4444,6 @@ export function App() {
     }
   };
 
-  const workspaceMemberClient = (scope: WorkspaceSettingsScope) =>
-    new DesktopApiClient({
-      ...configRef.current,
-      tenantId: scope.tenantId,
-      projectId: scope.projectId,
-      workspaceId: scope.workspaceId,
-    });
-
   const addWorkspaceMemberFromDialog = async (
     userId: string,
     role: WorkspaceMemberRole,
@@ -3617,14 +4451,18 @@ export function App() {
     signal: AbortSignal,
   ): Promise<WorkspaceMemberSummary> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    const member = await workspaceMemberClient(submittedScope).addWorkspaceMemberForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    const member = await desktopWorkspaceMemberMutationOperationsV2.addWorkspaceMember({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: submittedScope.workspaceId,
+      },
+      workspaceId: submittedScope.workspaceId,
       userId,
       role,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     assertWorkspaceMemberMutationScope(submittedScope);
     updateDataset((current) => ({
       ...current,
@@ -3644,14 +4482,18 @@ export function App() {
     signal: AbortSignal,
   ): Promise<WorkspaceMemberSummary> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    const member = await workspaceMemberClient(submittedScope).updateWorkspaceMemberRoleForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    const member = await desktopWorkspaceMemberMutationOperationsV2.updateWorkspaceMemberRole({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: submittedScope.workspaceId,
+      },
+      workspaceId: submittedScope.workspaceId,
       userId,
       role,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     assertWorkspaceMemberMutationScope(submittedScope);
     updateDataset((current) => ({
       ...current,
@@ -3670,13 +4512,17 @@ export function App() {
     signal: AbortSignal,
   ): Promise<void> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    await workspaceMemberClient(submittedScope).removeWorkspaceMemberForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    await desktopWorkspaceMemberMutationOperationsV2.removeWorkspaceMember({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: submittedScope.workspaceId,
+      },
+      workspaceId: submittedScope.workspaceId,
       userId,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     assertWorkspaceMemberMutationScope(submittedScope);
     updateDataset((current) => ({
       ...current,
@@ -3707,26 +4553,29 @@ export function App() {
     }
   };
 
-  const workspaceAgentBindingClient = (scope: WorkspaceSettingsScope) =>
-    new DesktopApiClient({
+  const workspaceAgentBindingOperationScope = (
+    scope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ) => ({
+    config: {
       ...configRef.current,
       tenantId: scope.tenantId,
       projectId: scope.projectId,
       workspaceId: scope.workspaceId,
-    });
+    },
+    workspaceId: scope.workspaceId,
+    signal,
+  });
 
   const loadWorkspaceAgentDefinitionsFromDialog = async (
     submittedScope: WorkspaceSettingsScope,
     signal: AbortSignal,
   ): Promise<WorkspaceBindingAgentDefinition[]> => {
     assertWorkspaceAgentBindingScope(submittedScope);
-    const definitions = await workspaceAgentBindingClient(
-      submittedScope,
-    ).listWorkspaceBindingAgentDefinitionsForProject(
-      submittedScope.projectId,
-      submittedScope.tenantId,
-      signal,
-    );
+    const definitions =
+      await desktopWorkspaceAgentBindingOperationsV2.listWorkspaceBindingAgentDefinitions(
+        workspaceAgentBindingOperationScope(submittedScope, signal),
+      );
     assertWorkspaceAgentBindingScope(submittedScope);
     return definitions;
   };
@@ -3739,13 +4588,10 @@ export function App() {
     signal: AbortSignal,
   ): Promise<WorkspaceAgentBinding> => {
     assertWorkspaceAgentBindingScope(submittedScope);
-    const binding = await workspaceAgentBindingClient(submittedScope).bindWorkspaceAgentForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
-      { agentId, displayName, description },
-      submittedScope.tenantId,
-      signal,
-    );
+    const binding = await desktopWorkspaceAgentBindingOperationsV2.bindWorkspaceAgent({
+      ...workspaceAgentBindingOperationScope(submittedScope, signal),
+      input: { agentId, displayName, description },
+    });
     assertWorkspaceAgentBindingScope(submittedScope);
     updateDataset((current) => ({
       ...current,
@@ -3764,13 +4610,10 @@ export function App() {
     signal: AbortSignal,
   ): Promise<void> => {
     assertWorkspaceAgentBindingScope(submittedScope);
-    await workspaceAgentBindingClient(submittedScope).unbindWorkspaceAgentForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    await desktopWorkspaceAgentBindingOperationsV2.unbindWorkspaceAgent({
+      ...workspaceAgentBindingOperationScope(submittedScope, signal),
       bindingId,
-      submittedScope.tenantId,
-      signal,
-    );
+    });
     assertWorkspaceAgentBindingScope(submittedScope);
     updateDataset((current) => ({
       ...current,
@@ -3801,21 +4644,16 @@ export function App() {
       ) {
         throw new Error('Invalid conversation lifecycle scope');
       }
-      const apiClient = new DesktopApiClient({
-        ...requestConfig,
-        projectId,
-        workspaceId: normalizedWorkspaceId,
-      });
       const mutationScopeIsCurrent = () =>
         expectedScopeEpoch === configScopeEpochRef.current &&
         expectedContextRevision === contextRevisionRef.current &&
         isSameDesktopProjectRequestScope(requestConfig, configRef.current);
-      const updated = await apiClient.updateAgentConversationTitle(
-        conversation.id,
-        title,
-        projectId,
-        normalizedWorkspaceId,
-      );
+      const updated =
+        await desktopConversationLifecycleOperationsV2.updateAgentConversationTitle({
+          config: requestConfig,
+          conversation,
+          title,
+        });
       if (!mutationScopeIsCurrent()) return;
       updateDataset((current) => {
         const conversationsByWorkspace = replaceConversationInWorkspaceRows(
@@ -3867,15 +4705,11 @@ export function App() {
     ) {
       throw new Error('Invalid conversation summary scope');
     }
-    const apiClient = new DesktopApiClient({
-      ...requestConfig,
-      workspaceId: normalizedWorkspaceId,
-    });
-    const updated = await apiClient.generateAgentConversationSummary(
-      requiredConversationId,
-      requestConfig.projectId,
-      normalizedWorkspaceId,
-    );
+    const updated =
+      await desktopConversationLifecycleOperationsV2.generateAgentConversationSummary({
+        config: requestConfig,
+        conversation: currentSession.conversation,
+      });
     const latestSession = agentConversationSessionRef.current;
     if (
       conversationSummaryMutationRequestRef.current !== requestGeneration ||
@@ -3919,16 +4753,14 @@ export function App() {
       ) {
         throw new Error('Invalid conversation lifecycle scope');
       }
-      const apiClient = new DesktopApiClient({
-        ...requestConfig,
-        projectId,
-        workspaceId: normalizedWorkspaceId,
-      });
       const mutationScopeIsCurrent = () =>
         expectedScopeEpoch === configScopeEpochRef.current &&
         expectedContextRevision === contextRevisionRef.current &&
         isSameDesktopProjectRequestScope(requestConfig, configRef.current);
-      await apiClient.deleteAgentConversation(conversation.id, projectId);
+      await desktopConversationLifecycleOperationsV2.deleteAgentConversation({
+        config: requestConfig,
+        conversation,
+      });
       if (!mutationScopeIsCurrent()) return;
       updateDataset((current) => {
         const conversationsByWorkspace = removeConversationFromWorkspaceRows(
@@ -4021,70 +4853,61 @@ export function App() {
       if (!sourceRun) {
         throw new Error(t('session.terminalRequiresActiveRun'));
       }
+      if (!sourceRun.environment) {
+        throw new Error(t('session.terminalCanonicalRunAuthorityUnavailable'));
+      }
+      const terminalRunAuthority = {
+        id: sourceRun.id,
+        conversation_id: sourceRun.conversation_id,
+        project_id: sourceRun.project_id,
+        revision: sourceRun.revision,
+        environment: {
+          id: sourceRun.environment.id,
+          workspace_path: sourceRun.environment.workspace_path,
+        },
+      };
       const requestGeneration = terminalStartGenerationRef.current + 1;
       terminalStartGenerationRef.current = requestGeneration;
-      if (config.mode === 'cloud') {
-        const runtimeClient = sandboxRuntime.runtimeClient;
-        if (!runtimeClient) {
-          throw new Error(t('session.terminalCapabilityUnavailable'));
-        }
-        const result = await runtimeClient.createTerminalSession(
-          config.projectId,
-          sourceRun.id,
-          sourceRun.revision,
-        );
-        if (result.status === 'unavailable') {
-          throw new Error(
-            t(
-              result.reason_code === 'terminal_session_v2_canonical_run_authority_unavailable'
-                ? 'session.terminalCanonicalRunAuthorityUnavailable'
-                : 'session.terminalCapabilityUnavailable',
-            ),
-          );
-        }
+      terminalProxy.close();
+      const previousLifecycle = terminalLifecycleRef.current;
+      terminalLifecycleRef.current = null;
+      setTerminalLifecycle(null);
+      setTerminal(null);
+      if (previousLifecycle !== null) await previousLifecycle.release();
+
+      const lifecycle = await acquireDesktopTerminalLifecycleAuthorityV2(
+        desktopPluginMarketplaceGenerationActionsRefV2.current,
+        {
+          config,
+          run: terminalRunAuthority,
+          capabilities: sandboxRuntime.capabilities,
+        },
+      );
+      let retained = false;
+      let primaryError: unknown;
+      try {
+        const started = await lifecycle.start();
         if (terminalStartGenerationRef.current !== requestGeneration) return;
-        const session = result.value;
-        const currentRun = currentArtifactRunRef.current;
-        if (
-          !currentRun ||
-          session.project_id !== currentRun.project_id ||
-          session.conversation_id !== currentRun.conversation_id ||
-          session.run_id !== currentRun.id ||
-          session.run_revision !== currentRun.revision ||
-          session.environment_id !== currentRun.environment?.id ||
-          session.cwd !== currentRun.environment?.workspace_path
-        ) {
+        if (!terminalSessionMatchesRun(started.terminal, currentArtifactRunRef.current)) {
           throw new Error(t('session.terminalAuthorityMismatch'));
         }
-        terminalProxy.clear();
-        setTerminalV2(session);
-        setTerminal({
-          success: true,
-          session_id: session.session_id,
-          run_id: session.run_id,
-          run_revision: session.run_revision,
-          conversation_id: session.conversation_id,
-          project_id: session.project_id,
-          environment_id: session.environment_id,
-          created_at: session.created_at,
-          expires_at: session.expires_at,
-          resumable: true,
-          cwd: session.cwd,
-        });
-        return;
-      }
-      if (config.mode !== 'local') {
-        throw new Error(t('session.terminalCapabilityUnavailable'));
-      }
-      await api.seedProxyAuthCookie();
-      const response = await api.startTerminal(sourceRun.id, sourceRun.revision);
-      if (terminalStartGenerationRef.current !== requestGeneration) return;
-      if (!terminalSessionMatchesRun(response, currentArtifactRunRef.current)) {
-        throw new Error(t('session.terminalAuthorityMismatch'));
+        terminalLifecycleRef.current = lifecycle;
+        setTerminalLifecycle(lifecycle);
+        setTerminal(started.terminal);
+        retained = true;
+      } catch (caught) {
+        primaryError = caught;
+        throw caught;
+      } finally {
+        if (!retained) {
+          try {
+            await lifecycle.release();
+          } catch (releaseError) {
+            if (primaryError === undefined) throw releaseError;
+          }
+        }
       }
       terminalProxy.clear();
-      setTerminalV2(null);
-      setTerminal(response);
     });
   };
 
@@ -4103,7 +4926,7 @@ export function App() {
   const paneStageClassName =
     activeSection === 'board'
       ? 'pane-stage single-stage my-work-stage'
-      : activeSection === 'home' || activeSection === 'automations' || activeSection === 'search'
+      : activeSection === 'home'
         ? 'pane-stage single-stage auxiliary-stage'
         : 'pane-stage single-stage';
   const configuredProject = useMemo(
@@ -4167,11 +4990,63 @@ export function App() {
     [config.projectId, dataset.workspacesByProject],
   );
   const selectedConversation = scopedConversation;
+  const imagePreviewConversationId = selectedConversation?.id;
+  const imagePreviewConversationTenantId = selectedConversation?.tenant_id;
+  const imagePreviewConversationProjectId = selectedConversation?.project_id;
+  const imagePreviewWorkspaceId = selectedWorkspace?.id;
+  const imagePreviewWorkspaceTenantId = selectedWorkspace?.tenant_id;
+  const imagePreviewWorkspaceProjectId = selectedWorkspace?.project_id;
+  const desktopStructuredImagePreviewClientV2 = useMemo(() => {
+    if (imagePreviewConversationId !== undefined) {
+      if (
+        imagePreviewConversationTenantId !== config.tenantId ||
+        imagePreviewConversationProjectId !== config.projectId
+      ) return null;
+      return createDesktopStructuredImagePreviewClientV2(
+        () => desktopRendererGenerationV2.actions,
+        config,
+        {
+          kind: 'conversation',
+          tenantId: config.tenantId,
+          projectId: config.projectId,
+          id: imagePreviewConversationId,
+        },
+      );
+    }
+    if (
+      imagePreviewWorkspaceId === undefined ||
+      imagePreviewWorkspaceId !== config.workspaceId ||
+      (imagePreviewWorkspaceTenantId !== undefined && imagePreviewWorkspaceTenantId !== config.tenantId) ||
+      (imagePreviewWorkspaceProjectId !== undefined && imagePreviewWorkspaceProjectId !== config.projectId)
+    ) return null;
+    return createDesktopStructuredImagePreviewClientV2(
+      () => desktopRendererGenerationV2.actions,
+      config,
+      {
+        kind: 'workspace',
+        tenantId: config.tenantId,
+        projectId: config.projectId,
+        id: imagePreviewWorkspaceId,
+      },
+    );
+  }, [
+    config,
+    desktopRendererGenerationV2.actions,
+    imagePreviewConversationId,
+    imagePreviewConversationTenantId,
+    imagePreviewConversationProjectId,
+    imagePreviewWorkspaceId,
+    imagePreviewWorkspaceTenantId,
+    imagePreviewWorkspaceProjectId,
+    auth.user?.user_id,
+  ]);
   const activityInbox = useActivityInbox({
     items: dataset.myWork,
     scopeKey: `${config.tenantId}:${config.projectId}`,
-    authorityAdapter: activityAuthorityAdapter,
-    authorityScope: activityAuthorityScope,
+    activityClientV2: desktopProjectActivityReadStateClientV2,
+    authorityScope: activityAuthorityAdapter.authority === 'local'
+      ? activityAuthorityAdapter.activityScope
+      : activityAuthorityScope ?? null,
   });
   // OS 通知点击后经由 ref 跳转,避免 hook 依赖后文才定义的 openMyWorkSession。
   const openMyWorkSessionRef = useRef<(item: ProjectWorkItem) => void>(() => {});
@@ -4218,32 +5093,19 @@ export function App() {
       ),
     [config.mode, currentArtifactRun, selectedConversation],
   );
-  useEffect(() => {
-    let active = true;
-    if (
-      config.mode !== 'cloud' ||
-      !activityAuthorityAdapter.client ||
-      !activityAuthorityScope ||
-      !currentArtifactRun
-    ) {
-      setAuthoritativeRunSummary(null);
-      return () => {
-        active = false;
-      };
-    }
-    setAuthoritativeRunSummary(null);
-    void activityAuthorityAdapter.client
-      .getRunSummary(activityAuthorityScope, currentArtifactRun.id)
-      .then((summary) => {
-        if (active) setAuthoritativeRunSummary(summary);
-      })
-      .catch(() => {
-        if (active) setAuthoritativeRunSummary(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [activityAuthorityAdapter, activityAuthorityScope, config.mode, currentArtifactRun]);
+  const loadRunChanges = useRunReviewAuthorityV2({
+    config,
+    conversation: selectedConversation ?? null,
+    run: currentArtifactRun,
+    scope: changeScope,
+    projectionOperations: desktopSessionProjectionOperationsV2,
+    changesOperations: desktopSessionRunChangesOperationsV2,
+    setSummary: setAuthoritativeRunSummary,
+    setSnapshot: setChangeSnapshot,
+    setLoading: setChangeSnapshotLoading,
+    setError: setChangeSnapshotError,
+    setReferences: setRunInputReferences,
+  });
   const sessionUsageSummary = useMemo(
     () => deriveSessionUsage(conversationTimeline.items),
     [conversationTimeline],
@@ -4305,68 +5167,12 @@ export function App() {
     if (terminalRunScopeKeyRef.current === currentTerminalRunScopeKey) return;
     terminalRunScopeKeyRef.current = currentTerminalRunScopeKey;
     terminalStartGenerationRef.current += 1;
+    terminalLifecycleRef.current = null;
     setTerminal(null);
-    setTerminalV2(null);
+    setTerminalLifecycle(null);
   }, [currentTerminalRunScopeKey]);
   const terminalMatchesCurrentRun = terminalSessionMatchesRun(terminal, currentArtifactRun);
-  const terminalUrl = useMemo(() => {
-    if (!terminalMatchesCurrentRun || !terminal?.session_id) return null;
-    try {
-      if (config.mode === 'cloud' && terminalV2 && terminalV2.session_id === terminal.session_id) {
-        return terminalSessionV2SocketUrl(config.apiBaseUrl, terminalV2);
-      }
-      return api.terminalProxyUrl(terminal.session_id, terminal.project_id);
-    } catch {
-      return null;
-    }
-  }, [
-    api,
-    config.apiBaseUrl,
-    config.mode,
-    terminal?.project_id,
-    terminal?.session_id,
-    terminalMatchesCurrentRun,
-    terminalV2,
-  ]);
-  const terminalRecovery = useMemo(
-    () =>
-      terminalMatchesCurrentRun && terminalV2
-        ? {
-            session: terminalV2,
-            onRefetchRun: () => invalidateSessionAuthority(),
-          }
-        : undefined,
-    [invalidateSessionAuthority, terminalMatchesCurrentRun, terminalV2],
-  );
-  const terminalCloudSocketAuthority = useMemo(
-    () =>
-      config.mode === 'cloud' && terminalMatchesCurrentRun && terminal
-        ? {
-            tenantId: config.tenantId.trim(),
-            projectId: (terminal.project_id ?? config.projectId).trim(),
-            workspaceId: config.workspaceId.trim() || null,
-            conversationId:
-              terminalV2?.conversation_id.trim() || scopedConversation?.id.trim() || null,
-          }
-        : undefined,
-    [
-      config.mode,
-      config.projectId,
-      config.tenantId,
-      config.workspaceId,
-      scopedConversation?.id,
-      terminal,
-      terminalMatchesCurrentRun,
-      terminalV2?.conversation_id,
-    ],
-  );
-  const terminalProxy = useTerminalProxy(
-    terminalUrl,
-    desktopApiCredential(config),
-    desktopLaunchCapability(config),
-    terminalRecovery,
-    terminalCloudSocketAuthority,
-  );
+  const terminalProxy = useTerminalProxy(terminalLifecycle, invalidateSessionAuthority);
   const terminalBinding = useMemo(
     () => terminalBindingState(terminal, currentArtifactRun, terminalProxy.status),
     [currentArtifactRun, terminal, terminalProxy.status],
@@ -4379,21 +5185,7 @@ export function App() {
   const runInputDeliveryOptions = useMemo(() => {
     if (!currentArtifactRun) return [];
     const options: RunInputDelivery[] = [];
-    if (config.mode === 'cloud') {
-      if (
-        !activityAuthorityAdapter.client ||
-        !activityAuthorityScope ||
-        !activityAuthorityAdapter.allowedActions.includes('create_run_input')
-      ) {
-        return options;
-      }
-      if (currentArtifactRun.status === 'running') options.push('steer_now');
-      if (currentArtifactRun.status === 'queued' || currentArtifactRun.status === 'running') {
-        options.push('queue_next');
-      }
-      return options;
-    }
-    if (!localRuntimeMode) return options;
+    if (config.mode === 'local' && !localRuntimeMode) return options;
     if (
       sessionProjection?.capabilities.canSteerNow &&
       sessionProjection.capabilities.allowedActions.includes('steer_now')
@@ -4408,8 +5200,6 @@ export function App() {
     }
     return options;
   }, [
-    activityAuthorityAdapter,
-    activityAuthorityScope,
     config.mode,
     currentArtifactRun,
     localRuntimeMode,
@@ -4449,60 +5239,6 @@ export function App() {
       actionLabel: t('session.authorityRetry'),
     };
   }, [selectedConversation, sessionProjectionState.status, t]);
-  const loadRunChanges = useCallback(async () => {
-    if (!currentArtifactRun) {
-      setChangeSnapshot(null);
-      setChangeSnapshotError(null);
-      setChangeSnapshotLoading(false);
-      return;
-    }
-    setChangeSnapshotLoading(true);
-    setChangeSnapshotError(null);
-    try {
-      const snapshot =
-        config.mode === 'cloud'
-          ? activityAuthorityAdapter.client && activityAuthorityScope
-            ? desktopChangeSnapshotFromCloud(
-                await activityAuthorityAdapter.client.getRunChanges(
-                  activityAuthorityScope,
-                  currentArtifactRun.id,
-                  {
-                    scope: changeScope,
-                    expected_revision: currentArtifactRun.revision,
-                    ...(changeScope === 'turn' ? { turn_id: currentArtifactRun.message_id } : {}),
-                  },
-                ),
-              )
-            : (() => {
-                throw new Error('cloud_run_changes_authority_scope_unavailable');
-              })()
-          : changeScope === 'run'
-            ? await api.getRunChanges(currentArtifactRun.id, currentArtifactRun.revision)
-            : (() => {
-                throw new Error('local_run_changes_scope_unavailable');
-              })();
-      setChangeSnapshot(snapshot);
-      setRunInputReferences((current) =>
-        current.filter(
-          (reference) =>
-            reference.snapshot_id === snapshot.id &&
-            reference.environment_id === snapshot.environment_id,
-        ),
-      );
-    } catch (caught) {
-      setChangeSnapshotError(formatConnectionError(caught, config.apiBaseUrl));
-    } finally {
-      setChangeSnapshotLoading(false);
-    }
-  }, [
-    activityAuthorityAdapter,
-    activityAuthorityScope,
-    api,
-    config.apiBaseUrl,
-    config.mode,
-    changeScope,
-    currentArtifactRun,
-  ]);
   const availableChangeScopes = useMemo<readonly RunChangeScope[]>(
     () =>
       config.mode === 'cloud'
@@ -4516,33 +5252,31 @@ export function App() {
     if (!availableChangeScopes.includes(changeScope)) setChangeScope('run');
   }, [availableChangeScopes, changeScope]);
   useEffect(() => {
-    void loadRunChanges();
-  }, [loadRunChanges]);
-  useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const requestConfig = configRef.current;
     if (
       !currentArtifactRun ||
-      (config.mode === 'local' && !localRuntimeMode) ||
-      (config.mode === 'cloud' && (!activityAuthorityAdapter.client || !activityAuthorityScope))
+      !scopedConversation ||
+      (requestConfig.mode === 'local' && !localRuntimeMode)
     ) {
       setRunInputs([]);
       setRunInputsLoading(false);
       setRunInputsError(null);
       return () => {
         active = false;
+        controller.abort();
       };
     }
     setRunInputsLoading(true);
     setRunInputsError(null);
     const requestRunInputs = async (): Promise<DesktopRunInput[]> => {
-      if (config.mode === 'cloud' && activityAuthorityAdapter.client && activityAuthorityScope) {
-        const response = await activityAuthorityAdapter.client.listRunInputs(
-          activityAuthorityScope,
-          currentArtifactRun.id,
-        );
-        return response.inputs.map(desktopRunInputFromCloud);
-      }
-      const response = await api.listRunInputs(currentArtifactRun.id);
+      const response = await desktopSessionRunInputOperationsV2.listRunInputs({
+        config: requestConfig,
+        conversation: scopedConversation,
+        runId: currentArtifactRun.id,
+        signal: controller.signal,
+      });
       return response.inputs;
     };
     void requestRunInputs()
@@ -4550,22 +5284,24 @@ export function App() {
         if (active) setRunInputs(inputs);
       })
       .catch((caught) => {
-        if (active) setRunInputsError(formatConnectionError(caught, config.apiBaseUrl));
+        if (active) {
+          setRunInputsError(formatConnectionError(caught, requestConfig.apiBaseUrl));
+        }
       })
       .finally(() => {
         if (active) setRunInputsLoading(false);
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [
-    activityAuthorityAdapter,
-    activityAuthorityScope,
-    api,
     config.apiBaseUrl,
     config.mode,
     currentArtifactRun,
+    desktopSessionRunInputOperationsV2,
     localRuntimeMode,
+    scopedConversation,
   ]);
   useEffect(() => {
     setRunInputDelivery((current) =>
@@ -4583,45 +5319,30 @@ export function App() {
   }, [changeSnapshot, currentArtifactRun?.id, currentArtifactRun?.revision]);
   const promoteQueuedRunInput = useCallback(
     async (input: DesktopRunInput) => {
-      if (!currentArtifactRun || currentArtifactRun.id !== input.run_id) {
+      const requestConfig = configRef.current;
+      if (
+        !currentArtifactRun ||
+        currentArtifactRun.id !== input.run_id ||
+        !selectedConversation
+      ) {
         setError(t('session.queueSourceRunUnavailable'));
         return;
       }
       setPromotingRunInputId(input.id);
       setError(null);
       try {
-        if (config.mode === 'cloud') {
-          if (!activityAuthorityAdapter.client || !activityAuthorityScope) {
-            throw new Error('cloud_run_input_authority_scope_unavailable');
-          }
-          const outcome = await activityAuthorityAdapter.client.promoteRunInput(
-            activityAuthorityScope,
-            currentArtifactRun.id,
-            input.id,
-            {
-              expected_source_run_revision: currentArtifactRun.revision,
-              idempotency_key: `desktop-run-input-promotion:${input.id}`,
-            },
-          );
-          setRunInputs((current) =>
-            current.map((candidate) =>
-              candidate.id === outcome.input.id
-                ? desktopRunInputFromCloud(outcome.input)
-                : candidate,
-            ),
-          );
-          invalidateSessionAuthority();
-          setReviewTab('plan');
-          if (selectedConversation) {
-            await loadConversationTimeline(selectedConversation, config.projectId);
-          }
-          return;
-        }
-        const outcome = await api.promoteRunInput(
-          input.id,
-          currentArtifactRun.revision,
-          `desktop-run-input-promotion:${input.id}`,
-        );
+        const outcome = await desktopSessionRunInputOperationsV2.promoteRunInput({
+          config: requestConfig,
+          conversation: selectedConversation,
+          runId: currentArtifactRun.id,
+          inputId: input.id,
+          expectedSourceRunRevision: currentArtifactRun.revision,
+          idempotencyKey: `desktop-run-input-promotion:${input.id}`,
+        });
+        const promotedConversation = {
+          ...selectedConversation,
+          ...outcome.conversation,
+        };
         invalidateSessionAuthority();
         setRunInputs((current) =>
           current.map((candidate) =>
@@ -4630,7 +5351,10 @@ export function App() {
         );
         setAgentConversationSession((current) =>
           current?.conversation.id === outcome.conversation.id
-            ? { ...current, conversation: outcome.conversation }
+            ? {
+                ...current,
+                conversation: { ...current.conversation, ...outcome.conversation },
+              }
             : current,
         );
         setDataset((current) => ({
@@ -4639,27 +5363,24 @@ export function App() {
             Object.entries(current.conversationsByWorkspace).map(([workspaceId, conversations]) => [
               workspaceId,
               conversations.map((conversation) =>
-                conversation.id === outcome.conversation.id ? outcome.conversation : conversation,
+                conversation.id === outcome.conversation.id
+                  ? { ...conversation, ...outcome.conversation }
+                  : conversation,
               ),
             ]),
           ),
         }));
         setReviewTab('plan');
-        await loadConversationTimeline(outcome.conversation, config.projectId);
+        await loadConversationTimeline(promotedConversation, requestConfig.projectId);
       } catch (caught) {
-        setError(formatConnectionError(caught, config.apiBaseUrl));
+        setError(formatConnectionError(caught, requestConfig.apiBaseUrl));
       } finally {
         setPromotingRunInputId(null);
       }
     },
     [
-      api,
-      activityAuthorityAdapter,
-      activityAuthorityScope,
-      config.apiBaseUrl,
-      config.mode,
-      config.projectId,
       currentArtifactRun,
+      desktopSessionRunInputOperationsV2,
       invalidateSessionAuthority,
       loadConversationTimeline,
       selectedConversation,
@@ -4696,6 +5417,7 @@ export function App() {
   }, []);
   const approveSessionPlan = useCallback(
     async (plan: SessionProjectionPlan, selection: SessionPlanApprovalSelection) => {
+      const requestConfig = configRef.current;
       const authoritativeProjection = sessionProjection;
       const authoritativePlan = authoritativeProjection?.currentPlan ?? null;
       const capabilities = authoritativeProjection?.capabilities ?? null;
@@ -4728,7 +5450,12 @@ export function App() {
       setSessionPlanApprovalPending(true);
       setError(null);
       try {
-        const outcome = await api.approvePlanAndStart(
+        const { approvePlanAndStart } =
+          desktopNewTaskFlowClientV2.bindOperation(requestConfig);
+        const client: Pick<DesktopNewTaskFlowClientV2, 'approvePlanAndStart'> = Object.freeze({
+          approvePlanAndStart,
+        });
+        const outcome = await client.approvePlanAndStart(
           sessionPlanApprovalRequest({
             conversationId: conversation.id,
             projectId: conversation.project_id,
@@ -4741,7 +5468,7 @@ export function App() {
           outcome.conversation,
           outcome.run,
         );
-        const workspaceId = nextConversation.workspace_id ?? config.workspaceId.trim();
+        const workspaceId = nextConversation.workspace_id ?? requestConfig.workspaceId.trim();
         if (workspaceId) {
           selectConversation(nextConversation.project_id, workspaceId, nextConversation, 'chat');
         } else {
@@ -4756,16 +5483,14 @@ export function App() {
         applyAuthoritativeRun(outcome.run);
         invalidateSessionAuthority();
       } catch (caught) {
-        setError(formatConnectionError(caught, config.apiBaseUrl));
+        setError(formatConnectionError(caught, requestConfig.apiBaseUrl));
       } finally {
         setSessionPlanApprovalPending(false);
       }
     },
     [
-      api,
       applyAuthoritativeRun,
-      config.apiBaseUrl,
-      config.workspaceId,
+      desktopNewTaskFlowClientV2,
       invalidateSessionAuthority,
       sessionProjection,
       t,
@@ -4773,9 +5498,17 @@ export function App() {
   );
   const handleSessionRunAction = useCallback(
     async (action: SessionRunAction, feedback?: string) => {
+      const authoritativeRun = sessionProjection?.currentRun;
       const runId = sessionDetailViewModel?.runId;
       const revision = sessionDetailViewModel?.runRevision;
-      if (!runId || revision === null || revision === undefined) {
+      if (
+        !runId ||
+        revision === null ||
+        revision === undefined ||
+        !authoritativeRun ||
+        authoritativeRun.id !== runId ||
+        authoritativeRun.revision !== revision
+      ) {
         setError(t('session.runControlUnavailable'));
         return;
       }
@@ -4783,23 +5516,28 @@ export function App() {
         setError(t('session.authorityActionUnavailable'));
         return;
       }
+      const requestConfig = configRef.current;
       setSessionRunActionPending(action);
       setError(null);
       try {
+        const client = desktopSessionRunControlOperationsV2.bindOperation(
+          requestConfig,
+          authoritativeRun.conversation_id,
+        );
         const outcome =
           action === 'pause'
-            ? await api.pauseRun(runId, revision)
+            ? await client.pauseRun(runId, revision)
             : action === 'resume' || action === 'reconnect'
-              ? await api.resumeRun(runId, revision)
+              ? await client.resumeRun(runId, revision)
               : action === 'fork'
-                ? await api.forkRecoveryRun(
+                ? await client.forkRecoveryRun(
                     runId,
                     revision,
                     `desktop-recovery-fork:${runId}:${revision}`,
                   )
                 : action === 'cancel'
-                  ? await api.cancelRun(runId, revision)
-                  : await api.reviewRun(runId, {
+                  ? await client.cancelRun(runId, revision)
+                  : await client.reviewRun(runId, {
                       action: action === 'approve' ? 'approve' : 'request_changes',
                       expectedRevision: revision,
                       ...(feedback ? { feedback } : {}),
@@ -4818,7 +5556,15 @@ export function App() {
         setSessionRunActionPending(null);
       }
     },
-    [api, applyAuthoritativeRun, invalidateSessionAuthority, sessionDetailViewModel, showToast, t],
+    [
+      applyAuthoritativeRun,
+      desktopSessionRunControlOperationsV2,
+      invalidateSessionAuthority,
+      sessionProjection,
+      sessionDetailViewModel,
+      showToast,
+      t,
+    ],
   );
   const handleArtifactAction = useCallback(
     async (version: DesktopArtifactVersion, action: ArtifactVersionAction, feedback?: string) => {
@@ -4844,17 +5590,22 @@ export function App() {
         setError(t('session.authorityActionUnavailable'));
         return;
       }
+      const requestConfig = configRef.current;
       setArtifactActionPending({ versionId: authoritativeVersion.id, action });
       setError(null);
       try {
+        const client = desktopSessionArtifactActionOperationsV2.bindOperation(
+          requestConfig,
+          authoritativeVersion.conversation_id,
+        );
         if (action === 'deliver') {
-          const outcome = await api.deliverArtifactVersion(
+          const outcome = await client.deliverArtifactVersion(
             authoritativeVersion.id,
             artifactDeliveryRequest(authoritativeVersion),
           );
           if (!outcome.accepted) throw new Error(t('session.authorityActionUnavailable'));
         } else {
-          const outcome = await api.reviewArtifactVersion(
+          const outcome = await client.reviewArtifactVersion(
             authoritativeVersion.id,
             artifactReviewRequest(authoritativeVersion, action, currentArtifactRun, feedback),
           );
@@ -4862,16 +5613,15 @@ export function App() {
         }
         invalidateSessionAuthority();
       } catch (caught) {
-        setError(formatConnectionError(caught, config.apiBaseUrl));
+        setError(formatConnectionError(caught, requestConfig.apiBaseUrl));
       } finally {
         setArtifactActionPending(null);
       }
     },
     [
-      api,
       applyAuthoritativeRun,
-      config.apiBaseUrl,
       currentArtifactRun,
+      desktopSessionArtifactActionOperationsV2,
       invalidateSessionAuthority,
       selectedConversation,
       sessionProjection?.capabilities,
@@ -4946,6 +5696,7 @@ export function App() {
       if (!conversation || !chatModelScopeKey) {
         throw new Error(t('chat.selectedModelUnavailable'));
       }
+      const requestConfig = configRef.current;
       const requestId = conversationModelMutationRequestRef.current + 1;
       conversationModelMutationRequestRef.current = requestId;
       const baseEventRevision = conversationModelEvent?.revision ?? null;
@@ -4964,14 +5715,12 @@ export function App() {
         baseEventRevision,
       }));
       try {
-        const updated = await api.updateAgentConversationConfig(
-          conversation.id,
-          {
-            llm_model_override: overrideModel,
-            ...(config.mode === 'local' ? { llm_route_override: routeOverride ?? null } : {}),
-          },
-          conversation.project_id || config.projectId,
-        );
+        const updated = await desktopConversationConfigOperationsV2.updateModelOverride({
+          config: requestConfig,
+          conversation,
+          llmModelOverride: overrideModel,
+          llmRouteOverride: routeOverride ?? null,
+        });
         const activeSession = agentConversationSessionRef.current;
         if (
           conversationModelMutationRequestRef.current !== requestId ||
@@ -4992,7 +5741,7 @@ export function App() {
           return next;
         });
         updateDataset((current) => {
-          const workspaceId = updated.workspace_id?.trim() || config.workspaceId.trim();
+          const workspaceId = updated.workspace_id?.trim() || requestConfig.workspaceId.trim();
           const conversations = current.conversationsByWorkspace[workspaceId];
           if (!conversations?.some((candidate) => candidate.id === updated.id)) return current;
           return {
@@ -5014,7 +5763,7 @@ export function App() {
           baseEventRevision,
         });
       } catch (caught) {
-        const message = formatConnectionError(caught, config.apiBaseUrl);
+        const message = formatConnectionError(caught, requestConfig.apiBaseUrl);
         if (conversationModelMutationRequestRef.current === requestId) {
           setConversationModelMutation({
             scopeKey: chatModelScopeKey,
@@ -5029,12 +5778,9 @@ export function App() {
       }
     },
     [
-      api,
       chatModelScopeKey,
-      config.apiBaseUrl,
-      config.projectId,
-      config.workspaceId,
       conversationModelEvent?.revision,
+      desktopConversationConfigOperationsV2,
       scopedConversation,
       t,
       updateDataset,
@@ -5190,9 +5936,7 @@ export function App() {
   const titlebarPrimaryLabel =
     showRuntimeConfig && activeSection === 'board'
       ? t('myWork.title')
-      : showRuntimeConfig && activeSection === 'automations'
-        ? t('automations.title')
-        : `Session: ${sessionTitle}`;
+      : `Session: ${sessionTitle}`;
   const titlebarRunTimeLabel = activeSidebarRun?.time ?? lastSync;
   useEffect(() => {
     if (!showRuntimeConfig) {
@@ -5356,6 +6100,7 @@ export function App() {
         setConnection('loading');
         setError(null);
 
+        await selectPlatformPluginAuthorityV2(config.mode);
         if (config.mode === 'cloud') {
           const projection = await hydrateProjectedCloudSession(authAttemptRevision);
           if (
@@ -5559,11 +6304,9 @@ export function App() {
     startNewSession,
   } = useAgentConversation({
     agentConversationSession,
-    api,
+    messagingOperationsV2: desktopConversationMessagingOperationsV2,
     applySectionSideEffects,
     auth,
-    activityAuthorityAdapter,
-    activityAuthorityScope,
     canManageWorkspacePolicy,
     commitRuntimeConfig,
     config,
@@ -5578,6 +6321,8 @@ export function App() {
     loadConversationTimeline,
     localRuntimeMode,
     newThreadWorkspaces,
+    newThreadCreationClientV2: desktopNewThreadCreationOperationsV2,
+    sessionRunInputOperationsV2: desktopSessionRunInputOperationsV2,
     pendingNewTaskAgentTurnsRef,
     permissionPreset,
     resetConversationTimeline,
@@ -5648,9 +6393,18 @@ export function App() {
         : current,
     );
     try {
-      const client = new DesktopApiClient(requestConfig);
-      await client.retryWorkspaceAutonomyAttention(attentionId);
-      const attentions = await client.listWorkspaceAutonomyAttentions();
+      const attentions =
+        await desktopWorkspaceAutonomyAttentionOperationsV2.withRetryWorkspaceAutonomyAttention(
+          {
+            config: requestConfig,
+            workspaceId: requestConfig.workspaceId,
+            attentionId,
+          },
+          async (client) => {
+            await client.retryWorkspaceAutonomyAttention(attentionId);
+            return client.listWorkspaceAutonomyAttentions();
+          },
+        );
       if (!requestIsCurrent()) return;
       setWorkspaceAutonomyAttentionState({
         scopeKey: requestScopeKey,
@@ -5674,7 +6428,7 @@ export function App() {
         );
       }
     }
-  }, []);
+  }, [desktopWorkspaceAutonomyAttentionOperationsV2]);
   const resolveWorkspaceAutonomyAttention = useCallback(async (attentionId: string) => {
     const requestConfig = configRef.current;
     const requestScopeKey = workspaceAutonomyAttentionScopeKey(requestConfig);
@@ -5707,76 +6461,110 @@ export function App() {
       });
       return attentionRemainsOpen;
     };
+    const persistedAttempt = currentWorkspaceAutonomyAttentionResolveAttempt(
+      workspaceAutonomyAttentionResolveAttemptsRef.current,
+      requestScopeKey,
+      requestActorId,
+      attentionId,
+    );
+    const operationIdempotencyKey =
+      persistedAttempt?.idempotencyKey ??
+      `desktop-autonomy-attention-resolve:${globalThis.crypto.randomUUID()}`;
     setResolvingWorkspaceAutonomyAttentionId(attentionId);
     setWorkspaceAutonomyAttentionState((current) =>
       current.scopeKey === requestScopeKey
         ? { ...current, authority: { ...current.authority, error: null } }
         : current,
     );
+    let operationErrorHandled = false;
     try {
-      const client = new DesktopApiClient(requestConfig);
-      let attempt = currentWorkspaceAutonomyAttentionResolveAttempt(
-        workspaceAutonomyAttentionResolveAttemptsRef.current,
-        requestScopeKey,
-        requestActorId,
-        attentionId,
-      );
-      if (!attempt) {
-        const expectedRevision = await client.getWorkspaceAuthorityRevision();
-        if (!requestIsCurrent()) return;
-        attempt = resolveWorkspaceAutonomyAttentionAttempt(
-          workspaceAutonomyAttentionResolveAttemptsRef.current,
-          {
-            scopeKey: requestScopeKey,
-            actorId: requestActorId,
-            attentionId,
-            expectedRevision,
-            idempotencyKey: `desktop-autonomy-attention-resolve:${globalThis.crypto.randomUUID()}`,
-          },
-        );
-      }
-      await client.resolveWorkspaceAutonomyAttention(
-        attentionId,
-        attempt.expectedRevision,
-        attempt.idempotencyKey,
-      );
-      const attentions = await client.listWorkspaceAutonomyAttentions();
-      if (!requestIsCurrent()) return;
-      applyCanonicalAttentions(attentions, null);
-    } catch (caught) {
-      if (!requestIsCurrent()) return;
-      const resolveError = formatConnectionError(caught, requestConfig.apiBaseUrl);
-      try {
-        const client = new DesktopApiClient(requestConfig);
-        const attentions = await client.listWorkspaceAutonomyAttentions();
-        if (!requestIsCurrent()) return;
-        const attentionRemainsOpen = attentions.some(
-          (attention) => attention.attention_id === attentionId,
-        );
-        if (!attentionRemainsOpen) {
-          applyCanonicalAttentions(attentions, null);
-          return;
-        }
-        if (caught instanceof DesktopApiError && caught.status === 409) {
-          discardWorkspaceAutonomyAttentionResolveAttempt(
-            workspaceAutonomyAttentionResolveAttemptsRef.current,
-            requestScopeKey,
-            requestActorId,
-            attentionId,
-          );
-        }
-        applyCanonicalAttentions(attentions, resolveError);
-      } catch {
-        if (!requestIsCurrent()) return;
-        setWorkspaceAutonomyAttentionState((current) =>
-          current.scopeKey === requestScopeKey
-            ? {
-                ...current,
-                authority: { ...current.authority, status: 'error', error: resolveError },
+      await desktopWorkspaceAutonomyAttentionOperationsV2.withResolveWorkspaceAutonomyAttention(
+        {
+          config: requestConfig,
+          workspaceId: requestConfig.workspaceId,
+          actorId: requestActorId,
+          attentionId,
+          expectedRevision: persistedAttempt?.expectedRevision ?? null,
+          idempotencyKey: operationIdempotencyKey,
+        },
+        async (client, prepared) => {
+          try {
+            let attempt = persistedAttempt;
+            if (!attempt) {
+              const expectedRevision = await client.getWorkspaceAuthorityRevision();
+              if (!requestIsCurrent()) return;
+              attempt = resolveWorkspaceAutonomyAttentionAttempt(
+                workspaceAutonomyAttentionResolveAttemptsRef.current,
+                {
+                  scopeKey: requestScopeKey,
+                  actorId: requestActorId,
+                  attentionId,
+                  expectedRevision,
+                  idempotencyKey: prepared.idempotencyKey,
+                },
+              );
+            }
+            await client.resolveWorkspaceAutonomyAttention(
+              attentionId,
+              attempt.expectedRevision,
+              attempt.idempotencyKey,
+            );
+            const attentions = await client.listWorkspaceAutonomyAttentions();
+            if (!requestIsCurrent()) return;
+            applyCanonicalAttentions(attentions, null);
+          } catch (caught) {
+            if (!requestIsCurrent()) throw caught;
+            const resolveError = formatConnectionError(caught, requestConfig.apiBaseUrl);
+            try {
+              const attentions = await client.listWorkspaceAutonomyAttentions();
+              if (!requestIsCurrent()) throw caught;
+              const attentionRemainsOpen = attentions.some(
+                (attention) => attention.attention_id === attentionId,
+              );
+              if (!attentionRemainsOpen) {
+                applyCanonicalAttentions(attentions, null);
+              } else {
+                if (caught instanceof DesktopApiError && caught.status === 409) {
+                  discardWorkspaceAutonomyAttentionResolveAttempt(
+                    workspaceAutonomyAttentionResolveAttemptsRef.current,
+                    requestScopeKey,
+                    requestActorId,
+                    attentionId,
+                  );
+                }
+                applyCanonicalAttentions(attentions, resolveError);
               }
-            : current,
-        );
-      }
+            } catch {
+              if (!requestIsCurrent()) throw caught;
+              setWorkspaceAutonomyAttentionState((current) =>
+                current.scopeKey === requestScopeKey
+                  ? {
+                      ...current,
+                      authority: {
+                        ...current.authority,
+                        status: 'error',
+                        error: resolveError,
+                      },
+                    }
+                  : current,
+              );
+            }
+            operationErrorHandled = true;
+            throw caught;
+          }
+        },
+      );
+    } catch (caught) {
+      if (!requestIsCurrent() || operationErrorHandled) return;
+      const resolveError = formatConnectionError(caught, requestConfig.apiBaseUrl);
+      setWorkspaceAutonomyAttentionState((current) =>
+        current.scopeKey === requestScopeKey
+          ? {
+              ...current,
+              authority: { ...current.authority, status: 'error', error: resolveError },
+            }
+          : current,
+      );
     } finally {
       if (requestIsCurrent()) {
         setResolvingWorkspaceAutonomyAttentionId((current) =>
@@ -5784,7 +6572,7 @@ export function App() {
         );
       }
     }
-  }, []);
+  }, [desktopWorkspaceAutonomyAttentionOperationsV2]);
   const openProfileWorkspaceSettings = () => openSettingsEntry('profile_workspace_switch');
 
   const openConnectionSettings = () => {
@@ -5793,17 +6581,20 @@ export function App() {
     }
     openSettingsEntry('runtime_connection');
   };
-  projectCronJobsRouteBindingRef.current = Object.freeze({
-    api: automationApi,
-    config,
-    project: selectedProject,
-    runCapability: automationRunCapability,
+  projectCronJobsRouteBindingProviderV2.publish({
+    api: desktopAutomationApiV2,
+    scope: Object.freeze({
+      tenantId: config.tenantId,
+      projectId: config.projectId,
+    }),
+    projects: auth.projects,
+    capabilitySnapshot: desktopCapabilityState.snapshot,
     onOpenProjectSettings: openWorkspaceSettings,
     onOpenConnection: openConnectionSettings,
   });
 
   const applySettingsContext = async (tenantId: string, projectId: string) => {
-    const requestConfig = configRef.current;
+    const requestConfig = Object.freeze({ ...configRef.current });
     const authAttemptRevision = authAttemptRevisionRef.current;
     const requestIsCurrent = () =>
       authAttemptRevisionRef.current === authAttemptRevision &&
@@ -5811,57 +6602,67 @@ export function App() {
     if (!auth.tenants.some((tenant) => tenant.id === tenantId)) {
       throw new Error(t('settings.selectedTenantUnavailable'));
     }
-    const contextClient = new DesktopApiClient({
+    const authorityConfig = Object.freeze({
       ...requestConfig,
       tenantId,
       projectId: '',
       workspaceId: '',
     });
-    const listedProjects = await contextClient.listProjects(tenantId);
-    if (!requestIsCurrent()) return;
-    const scopedProjects = listedProjects.filter((project) => project.tenant_id === tenantId);
-    const selectedProject = findWorkspaceProject(scopedProjects, tenantId, projectId);
-    if (!selectedProject) {
-      throw new Error(t('settings.selectedProjectUnavailable'));
-    }
+    const signal = new AbortController().signal;
+    await withDesktopWorkspaceContextAuthorityOperationV2(
+      desktopRendererGenerationV2.actions,
+      authorityConfig,
+      async (contextClient) => {
+        const listedProjects = await contextClient.listProjects(tenantId, signal);
+        if (!requestIsCurrent()) return;
+        const scopedProjects = listedProjects.filter(
+          (project) => project.tenant_id === tenantId,
+        );
+        const selectedProject = findWorkspaceProject(scopedProjects, tenantId, projectId);
+        if (!selectedProject) {
+          throw new Error(t('settings.selectedProjectUnavailable'));
+        }
 
-    let currentContext = auth.context;
-    if (!currentContext) {
-      const currentContextResponse = await contextClient.getWorkspaceContext();
-      if (!requestIsCurrent()) return;
-      currentContext = currentContextResponse.context;
-    }
-    let nextContext = currentContext;
-    if (!workspaceContextMatchesSelection(currentContext, tenantId, projectId)) {
-      const nextContextResponse = await contextClient.switchWorkspaceContext(
-        tenantId,
-        projectId,
-        currentContext.revision,
-        globalThis.crypto.randomUUID(),
-      );
-      if (!requestIsCurrent()) return;
-      nextContext = nextContextResponse.context;
-    }
-    if (!workspaceContextMatchesSelection(nextContext, tenantId, projectId)) {
-      throw new Error(t('settings.contextResponseMismatch'));
-    }
-    if (!requestIsCurrent()) return;
-    const nextConfig = {
-      ...requestConfig,
-      tenantId,
-      projectId,
-      workspaceId: '',
-    };
-    contextRevisionRef.current = nextContext.revision;
-    resetProjectScopedState();
-    commitRuntimeConfig(nextConfig);
-    setAuth((current) => ({
-      ...current,
-      context: nextContext,
-      projects: scopedProjects,
-    }));
-    applySectionSideEffects('workspace');
-    await refreshRuntime(nextConfig, [selectedProject]);
+        let currentContext = auth.context;
+        if (!currentContext) {
+          const currentContextResponse = await contextClient.getWorkspaceContext(signal);
+          if (!requestIsCurrent()) return;
+          currentContext = currentContextResponse.context;
+        }
+        let nextContext = currentContext;
+        if (!workspaceContextMatchesSelection(currentContext, tenantId, projectId)) {
+          const nextContextResponse = await contextClient.switchWorkspaceContext(
+            tenantId,
+            projectId,
+            currentContext.revision,
+            globalThis.crypto.randomUUID(),
+            signal,
+          );
+          if (!requestIsCurrent()) return;
+          nextContext = nextContextResponse.context;
+        }
+        if (!workspaceContextMatchesSelection(nextContext, tenantId, projectId)) {
+          throw new Error(t('settings.contextResponseMismatch'));
+        }
+        if (!requestIsCurrent()) return;
+        const nextConfig = {
+          ...requestConfig,
+          tenantId,
+          projectId,
+          workspaceId: '',
+        };
+        contextRevisionRef.current = nextContext.revision;
+        resetProjectScopedState();
+        commitRuntimeConfig(nextConfig);
+        setAuth((current) => ({
+          ...current,
+          context: nextContext,
+          projects: scopedProjects,
+        }));
+        applySectionSideEffects('workspace');
+        await refreshRuntime(nextConfig, [selectedProject]);
+      },
+    );
   };
 
   const goBackSection = () => {
@@ -5993,16 +6794,22 @@ export function App() {
         detectShortcutPlatform(navigator.userAgent, navigator.platform),
       )
     : undefined;
-  const routeDiscoveryEntries = deriveDesktopNavigationDiscoveryEntries({
-    registry: desktopCanonicalNavigationRegistry,
-    authenticated: identityAuthenticated,
-    context: {
-      tenantId: config.tenantId,
-      projectId: config.projectId,
-      workspaceId: config.workspaceId,
-    },
-    translate: t,
-  });
+  const routeDiscoveryEntries =
+    desktopRendererAuthorityV2.status === 'ready' &&
+    desktopCanonicalNavigationRegistry.definitions.length > 0 &&
+    desktopCanonicalNavigationRegistry.definitions.length ===
+      desktopRendererAuthorityV2.navigationDiscoveryRouteIds.length
+      ? deriveDesktopNavigationDiscoveryEntries({
+          registry: desktopCanonicalNavigationRegistry,
+          authenticated: identityAuthenticated,
+          context: {
+            tenantId: config.tenantId,
+            projectId: config.projectId,
+            workspaceId: config.workspaceId,
+          },
+          translate: t,
+        })
+      : [];
   const routeCommandItems: CommandPaletteItem[] = routeDiscoveryEntries.map((entry) => ({
     id: `route:${entry.routeId}`,
     kind: 'route',
@@ -6051,98 +6858,6 @@ export function App() {
       icon: <GridIcon />,
       searchText: `${t('myWork.title')} ${t('myWork.commandDescription')}`,
       onSelect: () => switchSection('board'),
-    },
-    {
-      id: 'automations',
-      kind: 'action',
-      groupId: 'desktop-shell',
-      groupLabel: shellCommandGroup,
-      label: t('automations.title'),
-      description: t('automations.commandDescription'),
-      icon: <ActivityLogIcon />,
-      searchText: `${t('automations.title')} ${t('automations.commandDescription')}`,
-      onSelect: () => switchSection('automations'),
-    },
-    {
-      id: BACKEND_STORES_ROUTE_ID,
-      kind: 'route',
-      groupId: 'desktop-auxiliary',
-      groupLabel: t('featureDirectory.group.auxiliary'),
-      routeId: BACKEND_STORES_ROUTE_ID,
-      label: t('backendStores.title'),
-      description: t('backendStores.subtitle'),
-      icon: <GridIcon />,
-      disabled: !identityAuthenticated || !config.tenantId.trim(),
-      disabledReason:
-        !identityAuthenticated || !config.tenantId.trim()
-          ? t('featureDirectory.disabled.requiredContext', {
-              scope: t('featureDirectory.scope.tenant'),
-            })
-          : undefined,
-      searchText: `${t('backendStores.title')} ${t('backendStores.subtitle')} ${BACKEND_STORES_ROUTE_ID}`,
-      onSelect: () => {
-        const route = desktopProductionRouteRegistry.byId.get(BACKEND_STORES_ROUTE_ID);
-        if (!route) return;
-        desktopProductionRouteNavigation.openPath(
-          buildDesktopRoutePath(route, { tenantId: config.tenantId }),
-        );
-      },
-    },
-    {
-      id: PROJECT_PLAYBOOKS_ROUTE_ID,
-      kind: 'route',
-      groupId: 'desktop-auxiliary',
-      groupLabel: t('featureDirectory.group.auxiliary'),
-      routeId: PROJECT_PLAYBOOKS_ROUTE_ID,
-      label: t('projectPlaybooks.title'),
-      description: t('projectPlaybooks.subtitle'),
-      icon: <ActivityLogIcon />,
-      disabled: !identityAuthenticated || !config.tenantId.trim() || !config.projectId.trim(),
-      disabledReason:
-        !identityAuthenticated || !config.tenantId.trim() || !config.projectId.trim()
-          ? t('featureDirectory.disabled.requiredContext', {
-              scope: t('featureDirectory.scope.project'),
-            })
-          : undefined,
-      searchText: `${t('projectPlaybooks.title')} ${t('projectPlaybooks.subtitle')} ${PROJECT_PLAYBOOKS_ROUTE_ID}`,
-      onSelect: () => {
-        const route = desktopProductionRouteRegistry.byId.get(PROJECT_PLAYBOOKS_ROUTE_ID);
-        if (!route) return;
-        desktopProductionRouteNavigation.openPath(
-          buildDesktopRoutePath(route, {
-            tenantId: config.tenantId,
-            projectId: config.projectId,
-          }),
-        );
-      },
-    },
-    {
-      id: 'project-support',
-      kind: 'route',
-      groupId: 'desktop-auxiliary',
-      groupLabel: t('featureDirectory.group.auxiliary'),
-      routeId: PROJECT_SUPPORT_ROUTE_ID,
-      label: t('projectSupport.title'),
-      description: t('projectSupport.subtitle'),
-      icon: <ActivityLogIcon />,
-      disabled: !identityAuthenticated || !config.tenantId.trim() || !config.projectId.trim(),
-      disabledReason:
-        !identityAuthenticated || !config.tenantId.trim() || !config.projectId.trim()
-          ? t('featureDirectory.disabled.requiredContext', {
-              scope: t('featureDirectory.scope.project'),
-            })
-          : undefined,
-      searchText: `${t('projectSupport.title')} ${t('projectSupport.subtitle')} ${PROJECT_SUPPORT_ROUTE_ID}`,
-      onSelect: () => {
-        const projectSupportRoute =
-          desktopProductionRouteRegistry.byId.get(PROJECT_SUPPORT_ROUTE_ID);
-        if (!projectSupportRoute) return;
-        const projectSupportPath = buildDesktopRoutePath(projectSupportRoute, {
-          tenantId: config.tenantId,
-          projectId: config.projectId,
-        });
-        desktopProductionRouteNavigation.openPath(projectSupportPath);
-      },
     },
     {
       id: 'settings',
@@ -6222,163 +6937,159 @@ export function App() {
       ({ routeId }) => routeId,
     ),
   );
+  const authorizedCommandItems = commandItems.filter(
+    (item) =>
+      item.kind !== 'route' ||
+      (item.routeId !== undefined &&
+        isDesktopNavigationRouteEnabledV2(desktopRendererAuthorityV2, item.routeId)),
+  );
   const normalizedCommandQuery = commandQuery.trim().toLocaleLowerCase(locale);
   const filteredCommandItems = normalizedCommandQuery
-    ? commandItems.filter((item) =>
+    ? authorizedCommandItems.filter((item) =>
         item.kind === 'route' && item.id.startsWith('route:') && item.routeId
           ? matchingRouteIds.has(item.routeId as (typeof routeDiscoveryEntries)[number]['routeId'])
           : item.searchText.toLocaleLowerCase(locale).includes(normalizedCommandQuery),
       )
-    : commandItems;
+    : authorizedCommandItems;
 
-  const renderChatPanel = () => (
-    <>
-      <ChatPanel
-      api={chatComposerApi}
-      conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
-      selectedConversationId={selectedConversation?.id ?? null}
-      messages={dataset.messages}
-      timelineState={selectedConversation ? sessionTimeline : null}
-      agentTaskSignals={agentTaskSignals}
-      workflowCounts={chatWorkflowCounts}
-      sessionTitle={selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined)}
-      scopeLabel={
-        selectedConversation
-          ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
-          : 'Workspace conversation'
-      }
-      turnCollapseRuntime={{
+  const createChatWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+    kind: 'chat',
+    chatPanel: {
+      imagePreviewClient: desktopStructuredImagePreviewClientV2,
+      api: chatComposerApi,
+      conversations: dataset.conversationsByWorkspace[config.workspaceId] ?? [],
+      selectedConversationId: selectedConversation?.id ?? null,
+      messages: dataset.messages,
+      timelineState: selectedConversation ? sessionTimeline : null,
+      agentTaskSignals,
+      workflowCounts: chatWorkflowCounts,
+      sessionTitle: selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined),
+      scopeLabel: selectedConversation
+        ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
+        : 'Workspace conversation',
+      turnCollapseRuntime: {
         mode: config.mode,
         apiBaseUrl: config.apiBaseUrl,
         tenantId: config.tenantId,
         projectId: config.projectId,
-      }}
-      voiceTranscriptionConfig={config}
-      composerVariant={selectedConversation ? 'session' : 'workspace'}
-      composerResetKey={selectedConversation?.id ?? config.workspaceId}
-      activityPresence={sessionActivityState}
-      activityStructuredEvidence={sessionActivityStructuredEvidence}
-      sending={sending}
-      disabledReason={sessionChatDisabledReason}
-      agentControlEvents={socket.events}
-      activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
-      modelLabel={chatRuntimeModelSelection.displayLabel}
-      modelOptions={runtimeModelOptions}
-      selectedModelValue={chatRuntimeModelSelection.selectedValue}
-      modelSwitching={chatRuntimeModelSwitching}
-      modelError={chatRuntimeModelError}
-      runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
-      runtimeTargetOptions={runtimeTargetComposerOptions}
-      composeAheadFallbackAllowed={false}
-      canonicalRunStatus={currentArtifactRun?.status ?? null}
-      runInputDelivery={effectiveRunInputDeliveryValue}
-      runInputDeliveryOptions={runInputDeliveryOptions}
-      runInputs={runInputs}
-      runInputsLoading={runInputsLoading}
-      runInputsError={runInputsError}
-      promotingRunInputId={promotingRunInputId}
-      runInputAuthorityRunId={currentArtifactRun?.id ?? null}
-      references={runInputReferences}
-      onRunInputDeliveryChange={setRunInputDelivery}
-      onPromoteRunInput={promoteQueuedRunInput}
-      onRemoveReference={handleChatRemoveReference}
-      onSend={sendChatMessage}
-      onRegenerateConversationSummary={regenerateConversationSummary}
-      onStopResponse={socket.stopAgentResponse}
-      onSteerResponse={(request) =>
+      },
+      voiceTranscriptionConfig: config,
+      voiceSessionOperations: desktopVoiceSessionOperationsV2,
+      composerVariant: selectedConversation ? 'session' : 'workspace',
+      composerResetKey: selectedConversation?.id ?? config.workspaceId,
+      activityPresence: sessionActivityState,
+      activityStructuredEvidence: sessionActivityStructuredEvidence,
+      sending,
+      disabledReason: sessionChatDisabledReason,
+      agentControlEvents: socket.events,
+      activeWorkflowTarget: chatWorkflowTargetForReviewTab(reviewTab),
+      modelLabel: chatRuntimeModelSelection.displayLabel,
+      modelOptions: runtimeModelOptions,
+      selectedModelValue: chatRuntimeModelSelection.selectedValue,
+      modelSwitching: chatRuntimeModelSwitching,
+      modelError: chatRuntimeModelError,
+      runtimeTargetLabel: runtimeTargetLabels[runtimeTarget],
+      runtimeTargetOptions: runtimeTargetComposerOptions,
+      composeAheadFallbackAllowed: false,
+      canonicalRunStatus: currentArtifactRun?.status ?? null,
+      runInputDelivery: effectiveRunInputDeliveryValue,
+      runInputDeliveryOptions,
+      runInputs,
+      runInputsLoading,
+      runInputsError,
+      promotingRunInputId,
+      runInputAuthorityRunId: currentArtifactRun?.id ?? null,
+      references: runInputReferences,
+      onRunInputDeliveryChange: setRunInputDelivery,
+      onPromoteRunInput: promoteQueuedRunInput,
+      onRemoveReference: handleChatRemoveReference,
+      onSend: sendChatMessage,
+      onRegenerateConversationSummary: regenerateConversationSummary,
+      onStopResponse: socket.stopAgentResponse,
+      onSteerResponse: (request) =>
         socket.sendSteerMessage({
           conversationId: request.conversationId,
           projectId: config.projectId,
           message: request.text,
           messageId: request.messageId,
-        })
-      }
-      subAgentControlAuthority={subAgentControlAuthority}
-      onSubAgentControl={socket.sendSubAgentControl}
-      onRefresh={handleChatRefresh}
-      onLoadEarlier={loadEarlierTimeline}
-      onRespondToHitl={respondToHitlWithSteering}
-      respondableHitlRequestIds={respondableHitlRequestIds}
-      permissionPreset={selectedConversation ? permissionPreset : undefined}
-      permissionPresetFullAccessAcknowledged={fullAccessWarningAcknowledged}
-      onPermissionPresetChange={selectedConversation ? handlePermissionPresetChange : undefined}
-      onAcknowledgeFullAccessWarning={
-        selectedConversation ? handleAcknowledgeFullAccessWarning : undefined
-      }
-      authorityNotice={sessionAuthorityNotice}
-      onAuthorityAction={
-        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
-      }
-      onWorkflowSelect={selectChatWorkflowTarget}
-      onModelChange={selectChatRuntimeModel}
-      onModelReset={
-        scopedConversation && chatRuntimeModelSelection.canReset ? resetChatRuntimeModel : undefined
-      }
-      onRuntimeTargetChange={handleChatRuntimeTargetChange}
-      onOpenMCPAppResult={openMCPAppResult}
-      onOpenCommands={openCommandPalette}
-      runCompletionSummary={selectedConversation ? runCompletionSummary : null}
-      onOpenSessionCanvasTab={openSessionCanvasTab}
-      />
-      {/* I3: plugin conversation renderers mount below the chat panel. */}
-      <PlatformPluginConversationSlots active config={config} />
-    </>
-  );
+        }),
+      subAgentControlAuthority,
+      onSubAgentControl: socket.sendSubAgentControl,
+      onRefresh: handleChatRefresh,
+      onLoadEarlier: loadEarlierTimeline,
+      onRespondToHitl: respondToHitlWithSteering,
+      respondableHitlRequestIds,
+      permissionPreset: selectedConversation ? permissionPreset : undefined,
+      permissionPresetFullAccessAcknowledged: fullAccessWarningAcknowledged,
+      onPermissionPresetChange: selectedConversation ? handlePermissionPresetChange : undefined,
+      onAcknowledgeFullAccessWarning: selectedConversation
+        ? handleAcknowledgeFullAccessWarning
+        : undefined,
+      authorityNotice: sessionAuthorityNotice,
+      onAuthorityAction:
+        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined,
+      onWorkflowSelect: selectChatWorkflowTarget,
+      onModelChange: selectChatRuntimeModel,
+      onModelReset:
+        scopedConversation && chatRuntimeModelSelection.canReset
+          ? resetChatRuntimeModel
+          : undefined,
+      onRuntimeTargetChange: handleChatRuntimeTargetChange,
+      onOpenMCPAppResult: openMCPAppResult,
+      onOpenCommands: openCommandPalette,
+      runCompletionSummary: selectedConversation ? runCompletionSummary : null,
+      onOpenSessionCanvasTab: openSessionCanvasTab,
+    },
+  });
 
-  const renderWorkspaceOverview = () => {
-    return (
-      <>
-        <WorkspaceOverview
-          workspace={selectedWorkspace}
-          project={selectedProject}
-          tenantName={
-            auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
-            config.tenantId ||
-            t('settings.noTenantSelected')
-          }
-          workspaceAuthority={newTaskWorkspaceAuthority}
-          conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
-          members={dataset.workspaceMembers}
-          agents={dataset.workspaceAgents}
-          plan={activeDataset.plan}
-          sandboxStatus={dataset.sandbox?.status ?? null}
-          liveActivity={workspaceLiveActivity}
-          autonomyAttentions={workspaceAutonomyAttentions}
-          canRetryAutonomyAttention={canRetryWorkspaceAutonomyAttention}
-          canResolveAutonomyAttention={canRetryWorkspaceAutonomyAttention}
-          retryingAutonomyAttentionId={retryingWorkspaceAutonomyAttentionId}
-          resolvingAutonomyAttentionId={resolvingWorkspaceAutonomyAttentionId}
-          newTaskDisabledReason={newTaskDisabledReason}
-          onNewTask={() => openNewTask(config.workspaceId)}
-          onRetryWorkspaces={() => void refreshRuntime()}
-          onRetryAutonomyAttention={(attentionId) =>
-            void retryWorkspaceAutonomyAttention(attentionId)
-          }
-          onResolveAutonomyAttention={(attentionId) =>
-            void resolveWorkspaceAutonomyAttention(attentionId)
-          }
-          onOpenConversation={(conversationId) => {
-            const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
-              (item) => item.id === conversationId,
-            );
+  const createWorkspaceWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+    kind: 'workspace',
+    overview: {
+      workspace: selectedWorkspace,
+      project: selectedProject,
+      tenantName:
+        auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
+        config.tenantId ||
+        t('settings.noTenantSelected'),
+      workspaceAuthority: newTaskWorkspaceAuthority,
+      conversations: dataset.conversationsByWorkspace[config.workspaceId] ?? [],
+      members: dataset.workspaceMembers,
+      agents: dataset.workspaceAgents,
+      plan: activeDataset.plan,
+      sandboxStatus: dataset.sandbox?.status ?? null,
+      liveActivity: workspaceLiveActivity,
+      autonomyAttentions: workspaceAutonomyAttentions,
+      canRetryAutonomyAttention: canRetryWorkspaceAutonomyAttention,
+      canResolveAutonomyAttention: canRetryWorkspaceAutonomyAttention,
+      retryingAutonomyAttentionId: retryingWorkspaceAutonomyAttentionId,
+      resolvingAutonomyAttentionId: resolvingWorkspaceAutonomyAttentionId,
+      newTaskDisabledReason,
+      onNewTask: () => openNewTask(config.workspaceId),
+      onRetryWorkspaces: () => void refreshRuntime(),
+      onRetryAutonomyAttention: (attentionId) => void retryWorkspaceAutonomyAttention(attentionId),
+      onResolveAutonomyAttention: (attentionId) =>
+        void resolveWorkspaceAutonomyAttention(attentionId),
+      onOpenConversation: (conversationId) => {
+        const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
+          (item) => item.id === conversationId,
+        );
             if (!conversation) {
               setError(t('myWork.sessionUnavailable'));
-              return;
-            }
-            selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
-          }}
-          onOpenSettings={openWorkspaceSettings}
-        />
-        {selectedWorkspace && config.workspaceId.trim() ? (
-          <WorkspaceCollaborationCanvas
-            workspaceId={config.workspaceId}
-            client={workspaceCollaborationClient}
-            authorityInvalidation={workspaceCollaborationAuthorityInvalidation}
-          />
-        ) : null}
-      </>
-    );
-  };
+          return;
+        }
+        selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
+      },
+      onOpenSettings: openWorkspaceSettings,
+    },
+    collaboration:
+      selectedWorkspace && config.workspaceId.trim()
+        ? {
+            workspaceId: config.workspaceId,
+            client: workspaceCollaborationClientV2,
+            authorityInvalidation: workspaceCollaborationAuthorityInvalidation,
+          }
+        : null,
+  });
 
   const openMyWorkSession = async (item: ProjectWorkItem) => {
     const workspaceId = item.workspace_id ?? '';
@@ -6394,10 +7105,16 @@ export function App() {
     }
     if (!conversation) {
       try {
-        const response = await api.listConversations(
-          item.project_id,
-          workspaceId ? workspaceId : { workspaceId: null, unboundOnly: true },
-        );
+        const response =
+          await desktopWorkspaceConversationCatalogOperationsV2.listConversations({
+            config: {
+              ...config,
+              projectId: item.project_id,
+              workspaceId,
+            },
+            workspaceId: workspaceId || null,
+            unboundOnly: !workspaceId,
+          });
         conversation = response.items.find((candidate) => candidate.id === item.conversation_id);
       } catch (caught) {
         if (
@@ -6444,7 +7161,16 @@ export function App() {
     );
     if (!conversation) {
       try {
-        const response = await api.listConversations(projectId, workspaceId);
+        const response =
+          await desktopWorkspaceConversationCatalogOperationsV2.listConversations({
+            config: {
+              ...config,
+              projectId,
+              workspaceId,
+            },
+            workspaceId,
+            unboundOnly: false,
+          });
         conversation = response.items.find((candidate) => candidate.id === conversationId);
       } catch (caught) {
         if (
@@ -6475,39 +7201,41 @@ export function App() {
     selectConversation(projectId, workspaceId, conversation, 'chat');
   };
 
-  const renderBoardPanel = () => (
-    <MyWorkQueue
-      items={dataset.myWork}
-      error={dataset.myWorkError}
-      loading={connection === 'loading' || myWorkRefreshing}
-      mode={preferredTaskMode}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
-      workspaceLabels={myWorkWorkspaceLabels}
-      onRefresh={() => void refreshMyWork()}
-      onOpenSession={(item) => void openMyWorkSession(item)}
-    />
-  );
+  const createBoardWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+    kind: 'board',
+    myWorkQueue: {
+      items: dataset.myWork,
+      error: dataset.myWorkError,
+      loading: connection === 'loading' || myWorkRefreshing,
+      mode: preferredTaskMode,
+      projectName: selectedProject?.name ?? selectedProject?.id ?? t('overview.none'),
+      workspaceLabels: myWorkWorkspaceLabels,
+      onRefresh: () => void refreshMyWork(),
+      onOpenSession: (item) => void openMyWorkSession(item),
+    },
+  });
 
-  const renderActivityInbox = () => (
-    <ActivityInbox
-      groups={activityInbox.groups}
-      isEntryRead={activityInbox.isEntryRead}
-      unreadCount={activityInbox.unreadCount}
-      error={dataset.myWorkError}
-      loading={connection === 'loading' || myWorkRefreshing}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
-      workspaceLabels={myWorkWorkspaceLabels}
-      onRefresh={() => void refreshMyWork()}
-      onOpen={(entry) => {
+  const createActivityWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+    kind: 'activity',
+    activityInbox: {
+      groups: activityInbox.groups,
+      isEntryRead: activityInbox.isEntryRead,
+      unreadCount: activityInbox.unreadCount,
+      error: dataset.myWorkError,
+      loading: connection === 'loading' || myWorkRefreshing,
+      projectName: selectedProject?.name ?? selectedProject?.id ?? t('overview.none'),
+      workspaceLabels: myWorkWorkspaceLabels,
+      onRefresh: () => void refreshMyWork(),
+      onOpen: (entry) => {
         activityInbox.markRead(entry.id);
         void openMyWorkSession(entry.item);
-      }}
-      onMarkRead={activityInbox.markRead}
-      onMarkAllRead={activityInbox.markAllRead}
-    />
-  );
+      },
+      onMarkRead: activityInbox.markRead,
+      onMarkAllRead: activityInbox.markAllRead,
+    },
+  });
 
-  const renderNewThreadComposer = () => {
+  const createHomeWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => {
     const newThreadComposerScopeKey = [
       config.mode,
       config.apiBaseUrl,
@@ -6529,204 +7257,155 @@ export function App() {
     );
     const unboundTransportUnavailable =
       !newThreadWorkspaceId && config.mode === 'cloud' && connection !== 'ready';
-    return (
-      <NewThreadComposer
-        key={newThreadComposerScopeKey}
-        api={newThreadComposerApi}
-        workspaceId={newThreadWorkspaceId}
-        workspace={workspace}
-        workspaces={newThreadWorkspaces}
-        conversations={
-          dataset.conversationsByWorkspace[newThreadWorkspaceId || UNBOUND_CONVERSATIONS_KEY] ?? []
-        }
-        mode={preferredTaskMode}
-        policy={workspaceAgentPolicy.policy}
-        modelOptions={modelOptions}
-        canManagePolicy={canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode}
-        loadingPolicy={workspaceAgentPolicy.loading}
-        compatibilityMode={Boolean(newThreadWorkspaceId) && workspaceAgentPolicy.compatibilityMode}
-        disabledReason={
-          newTaskDisabledReason ??
-          (unboundTransportUnavailable
-            ? t('task.liveConnectionRequired')
-            : policyUnavailable
-              ? t('task.policyUnavailable')
-              : modelUnavailable
-                ? t('task.noModelsAvailable')
-                : null)
-        }
-        creating={newThreadCreating}
-        error={newThreadError}
-        onModeChange={setPreferredTaskMode}
-        onWorkspaceChange={changeNewThreadWorkspace}
-        onCreate={(input) => void createComposerThread(input)}
-        onOpenThread={(conversation) =>
-          selectConversation(config.projectId, newThreadWorkspaceId, conversation, 'chat')
-        }
-        onManageModels={() => {
-          setSettingsInitialSection('models');
-          setSettingsWindowOpen(true);
-        }}
-      />
-    );
+    return {
+      kind: 'home',
+      newThreadComposer: {
+        scopeKey: newThreadComposerScopeKey,
+        composer: {
+          api: desktopNewThreadComposerCatalogClientV2.client,
+          workspaceId: newThreadWorkspaceId,
+          workspace,
+          workspaces: newThreadWorkspaces,
+          conversations:
+            dataset.conversationsByWorkspace[newThreadWorkspaceId || UNBOUND_CONVERSATIONS_KEY] ??
+            [],
+          mode: preferredTaskMode,
+          policy: workspaceAgentPolicy.policy,
+          modelOptions,
+          canManagePolicy: canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode,
+          loadingPolicy: workspaceAgentPolicy.loading,
+          compatibilityMode: Boolean(newThreadWorkspaceId) && workspaceAgentPolicy.compatibilityMode,
+          disabledReason:
+            newTaskDisabledReason ??
+            (unboundTransportUnavailable
+              ? t('task.liveConnectionRequired')
+              : policyUnavailable
+                ? t('task.policyUnavailable')
+                : modelUnavailable
+                  ? t('task.noModelsAvailable')
+                  : null),
+          creating: newThreadCreating,
+          error: newThreadError,
+          onModeChange: setPreferredTaskMode,
+          onWorkspaceChange: changeNewThreadWorkspace,
+          onCreate: (input) => void createComposerThread(input),
+          onOpenThread: (conversation) =>
+            selectConversation(config.projectId, newThreadWorkspaceId, conversation, 'chat'),
+          onManageModels: () => {
+            setSettingsInitialSection('models');
+            setSettingsWindowOpen(true);
+          },
+        },
+      },
+    };
   };
 
-  const renderAuxiliaryView = () => (
-    <AuxiliaryView
-      section="home"
-      userName={auxiliaryUserName}
-      runningCount={myWorkCounts.running}
-      needsInputCount={myWorkCounts.needs_input + myWorkCounts.needs_approval}
-      readyCount={myWorkCounts.ready_review}
-      metricStatus={myWorkMetricStatus}
-      onOpenMyWork={() => switchSection('board')}
-      onRetryMyWork={() => void refreshMyWork()}
-    />
-  );
-
-  const renderSearchPage = () => (
-    <DesktopSearch
-      key={`${config.tenantId || 'no-tenant'}:${config.projectId || 'no-project'}`}
-      api={api}
-      tenantId={config.tenantId}
-      projectId={config.projectId}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? null}
-      capability={searchCapability}
-      capabilityLoading={desktopCapabilityState.loading}
-      onRetryCapability={desktopCapabilityState.reload}
-      onOpenProjectSettings={openWorkspaceSettings}
-    />
-  );
-
-  const renderAutomationsPage = () => (
-    <Suspense
-      fallback={
-        <section className="automations-page" aria-busy="true">
-          <Text>{t('automations.loading')}</Text>
-        </section>
-      }
-    >
-      <LazyAutomationsPage
-        key={config.projectId || 'no-project'}
-        api={automationApi}
-        projectId={config.projectId}
-        projectName={selectedProject?.name ?? selectedProject?.id ?? null}
-        runCapability={automationRunCapability}
-        onOpenProjectSettings={openWorkspaceSettings}
-        onOpenConnection={openConnectionSettings}
-      />
-    </Suspense>
-  );
-
-  const renderWorkspaceReviewPanel = (sessionControls?: SessionCanvasControls) => (
-    <WorkspaceReviewPanel
-      activeTab={reviewTab}
-      socketEvents={workspaceEventInputs}
-      timelineItems={conversationTimeline.items}
-      artifacts={workspaceArtifacts}
-      artifactVersions={displaySessionProjection?.artifactVersions ?? []}
-      artifactCanvas={artifactCanvasState}
-      artifactClient={artifactApi}
-      mcpAppCanvas={mcpAppCanvasState}
-      mcpAppApi={api}
-      mcpAppProjectId={config.projectId}
-      mcpAppSandboxProxyUrl={desktopMCPAppSandboxProxyUrl(config.apiBaseUrl)}
-      onSendMCPAppMessage={(message) => sendChatMessage(message, [])}
-      artifactDeliveries={displaySessionProjection?.artifactDeliveries ?? []}
-      toolInvocations={displaySessionProjection?.toolInvocations ?? []}
-      currentRun={currentArtifactRun}
-      changeSnapshot={changeSnapshot}
-      changeSnapshotLoading={changeSnapshotLoading}
-      changeSnapshotError={changeSnapshotError}
-      changeScope={changeScope}
-      availableChangeScopes={availableChangeScopes}
-      changeReferences={runInputReferences}
-      changeComments={commentsForConversation(
-        changeCommentsByConversation,
-        changeSnapshot?.conversation_id,
-      )}
-      onAddChangeComment={handleAddChangeComment}
-      onRemoveChangeComment={handleRemoveChangeComment}
-      onSendChangeComments={handleSendChangeComments}
-      artifactActionPending={artifactActionPending}
-      terminal={terminal}
-      terminalBinding={terminalBinding}
-      terminalError={terminalProxy.error}
-      terminalLines={terminalProxy.lines}
-      terminalBusy={sandboxBusy}
-      terminalInteractiveCapability={terminalInteractiveCapability}
-      sandboxRuntime={sandboxRuntime}
-      capabilityMode={sessionDetailViewModel?.capabilityMode ?? 'unavailable'}
-      approvalRequests={displaySessionProjection?.pendingHitl ?? []}
-      currentPlan={displaySessionProjection?.currentPlan ?? null}
-      taskListPlanTasks={
-        displaySessionProjection?.planAuthority.kind === 'agent_task_list'
-          ? displaySessionProjection.tasks
-          : []
-      }
-      canResumeTaskListReview={
-        displaySessionProjection?.planAuthority.kind === 'agent_task_list' &&
-        sessionTaskListPlanRecovery?.canResume === true
-      }
-      sessionCapabilities={sessionProjection?.capabilities ?? null}
-      sessionPlanApprovalPending={sessionPlanApprovalPending}
-      respondableHitlRequestIds={respondableHitlRequestIds}
-      sessionDataAvailable={displaySessionProjection !== null}
-      authorityNotice={sessionAuthorityNotice}
-      onAuthorityAction={
-        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
-      }
-      currentRunId={sessionDetailViewModel?.runId ?? null}
-      sessionViewModel={sessionDetailViewModel}
-      onRespondToHitl={respondToHitlWithSteering}
-      onApprovePlan={approveSessionPlan}
-      onResumeTaskListReview={resumeSessionTaskListReview}
-      onArtifactAction={handleArtifactAction}
-      onSelectArtifactCanvasTab={(artifactId) => {
-        setArtifactCanvasState((current) => {
-          const next = selectArtifactCanvasTab(current, artifactId);
-          artifactCanvasStateRef.current = next;
-          return next;
-        });
-      }}
-      onSelectMCPAppCanvasTab={(tabId) => {
-        setMCPAppCanvasState((current) => {
-          const next = selectMCPAppCanvasTab(current, tabId);
-          mcpAppCanvasStateRef.current = next;
-          return next;
-        });
-      }}
-      onCloseMCPAppCanvasTab={(tabId) => {
+  const desktopSessionCanvasInputV2: DesktopSessionCanvasInputV2 = {
+    actions: {
+      onAddChangeComment: handleAddChangeComment,
+      onApprovePlan: approveSessionPlan,
+      onArtifactAction: handleArtifactAction,
+      onAuthorityAction:
+        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined,
+      onChangeScope: setChangeScope,
+      onCloseMCPAppCanvasTab: (tabId) => {
         setMCPAppCanvasState((current) => {
           const next = closeMCPAppCanvasTab(current, tabId);
           mcpAppCanvasStateRef.current = next;
           return next;
         });
-      }}
-      onStartTerminal={() => void startTerminal()}
-      onTerminalInput={terminalProxy.sendInput}
-      onTerminalResize={terminalProxy.resize}
-      onRefreshChanges={() => void loadRunChanges()}
-      onChangeScope={setChangeScope}
-      onToggleChangeReference={(reference) =>
-        setRunInputReferences((current) => toggleRunInputReference(current, reference))
-      }
-      onOpenAgentSession={(conversationId) => void openAgentSession(conversationId)}
-      onTabChange={setReviewTab}
-      sessionControls={sessionControls}
-    />
-  );
+      },
+      onOpenAgentSession: (conversationId) => void openAgentSession(conversationId),
+      onRefreshChanges: () => void loadRunChanges(),
+      onRemoveChangeComment: handleRemoveChangeComment,
+      onRespondToHitl: respondToHitlWithSteering,
+      onResumeTaskListReview: resumeSessionTaskListReview,
+      onSelectArtifactCanvasTab: (artifactId) => {
+        setArtifactCanvasState((current) => {
+          const next = selectArtifactCanvasTab(current, artifactId);
+          artifactCanvasStateRef.current = next;
+          return next;
+        });
+      },
+      onSelectMCPAppCanvasTab: (tabId) => {
+        setMCPAppCanvasState((current) => {
+          const next = selectMCPAppCanvasTab(current, tabId);
+          mcpAppCanvasStateRef.current = next;
+          return next;
+        });
+      },
+      onSendChangeComments: handleSendChangeComments,
+      onSendMCPAppMessage: (message) => sendChatMessage(message, []),
+      onStartTerminal: () => void startTerminal(),
+      onTabChange: setReviewTab,
+      onTerminalInput: terminalProxy.sendInput,
+      onTerminalResize: terminalProxy.resize,
+      onToggleChangeReference: (reference) =>
+        setRunInputReferences((current) => toggleRunInputReference(current, reference)),
+    },
+    meta: {
+      artifactClient: desktopArtifactClientV2,
+      mcpAppApi: desktopProjectMcpAppsClientV2,
+      mcpAppProjectId: config.projectId,
+      mcpAppSandboxProxyUrl: desktopMCPAppSandboxProxyUrl(config.apiBaseUrl),
+      sandboxRuntime,
+      terminalInteractiveCapability,
+    },
+    state: {
+      activeTab: reviewTab,
+      approvalRequests: displaySessionProjection?.pendingHitl ?? [],
+      artifactActionPending,
+      artifactCanvas: artifactCanvasState,
+      artifactDeliveries: displaySessionProjection?.artifactDeliveries ?? [],
+      artifacts: workspaceArtifacts,
+      artifactVersions: displaySessionProjection?.artifactVersions ?? [],
+      authorityNotice: sessionAuthorityNotice,
+      availableChangeScopes,
+      canResumeTaskListReview:
+        displaySessionProjection?.planAuthority.kind === 'agent_task_list' &&
+        sessionTaskListPlanRecovery?.canResume === true,
+      capabilityMode: sessionDetailViewModel?.capabilityMode ?? 'unavailable',
+      changeComments: commentsForConversation(
+        changeCommentsByConversation,
+        changeSnapshot?.conversation_id,
+      ),
+      changeReferences: runInputReferences,
+      changeScope,
+      changeSnapshot,
+      changeSnapshotError,
+      changeSnapshotLoading,
+      currentPlan: displaySessionProjection?.currentPlan ?? null,
+      currentRun: currentArtifactRun,
+      currentRunId: sessionDetailViewModel?.runId ?? null,
+      mcpAppCanvas: mcpAppCanvasState,
+      respondableHitlRequestIds,
+      sessionCapabilities: sessionProjection?.capabilities ?? null,
+      sessionDataAvailable: displaySessionProjection !== null,
+      sessionPlanApprovalPending,
+      sessionViewModel: sessionDetailViewModel,
+      socketEvents: workspaceEventInputs,
+      taskListPlanTasks:
+        displaySessionProjection?.planAuthority.kind === 'agent_task_list'
+          ? displaySessionProjection.tasks
+          : [],
+      terminal,
+      terminalBinding,
+      terminalBusy: sandboxBusy,
+      terminalError: terminalProxy.error,
+      terminalLines: terminalProxy.lines,
+      timelineItems: conversationTimeline.items,
+      toolInvocations: displaySessionProjection?.toolInvocations ?? [],
+    },
+  };
 
-  const renderWorkbench = () => {
-    if (!showRuntimeConfig) return renderWorkspaceOverview();
-    if (activeSection === 'workspace') return renderWorkspaceOverview();
-    if (activeSection === 'chat') return renderChatPanel();
-    if (activeSection === 'board') return renderBoardPanel();
-    if (activeSection === 'activity') return renderActivityInbox();
-    if (activeSection === 'automations') return renderAutomationsPage();
-    if (activeSection === 'home') return renderNewThreadComposer();
-    if (activeSection === 'search') return renderSearchPage();
-    return renderWorkspaceOverview();
+  const selectDesktopWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => {
+    if (!showRuntimeConfig) return createWorkspaceWorkbenchViewV2();
+    if (activeSection === 'workspace') return createWorkspaceWorkbenchViewV2();
+    if (activeSection === 'chat') return createChatWorkbenchViewV2();
+    if (activeSection === 'board') return createBoardWorkbenchViewV2();
+    if (activeSection === 'activity') return createActivityWorkbenchViewV2();
+    if (activeSection === 'home') return createHomeWorkbenchViewV2();
+    return createWorkspaceWorkbenchViewV2();
   };
 
   if (auth.status === 'password_change_required' || auth.status === 'changing_password') {
@@ -6755,49 +7434,98 @@ export function App() {
       ? new Set([DEVICE_APPROVAL_ROUTE_ID])
       : AUTHENTICATION_PASSTHROUGH_ROUTE_IDS;
     return (
-      <Theme
-        appearance={themeAppearance}
-        accentColor="cyan"
-        grayColor="slate"
-        radius="medium"
-        scaling="95%"
-      >
-        <DesktopProductionRouter
-          authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
-          forceLegacyChildren={invitationSignInRequested}
-          location={desktopProductionRouteLocation}
-          mode={productionRouteRuntimeMode}
-          navigation={desktopProductionRouteNavigation}
-          permissions={productionRouteBasePermissions}
-          registry={desktopProductionRouteRegistry}
-          resolveCapability={resolveProductionRouteCapability}
-          resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
-          switchScope={switchProductionRouteScope}
+      <DesktopRendererGenerationProviderV2 value={desktopRendererGenerationV2}>
+        <Theme
+          appearance={themeAppearance}
+          accentColor="cyan"
+          grayColor="slate"
+          radius="medium"
+          scaling="95%"
         >
-          <LoginScreen
-            auth={auth}
-            mode={config.mode}
-            localReady={localRuntimeAuthorityReady}
-            localModeAvailable={runsInNativeDesktop}
-            email={loginEmail}
-            password={loginPassword}
-            onModeChange={changeLoginMode}
-            onEmailChange={setLoginEmail}
-            onPasswordChange={setLoginPassword}
-            onEmailLogin={(trustedDevice) => void login(trustedDevice)}
-            onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
-            onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
-            nativeOAuthProviders={nativeOAuthProviders}
-            nativeOAuthPendingProvider={nativeOAuthPendingProvider}
-            onNativeOAuth={beginNativeOAuth}
-            workspaceSso={workspaceSso}
-            onOpenWorkspaceSso={openCurrentWorkspaceSso}
-            onCancelWorkspaceSso={cancelWorkspaceSso}
-          />
-        </DesktopProductionRouter>
-      </Theme>
+          <DesktopRendererAuthenticationRouterV2
+            authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
+            forceLegacyChildren={invitationSignInRequested}
+            location={desktopProductionRouteLocation}
+            mode={desktopProductionRouteAuthorityV2.mode}
+            navigation={desktopProductionRouteNavigation}
+            permissions={desktopProductionRouteAuthorityV2.permissions}
+            resolveCapability={desktopProductionRouteAuthorityV2.resolveCapability}
+            resolvePermissionSnapshot={
+              desktopProductionRouteAuthorityV2.resolvePermissionSnapshot
+            }
+            switchScope={switchProductionRouteScope}
+          >
+            <LoginScreen
+              auth={auth}
+              mode={config.mode}
+              localReady={localRuntimeAuthorityReady}
+              localModeAvailable={runsInNativeDesktop}
+              email={loginEmail}
+              password={loginPassword}
+              onModeChange={changeLoginMode}
+              onEmailChange={setLoginEmail}
+              onPasswordChange={setLoginPassword}
+              onEmailLogin={(trustedDevice) => void login(trustedDevice)}
+              onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
+              onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
+              nativeOAuthProviders={nativeOAuthProviders}
+              nativeOAuthPendingProvider={nativeOAuthPendingProvider}
+              onNativeOAuth={beginNativeOAuth}
+              workspaceSso={workspaceSso}
+              onOpenWorkspaceSso={openCurrentWorkspaceSso}
+              onCancelWorkspaceSso={cancelWorkspaceSso}
+            />
+          </DesktopRendererAuthenticationRouterV2>
+        </Theme>
+      </DesktopRendererGenerationProviderV2>
     );
   }
+
+  const desktopWorkbenchSurfaceViewModelV2: DesktopWorkbenchSurfaceViewModelV2 = {
+    error: error
+      ? {
+          message: error,
+          onRetry:
+            connection === 'error' && showRuntimeConfig
+              ? () => {
+                  workbenchRef.current?.focus();
+                  void refreshRuntime();
+                }
+              : null,
+        }
+      : null,
+    paneStageClassName,
+    session:
+      activeSection === 'chat' && sessionDetailViewModel
+        ? {
+            viewModel: sessionDetailViewModel,
+            onOpenCanvas: handleOpenCanvas,
+            runActionPending: sessionRunActionPending,
+            liveConnected: socket.connected,
+            liveError: socket.error,
+            onRunAction: (action, feedback) => void handleSessionRunAction(action, feedback),
+            onOpenTask: sessionDetailViewModel.linkedTaskId
+              ? () => {
+                  setSelectedTaskId(sessionDetailViewModel.linkedTaskId!);
+                  switchSection('board');
+                }
+              : undefined,
+            onRenameConversation: scopedConversation
+              ? (title) =>
+                  renameConversation(
+                    config.projectId,
+                    config.workspaceId,
+                    scopedConversation,
+                    title,
+                  )
+              : undefined,
+            onDeleteConversation: scopedConversation
+              ? () => deleteConversation(config.projectId, config.workspaceId, scopedConversation)
+              : undefined,
+          }
+        : null,
+    view: selectDesktopWorkbenchViewV2(),
+  };
 
   const activeTenantName =
     auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
@@ -6805,321 +7533,267 @@ export function App() {
     t('settings.noTenantSelected');
   const activeProjectName =
     selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected');
+  const desktopAuthenticatedShellViewModelV2: DesktopAuthenticatedShellViewModelV2 = {
+    meta: {
+      appearance: themeAppearance,
+      appShellRef,
+      generation: desktopRendererGenerationV2.meta,
+      workbenchRef,
+    },
+    state: {
+      layoutMode: activeSection === 'board' ? 'my-work' : 'default',
+      sidebarCollapsed,
+      sidebarPreferredWidth: sidebarPanelWidth.width,
+      windowMode: runsInNativeDesktop ? 'native' : 'browser',
+    },
+    surfaces: {
+      titlebar: runsInNativeDesktop
+        ? {
+            kind: 'visible',
+            props: {
+              contextTitle: `${activeTenantName} · ${activeProjectName}`,
+              sidebarCollapsed,
+              rightSidebarOpen,
+              rightSidebarAvailable,
+              onToggleSidebar: () => setSidebarCollapsed((collapsed) => !collapsed),
+              onToggleRightSidebar: () => {
+                if (!rightSidebarAvailable) return;
+                setRightSidebarOpen((open) => !open);
+              },
+            },
+          }
+        : { kind: 'hidden' },
+      sidebar: {
+        props: {
+          activeSection:
+            activeSection === 'board'
+              ? 'my-work'
+              : activeSection === 'home' || activeSection === 'activity'
+                ? activeSection
+                : null,
+          taskCount: dataset.myWork.length,
+          activityUnreadCount: activityInbox.unreadCount,
+          conversationStatusSummary,
+          tenantName: activeTenantName,
+          projectName: activeProjectName,
+          user: auth.user,
+          workspaces: dataset.workspacesByProject[config.projectId] ?? [],
+          conversationsByWorkspace: dataset.conversationsByWorkspace,
+          nodeState: dataset.nodeState,
+          currentProjectId: config.projectId,
+          currentWorkspaceId: config.workspaceId,
+          currentConversationId: selectedConversation?.id ?? null,
+          workspaceTreeSelectionMode:
+            activeSection === 'workspace'
+              ? 'overview'
+              : activeSection === 'chat'
+                ? 'conversation'
+                : activeSection === 'board'
+                  ? 'my-work'
+                  : 'none',
+          expandedWorkspaceIds,
+          newTaskDisabledReason,
+          onNavigate: (section) => {
+            if (section === 'home') switchSection('home');
+            if (section === 'my-work') switchSection('board');
+            if (section === 'activity') switchSection('activity');
+          },
+          onOpenFeatureDirectory: (trigger) => openCommandPalette(trigger),
+          onToggleWorkspace: toggleWorkspace,
+          onRetryProject: () => void refreshRuntime(),
+          onRetryWorkspace: (workspaceId) => void loadWorkspaceConversations(workspaceId),
+          onSelectWorkspace: (projectId, workspaceId) =>
+            selectWorkspace(workspaceId, projectId),
+          onSelectConversation: selectConversation,
+          onRenameConversation: renameConversation,
+          onDeleteConversation: deleteConversation,
+          workspaceCreateDisabledReason,
+          onCreateWorkspace: () => setWorkspaceCreateOpen(true),
+          onNewTask: startNewSession,
+          onOpenAccountSettings: openSidebarSettings,
+          onSwitchWorkspace: openProfileWorkspaceSettings,
+          onSignOut: () => void logout(),
+        },
+        resizeHandle: sidebarCollapsed
+          ? { kind: 'hidden' }
+          : {
+              kind: 'visible',
+              props: {
+                side: 'trailing',
+                width: sidebarPanelWidth.width,
+                constraints: SIDEBAR_WIDTH_CONSTRAINTS,
+                label: t('layout.resizeSidebar'),
+                onResize: sidebarPanelWidth.resize,
+                onReset: sidebarPanelWidth.reset,
+              },
+            },
+      },
+      tabBar: {
+        tabs: openTabs,
+        activeTabKey: activeWorkbenchTabKey,
+        onActivate: activateWorkbenchTab,
+        onClose: closeWorkbenchTab,
+      },
+      router: {
+        authenticationPassthroughRouteIds: AUTHENTICATION_PASSTHROUGH_ROUTE_IDS,
+        location: desktopProductionRouteLocation,
+        mode: desktopProductionRouteAuthorityV2.mode,
+        navigation: desktopProductionRouteNavigation,
+        permissions: desktopProductionRouteAuthorityV2.permissions,
+        resolveCapability: desktopProductionRouteAuthorityV2.resolveCapability,
+        resolvePermissionSnapshot:
+          desktopProductionRouteAuthorityV2.resolvePermissionSnapshot,
+        switchScope: switchProductionRouteScope,
+        viewModel: desktopWorkbenchSurfaceViewModelV2,
+      },
+      rightSidebar:
+        rightSidebarAvailable && rightSidebarOpen
+          ? {
+              kind: 'visible',
+              props: {
+                activePanel: activeRightPanel,
+                canvas: showReviewPanel
+                  ? { kind: 'available', input: desktopSessionCanvasInputV2 }
+                  : { kind: 'unavailable' },
+                viewModel: sessionDetailViewModel,
+                runActionPending: sessionRunActionPending,
+                onRunAction: (action, feedback) =>
+                  void handleSessionRunAction(action, feedback),
+                onOpenCanvas: handleOpenCanvas,
+                onSelectPanel: handleSelectRightPanel,
+                onCloseCanvas: handleCloseCanvas,
+                onClose: () => setRightSidebarOpen(false),
+              },
+            }
+          : { kind: 'hidden' },
+      statusBar: {
+        connection,
+        liveConnected: socket.connected,
+        liveError: socket.error,
+        tenantName: activeTenantName,
+        projectName: activeProjectName,
+      },
+      commandPalette: commandPaletteOpen
+        ? {
+            kind: 'visible',
+            props: {
+              inputRef: commandInputRef,
+              query: commandQuery,
+              items: filteredCommandItems,
+              onQueryChange: setCommandQuery,
+              onClose: closeCommandPalette,
+            },
+          }
+        : { kind: 'hidden' },
+      keyboardShortcuts: {
+        open: shortcutsDialogOpen,
+        onClose: () => setShortcutsDialogOpen(false),
+      },
+      newTask: {
+        open: newTaskOpen,
+        config,
+        actorId: auth.user?.user_id,
+        newTaskFlowClientV2: desktopNewTaskFlowClientV2,
+        workspaceAuthority: newTaskWorkspaceAuthority,
+        resumeDraft: newTaskResumeDraft,
+        preferredWorkspaceId: newTaskPreferredWorkspaceId,
+        preferredKind: preferredTaskMode === 'code' ? 'programming' : 'general',
+        disabledReason: newTaskDisabledReason,
+        onClose: () => {
+          setNewTaskOpen(false);
+          setNewTaskResumeDraft(null);
+        },
+        onSessionPersisted: persistNewTaskSession,
+        onSessionReady: activateNewTaskSession,
+        onRunAgentTurn: runNewTaskAgentTurn,
+        onOpenRuntimeSettings: () => {
+          setNewTaskOpen(false);
+          setNewTaskResumeDraft(null);
+          openConnectionSettings();
+        },
+        onError: setError,
+      },
+      workspaceCreate: {
+        open: workspaceCreateOpen,
+        projectName:
+          selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected'),
+        scope: {
+          tenantId: config.tenantId,
+          projectId: config.projectId,
+          epoch: configScopeEpochRef.current,
+          contextRevision: contextRevisionRef.current,
+        },
+        onOpenChange: setWorkspaceCreateOpen,
+        onCreate: createWorkspaceFromDialog,
+      },
+      workspaceSettings: {
+        open: workspaceSettingsOpen,
+        workspace: selectedWorkspace,
+        agents: dataset.workspaceAgents,
+        members: dataset.workspaceMembers,
+        actorUserId: auth.user?.user_id ?? '',
+        scope: {
+          tenantId: config.tenantId,
+          projectId: config.projectId,
+          workspaceId: config.workspaceId,
+          epoch: configScopeEpochRef.current,
+          contextRevision: contextRevisionRef.current,
+        },
+        onOpenChange: setWorkspaceSettingsOpen,
+        onSave: updateWorkspaceFromDialog,
+        onAddMember: addWorkspaceMemberFromDialog,
+        onUpdateMemberRole: updateWorkspaceMemberRoleFromDialog,
+        onRemoveMember: removeWorkspaceMemberFromDialog,
+        onLoadAgentDefinitions: loadWorkspaceAgentDefinitionsFromDialog,
+        onBindAgent: bindWorkspaceAgentFromDialog,
+        onUnbindAgent: unbindWorkspaceAgentFromDialog,
+      },
+      settings: {
+        open: settingsWindowOpen,
+        initialSection: settingsInitialSection,
+        auth,
+        config,
+        connection,
+        wsConnected: socket.connected,
+        wsError: socket.error,
+        runtimeDisabledReason,
+        agentDefinitionEvent,
+        rendererRouteRegistry: desktopProductionRouteRegistry,
+        tenantSubAgentDefinitionsOperationsV2:
+          desktopTenantSubAgentDefinitionsOperationsV2,
+        pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
+        tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
+        tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
+        browserIntegrationOperationsV2: desktopBrowserIntegrationOperationsV2,
+        browserBridgeManagementClientV2: desktopBrowserBridgeManagementClientV2,
+        projectMcpServersOperationsV2: desktopProjectMcpServersOperationsV2,
+        tenantSkillPackagesOperationsV2: desktopTenantSkillPackagesOperationsV2,
+        tenantSkillEvolutionOperationsV2: desktopTenantSkillEvolutionOperationsV2,
+        tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
+        projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
+        tenantAgentDefinitionsOperationsV2:
+          desktopTenantAgentDefinitionsOperationsV2,
+        onClose: () => {
+          const closeRoute = settingsRouteCloseNavigationRef.current;
+          settingsRouteCloseNavigationRef.current = null;
+          setSettingsWindowOpen(false);
+          closeRoute?.();
+        },
+        onConfigChange: handleConfigChange,
+        onRuntimeStatusRefresh: refreshLocalRuntimeStatus,
+        onRefreshRuntime: () => void refreshRuntime(),
+        onContextChange: applySettingsContext,
+        onSignOut: () => void logout(),
+      },
+    },
+  };
 
   return (
-    <Theme
-      appearance={themeAppearance}
-      accentColor="cyan"
-      grayColor="slate"
-      radius="medium"
-      scaling="95%"
-    >
-      <div
-        ref={appShellRef}
-        className={`app-shell hierarchy-shell runtime-mode ${
-          runsInNativeDesktop ? 'desktop-window' : 'browser-window'
-        } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
-          activeSection === 'board' ? 'my-work-mode' : ''
-        }`}
-        style={
-          {
-            '--desktop-sidebar-preferred-width': `${Math.round(sidebarPanelWidth.width)}px`,
-          } as CSSProperties
-        }
-      >
-        {runsInNativeDesktop ? (
-          <DesktopTitlebar
-            contextTitle={`${activeTenantName} · ${activeProjectName}`}
-            sidebarCollapsed={sidebarCollapsed}
-            rightSidebarOpen={rightSidebarOpen}
-            rightSidebarAvailable={rightSidebarAvailable}
-            onToggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            onToggleRightSidebar={() => {
-              if (!rightSidebarAvailable) return;
-              setRightSidebarOpen((open) => !open);
-            }}
-          />
-        ) : null}
-        <section className="desktop-body">
-          <DesktopSidebar
-            activeSection={
-              activeSection === 'board'
-                ? 'my-work'
-                : activeSection === 'home' ||
-                    activeSection === 'automations' ||
-                    activeSection === 'search' ||
-                    activeSection === 'activity'
-                  ? activeSection
-                  : null
-            }
-            taskCount={dataset.myWork.length}
-            activityUnreadCount={activityInbox.unreadCount}
-            conversationStatusSummary={conversationStatusSummary}
-            tenantName={activeTenantName}
-            projectName={activeProjectName}
-            user={auth.user}
-            workspaces={dataset.workspacesByProject[config.projectId] ?? []}
-            conversationsByWorkspace={dataset.conversationsByWorkspace}
-            nodeState={dataset.nodeState}
-            currentProjectId={config.projectId}
-            currentWorkspaceId={config.workspaceId}
-            currentConversationId={selectedConversation?.id ?? null}
-            workspaceTreeSelectionMode={
-              activeSection === 'workspace'
-                ? 'overview'
-                : activeSection === 'chat'
-                  ? 'conversation'
-                  : activeSection === 'board'
-                    ? 'my-work'
-                    : 'none'
-            }
-            expandedWorkspaceIds={expandedWorkspaceIds}
-            newTaskDisabledReason={newTaskDisabledReason}
-            onNavigate={(section) => {
-              if (section === 'home') switchSection('home');
-              if (section === 'my-work') switchSection('board');
-              if (section === 'automations') switchSection('automations');
-              if (section === 'search') switchSection('search');
-              if (section === 'activity') switchSection('activity');
-            }}
-            onOpenFeatureDirectory={(trigger) => openCommandPalette(trigger)}
-            onToggleWorkspace={toggleWorkspace}
-            onRetryProject={() => void refreshRuntime()}
-            onRetryWorkspace={(workspaceId) => void loadWorkspaceConversations(workspaceId)}
-            onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
-            onSelectConversation={selectConversation}
-            onRenameConversation={renameConversation}
-            onDeleteConversation={deleteConversation}
-            workspaceCreateDisabledReason={workspaceCreateDisabledReason}
-            onCreateWorkspace={() => setWorkspaceCreateOpen(true)}
-            onNewTask={startNewSession}
-            onOpenAccountSettings={openSidebarSettings}
-            onSwitchWorkspace={openProfileWorkspaceSettings}
-            onSignOut={() => void logout()}
-            resizeHandle={
-              sidebarCollapsed ? undefined : (
-                <ResizeHandle
-                  side="trailing"
-                  width={sidebarPanelWidth.width}
-                  constraints={SIDEBAR_WIDTH_CONSTRAINTS}
-                  label={t('layout.resizeSidebar')}
-                  onResize={sidebarPanelWidth.resize}
-                  onReset={sidebarPanelWidth.reset}
-                />
-              )
-            }
-          />
-
-          <main ref={workbenchRef} className="workbench" tabIndex={-1}>
-            <WorkbenchTabBar
-              tabs={openTabs}
-              activeTabKey={activeWorkbenchTabKey}
-              onActivate={activateWorkbenchTab}
-              onClose={closeWorkbenchTab}
-            />
-            <div className="workbench-content">
-              <DesktopProductionRouter
-                authenticationPassthroughRouteIds={AUTHENTICATION_PASSTHROUGH_ROUTE_IDS}
-                location={desktopProductionRouteLocation}
-                mode={productionRouteRuntimeMode}
-                navigation={desktopProductionRouteNavigation}
-                permissions={productionRouteBasePermissions}
-                registry={desktopProductionRouteRegistry}
-                resolveCapability={resolveProductionRouteCapability}
-                resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
-                switchScope={switchProductionRouteScope}
-              >
-                {error ? (
-                  <div className="workbench-error" role="alert" aria-live="polite">
-                    <span>{error}</span>
-                    {connection === 'error' && showRuntimeConfig ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          workbenchRef.current?.focus();
-                          void refreshRuntime();
-                        }}
-                      >
-                        {t('runtime.retryWorkspace')}
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {activeSection === 'chat' && sessionDetailViewModel ? (
-                  <SessionWorkspace
-                    viewModel={sessionDetailViewModel}
-                    thread={<section className={paneStageClassName}>{renderWorkbench()}</section>}
-                    onOpenCanvas={handleOpenCanvas}
-                    runActionPending={sessionRunActionPending}
-                    liveConnected={socket.connected}
-                    liveError={socket.error}
-                    onRunAction={(action, feedback) =>
-                      void handleSessionRunAction(action, feedback)
-                    }
-                    onOpenTask={
-                      sessionDetailViewModel.linkedTaskId
-                        ? () => {
-                            setSelectedTaskId(sessionDetailViewModel.linkedTaskId!);
-                            switchSection('board');
-                          }
-                        : undefined
-                    }
-                    onRenameConversation={
-                      scopedConversation
-                        ? (title) =>
-                            renameConversation(
-                              config.projectId,
-                              config.workspaceId,
-                              scopedConversation,
-                              title,
-                            )
-                        : undefined
-                    }
-                    onDeleteConversation={
-                      scopedConversation
-                        ? () =>
-                            deleteConversation(
-                              config.projectId,
-                              config.workspaceId,
-                              scopedConversation,
-                            )
-                        : undefined
-                    }
-                  />
-                ) : (
-                  <section className="workbench-layout">
-                    <section className={paneStageClassName}>{renderWorkbench()}</section>
-                  </section>
-                )}
-              </DesktopProductionRouter>
-            </div>
-          </main>
-
-          {rightSidebarAvailable && rightSidebarOpen ? (
-            <DesktopRightSidebar
-              activePanel={activeRightPanel}
-              canvasAvailable={showReviewPanel}
-              viewModel={sessionDetailViewModel}
-              runActionPending={sessionRunActionPending}
-              onRunAction={(action, feedback) => void handleSessionRunAction(action, feedback)}
-              onOpenCanvas={handleOpenCanvas}
-              onSelectPanel={handleSelectRightPanel}
-              onCloseCanvas={handleCloseCanvas}
-              onClose={() => setRightSidebarOpen(false)}
-              renderCanvas={
-                showReviewPanel ? (controls) => renderWorkspaceReviewPanel(controls) : null
-              }
-            />
-          ) : null}
-        </section>
-
-        <DesktopStatusBar
-          connection={connection}
-          liveConnected={socket.connected}
-          liveError={socket.error}
-          tenantName={activeTenantName}
-          projectName={activeProjectName}
-        />
-
-        {commandPaletteOpen
-          ? createPortal(
-              <CommandPalette
-                inputRef={commandInputRef}
-                query={commandQuery}
-                items={filteredCommandItems}
-                onQueryChange={setCommandQuery}
-                onClose={closeCommandPalette}
-              />,
-              document.body,
-            )
-          : null}
-        <KeyboardShortcutsDialog
-          open={shortcutsDialogOpen}
-          onClose={() => setShortcutsDialogOpen(false)}
-        />
-        <NewTaskFlow
-          open={newTaskOpen}
-          config={config}
-          actorId={auth.user?.user_id}
-          workspaceAuthority={newTaskWorkspaceAuthority}
-          resumeDraft={newTaskResumeDraft}
-          preferredWorkspaceId={newTaskPreferredWorkspaceId}
-          preferredKind={preferredTaskMode === 'code' ? 'programming' : 'general'}
-          disabledReason={newTaskDisabledReason}
-          onClose={() => {
-            setNewTaskOpen(false);
-            setNewTaskResumeDraft(null);
-          }}
-          onSessionPersisted={persistNewTaskSession}
-          onSessionReady={activateNewTaskSession}
-          onRunAgentTurn={runNewTaskAgentTurn}
-          onOpenRuntimeSettings={() => {
-            setNewTaskOpen(false);
-            setNewTaskResumeDraft(null);
-            openConnectionSettings();
-          }}
-          onError={setError}
-        />
-        <WorkspaceCreateDialog
-          open={workspaceCreateOpen}
-          projectName={
-            selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected')
-          }
-          scope={{
-            tenantId: config.tenantId,
-            projectId: config.projectId,
-            epoch: configScopeEpochRef.current,
-            contextRevision: contextRevisionRef.current,
-          }}
-          onOpenChange={setWorkspaceCreateOpen}
-          onCreate={createWorkspaceFromDialog}
-        />
-        <WorkspaceSettingsDialog
-          open={workspaceSettingsOpen}
-          workspace={selectedWorkspace}
-          agents={dataset.workspaceAgents}
-          members={dataset.workspaceMembers}
-          actorUserId={auth.user?.user_id ?? ''}
-          scope={{
-            tenantId: config.tenantId,
-            projectId: config.projectId,
-            workspaceId: config.workspaceId,
-            epoch: configScopeEpochRef.current,
-            contextRevision: contextRevisionRef.current,
-          }}
-          onOpenChange={setWorkspaceSettingsOpen}
-          onSave={updateWorkspaceFromDialog}
-          onAddMember={addWorkspaceMemberFromDialog}
-          onUpdateMemberRole={updateWorkspaceMemberRoleFromDialog}
-          onRemoveMember={removeWorkspaceMemberFromDialog}
-          onLoadAgentDefinitions={loadWorkspaceAgentDefinitionsFromDialog}
-          onBindAgent={bindWorkspaceAgentFromDialog}
-          onUnbindAgent={unbindWorkspaceAgentFromDialog}
-        />
-        <SettingsWindow
-          open={settingsWindowOpen}
-          initialSection={settingsInitialSection}
-          auth={auth}
-          config={config}
-          connection={connection}
-          wsConnected={socket.connected}
-          wsError={socket.error}
-          runtimeDisabledReason={runtimeDisabledReason}
-          agentDefinitionEvent={agentDefinitionEvent}
-          profileRouteLoader={profileRouteModuleLoader}
-          onClose={() => {
-            const closeRoute = settingsRouteCloseNavigationRef.current;
-            settingsRouteCloseNavigationRef.current = null;
-            setSettingsWindowOpen(false);
-            closeRoute?.();
-          }}
-          onConfigChange={handleConfigChange}
-          onRuntimeStatusRefresh={refreshLocalRuntimeStatus}
-          onRefreshRuntime={() => void refreshRuntime()}
-          onContextChange={applySettingsContext}
-          onSignOut={() => void logout()}
-        />
-      </div>
-    </Theme>
+    <DesktopRendererGenerationProviderV2 value={desktopRendererGenerationV2}>
+      <DesktopRendererAuthenticatedShellV2
+        viewModel={desktopAuthenticatedShellViewModelV2}
+      />
+    </DesktopRendererGenerationProviderV2>
   );
 }

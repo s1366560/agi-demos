@@ -8,158 +8,100 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-class PlatformPluginSnapshotResponse(BaseModel):
-    version: int
+class PlatformPluginDistributionResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    descriptor: dict[str, Any]
+    snapshot: dict[str, Any]
+    envelope: dict[str, Any]
+
+
+class PlatformPluginApplyStateResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    data_plane_id: str
     nonce: str
+    receipt: dict[str, Any]
+
+
+class PlatformPluginDataPlaneCredentialIssueRequestV2(BaseModel):
+    data_plane_id: str
+    expires_at: datetime | None = None
+
+
+class PlatformPluginDataPlaneCredentialRotateRequestV2(BaseModel):
+    expires_at: datetime | None = None
+
+
+class PlatformPluginDataPlaneCredentialResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    credential_id: str
+    data_plane_id: str
+    key_prefix: str
+    created_by_user_id: str
+    created_at: datetime
+    expires_at: datetime | None
+    revoked_at: datetime | None
+    revoked_by_user_id: str | None
+    rotated_from_id: str | None
+
+
+class PlatformPluginDataPlaneCredentialIssuedResponseV2(
+    PlatformPluginDataPlaneCredentialResponseV2
+):
+    secret: str = Field(repr=False)
+
+
+class PlatformPluginDataPlaneReadinessResponseV2(BaseModel):
+    data_plane_id: str
+    status: Literal["ack", "nack"] | None
+    requested_version: int | None
+    requested_digest: str | None
+    applied_version: int | None
+    applied_digest: str | None
+    error_code: str | None
+    error_message: str | None
+
+
+class PlatformPluginPublicationReadinessResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    publication_id: str
     profile_id: str
-    digest: str
-    payload: dict[str, Any]
-
-
-class PlatformPluginPublishResponse(BaseModel):
-    version: int
+    generation: int
+    requested_version: int
+    snapshot_digest: str
     nonce: str
-    profile_id: str
-    digest: str
-    plugin_count: int
-    local_status: Literal["ack", "nack"]
-    local_error_message: str | None = None
+    republished_from_nonce: str | None
+    required_data_plane_ids: list[str]
+    ack_deadline_at: datetime
+    status: Literal["reconciling", "ready", "degraded"]
+    ready_at: datetime | None
+    data_planes: list[PlatformPluginDataPlaneReadinessResponseV2]
 
 
-class PlatformPluginHttpRouteRequest(BaseModel):
-    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
-    path: str = Field(min_length=1, max_length=512)
-    permission: str = Field(min_length=1, max_length=191)
-    authorization_mode: Literal["tenant_member", "project_member", "tenant_admin"]
-    enabled: bool = True
+class PlatformPluginDesiredBundleSetResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    record_id: str
+    scope: dict[str, str]
+    desired_bundle_set: dict[str, Any]
+    actor_id: str | None
+    created_at: datetime
 
 
-class PlatformPluginHttpRouteResponse(BaseModel):
-    plugin_id: str
+class PlatformPluginRouteAuthorityBindingResponseV2(BaseModel):
     method: str
     path: str
-    permission: str
-    authorization_mode: str
-    enabled: bool
-    revision: int
+    source_plugin_id: str
+    target_entry_id: str
+    target_plugin_ref: str
+    target_module_ref: str
 
 
-class PlatformPluginHttpRouteReconcileResponse(BaseModel):
-    mounted: int
-    unmounted: int
-
-
-class PlatformPluginApplyStateRequest(BaseModel):
-    data_plane_id: str = Field(min_length=1)
-    snapshot_digest: str = Field(min_length=64, max_length=64)
-    requested_version: int = Field(ge=1)
-    applied_version: int = Field(ge=0)
-    status: Literal["ack", "nack"]
-    error_message: str | None = Field(default=None, max_length=8192)
-
-
-class PlatformPluginApplyStateResponse(BaseModel):
-    data_plane_id: str
+class PlatformPluginRouteAuthorityReadinessResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    profile_id: str
+    generation: int
     snapshot_digest: str
-    requested_version: int
-    applied_version: int
-    status: Literal["ack", "nack"]
-
-
-class PlatformPluginShadowRolloutEventResponse(BaseModel):
-    capability: str
-    event_name: str
-    hook_name: str
-    scope_type: str
-    scope_id: str
-    equal: bool
-    legacy_payload: dict[str, Any]
-    typed_payload: dict[str, Any]
-    occurred_at: datetime
-
-
-class PlatformPluginShadowRolloutSummaryResponse(BaseModel):
-    capability: str
-    event_name: str
-    total_count: int
-    equal_count: int
-    diff_count: int
-    equal: bool
-    last_occurred_at: datetime
-
-
-class PlatformPluginShadowRolloutResponse(BaseModel):
-    summary: list[PlatformPluginShadowRolloutSummaryResponse]
-    events: list[PlatformPluginShadowRolloutEventResponse]
-
-
-class PlatformPluginShadowRolloutCapabilityReadinessResponse(BaseModel):
-    capability: str
     ready: bool
-    total_count: int
-    equal_count: int
-    diff_count: int
-    distinct_scope_count: int
-    observed_event_count: int
-    required_event_count: int
-    last_occurred_at: datetime | None
+    required_route_count: int
+    bound_route_count: int
+    bindings: list[PlatformPluginRouteAuthorityBindingResponseV2]
     reasons: list[str]
-
-
-class PlatformPluginShadowRolloutReadinessResponse(BaseModel):
-    ready: bool
-    checked_at: datetime
-    minimum_samples_per_event: int
-    minimum_distinct_scopes: int
-    maximum_evidence_age_seconds: int
-    capabilities: list[PlatformPluginShadowRolloutCapabilityReadinessResponse]
-    reasons: list[str]
-
-
-class PlatformPluginRollbackDrillDataPlaneResponse(BaseModel):
-    data_plane_id: str
-    ready: bool
-    last_recorded_at: datetime | None
-    reasons: list[str]
-
-
-class PlatformPluginRollbackDrillReadinessResponse(BaseModel):
-    ready: bool
-    checked_at: datetime
-    minimum_distinct_data_planes: int
-    maximum_evidence_age_seconds: int
-    data_planes: list[PlatformPluginRollbackDrillDataPlaneResponse]
-    reasons: list[str]
-
-
-class PlatformPluginCutoverReadinessResponse(BaseModel):
-    ready: bool
-    checked_at: datetime
-    shadow: PlatformPluginShadowRolloutReadinessResponse
-    rollback_drill: PlatformPluginRollbackDrillReadinessResponse
-    approval: PlatformPluginCutoverApprovalResponse | None = None
-    operator_approved: bool = False
-    reasons: list[str]
-
-
-class PlatformPluginCutoverApprovalResponse(BaseModel):
-    capability: str
-    approved_by: str
-    approved_at: datetime
-    expires_at: datetime
-    evidence: dict[str, Any]
-
-
-class PlatformPluginCutoverApprovalRequest(BaseModel):
-    valid_for_seconds: int = Field(default=7 * 24 * 60 * 60, ge=3_600, le=30 * 24 * 60 * 60)
-
-
-class PlatformPluginCutoverRevocationRequest(BaseModel):
-    reason: str = Field(min_length=1, max_length=8192)
-
-
-class PlatformPluginCutoverRevocationResponse(BaseModel):
-    capability: str
-    revoked: bool
-    revoked_at: datetime
-    reason: str

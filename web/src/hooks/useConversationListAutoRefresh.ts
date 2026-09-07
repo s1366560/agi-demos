@@ -1,4 +1,8 @@
-import { useEffect } from 'react';
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '@/plugins/webOperationAdmissionV2';
+import { useEffect, useSyncExternalStore } from 'react';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -72,10 +76,15 @@ function getRefreshLimit(): number {
  * create sessions in the selected project.
  */
 export function useConversationListAutoRefresh(projectId: string | null): void {
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
   const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
-    if (!projectId || !token) {
+    if (!projectId || !token || !availability.available) {
       return;
     }
 
@@ -84,6 +93,7 @@ export function useConversationListAutoRefresh(projectId: string | null): void {
     let lastRefreshAt = Date.now();
 
     const refreshConversations = () => {
+      if (getWebOperationAvailabilityV2() !== availability) return;
       refreshController?.abort();
       const controller = new AbortController();
       refreshController = controller;
@@ -116,6 +126,7 @@ export function useConversationListAutoRefresh(projectId: string | null): void {
     };
 
     const unsubscribe = unifiedEventService.subscribeProject(projectId, (event) => {
+      if (getWebOperationAvailabilityV2() !== availability) return;
       if (event.type !== 'conversation_created') {
         return;
       }
@@ -148,5 +159,5 @@ export function useConversationListAutoRefresh(projectId: string | null): void {
       document.removeEventListener('visibilitychange', refreshVisibleStaleList);
       refreshController?.abort();
     };
-  }, [projectId, token]);
+  }, [projectId, token, availability]);
 }

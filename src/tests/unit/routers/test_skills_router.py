@@ -114,11 +114,6 @@ class _SkillRepository:
         raise ValueError("Skill name 'Bad Name' must be lowercase with hyphens only")
 
 
-class _Container:
-    def skill_repository(self) -> _SkillRepository:
-        return _SkillRepository()
-
-
 class _MemorySkillRepository:
     def __init__(self) -> None:
         self.skills_by_id: dict[str, Skill] = {}
@@ -196,14 +191,6 @@ class _MemorySkillRepository:
         return len(self.skills_by_id)
 
 
-class _MemoryContainer:
-    def __init__(self, repo: _MemorySkillRepository) -> None:
-        self._repo = repo
-
-    def skill_repository(self) -> _MemorySkillRepository:
-        return self._repo
-
-
 class _MemoryVersionRepository:
     def __init__(self, db: SimpleNamespace) -> None:
         self._db = db
@@ -242,31 +229,12 @@ class _MemoryVersionRepository:
         return len([version for version in self._db.versions if version.skill_id == skill_id])
 
 
-class _MemorySqlSkillRepository:
-    def __init__(self, db: SimpleNamespace) -> None:
-        self._repo = db.skill_repo
-
-    async def create(self, skill: Skill) -> Skill:
-        return await self._repo.create(skill)
-
-    async def get_by_id(self, skill_id: str) -> Skill | None:
-        return await self._repo.get_by_id(skill_id)
-
-    async def get_by_name(
-        self,
-        tenant_id: str,
-        name: str,
-        scope: SkillScope | None = None,
-    ) -> Skill | None:
-        return await self._repo.get_by_name(tenant_id, name, scope)
-
-    async def update(self, skill: Skill) -> Skill:
-        return await self._repo.update(skill)
-
-    async def list_by_project(
-        self, project_id: str, *_args: object, tenant_id: str | None = None, **_kwargs: object
-    ) -> list[Skill]:
-        return await self._repo.list_by_project(project_id, tenant_id=tenant_id)
+def _plugin_config_repository(config: dict[str, object] | None = None) -> SimpleNamespace:
+    row = SimpleNamespace(config=config) if config is not None else None
+    return SimpleNamespace(
+        get_by_tenant_and_plugin=AsyncMock(return_value=row),
+        upsert=AsyncMock(),
+    )
 
 
 class _MemoryEvolutionRepository:
@@ -474,10 +442,8 @@ class _MemoryEvolutionRepository:
 
 
 @pytest.mark.unit
-async def test_create_skill_sanitizes_domain_validation_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _Container())
+async def test_create_skill_sanitizes_domain_validation_error() -> None:
+    repo = _SkillRepository()
 
     with pytest.raises(HTTPException) as exc_info:
         await router.create_skill(
@@ -489,6 +455,7 @@ async def test_create_skill_sanitizes_domain_validation_error(
             ),
             tenant_id="tenant-1",
             db=SimpleNamespace(commit=AsyncMock()),
+            skill_repository=repo,
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -519,7 +486,6 @@ async def test_create_skill_preserves_agentskills_spec_fields(
 ) -> None:
     repo = _MemorySkillRepository()
     db = SimpleNamespace(commit=AsyncMock())
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
 
     response = await router.create_skill(
         request=SimpleNamespace(),
@@ -535,6 +501,7 @@ async def test_create_skill_preserves_agentskills_spec_fields(
         ),
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
     )
 
     assert response.license == "MIT"
@@ -561,7 +528,6 @@ async def test_create_project_skill_requires_project_access(
     access_guard = AsyncMock(
         side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     )
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
     monkeypatch.setattr(router, "_ensure_project_skill_access", access_guard)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -577,6 +543,7 @@ async def test_create_project_skill_requires_project_access(
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
             db=db,
+            skill_repository=repo,
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -597,7 +564,6 @@ async def test_create_tenant_skill_requires_tenant_admin(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
         )
     )
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
     monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -611,6 +577,7 @@ async def test_create_tenant_skill_requires_tenant_admin(
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
             db=db,
+            skill_repository=repo,
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -627,7 +594,6 @@ async def test_list_project_skills_requires_project_access(
     access_guard = AsyncMock(
         side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     )
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
     monkeypatch.setattr(router, "_ensure_project_skill_access", access_guard)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -644,6 +610,7 @@ async def test_list_project_skills_requires_project_access(
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
             db=db,
+            skill_repository=repo,
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -690,26 +657,13 @@ async def test_project_skill_raw_id_routes_require_project_access(
         evolution_jobs=[],
         evolution_sessions=[],
     )
+    version_repository = _MemoryVersionRepository(db)
+    plugin_config_repository = _plugin_config_repository()
     current_user = SimpleNamespace(id="user-1")
     access_guard = AsyncMock(
         side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     )
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
     monkeypatch.setattr(router, "_ensure_project_skill_access", access_guard)
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        _MemorySqlSkillRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     route_calls = {
         "get": lambda: router.get_skill(
             request=SimpleNamespace(),
@@ -717,6 +671,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant_id="tenant-1",
             current_user=current_user,
             db=db,
+            skill_repository=repo,
         ),
         "update": lambda: router.update_skill(
             request=SimpleNamespace(),
@@ -725,6 +680,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant_id="tenant-1",
             current_user=current_user,
             db=db,
+            skill_repository=repo,
         ),
         "delete": lambda: router.delete_skill(
             request=SimpleNamespace(),
@@ -732,6 +688,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant_id="tenant-1",
             current_user=current_user,
             db=db,
+            skill_repository=repo,
         ),
         "status": lambda: router.update_skill_status(
             request=SimpleNamespace(),
@@ -740,6 +697,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant_id="tenant-1",
             current_user=current_user,
             db=db,
+            skill_repository=repo,
         ),
         "content_get": lambda: router.get_skill_content(
             request=SimpleNamespace(),
@@ -747,6 +705,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant_id="tenant-1",
             current_user=current_user,
             db=db,
+            skill_repository=repo,
         ),
         "content_update": lambda: router.update_skill_content(
             request=SimpleNamespace(),
@@ -755,6 +714,8 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant_id="tenant-1",
             current_user=current_user,
             db=db,
+            skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
         "export": lambda: router.export_skill_package(
             request=SimpleNamespace(),
@@ -762,6 +723,8 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant_id="tenant-1",
             current_user=current_user,
             db=db,
+            skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
         "versions": lambda: router.list_skill_versions(
             skill_id=skill.id,
@@ -770,6 +733,8 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant={"id": "tenant-1"},
             current_user=current_user,
             db=db,
+            skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
         "version": lambda: router.get_skill_version(
             skill_id=skill.id,
@@ -777,6 +742,8 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant={"id": "tenant-1"},
             current_user=current_user,
             db=db,
+            skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
         "evolution": lambda: router.get_skill_evolution(
             skill_id=skill.id,
@@ -784,13 +751,17 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant={"id": "tenant-1"},
             current_user=current_user,
             db=db,
+            skill_repository=repo,
+            skill_version_repository=version_repository,
+            evolution_repository=_MemoryEvolutionRepository(db),
+            plugin_config_repository=plugin_config_repository,
         ),
         "evolution_run": lambda: router.run_skill_evolution(
-            request=SimpleNamespace(),
             skill_id=skill.id,
             tenant={"id": "tenant-1"},
             current_user=current_user,
             db=db,
+            skill_repository=repo,
         ),
         "rollback": lambda: router.rollback_skill(
             skill_id=skill.id,
@@ -798,6 +769,8 @@ async def test_project_skill_raw_id_routes_require_project_access(
             tenant={"id": "tenant-1"},
             current_user=current_user,
             db=db,
+            skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
     }
 
@@ -811,12 +784,77 @@ async def test_project_skill_raw_id_routes_require_project_access(
 
 
 @pytest.mark.unit
+async def test_rollback_skill_uses_injected_version_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Manages Agent Skills packages",
+        tools=["Read"],
+        full_content=SAMPLE_SKILL_MD,
+    )
+    await repo.create(skill)
+    db = SimpleNamespace(versions=[], commit=AsyncMock())
+    version_repository = _MemoryVersionRepository(db)
+    captured: dict[str, object] = {}
+
+    class _ReverseSync:
+        def __init__(
+            self,
+            *,
+            skill_repository: object,
+            skill_version_repository: object,
+            host_project_path: Path,
+        ) -> None:
+            captured.update(
+                skill_repository=skill_repository,
+                skill_version_repository=skill_version_repository,
+                host_project_path=host_project_path,
+            )
+
+        async def rollback_to_version(
+            self,
+            *,
+            skill_id: str,
+            version_number: int,
+        ) -> dict[str, object]:
+            captured.update(skill_id=skill_id, version_number=version_number)
+            return {"rolled_back": True}
+
+    monkeypatch.setattr(
+        "src.application.services.skill_reverse_sync.SkillReverseSync",
+        _ReverseSync,
+    )
+
+    response = await router.rollback_skill(
+        skill_id=skill.id,
+        request_body=router.SkillRollbackRequest(version_number=3),
+        db=db,
+        tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+        skill_repository=repo,
+        skill_version_repository=version_repository,
+    )
+
+    assert response.id == skill.id
+    assert captured == {
+        "skill_repository": repo,
+        "skill_version_repository": version_repository,
+        "host_project_path": Path.cwd(),
+        "skill_id": skill.id,
+        "version_number": 3,
+    }
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
 async def test_create_skill_rejects_mismatched_skill_md_frontmatter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repo = _MemorySkillRepository()
     db = SimpleNamespace(commit=AsyncMock())
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
 
     with pytest.raises(HTTPException) as exc_info:
         await router.create_skill(
@@ -829,6 +867,7 @@ async def test_create_skill_rejects_mismatched_skill_md_frontmatter(
             ),
             tenant_id="tenant-1",
             db=db,
+            skill_repository=repo,
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -841,7 +880,6 @@ async def test_create_skill_from_skill_md_uses_frontmatter_as_canonical_source(
 ) -> None:
     repo = _MemorySkillRepository()
     db = SimpleNamespace(commit=AsyncMock())
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
 
     response = await router.create_skill(
         request=SimpleNamespace(),
@@ -853,6 +891,7 @@ async def test_create_skill_from_skill_md_uses_frontmatter_as_canonical_source(
         ),
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
     )
 
     stored = await repo.get_by_id(response.id)
@@ -891,7 +930,6 @@ async def test_update_skill_clears_optional_agentskills_fields(
     )
     await repo.create(skill)
     db = SimpleNamespace(commit=AsyncMock())
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
 
     response = await router.update_skill(
         request=SimpleNamespace(),
@@ -904,6 +942,7 @@ async def test_update_skill_clears_optional_agentskills_fields(
         ),
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
     )
 
     stored = await repo.get_by_id(skill.id)
@@ -1012,17 +1051,10 @@ def test_skill_search_matches_name_description_version_and_metadata() -> None:
 
 
 @pytest.mark.unit
-async def test_import_skill_package_creates_skill_and_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_import_skill_package_creates_skill_and_version() -> None:
     repo = _MemorySkillRepository()
     db = SimpleNamespace(commit=AsyncMock(), versions=[])
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
 
     response = await router.import_skill_package(
         request=SimpleNamespace(),
@@ -1032,6 +1064,8 @@ async def test_import_skill_package_creates_skill_and_version(
         ),
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     assert response.action == "import"
@@ -1043,9 +1077,7 @@ async def test_import_skill_package_creates_skill_and_version(
 
 
 @pytest.mark.unit
-async def test_update_skill_content_validates_and_creates_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_update_skill_content_validates_and_creates_version() -> None:
     repo = _MemorySkillRepository()
     skill = Skill.create(
         tenant_id="tenant-1",
@@ -1056,12 +1088,7 @@ async def test_update_skill_content_validates_and_creates_version(
     )
     await repo.create(skill)
     db = SimpleNamespace(commit=AsyncMock(), versions=[])
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
 
     response = await router.update_skill_content(
         request=SimpleNamespace(),
@@ -1069,6 +1096,8 @@ async def test_update_skill_content_validates_and_creates_version(
         data=router.SkillContentUpdate(full_content=SAMPLE_SKILL_MD_WITH_SPEC),
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     updated = await repo.get_by_id(skill.id)
@@ -1084,17 +1113,10 @@ async def test_update_skill_content_validates_and_creates_version(
 
 
 @pytest.mark.unit
-async def test_import_skill_zip_package_creates_skill_and_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_import_skill_zip_package_creates_skill_and_version() -> None:
     repo = _MemorySkillRepository()
     db = SimpleNamespace(commit=AsyncMock(), versions=[])
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
     archive = SimpleNamespace(
         filename="alpha-skill.zip",
         read=AsyncMock(
@@ -1116,6 +1138,8 @@ async def test_import_skill_zip_package_creates_skill_and_version(
         change_summary=None,
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     assert response.action == "import"
@@ -1145,7 +1169,6 @@ async def test_get_skill_reads_filesystem_skill_by_name(
         async def list_available_skills(self, *_args: object, **_kwargs: object) -> list[Skill]:
             return [filesystem_skill]
 
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
     monkeypatch.setattr(
         SkillService,
         "create",
@@ -1157,6 +1180,7 @@ async def test_get_skill_reads_filesystem_skill_by_name(
         skill_id="filesystem-skill",
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
     )
 
     assert response.name == "filesystem-skill"
@@ -1165,9 +1189,7 @@ async def test_get_skill_reads_filesystem_skill_by_name(
 
 
 @pytest.mark.unit
-async def test_export_skill_package_uses_latest_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_export_skill_package_uses_latest_version() -> None:
     repo = _MemorySkillRepository()
     skill = Skill.create(
         tenant_id="tenant-1",
@@ -1189,18 +1211,15 @@ async def test_export_skill_package_uses_latest_version(
             )
         ]
     )
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
 
     response = await router.export_skill_package(
         request=SimpleNamespace(),
         skill_id=skill.id,
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     assert response.skill.name == "alpha-skill"
@@ -1211,7 +1230,6 @@ async def test_export_skill_package_uses_latest_version(
 
 @pytest.mark.unit
 async def test_export_filesystem_skill_includes_directory_resource_files(
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     repo = _MemorySkillRepository()
@@ -1236,18 +1254,15 @@ async def test_export_filesystem_skill_includes_directory_resource_files(
     skill.file_path = str(skill_md_path)
     await repo.create(skill)
     db = SimpleNamespace(versions=[])
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
 
     response = await router.export_skill_package(
         request=SimpleNamespace(),
         skill_id=skill.id,
         tenant_id="tenant-1",
         db=db,
+        skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     assert response.skill_md_content == SAMPLE_SKILL_MD
@@ -1258,9 +1273,7 @@ async def test_export_filesystem_skill_includes_directory_resource_files(
 
 
 @pytest.mark.unit
-async def test_get_skill_version_sanitizes_missing_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_get_skill_version_sanitizes_missing_version() -> None:
     repo = _MemorySkillRepository()
     skill = Skill.create(
         tenant_id="tenant-1",
@@ -1270,29 +1283,21 @@ async def test_get_skill_version_sanitizes_missing_version(
     )
     await repo.create(skill)
 
-    class _VersionRepository:
-        def __init__(self, _db: object) -> None:
-            pass
-
+    class _VersionRepository(_MemoryVersionRepository):
         async def get_by_version(self, _skill_id: str, _version_number: int) -> object | None:
             return None
 
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        _MemorySqlSkillRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _VersionRepository,
-    )
+    db = SimpleNamespace(skill_repo=repo, versions=[])
+    version_repository = _VersionRepository(db)
 
     with pytest.raises(HTTPException) as exc_info:
         await router.get_skill_version(
             skill_id=skill.id,
             version_number=42,
-            db=SimpleNamespace(skill_repo=repo),
+            db=db,
             tenant={"id": "tenant-1"},
+            skill_repository=repo,
+            skill_version_repository=version_repository,
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -1349,25 +1354,15 @@ async def test_get_skill_evolution_returns_route_and_trigger_metadata(
             SimpleNamespace(tenant_id="tenant-1", skill_name="alpha-skill"),
         ],
     )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        _MemorySqlSkillRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     response = await router.get_skill_evolution(
         skill_id=skill.id,
         limit=20,
         db=db,
         tenant={"id": "tenant-1"},
+        skill_repository=repo,
+        skill_version_repository=_MemoryVersionRepository(db),
+        evolution_repository=_MemoryEvolutionRepository(db),
+        plugin_config_repository=_plugin_config_repository(),
     )
 
     assert response.skill_name == "alpha-skill"
@@ -1473,11 +1468,6 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
             ),
         ],
     )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     response = await router.get_skill_evolution_overview(
         skill_limit=20,
         session_limit=20,
@@ -1485,6 +1475,8 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
         db=db,
         tenant={"id": "tenant-1"},
         current_user=SimpleNamespace(id="user-1"),
+        evolution_repository=_MemoryEvolutionRepository(db),
+        plugin_config_repository=_plugin_config_repository(),
     )
 
     assert response.stats.total_sessions == 2
@@ -1516,9 +1508,7 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
 
 
 @pytest.mark.unit
-async def test_apply_skill_evolution_job_creates_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_apply_skill_evolution_job_creates_version() -> None:
     repo = _MemorySkillRepository()
     skill = Skill.create(
         tenant_id="tenant-1",
@@ -1549,24 +1539,14 @@ async def test_apply_skill_evolution_job_creates_version(
         ],
         commit=AsyncMock(),
     )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        _MemorySqlSkillRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     response = await router.apply_skill_evolution_job(
         job_id="job-apply",
         db=db,
         tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+        skill_repository=repo,
+        skill_version_repository=_MemoryVersionRepository(db),
+        evolution_repository=_MemoryEvolutionRepository(db),
     )
 
     assert response.status == "applied"
@@ -1578,9 +1558,7 @@ async def test_apply_skill_evolution_job_creates_version(
 
 
 @pytest.mark.unit
-async def test_apply_create_skill_evolution_job_creates_skill_and_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_apply_create_skill_evolution_job_creates_skill_and_version() -> None:
     repo = _MemorySkillRepository()
     created_at = datetime.now(UTC)
     candidate_content = """---
@@ -1616,24 +1594,14 @@ Use this when a reusable review workflow is needed.
         ],
         commit=AsyncMock(),
     )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        _MemorySqlSkillRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     response = await router.apply_skill_evolution_job(
         job_id="job-create",
         db=db,
         tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+        skill_repository=repo,
+        skill_version_repository=_MemoryVersionRepository(db),
+        evolution_repository=_MemoryEvolutionRepository(db),
     )
 
     created_skill = await repo.get_by_name("tenant-1", "new-review-skill", SkillScope.TENANT)
@@ -1651,9 +1619,7 @@ Use this when a reusable review workflow is needed.
 
 
 @pytest.mark.unit
-async def test_reject_skill_evolution_job_does_not_create_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_reject_skill_evolution_job_does_not_create_version() -> None:
     created_at = datetime.now(UTC)
     db = SimpleNamespace(
         evolution_jobs=[
@@ -1674,15 +1640,14 @@ async def test_reject_skill_evolution_job_does_not_create_version(
         versions=[],
         commit=AsyncMock(),
     )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
+    evolution_repository = _MemoryEvolutionRepository(db)
 
     response = await router.reject_skill_evolution_job(
         job_id="job-reject",
         db=db,
         tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+        evolution_repository=evolution_repository,
     )
 
     assert response.status == "rejected"
@@ -1692,9 +1657,8 @@ async def test_reject_skill_evolution_job_does_not_create_version(
 
 
 @pytest.mark.unit
-async def test_apply_skill_evolution_job_rejects_cross_tenant(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_apply_skill_evolution_job_rejects_cross_tenant() -> None:
+    repo = _MemorySkillRepository()
     db = SimpleNamespace(
         evolution_jobs=[
             SimpleNamespace(
@@ -1713,16 +1677,15 @@ async def test_apply_skill_evolution_job_rejects_cross_tenant(
         ],
         commit=AsyncMock(),
     )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await router.apply_skill_evolution_job(
             job_id="job-other",
             db=db,
             tenant={"id": "tenant-1"},
+            current_user=SimpleNamespace(id="user-1"),
+            skill_repository=repo,
+            skill_version_repository=_MemoryVersionRepository(db),
+            evolution_repository=_MemoryEvolutionRepository(db),
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -1733,6 +1696,7 @@ async def test_apply_skill_evolution_job_rejects_cross_tenant(
 async def test_apply_tenant_skill_evolution_job_requires_tenant_admin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    repo = _MemorySkillRepository()
     db = SimpleNamespace(
         evolution_jobs=[
             SimpleNamespace(
@@ -1757,10 +1721,6 @@ async def test_apply_tenant_skill_evolution_job_requires_tenant_admin(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
         )
     )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
     monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -1769,6 +1729,9 @@ async def test_apply_tenant_skill_evolution_job_requires_tenant_admin(
             db=db,
             tenant={"id": "tenant-1"},
             current_user=SimpleNamespace(id="user-1"),
+            skill_repository=repo,
+            skill_version_repository=_MemoryVersionRepository(db),
+            evolution_repository=_MemoryEvolutionRepository(db),
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -1800,14 +1763,6 @@ async def test_apply_skill_evolution_job_rejects_project_without_membership(
         commit=AsyncMock(),
     )
     monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        _MemorySqlSkillRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-    monkeypatch.setattr(
         router,
         "_ensure_project_skill_access",
         AsyncMock(
@@ -1824,6 +1779,9 @@ async def test_apply_skill_evolution_job_rejects_project_without_membership(
             db=db,
             tenant={"id": "tenant-1"},
             current_user=SimpleNamespace(id="user-2"),
+            skill_repository=db.skill_repo,
+            skill_version_repository=_MemoryVersionRepository(db),
+            evolution_repository=_MemoryEvolutionRepository(db),
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -1874,19 +1832,6 @@ async def test_apply_skill_evolution_job_targets_project_skill(
         ],
         commit=AsyncMock(),
     )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        _MemorySqlSkillRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
     ensure_access = AsyncMock()
     monkeypatch.setattr(router, "_ensure_project_skill_access", ensure_access)
 
@@ -1895,6 +1840,9 @@ async def test_apply_skill_evolution_job_targets_project_skill(
         db=db,
         tenant={"id": "tenant-1"},
         current_user=SimpleNamespace(id="user-1"),
+        skill_repository=repo,
+        skill_version_repository=_MemoryVersionRepository(db),
+        evolution_repository=_MemoryEvolutionRepository(db),
     )
 
     assert response.project_id == "project-1"
@@ -1925,10 +1873,38 @@ async def test_update_skill_evolution_config_requires_tenant_admin(
             db=db,
             tenant={"id": "tenant-1"},
             current_user=SimpleNamespace(id="user-1"),
+            plugin_config_repository=_plugin_config_repository(),
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_update_skill_evolution_config_uses_v2_repository_and_handler_commit() -> None:
+    db = SimpleNamespace(commit=AsyncMock())
+    repository = _plugin_config_repository({"enabled": False, "publish_mode": "review"})
+
+    response = await router.update_skill_evolution_config(
+        payload=router.SkillEvolutionConfigUpdateRequest(enabled=True, publish_mode="direct"),
+        db=db,
+        tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+        plugin_config_repository=repository,
+    )
+
+    assert response.enabled is True
+    assert response.publish_mode == "direct"
+    repository.get_by_tenant_and_plugin.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        plugin_name="skill_evolution",
+    )
+    repository.upsert.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        plugin_name="skill_evolution",
+        config=response.model_dump(),
+    )
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -1947,22 +1923,12 @@ async def test_run_skill_evolution_queues_single_skill_cycle(
     plugin = SimpleNamespace(
         schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
     )
-    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
-        )
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        _MemorySqlSkillRepository,
-    )
-
+    monkeypatch.setattr(router, "_skill_evolution_scheduler_v2", lambda: plugin)
     response = await router.run_skill_evolution(
-        request=request,
         skill_id=skill.id,
         db=db,
         tenant={"id": "tenant-1"},
+        skill_repository=repo,
     )
 
     assert response.result == {"scheduled": True, "status": "queued"}
@@ -1974,19 +1940,15 @@ async def test_run_skill_evolution_queues_single_skill_cycle(
 
 
 @pytest.mark.unit
-async def test_run_tenant_skill_evolution_queues_tenant_cycle() -> None:
+async def test_run_tenant_skill_evolution_queues_tenant_cycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     plugin = SimpleNamespace(
         schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
     )
-    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
-        )
-    )
+    monkeypatch.setattr(router, "_skill_evolution_scheduler_v2", lambda: plugin)
 
     response = await router.run_tenant_skill_evolution(
-        request=request,
         db=SimpleNamespace(),
         tenant={"id": "tenant-1"},
     )
@@ -2007,12 +1969,7 @@ async def test_run_tenant_skill_evolution_requires_tenant_admin(
     plugin = SimpleNamespace(
         schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
     )
-    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
-        )
-    )
+    monkeypatch.setattr(router, "_skill_evolution_scheduler_v2", lambda: plugin)
     write_guard = AsyncMock(
         side_effect=HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
@@ -2022,7 +1979,6 @@ async def test_run_tenant_skill_evolution_requires_tenant_admin(
 
     with pytest.raises(HTTPException) as exc_info:
         await router.run_tenant_skill_evolution(
-            request=request,
             db=SimpleNamespace(),
             tenant={"id": "tenant-1"},
             current_user=SimpleNamespace(id="user-1"),
@@ -2033,17 +1989,19 @@ async def test_run_tenant_skill_evolution_requires_tenant_admin(
 
 
 @pytest.mark.unit
-async def test_run_tenant_skill_evolution_rejects_missing_plugin() -> None:
-    container = SimpleNamespace(skill_evolution_plugin=lambda: None)
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
+async def test_run_tenant_skill_evolution_rejects_missing_plugin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_runtime():
+        raise router.RuntimeV2Error(
+            "service_not_found",
+            "Skill Evolution scheduler is disabled",
         )
-    )
+
+    monkeypatch.setattr(router, "current_skill_evolution_scheduler_v2", missing_runtime)
 
     with pytest.raises(HTTPException) as exc_info:
         await router.run_tenant_skill_evolution(
-            request=request,
             db=SimpleNamespace(),
             tenant={"id": "tenant-1"},
         )

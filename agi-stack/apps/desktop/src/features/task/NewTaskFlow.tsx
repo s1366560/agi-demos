@@ -7,10 +7,7 @@ import {
   MagicWandIcon,
 } from '@radix-ui/react-icons';
 
-import {
-  DesktopApiClient,
-  isTaskSessionIdempotencyConflictError,
-} from '../../api/client';
+import { isTaskSessionIdempotencyConflictError } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
   AgentConversation,
@@ -82,6 +79,7 @@ import {
   NewTaskReviewStage,
 } from './NewTaskFlowStages';
 import { FlowStep, NewTaskFooterBackButton } from './NewTaskStagePrimitives';
+import type { DesktopNewTaskFlowOperationsV2 } from '../../plugins/desktopNewTaskFlowAuthorityModuleV2';
 import './NewTaskFlow.css';
 import './NewTaskPlanReview.css';
 
@@ -123,6 +121,7 @@ type NewTaskFlowProps = {
   open: boolean;
   config: DesktopRuntimeConfig;
   actorId: string | null | undefined;
+  newTaskFlowClientV2: DesktopNewTaskFlowOperationsV2;
   workspaceAuthority?: WorkspaceAuthorityCollection<WorkspaceSummary>;
   workspaces?: WorkspaceSummary[];
   resumeDraft?: NewTaskResumeDraft | null;
@@ -147,6 +146,7 @@ export function NewTaskFlow({
   open,
   config,
   actorId,
+  newTaskFlowClientV2,
   workspaceAuthority,
   workspaces,
   resumeDraft = null,
@@ -517,7 +517,7 @@ export function NewTaskFlow({
         return;
       }
       try {
-        const client = new DesktopApiClient(session.config);
+        const client = newTaskFlowClientV2.bindOperation(session.config);
         const timelineRequest =
           session.config.mode === 'local'
             ? client
@@ -619,7 +619,7 @@ export function NewTaskFlow({
       if (pollTimeout !== undefined) window.clearTimeout(pollTimeout);
       abortController.abort();
     };
-  }, [open, phase, planningFailed, session, t]);
+  }, [newTaskFlowClientV2, open, phase, planningFailed, session, t]);
 
   if (!open) return null;
 
@@ -718,7 +718,7 @@ export function NewTaskFlow({
       }
       let readySession = sessionMatchesDefinition ? session : null;
       if (!readySession) {
-        const baseClient = new DesktopApiClient(config);
+        const baseClient = newTaskFlowClientV2.bindOperation(config);
         if (config.mode === 'cloud') {
           try {
             if (!(await baseClient.supportsAgentPlanWorkflow())) {
@@ -848,7 +848,7 @@ export function NewTaskFlow({
         targetWorkspaceSelection === NEW_WORKSPACE_VALUE
       ) {
         try {
-          const workspaces = await new DesktopApiClient(config).listWorkspaces();
+          const workspaces = await newTaskFlowClientV2.bindOperation(config).listWorkspaces();
           if (
             flowEpochRef.current !== operationEpoch ||
             activeActorIdRef.current !== operationActorId
@@ -964,7 +964,7 @@ export function NewTaskFlow({
     setFlowError(null);
     setPhase('planning');
     try {
-      const client = new DesktopApiClient(session.config);
+      const client = newTaskFlowClientV2.bindOperation(session.config);
       await client.sendMessage(humanMessage);
       const outcome = await runAgentTurn(
         session,
@@ -1022,7 +1022,7 @@ export function NewTaskFlow({
 
   const refreshLegacyPlanBeforeApproval = async (operationEpoch: number): Promise<boolean> => {
     if (!session) return false;
-    const client = new DesktopApiClient(session.config);
+    const client = newTaskFlowClientV2.bindOperation(session.config);
     const response = await client.listAgentPlanTasks(session.conversation.id);
     if (flowEpochRef.current !== operationEpoch) return false;
     const tasks = orderedPlanTasks(response.tasks ?? []);
@@ -1043,7 +1043,7 @@ export function NewTaskFlow({
     activeSession: NewTaskSession,
     operationEpoch: number,
   ): Promise<boolean> => {
-    const client = new DesktopApiClient(activeSession.config);
+    const client = newTaskFlowClientV2.bindOperation(activeSession.config);
     const recoveryStorage = browserLegacyPlanApprovalStorage();
     const recoveryScope = legacyPlanApprovalRuntimeScope(activeSession.config);
     if (!recoveryScope) {
@@ -1123,7 +1123,7 @@ export function NewTaskFlow({
     activeSession: NewTaskSession,
     previewedPlanVersion: DesktopPlanVersion,
   ) => {
-    const client = new DesktopApiClient(activeSession.config);
+    const client = newTaskFlowClientV2.bindOperation(activeSession.config);
     const approvalIdentity = [
       previewedPlanVersion.id,
       previewedPlanVersion.version,

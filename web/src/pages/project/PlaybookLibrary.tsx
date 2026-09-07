@@ -1,3 +1,7 @@
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '@/plugins/webOperationAdmissionV2';
 /**
  * PlaybookLibrary — read-only view of the project's reflection loop.
  *
@@ -11,7 +15,7 @@
  * for the foreseeable future.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FC, ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -146,7 +150,10 @@ const VerdictRow: FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => {
           {verdict.playbook_id !== null && (
             <>
               {' · '}
-              <span className="font-mono text-zinc-600 dark:text-zinc-400" title={verdict.playbook_id}>
+              <span
+                className="font-mono text-zinc-600 dark:text-zinc-400"
+                title={verdict.playbook_id}
+              >
                 {verdict.playbook_id.slice(0, 8)}
               </span>
             </>
@@ -158,12 +165,18 @@ const VerdictRow: FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => {
 };
 
 export const PlaybookLibrary: FC = () => {
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
   const { projectId } = useParams<{ projectId: string }>();
   const { t } = useTranslation();
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [verdicts, setVerdicts] = useState<ReflectionVerdict[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sequenceOwnerRef = useRef<object | null>(null);
   const lastSequenceRef = useRef<string | undefined>(undefined);
   const activeProjectIdRef = useRef<string | undefined>(projectId);
   const sequenceProjectIdRef = useRef<string | undefined>(projectId);
@@ -228,11 +241,16 @@ export const PlaybookLibrary: FC = () => {
   }, [projectId, load]);
 
   useEffect(() => {
-    if (projectId === undefined) return;
+    if (projectId === undefined || !availability.available) return;
+    if (sequenceOwnerRef.current !== availability.owner) {
+      sequenceOwnerRef.current = availability.owner;
+      lastSequenceRef.current = undefined;
+    }
 
     const unsubscribe = unifiedEventService.subscribeProject(
       projectId,
       (event) => {
+        if (getWebOperationAvailabilityV2() !== availability) return;
         if (event.type !== 'reflection_complete') {
           return;
         }
@@ -243,6 +261,7 @@ export const PlaybookLibrary: FC = () => {
           window.clearTimeout(refreshTimerRef.current);
         }
         refreshTimerRef.current = window.setTimeout(() => {
+          if (getWebOperationAvailabilityV2() !== availability) return;
           void load(true);
           refreshTimerRef.current = undefined;
         }, EVENT_REFRESH_DEBOUNCE_MS);
@@ -257,7 +276,7 @@ export const PlaybookLibrary: FC = () => {
         refreshTimerRef.current = undefined;
       }
     };
-  }, [projectId, load]);
+  }, [projectId, load, availability]);
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-6">

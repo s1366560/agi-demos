@@ -1,6 +1,9 @@
+import { createBrowserIntegrationHttpClientV2Fixture } from './browserIntegrationOperationsV2Fixture.mjs';
+import { createTenantSkillHttpClientV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { createTenantSubAgentDefinitionsHttpClientV2Fixture } from './tenantSubAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const clientModule = require(
@@ -2487,6 +2490,12 @@ test('conversation session authority request preserves scoped identity without l
   }
 });
 
+test('desktop API client does not expose the retired cross-domain runtime aggregate', () => {
+  const client = new DesktopApiClient(DEFAULT_CONFIG);
+
+  assert.equal(client.loadRuntime, undefined);
+});
+
 test('plan workflow preflight proves route support without creating server artifacts', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
@@ -2710,7 +2719,8 @@ test('run changes and structured inputs preserve snapshot, revision, and deliver
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
     });
-    await client.getRunChanges('run/1', 7);
+    const runChangesController = new AbortController();
+    await client.getRunChanges('run/1', 7, runChangesController.signal);
     await client.createRunInput('run/1', {
       expectedRunRevision: 7,
       message: 'Keep the API stable',
@@ -2731,12 +2741,13 @@ test('run changes and structured inputs preserve snapshot, revision, and deliver
       ],
     });
     await client.listRunInputs('run/1');
-    await client.promoteRunInput('input/1', 8, 'promote-input-1');
+    await client.promoteRunInput('run/1', 'input/1', 8, 'promote-input-1');
 
     assert.equal(
       String(calls[0].input),
       'http://127.0.0.1:8088/api/v1/agent/runs/run%2F1/changes?expected_revision=7'
     );
+    assert.equal(calls[0].init.signal, runChangesController.signal);
     assert.equal(
       String(calls[1].input),
       'http://127.0.0.1:8088/api/v1/agent/runs/run%2F1/inputs'
@@ -3591,144 +3602,10 @@ test('updateAgentConversationConfig persists and clears a scoped model override'
   }
 });
 
-test('prompt template catalog, creation, and deletion preserve the authenticated tenant contract', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  const controller = new AbortController();
-  const template = {
-    id: 'template-1',
-    tenant_id: 'tenant / one',
-    project_id: null,
-    created_by: 'user-1',
-    title: 'Release brief',
-    content: 'Summarize {{release}}.',
-    category: 'writing',
-    variables: [
-      {
-        name: 'release',
-        description: 'Release identifier',
-        default_value: '',
-        required: true,
-      },
-    ],
-    is_system: false,
-    usage_count: 2,
-    created_at: '2026-07-24T00:00:00Z',
-    updated_at: '2026-07-24T00:00:00Z',
-  };
-  const createdTemplate = {
-    ...template,
-    id: 'template-created',
-    title: 'Saved answer',
-    content: 'Exact assistant answer',
-    category: 'analysis',
-    variables: [],
-    usage_count: 0,
-  };
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input: String(input), init });
-    if (init?.method === 'DELETE') return new Response(null, { status: 204 });
-    if (init?.method === 'POST') {
-      return new Response(JSON.stringify(createdTemplate), {
-        status: 201,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return new Response(JSON.stringify([template]), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      mode: 'cloud',
-      apiBaseUrl: 'https://api.memstack.test',
-      apiKey: 'cloud-session',
-      tenantId: 'tenant / one',
-    });
-
-    assert.deepEqual(
-      await client.listPromptTemplates('tenant / one', controller.signal),
-      [template],
-    );
-    assert.deepEqual(
-      await client.createPromptTemplate(
-        'tenant / one',
-        {
-          title: 'Saved answer',
-          content: 'Exact assistant answer',
-          category: 'analysis',
-        },
-        controller.signal,
-      ),
-      createdTemplate,
-    );
-    await client.deletePromptTemplate('template / one', controller.signal);
-
-    assert.equal(
-      calls[0].input,
-      'https://api.memstack.test/api/v1/agent/templates?tenant_id=tenant+%2F+one&limit=100&offset=0',
-    );
-    assert.equal(calls[0].init.signal, controller.signal);
-    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer cloud-session');
-    assert.equal(
-      calls[1].input,
-      'https://api.memstack.test/api/v1/agent/templates?tenant_id=tenant+%2F+one',
-    );
-    assert.equal(calls[1].init.method, 'POST');
-    assert.equal(calls[1].init.signal, controller.signal);
-    assert.deepEqual(JSON.parse(String(calls[1].init.body)), {
-      title: 'Saved answer',
-      content: 'Exact assistant answer',
-      category: 'analysis',
-    });
-    assert.equal(
-      calls[2].input,
-      'https://api.memstack.test/api/v1/agent/templates/template%20%2F%20one',
-    );
-    assert.equal(calls[2].init.method, 'DELETE');
-    assert.equal(calls[2].init.signal, controller.signal);
-
-    for (const invalidTemplate of [
-      { ...template, tenant_id: 'tenant-two' },
-      { ...template, variables: [{ ...template.variables[0], required: 'yes' }] },
-    ]) {
-      globalThis.fetch = async () =>
-        new Response(JSON.stringify([invalidTemplate]), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      await assert.rejects(
-        () => client.listPromptTemplates('tenant / one'),
-        (error) =>
-          error instanceof DesktopApiError &&
-          error.status === 502 &&
-          error.message === 'Invalid prompt template catalog response',
-      );
-    }
-
-    globalThis.fetch = async () =>
-      new Response(JSON.stringify({ ...createdTemplate, is_system: true }), {
-        status: 201,
-        headers: { 'content-type': 'application/json' },
-      });
-    await assert.rejects(
-      () =>
-        client.createPromptTemplate('tenant / one', {
-          title: 'Saved answer',
-          content: 'Exact assistant answer',
-          category: 'analysis',
-        }),
-      (error) =>
-        error instanceof DesktopApiError &&
-        error.status === 502 &&
-        error.message === 'Invalid prompt template response',
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('prompt template transport is retired from the static Desktop API client', () => {
+  assert.equal(DesktopApiClient.prototype.listPromptTemplates, undefined);
+  assert.equal(DesktopApiClient.prototype.createPromptTemplate, undefined);
+  assert.equal(DesktopApiClient.prototype.deletePromptTemplate, undefined);
 });
 
 test('conversation lifecycle mutations use the scoped Web-compatible routes', async () => {
@@ -4335,6 +4212,7 @@ test('managed skill APIs preserve tenant and project collection scope and status
               items: [
                 {
                   id: 'skill/1',
+                  tenant_id: 'tenant 1',
                   name: 'Repository review',
                   description: 'Review repository changes',
                   status: 'active',
@@ -4345,6 +4223,7 @@ test('managed skill APIs preserve tenant and project collection scope and status
             }
           : {
               id: 'skill/1',
+              tenant_id: 'tenant 1',
               name: 'Repository review',
               description: 'Review repository changes',
               status: 'disabled',
@@ -4357,10 +4236,11 @@ test('managed skill APIs preserve tenant and project collection scope and status
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      apiKey: 'skill-trusted-session',
       tenantId: 'tenant 1',
       projectId: 'project/1',
     });
@@ -4398,7 +4278,7 @@ test('managed skill author APIs preserve tenant scope and SKILL.md content contr
   globalThis.fetch = async (input, init) => {
     calls.push({ input, init });
     const method = init?.method ?? 'GET';
-    if (method === 'DELETE') return new Response(null, { status: 204 });
+    if (method === 'DELETE') return Response.json({ deleted: true, id: 'skill/1' });
     if (String(input).includes('/content') && method === 'GET') {
       return new Response(
         JSON.stringify({
@@ -4414,6 +4294,7 @@ test('managed skill author APIs preserve tenant scope and SKILL.md content contr
     return new Response(
       JSON.stringify({
         id: 'skill/1',
+        tenant_id: 'tenant 1',
         name: 'repository-review',
         description: 'Review repository changes',
         status: 'active',
@@ -4425,10 +4306,11 @@ test('managed skill author APIs preserve tenant scope and SKILL.md content contr
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      apiKey: 'skill-trusted-session',
       tenantId: 'tenant 1',
     });
     const createInput = {
@@ -4540,6 +4422,7 @@ test('local managed skill import binds frontmatter identity to scope and revisio
           items: [
             {
               id: 'repository-review',
+              tenant_id: 'tenant 1',
               revision: 4,
               name: 'repository-review',
               description: 'Review repository changes.',
@@ -4560,6 +4443,7 @@ test('local managed skill import binds frontmatter identity to scope and revisio
         version_label: null,
         skill: {
           id: 'repository-review',
+          tenant_id: 'tenant 1',
           revision: 5,
           name: 'repository-review',
           description: 'Review repository changes safely.',
@@ -4574,10 +4458,11 @@ test('local managed skill import binds frontmatter identity to scope and revisio
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      apiKey: 'skill-trusted-session',
       tenantId: 'tenant 1',
       projectId: 'project/1',
     });
@@ -4620,6 +4505,7 @@ test('local managed skill import refuses implicit overwrite before mutation', as
         items: [
           {
             id: 'repository-review',
+            tenant_id: 'tenant 1',
             revision: 0,
             name: 'repository-review',
             description: 'Existing package.',
@@ -4635,10 +4521,11 @@ test('local managed skill import refuses implicit overwrite before mutation', as
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      apiKey: 'skill-trusted-session',
       tenantId: 'tenant 1',
       projectId: 'project/1',
     });
@@ -4693,6 +4580,7 @@ test('cloud managed skill import preserves the existing request contract', async
         version_label: null,
         skill: {
           id: 'cloud-skill-id',
+          tenant_id: 'tenant 1',
           name: 'cloud-review',
           description: 'Cloud authority fixture.',
           status: 'active',
@@ -4705,7 +4593,7 @@ test('cloud managed skill import preserves the existing request contract', async
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',
@@ -4728,352 +4616,44 @@ test('cloud managed skill import preserves the existing request contract', async
   }
 });
 
-test('managed plugin APIs preserve authoritative ids and toggle by id', async () => {
+test('marketplace V2 APIs preserve exact versions and uninstall desired bundles', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     calls.push({ input, init });
-    return new Response(
-      JSON.stringify({
-        items: [
-          {
-            id: 'runtime/github',
-            name: 'github-display-name',
-            source: 'entrypoint',
-            enabled: true,
-            discovered: true,
-            channel_types: [],
-          },
-          {
-            name: 'legacy-plugin',
-            source: 'entrypoint',
-            enabled: false,
-            discovered: true,
-            channel_types: [],
-          },
-        ],
-        diagnostics: [],
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } }
-    );
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      localApiToken: 'local-session-token',
-      tenantId: 'tenant 1',
-    });
-    const plugins = await client.listManagedPlugins();
-    await client.setManagedPluginEnabled(plugins[0].id, false);
-    await client.setManagedPluginEnabled(plugins[1].id, true);
-
-    assert.equal(plugins[0].id, 'runtime/github');
-    assert.equal(plugins[1].id, 'legacy-plugin');
-    assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
-      [
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins',
-          'GET',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/runtime%2Fgithub/disable',
-          'POST',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/legacy-plugin/enable',
-          'POST',
-          undefined,
-        ],
-      ]
-    );
-    assert.doesNotMatch(String(calls[0]?.input), /mcp\/apps/);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('managed plugin lifecycle and configuration preserve tenant control-plane contracts', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input, init });
-    const url = String(input);
-    if (url.endsWith('/config-schema')) {
+    if (init?.method === 'POST') {
       return new Response(
         JSON.stringify({
-          plugin_name: 'release/notifier',
-          providers: [],
-          skills: [],
-          enabled: true,
-          discovered: true,
-          schema_supported: true,
-          config_schema: { type: 'object', properties: {} },
-          secret_paths: [],
+          plugin_id: 'release/notifier',
+          version: '2.4.1',
+          status: 'uninstalled',
+          desired_removed: true,
+          revoked_permissions: 2,
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }
-    if (url.endsWith('/config') && init?.method !== 'PUT') {
-      return new Response(
-        JSON.stringify({
-          tenant_id: 'tenant 1',
-          plugin_name: 'release/notifier',
-          config: { endpoint: 'https://example.test' },
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
-    }
-    return new Response(JSON.stringify({ success: true, message: 'ok' }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      localApiToken: 'local-session-token',
-      tenantId: 'tenant 1',
-    });
-
-    await client.installManagedPlugin('memstack-release-notifier>=2.0');
-    await client.reloadManagedPlugins();
-    await client.getManagedPluginConfigSchema('release/notifier');
-    await client.getManagedPluginConfig('release/notifier');
-    await client.updateManagedPluginConfig('release/notifier', {
-      config: { endpoint: 'https://example.test/v2' },
-    });
-    await client.uninstallManagedPlugin('release/notifier');
-
-    assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
-      [
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/install',
-          'POST',
-          JSON.stringify({ requirement: 'memstack-release-notifier>=2.0' }),
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/reload',
-          'POST',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/release%2Fnotifier/config-schema',
-          'GET',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/release%2Fnotifier/config',
-          'GET',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/release%2Fnotifier/config',
-          'PUT',
-          JSON.stringify({ config: { endpoint: 'https://example.test/v2' } }),
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/release%2Fnotifier/uninstall',
-          'POST',
-          undefined,
-        ],
-      ],
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('cloud managed plugins use the response name as the operation key when id is absent', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input, init });
-    return new Response(
-      JSON.stringify({
-        plugins: [
-          {
-            name: 'github',
-            source: 'entrypoint',
-            enabled: true,
-            discovered: true,
-            channel_types: [],
-          },
-        ],
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } }
-    );
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'https://api.memstack.test',
-      apiKey: 'cloud-session-token',
-      localApiToken: '',
-      tenantId: 'tenant 1',
-      mode: 'cloud',
-    });
-    const plugins = await client.listManagedPlugins();
-    await client.setManagedPluginEnabled(plugins[0].id, false);
-
-    assert.equal(plugins[0].id, 'github');
-    assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method]),
-      [
-        ['https://api.memstack.test/api/v1/channels/tenants/tenant%201/plugins', 'GET'],
-        [
-          'https://api.memstack.test/api/v1/channels/tenants/tenant%201/plugins/github/disable',
-          'POST',
-        ],
-      ]
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('managed agent APIs preserve project scope and the enabled mutation body', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input, init });
-    return new Response(
-      JSON.stringify(
-        calls.length === 1
-          ? {
-              items: [
-                {
-                  id: 'agent/1',
-                  name: 'coding-agent',
-                  display_name: 'Coding agent',
-                  enabled: false,
-                },
-              ],
-            }
-          : {
-              id: 'agent/1',
-              name: 'coding-agent',
-              display_name: 'Coding agent',
-              enabled: true,
-            }
-      ),
-      { status: 200, headers: { 'content-type': 'application/json' } }
-    );
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      localApiToken: 'local-session-token',
-      tenantId: 'tenant 1',
-      projectId: 'project/1',
-    });
-
-    const agents = await client.listManagedAgents();
-    const updated = await client.setManagedAgentEnabled(agents[0].id, true, 0);
-
-    assert.equal(updated.enabled, true);
-    assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method]),
-      [
-        [
-          'http://127.0.0.1:8088/api/v1/agent/definitions?limit=100&enabled_only=false&project_id=project%2F1&tenant_id=tenant+1',
-          'GET',
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1/enabled?tenant_id=tenant+1&project_id=project%2F1',
-          'PATCH',
-        ],
-      ],
-    );
-    assertLocalManagedMutation(calls[1], {
-      expectedRevision: 0,
-      value: { enabled: true },
-    });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('managed external ACP Agent catalog preserves tenant scope', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input, init });
     return new Response(
       JSON.stringify([
         {
-          id: 'acp-agent-1',
-          agentKey: 'review-agent',
-          name: 'Review Agent',
-          enabled: true,
-          available: true,
+          plugin_id: 'release/notifier',
+          version: '2.4.1',
+          publisher: 'MemStack Labs',
+          artifact_digest: 'sha256:artifact',
+          artifact_registry: 'registry.example.test',
+          artifact_repository: 'plugins/release-notifier',
+          oci_manifest_digest: 'sha256:manifest',
+          install_status: 'installed',
+          manifest: { targets: ['python', 'desktop-renderer'] },
+          signature: { algorithm: 'Ed25519' },
+          provenance: { builder_id: 'builder-v2' },
+          security_scan_status: 'passed',
+          revoked: false,
+          revocation_reason: null,
         },
       ]),
-      { status: 200, headers: { 'content-type': 'application/json' } },
+      { status: 200, headers: { 'content-type': 'application/json' } }
     );
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'https://api.memstack.test',
-      apiKey: 'cloud-session-token',
-      tenantId: 'tenant 1',
-      mode: 'cloud',
-    });
-
-    assert.equal((await client.listManagedExternalAcpAgents())[0].agentKey, 'review-agent');
-    assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method]),
-      [
-        [
-          'https://api.memstack.test/api/v1/acp/tenants/tenant%201/external-agents',
-          'GET',
-        ],
-      ],
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('managed Agent definition CRUD preserves tenant scope and request bodies', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input, init });
-    if (init?.method === 'DELETE') {
-      return new Response(JSON.stringify({ deleted: true, id: 'agent/1' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return new Response(
-      JSON.stringify({
-        id: 'agent/1',
-        name: 'release_reviewer',
-        display_name: 'Release reviewer',
-        system_prompt: 'Review releases.',
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    );
-  };
-
-  const mutation = {
-    name: 'release_reviewer',
-    display_name: 'Release reviewer',
-    system_prompt: 'Review releases.',
-    project_id: 'project/1',
   };
 
   try {
@@ -5082,44 +4662,31 @@ test('managed Agent definition CRUD preserves tenant scope and request bodies', 
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
       tenantId: 'tenant 1',
-      projectId: 'project/1',
     });
+    const plugins = await client.listMarketplacePlugins();
+    const response = await client.uninstallMarketplacePlugin(
+      plugins[0].plugin_id,
+      plugins[0].version,
+    );
 
-    const created = await client.createManagedAgentDefinition(mutation);
-    const updated = await client.updateManagedAgentDefinition(created.id, mutation, 0);
-    const deleted = await client.deleteManagedAgentDefinition(updated.id, 1);
-
-    assert.equal(deleted.deleted, true);
+    assert.equal(plugins[0].id, 'release/notifier@2.4.1');
+    assert.equal(plugins[0].enabled, true);
+    assert.equal(response.status, 'uninstalled');
     assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method]),
+      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
       [
         [
-          'http://127.0.0.1:8088/api/v1/agent/definitions?tenant_id=tenant+1',
+          'http://127.0.0.1:8088/api/v1/plugin-marketplace/packages?include_revoked=true',
+          'GET',
+          undefined,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/plugin-marketplace/packages/release%2Fnotifier/uninstall',
           'POST',
+          JSON.stringify({ tenant_id: 'tenant 1', version: '2.4.1' }),
         ],
-        [
-          'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1?tenant_id=tenant+1',
-          'PUT',
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1?tenant_id=tenant+1',
-          'DELETE',
-        ],
-      ],
+      ]
     );
-    assertLocalManagedMutation(calls[0], {
-      expectedRevision: 0,
-      value: mutation,
-      resourceId: true,
-    });
-    assertLocalManagedMutation(calls[1], {
-      expectedRevision: 0,
-      value: mutation,
-    });
-    assertLocalManagedMutation(calls[2], {
-      expectedRevision: 1,
-      value: null,
-    });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -5162,9 +4729,11 @@ test('managed subagent APIs preserve tenant scope and enabled mutation contracts
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSubAgentDefinitionsHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
+      mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'subagent-trusted-session',
       localApiToken: 'local-session-token',
       tenantId: 'tenant 1',
       projectId: 'project/1',
@@ -5174,6 +4743,11 @@ test('managed subagent APIs preserve tenant scope and enabled mutation contracts
     const updated = await client.setManagedSubAgentEnabled(subagents[0].id, true, 0);
 
     assert.equal(updated.enabled, true);
+    for (const call of calls) {
+      const headers = new Headers(call.init.headers);
+      assert.equal(headers.get('Authorization'), 'Bearer subagent-trusted-session');
+      assert.equal(headers.get('X-Agistack-Launch'), 'local-session-token');
+    }
     assert.deepEqual(
       calls.map((call) => [String(call.input), call.init?.method]),
       [
@@ -5451,7 +5025,7 @@ test('browser origin grants list and revoke follow the sidecar contract', async 
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5488,7 +5062,7 @@ test('browser origin grant responses reject malformed payloads', async () => {
       headers: { 'content-type': 'application/json' },
     });
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5540,7 +5114,7 @@ test('browser capability grants list and revoke follow the sidecar contract', as
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5580,7 +5154,7 @@ test('browser capability grant responses reject malformed payloads', async () =>
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5601,14 +5175,14 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
   const calls = [];
   const credential = {
     id: 'cred-1',
-    origin: 'https://example.com',
+    origin: 'example.com',
     username: 'agent-user',
     created_at: '2026-08-01T00:00:00Z',
   };
   globalThis.fetch = async (request, init) => {
     calls.push({ request: String(request), init, body: init?.body });
     if (calls.length === 1) {
-      return new Response(JSON.stringify({ credential }), {
+      return new Response(JSON.stringify({ success: true, credential }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -5626,7 +5200,7 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5634,9 +5208,9 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
       localApiToken: 'launch-token',
     });
     const saved = await client.upsertBrowserSiteCredential({
-      origin: 'https://example.com',
+      origin: 'example.com',
       username: 'agent-user',
-      password: 's3cret',
+      password: '  dummy-browser-password  ',
     });
     assert.deepEqual(saved, credential);
     const listed = await client.listBrowserSiteCredentials();
@@ -5651,9 +5225,9 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
     );
     assert.equal(calls[0].init.method, 'PUT');
     assert.deepEqual(JSON.parse(calls[0].body), {
-      origin: 'https://example.com',
+      origin: 'example.com',
       username: 'agent-user',
-      password: 's3cret',
+      password: '  dummy-browser-password  ',
     });
     assert.equal(
       calls[1].request,
@@ -5678,7 +5252,7 @@ test('browser site credential responses reject malformed payloads', async () => 
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5728,7 +5302,7 @@ test('browser audit entries list follows the sidecar contract with filters', asy
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5764,7 +5338,7 @@ test('browser audit entry responses reject malformed payloads', async () => {
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5778,4 +5352,27 @@ test('browser audit entry responses reject malformed payloads', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('browser audit numeric storage rows preserve denied outcomes without tenant scope', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ entries: ['denied', 'consent_required', 'declined'].map((outcome, index) => ({
+    id: 42 + index, run_id: null, tool_name: 'getSidePanelSession', origin: null,
+    target_summary: 'session access declined', outcome, latency_ms: 0,
+    created_at: 1785542400000,
+  })) });
+  try {
+    const client = createBrowserIntegrationHttpClientV2Fixture({
+      ...DEFAULT_CONFIG, mode: 'local', tenantId: '', projectId: '',
+      apiBaseUrl: 'http://127.0.0.1:47832', apiKey: 'local-session', localApiToken: 'launch-token',
+    });
+    const entries = await client.listBrowserAuditEntries();
+    const [entry] = entries;
+    assert.deepEqual(entries.map((item) => item.outcome), ['denied', 'consent_required', 'declined']);
+    assert.equal(entry.id, '42');
+    assert.equal(entry.outcome, 'denied');
+    assert.equal(entry.created_at, new Date(1785542400000).toISOString());
+    assert.equal(entry.run_id, '');
+    assert.equal(entry.origin, '');
+  } finally { globalThis.fetch = originalFetch; }
 });

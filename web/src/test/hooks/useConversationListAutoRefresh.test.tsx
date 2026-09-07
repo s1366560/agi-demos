@@ -1,6 +1,18 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const operationAvailability = vi.hoisted(() => ({
+  snapshot: { owner: {}, available: true },
+  listeners: new Set<() => void>(),
+}));
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => operationAvailability.snapshot,
+  subscribeWebOperationAvailabilityV2: (listener: () => void) => {
+    operationAvailability.listeners.add(listener);
+    return () => operationAvailability.listeners.delete(listener);
+  },
+}));
+
 const mocks = vi.hoisted(() => ({
   subscribeProject: vi.fn(),
   unsubscribeProject: vi.fn(),
@@ -243,4 +255,40 @@ describe('useConversationListAutoRefresh', () => {
     expect(mocks.subscribeProject).toHaveBeenLastCalledWith('project-2', expect.any(Function));
     expect(mocks.loadConversations).not.toHaveBeenCalled();
   });
+});
+
+it('re-registers unchanged project for a new owner and clears queued old-owner refresh', async () => {
+  vi.useFakeTimers();
+  mocks.token = 'token-1';
+  mocks.conversations = [];
+  mocks.subscribeProject.mockReset();
+  mocks.unsubscribeProject.mockReset();
+  mocks.loadConversations.mockReset();
+  mocks.loadConversations.mockResolvedValue(undefined);
+  mocks.subscribeProject.mockReturnValue(mocks.unsubscribeProject);
+  operationAvailability.snapshot = { owner: {}, available: true };
+  const { unmount } = renderHook(() => useConversationListAutoRefresh('owner-project'));
+  const oldCallback = projectHandler();
+  act(() => {
+    oldCallback({
+      type: 'conversation_created',
+      project_id: 'owner-project',
+      data: { conversation_id: 'old', project_id: 'owner-project' },
+    });
+  });
+  act(() => {
+    operationAvailability.snapshot = { owner: {}, available: true };
+    operationAvailability.listeners.forEach((listener) => listener());
+  });
+  expect(mocks.unsubscribeProject).toHaveBeenCalledOnce();
+  expect(mocks.subscribeProject).toHaveBeenCalledTimes(2);
+  oldCallback({
+    type: 'conversation_created',
+    project_id: 'owner-project',
+    data: { conversation_id: 'late', project_id: 'owner-project' },
+  });
+  await flushTimers(1000);
+  expect(mocks.loadConversations).not.toHaveBeenCalled();
+  unmount();
+  vi.useRealTimers();
 });

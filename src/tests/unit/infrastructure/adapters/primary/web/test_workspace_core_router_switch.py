@@ -17,6 +17,14 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     verify_api_key_dependency,
 )
+from src.infrastructure.adapters.primary.web.routers import (
+    cyber_genes,
+    cyber_objectives,
+    topology,
+    workspace_chat,
+    workspace_tasks,
+    workspaces,
+)
 from src.infrastructure.adapters.primary.web.workspace_core_routes import (
     register_workspace_core_routes,
     register_workspace_core_static_routes,
@@ -177,6 +185,458 @@ async def test_avernet_proxy_separates_service_and_user_authorization() -> None:
     assert response.status_code == 206
     assert response.json() == {"proxied": True}
     assert response.headers["etag"] == '"revision-7"'
+
+
+@pytest.mark.unit
+async def test_avernet_cyber_gene_routes_proxy_exact_contract_without_legacy_di(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-tenant-id"] == "tenant-1"
+        assert request.headers["x-memstack-project-id"] == "project-1"
+        assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "gene-1"})
+        return httpx.Response(200, json={"id": "gene-1"})
+
+    def legacy_di_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("cyber-gene proxy touched the retired DI path")
+
+    monkeypatch.setattr(cyber_genes, "get_container_with_db", legacy_di_trap, raising=False)
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/genes"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(base, json={"name": "Gene"}),
+            await client.get(base, params={"category": "skill", "limit": 10}),
+            await client.get(f"{base}/gene-1"),
+            await client.patch(f"{base}/gene-1", json={"name": "Updated"}),
+            await client.delete(f"{base}/gene-1"),
+        ]
+
+    assert [response.status_code for response in responses] == [201, 200, 200, 200, 204]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", base),
+        ("GET", f"{base}?category=skill&limit=10"),
+        ("GET", f"{base}/gene-1"),
+        ("PATCH", f"{base}/gene-1"),
+        ("DELETE", f"{base}/gene-1"),
+    ]
+
+
+@pytest.mark.unit
+async def test_avernet_cyber_objective_routes_proxy_exact_contract_without_legacy_di(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-tenant-id"] == "tenant-1"
+        assert request.headers["x-memstack-project-id"] == "project-1"
+        assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "objective-1"})
+        return httpx.Response(200, json={"id": "objective-1"})
+
+    def legacy_di_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("cyber-objective proxy touched the retired DI path")
+
+    monkeypatch.setattr(cyber_objectives, "get_container_with_db", legacy_di_trap, raising=False)
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/objectives"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(base, json={"title": "Objective"}),
+            await client.get(base, params={"obj_type": "objective", "limit": 10}),
+            await client.get(f"{base}/objective-1"),
+            await client.patch(f"{base}/objective-1", json={"title": "Updated"}),
+            await client.delete(f"{base}/objective-1"),
+            await client.post(
+                f"{base}/objective-1/project-to-task",
+                json={"preferred_language": "zh-CN"},
+            ),
+        ]
+
+    assert [response.status_code for response in responses] == [201, 200, 200, 200, 204, 201]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", base),
+        ("GET", f"{base}?obj_type=objective&limit=10"),
+        ("GET", f"{base}/objective-1"),
+        ("PATCH", f"{base}/objective-1"),
+        ("DELETE", f"{base}/objective-1"),
+        ("POST", f"{base}/objective-1/project-to-task"),
+    ]
+
+
+@pytest.mark.unit
+async def test_avernet_topology_routes_proxy_exact_contract_without_legacy_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "topology-1"})
+        return httpx.Response(200, json={"id": "topology-1"})
+
+    def legacy_service_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("topology proxy touched the retired local service")
+
+    monkeypatch.setattr(topology, "get_topology_service", legacy_service_trap, raising=False)
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/workspaces/workspace-1/topology"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(f"{base}/nodes", json={"node_type": "note"}),
+            await client.get(f"{base}/nodes", params={"limit": 10}),
+            await client.get(f"{base}/nodes/node-1"),
+            await client.patch(f"{base}/nodes/node-1", json={"title": "Updated"}),
+            await client.delete(f"{base}/nodes/node-1"),
+            await client.post(
+                f"{base}/edges",
+                json={"source_node_id": "node-1", "target_node_id": "node-2"},
+            ),
+            await client.get(f"{base}/edges", params={"limit": 20}),
+            await client.get(f"{base}/edges/edge-1"),
+            await client.patch(f"{base}/edges/edge-1", json={"label": "Updated"}),
+            await client.delete(f"{base}/edges/edge-1"),
+        ]
+
+    assert [response.status_code for response in responses] == [
+        201,
+        200,
+        200,
+        200,
+        204,
+        201,
+        200,
+        200,
+        200,
+        204,
+    ]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", f"{base}/nodes"),
+        ("GET", f"{base}/nodes?limit=10"),
+        ("GET", f"{base}/nodes/node-1"),
+        ("PATCH", f"{base}/nodes/node-1"),
+        ("DELETE", f"{base}/nodes/node-1"),
+        ("POST", f"{base}/edges"),
+        ("GET", f"{base}/edges?limit=20"),
+        ("GET", f"{base}/edges/edge-1"),
+        ("PATCH", f"{base}/edges/edge-1"),
+        ("DELETE", f"{base}/edges/edge-1"),
+    ]
+
+
+@pytest.mark.unit
+async def test_avernet_workspace_chat_routes_proxy_exact_contract_without_legacy_di(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-tenant-id"] == "tenant-1"
+        assert request.headers["x-memstack-project-id"] == "project-1"
+        assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "POST":
+            return httpx.Response(
+                201,
+                json={
+                    "id": "message-1",
+                    "workspace_id": "workspace-1",
+                    "sender_id": "user-1",
+                    "sender_type": "human",
+                    "content": "Hello Core",
+                    "mentions": ["agent-1"],
+                    "parent_message_id": None,
+                    "metadata": {},
+                    "created_at": "2026-08-26T00:00:00Z",
+                },
+            )
+        return httpx.Response(200, json={"items": []})
+
+    def legacy_di_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("workspace chat proxy touched the retired local DI path")
+
+    monkeypatch.setattr(workspace_chat, "get_message_service", legacy_di_trap, raising=False)
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/messages"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(
+                base,
+                json={"content": "Hello Core", "mentions": ["agent-1"]},
+            ),
+            await client.get(base, params={"limit": 25, "before": "message-9"}),
+            await client.get(f"{base}/mentions/agent-1", params={"limit": 10}),
+        ]
+
+    assert [response.status_code for response in responses] == [201, 200, 200]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", base),
+        ("GET", f"{base}?limit=25&before=message-9"),
+        ("GET", f"{base}/mentions/agent-1?limit=10"),
+    ]
+    assert observed[0][2] == b'{"content":"Hello Core","mentions":["agent-1"]}'
+
+
+@pytest.mark.unit
+async def test_avernet_workspace_task_routes_proxy_exact_contract_without_legacy_di(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST" and request.url.path == base:
+            return httpx.Response(201, json={"id": "task-1"})
+        return httpx.Response(200, json={"id": "task-1"})
+
+    def legacy_di_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("workspace task proxy touched the retired local DI path")
+
+    monkeypatch.setattr(
+        workspace_tasks,
+        "_get_workspace_task_service",
+        legacy_di_trap,
+        raising=False,
+    )
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/workspaces/workspace-1/tasks"
+    task = f"{base}/task-1"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(base, json={"title": "Task"}),
+            await client.get(
+                base,
+                params={"status": "todo", "limit": 10, "offset": 5},
+            ),
+            await client.get(task),
+            await client.get(f"{task}/experience"),
+            await client.get(f"{task}/execution-session"),
+            await client.post(
+                f"{task}/recovery-actions",
+                json={"action": "retry_launch"},
+            ),
+            await client.patch(task, json={"title": "Updated"}),
+            await client.delete(task),
+            await client.post(
+                f"{task}/assign-agent",
+                json={"workspace_agent_id": "binding-1"},
+            ),
+            await client.post(f"{task}/unassign-agent"),
+            await client.post(f"{task}/claim"),
+            await client.post(f"{task}/start"),
+            await client.post(f"{task}/block"),
+            await client.post(f"{task}/complete"),
+        ]
+
+    assert [response.status_code for response in responses] == [
+        201,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        204,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+    ]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", base),
+        ("GET", f"{base}?status=todo&limit=10&offset=5"),
+        ("GET", task),
+        ("GET", f"{task}/experience"),
+        ("GET", f"{task}/execution-session"),
+        ("POST", f"{task}/recovery-actions"),
+        ("PATCH", task),
+        ("DELETE", task),
+        ("POST", f"{task}/assign-agent"),
+        ("POST", f"{task}/unassign-agent"),
+        ("POST", f"{task}/claim"),
+        ("POST", f"{task}/start"),
+        ("POST", f"{task}/block"),
+        ("POST", f"{task}/complete"),
+    ]
+
+
+@pytest.mark.unit
+async def test_avernet_workspace_lifecycle_routes_proxy_exact_contract_without_legacy_di(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-tenant-id"] == "tenant-1"
+        assert request.headers["x-memstack-project-id"] == "project-1"
+        if request.url.path != base:
+            assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "workspace-1"})
+        if request.method == "GET" and request.url.path in {base, members, agents}:
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json={"id": "workspace-1"})
+
+    def legacy_di_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("workspace proxy touched the retired local DI path")
+
+    monkeypatch.setattr(workspaces, "get_workspace_service", legacy_di_trap, raising=False)
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.workspace_core_routes.async_session_factory",
+        lambda: _FakeMembershipSessionFactory("owner"),
+    )
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/tenants/tenant-1/projects/project-1/workspaces"
+    workspace = f"{base}/workspace-1"
+    members = f"{workspace}/members"
+    agents = f"{workspace}/agents"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(base, json={"name": "Workspace"}),
+            await client.get(base, params={"limit": 10, "offset": 2}),
+            await client.get(workspace),
+            await client.get(f"{workspace}/collaboration/capabilities"),
+            await client.patch(workspace, json={"name": "Updated"}),
+            await client.delete(workspace),
+            await client.get(members, params={"limit": 20, "offset": 3}),
+            await client.post(members, json={"user_id": "user-2", "role": "editor"}),
+            await client.patch(f"{members}/user-2", json={"role": "viewer"}),
+            await client.delete(f"{members}/user-2"),
+            await client.get(
+                agents,
+                params={"active_only": True, "limit": 30, "offset": 4},
+            ),
+            await client.post(agents, json={"agent_id": "agent-1"}),
+            await client.patch(
+                f"{agents}/binding-1",
+                json={"display_name": "Updated"},
+            ),
+            await client.delete(f"{agents}/binding-1"),
+        ]
+
+    assert [response.status_code for response in responses] == [
+        201,
+        200,
+        200,
+        200,
+        200,
+        204,
+        200,
+        201,
+        200,
+        204,
+        200,
+        201,
+        200,
+        204,
+    ]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", base),
+        ("GET", f"{base}?limit=10&offset=2"),
+        ("GET", workspace),
+        ("GET", f"{workspace}/collaboration/capabilities"),
+        ("PATCH", workspace),
+        ("DELETE", workspace),
+        ("GET", f"{members}?limit=20&offset=3"),
+        ("POST", members),
+        ("PATCH", f"{members}/user-2"),
+        ("DELETE", f"{members}/user-2"),
+        ("GET", f"{agents}?active_only=true&limit=30&offset=4"),
+        ("POST", agents),
+        ("PATCH", f"{agents}/binding-1"),
+        ("DELETE", f"{agents}/binding-1"),
+    ]
+    assert observed[0][2] == b'{"name":"Workspace"}'
 
 
 @pytest.mark.unit

@@ -11,6 +11,244 @@
       "web_route_ids": [
         "agent-workspace-tenant-agent-workspace"
       ],
+      "reviewed_production_dependencies": [
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/client/httpClient.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/client/kernelHttpClient.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/client/urlUtils.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/client/webFetchV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/attachmentService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/artifactService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/projectStatsService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/agentService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/agent/wsConnection.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/sandboxSSEService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/unifiedEventService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/unifiedEventConnectionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/AgentChatContent.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useBlackboardSSE.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useConversationListAutoRefresh.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/hitlActions.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/messageSendActions.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/streamEventHandlers.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/sandbox.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useAgentLifecycleState.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/messageLoadActions.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/SandboxStatusIndicator.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/conversationLifecycleActions.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/conversationsStore.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/InputBar.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/InputToolbar.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/chat/VoiceCallPanel.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/chat/VoiceWaveform.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/chat/useVoiceSessionMediaV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useVoiceChat.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useVoiceTranscribe.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useAudioQueue.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/voiceRetainedSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/voiceCallStore.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/SandboxSection.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/SandboxTerminal.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/terminalScopeV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/terminalRetainedSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/sandboxTerminalRequestV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/canvas/CanvasPanel.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/ControlledMCPAppRendererV2.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/mcpAppHttpSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/mcpAppRendererProtocolV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/useMcpAppFrameSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useMCPClient.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/mcp/BrowserWebSocketTransport.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/mcpAppService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/projectSandboxService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/RemoteDesktopViewer.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/KasmVNCViewer.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/kasmRetainedSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/vendor/kasmvnc/core/rfb.js"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/vendor/kasmvnc/core/display.js"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/vendor/kasmvnc/core/decoders/tight.js"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/vendor/kasmvnc/core/input/keyboard.js"
+        }
+      ],
       "api_method": "WS",
       "api_path": "/api/v1/agent/ws",
       "api_contracts": [
@@ -182,7 +420,148 @@
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/session/SessionWorkspace.tsx",
-        "agi-stack/apps/desktop/src/hooks/useAgentSocket.ts"
+        "agi-stack/apps/desktop/src/hooks/useAgentSocket.ts",
+        "agi-stack/apps/desktop/src/features/chat/desktopChatComposerCatalogClientV2.ts",
+        "agi-stack/apps/desktop/src/features/task/desktopNewThreadComposerCatalogClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/ChatPanel.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ComposerPlusMenu.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ConversationComparison.tsx",
+        "agi-stack/apps/desktop/src/features/chat/composerCatalogModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/useComposerFileUpload.ts",
+        "agi-stack/apps/desktop/src/features/chat/composerFileDropModel.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadResponseContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts",
+        "agi-stack/apps/desktop/electron/main/cloudRequestPolicy.ts",
+        "sandbox-mcp-server/src/tools/import_tools.py",
+        "agi-stack/apps/desktop/electron/main/cloudSandboxImportBudget.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/useSandboxRuntimeSurface.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/sandboxRuntimeClient.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/sandboxRuntimeSurfaceClient.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/sandboxFileOperationGate.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/SessionSandboxTools.tsx",
+        "agi-stack/apps/desktop/src/features/sandbox/SandboxFileBrowser.tsx",
+        "agi-stack/apps/desktop/src/features/sandbox/RemoteDesktopSurface.tsx",
+        "agi-stack/apps/desktop/src/features/session/SessionTerminalCanvas.tsx",
+        "agi-stack/apps/desktop/src/features/session/WorkspaceReviewPanel.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceResponseContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceFileContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/api/cloudRequestBroker.ts",
+        "agi-stack/apps/desktop/src/api/cloudSandboxDownloadAuthority.ts",
+        "src/infrastructure/adapters/primary/web/routers/project_sandbox.py",
+        "agi-stack/apps/desktop/electron/main/index.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/api/client.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectActivityReadStateAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectActivityReadStateOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectActivityReadStateHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/activityReadRetryStore.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/agentAuthorityTypes.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/agentAuthorityContract.ts",
+        "agi-stack/apps/desktop/src/features/activity/useActivityInbox.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/cloudAgentAuthorityClient.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/localActivityAuthorityClient.ts",
+        "src/infrastructure/adapters/primary/web/routers/project_my_work.py",
+        "agi-stack/apps/desktop/tests/cloud-activity-read-state-broker.test.mjs",
+        "agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopSessionRunChangesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRunReviewHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRunReviewContractV2.ts",
+        "agi-stack/apps/desktop/src/features/session/useRunReviewAuthorityV2.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/agentAuthorityProjection.ts",
+        "agi-stack/apps/desktop/electron/main/cloudRunReviewAuthority.ts",
+        "src/infrastructure/adapters/primary/web/routers/agent/run_review_authority.py",
+        "agi-stack/apps/desktop/tests/cloud-run-review-broker.test.mjs",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRendererServiceOperationLeaseV2.ts",
+        "agi-stack/packages/plugin-runtime/src/runtime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchSnapshotSettlementV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/useDesktopCapabilitySnapshot.ts",
+        "agi-stack/apps/desktop/tests/desktop-parent-bound-service-lease-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/desktop-workbench-snapshot-authority-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/workbench-snapshot-dependencies-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/desktop-capability-snapshot-lifecycle.test.mjs",
+        "agi-stack/apps/desktop/tests/desktop-workbench-capability-client-provider-v2.test.mjs",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchSnapshotJourneyV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopConversationMessagingAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopConversationWorkspaceBindingContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewThreadCreationAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewThreadCreationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewTaskFlowContractV2.ts",
+        "agi-stack/apps/desktop/src/hooks/useConversationMessaging.ts",
+        "agi-stack/apps/desktop/src/hooks/useConversationMessagingLifetime.ts",
+        "agi-stack/apps/desktop/src/hooks/useAgentConversation.ts",
+        "agi-stack/apps/desktop/tests/conversation-messaging-authority-lifecycle.test.mjs",
+        "agi-stack/apps/desktop/tests/cloud-conversation-mode-broker.test.mjs",
+        "src/infrastructure/adapters/primary/web/routers/agent/conversations.py",
+        "src/infrastructure/adapters/primary/web/routers/agent/schemas.py",
+        "agi-stack/apps/desktop/src/plugins/desktopConversationMessagingExecutionContractV2.ts",
+        "agi-stack/apps/desktop/tests/desktop-conversation-messaging-authority-v2.test.mjs",
+        "agi-stack/apps/desktop/src/plugins/desktopStructuredImagePreviewAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopStructuredImagePreviewContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopStructuredImagePreviewHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/structuredImagePreviewOwnerModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/MarkdownArtifactImage.tsx",
+        "agi-stack/apps/desktop/src/features/chat/markdownArtifactImageModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/assistantArtifactReferenceModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/ChatTimeline.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ChatTranscript.tsx",
+        "agi-stack/apps/desktop/tests/desktop-structured-image-preview-authority-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/structured-image-preview-ui-lifecycle.test.mjs",
+        "agi-stack/apps/desktop/tests/markdown-artifact-image.test.mjs",
+        "agi-stack/apps/desktop/src/plugins/desktopVoiceSessionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopVoiceSessionContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopVoiceSessionRuntimeProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopVoiceSessionRetainedRuntimeV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/useVoiceSessionLeaseV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/useVoiceCall.ts",
+        "agi-stack/apps/desktop/src/features/chat/useVoiceTranscription.ts",
+        "agi-stack/apps/desktop/src/features/chat/voiceCallRuntime.ts",
+        "agi-stack/apps/desktop/src/features/chat/voiceTranscriptionRuntime.ts",
+        "agi-stack/apps/desktop/src/features/chat/voiceCallModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/voiceTranscriptionModel.ts",
+        "agi-stack/apps/desktop/src/api/cloudSocketBridge.ts",
+        "agi-stack/apps/desktop/tests/desktop-voice-session-authority-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/voice-session-hook-lifecycle.test.mjs",
+        "agi-stack/apps/desktop/tests/voice-call.test.mjs",
+        "agi-stack/apps/desktop/tests/voice-transcription.test.mjs",
+        "agi-stack/apps/desktop/electron/main/cloudSocketPolicy.ts",
+        "src/infrastructure/adapters/primary/web/routers/voice_websocket.py",
+        "agi-stack/apps/desktop/electron/main/sandboxDesktopGrantPolicy.ts",
+        "agi-stack/apps/desktop/electron/main/sandboxDesktopGrantRegistry.ts",
+        "agi-stack/apps/desktop/electron/main/sandboxDesktopGrantElectron.ts",
+        "agi-stack/apps/desktop/electron/preload/index.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/nativeSandboxDesktopGrantV2.ts",
+        "agi-stack/apps/desktop/tests/sandbox-desktop-grant-policy.test.mjs",
+        "agi-stack/apps/desktop/tests/sandbox-desktop-grant-registry.test.mjs",
+        "agi-stack/apps/desktop/tests/sandbox-desktop-grant-electron.test.mjs",
+        "agi-stack/apps/desktop/tests/sandbox-desktop-grant-vault.test.mjs",
+        "agi-stack/apps/desktop/tests/sandbox-desktop-grant-integration.test.mjs",
+        "agi-stack/apps/desktop/tests/sandbox-desktop-grant-shutdown.test.mjs",
+        "agi-stack/apps/desktop/tests/native-sandbox-desktop-grant-renderer.test.mjs",
+        "agi-stack/apps/desktop/tests/sandbox-surface-authority-lifecycle.test.mjs",
+        "agi-stack/packages/plugin-runtime/src/desktopRendererDelivery.ts",
+        "agi-stack/apps/desktop/sidecar/src/renderer_receipt_service_v2.rs",
+        "agi-stack/apps/desktop/sidecar/src/renderer_receipt_service_v2_tests.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/platform_plugin_sync_v2.rs",
+        "web/src/test/plugins/desktopRendererDeliveryV2.test.ts",
+        "agi-stack/apps/desktop/tests/desktop-plugin-generation-v2-wiring.test.mjs",
+        "agi-stack/apps/desktop/electron/main/rendererDeliveryAdmissionV2.ts",
+        "web/src/test/plugins/desktopRendererDeliveryAdmissionV2.test.ts"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
@@ -191,9 +570,135 @@
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/hooks/useAgentSocket.ts",
-        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/plan_tool_contract.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/llm_tool_contracts.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/authorized_tool_host.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/execution_profile.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/fan_out_tool_host.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/automation_executor.rs",
+        "agi-stack/crates/core/src/tool_definition.rs",
+        "agi-stack/crates/core/src/ports.rs",
+        "agi-stack/crates/core/src/agent/react.rs",
+        "agi-stack/crates/adapters-http-llm/src/openai.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/terminal_pty_v2.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/terminal_pty_v2_windows.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/terminal_pty_v2_tests.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/terminal_generation_v2_tests.rs",
+        "agi-stack/apps/desktop/src/features/chat/desktopChatComposerCatalogClientV2.ts",
+        "agi-stack/apps/desktop/src/features/task/desktopNewThreadComposerCatalogClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/ChatPanel.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ComposerPlusMenu.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ConversationComparison.tsx",
+        "agi-stack/apps/desktop/src/features/chat/composerCatalogModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/useComposerFileUpload.ts",
+        "agi-stack/apps/desktop/src/features/chat/composerFileDropModel.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadResponseContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/useSandboxRuntimeSurface.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/sandboxRuntimeClient.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/sandboxRuntimeSurfaceClient.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/sandboxFileOperationGate.ts",
+        "agi-stack/apps/desktop/src/features/sandbox/SessionSandboxTools.tsx",
+        "agi-stack/apps/desktop/src/features/sandbox/SandboxFileBrowser.tsx",
+        "agi-stack/apps/desktop/src/features/sandbox/RemoteDesktopSurface.tsx",
+        "agi-stack/apps/desktop/src/features/session/SessionTerminalCanvas.tsx",
+        "agi-stack/apps/desktop/src/features/session/WorkspaceReviewPanel.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceResponseContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceFileContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/sandbox_files.rs",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectActivityReadStateAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectActivityReadStateOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectActivityReadStateHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/activityReadRetryStore.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/agentAuthorityTypes.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/agentAuthorityContract.ts",
+        "agi-stack/apps/desktop/src/features/activity/useActivityInbox.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/cloudAgentAuthorityClient.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/localActivityAuthorityClient.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/activity_read_state.rs",
+        "agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopSessionRunChangesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRunReviewHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRunReviewContractV2.ts",
+        "agi-stack/apps/desktop/src/features/session/useRunReviewAuthorityV2.ts",
+        "agi-stack/apps/desktop/src/features/agent-authority/agentAuthorityProjection.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/changes.rs",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRendererServiceOperationLeaseV2.ts",
+        "agi-stack/packages/plugin-runtime/src/runtime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchSnapshotSettlementV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/useDesktopCapabilitySnapshot.ts",
+        "agi-stack/apps/desktop/tests/desktop-parent-bound-service-lease-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/desktop-workbench-snapshot-authority-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/workbench-snapshot-dependencies-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/desktop-capability-snapshot-lifecycle.test.mjs",
+        "agi-stack/apps/desktop/tests/desktop-workbench-capability-client-provider-v2.test.mjs",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchSnapshotJourneyV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopConversationMessagingAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopConversationWorkspaceBindingContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewThreadCreationAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewThreadCreationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewTaskFlowContractV2.ts",
+        "agi-stack/apps/desktop/src/api/client.ts",
+        "agi-stack/apps/desktop/src/hooks/useConversationMessaging.ts",
+        "agi-stack/apps/desktop/src/hooks/useConversationMessagingLifetime.ts",
+        "agi-stack/apps/desktop/src/hooks/useAgentConversation.ts",
+        "agi-stack/apps/desktop/tests/conversation-messaging-authority-lifecycle.test.mjs",
+        "agi-stack/apps/desktop/src/plugins/desktopConversationMessagingExecutionContractV2.ts",
+        "agi-stack/apps/desktop/tests/desktop-conversation-messaging-authority-v2.test.mjs",
+        "agi-stack/apps/desktop/src/plugins/desktopStructuredImagePreviewAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopStructuredImagePreviewContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopStructuredImagePreviewHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/structuredImagePreviewOwnerModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/MarkdownArtifactImage.tsx",
+        "agi-stack/apps/desktop/src/features/chat/markdownArtifactImageModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/assistantArtifactReferenceModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/ChatTimeline.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ChatTranscript.tsx",
+        "agi-stack/apps/desktop/tests/desktop-structured-image-preview-authority-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/structured-image-preview-ui-lifecycle.test.mjs",
+        "agi-stack/apps/desktop/tests/markdown-artifact-image.test.mjs",
+        "agi-stack/apps/desktop/src/plugins/desktopVoiceSessionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopVoiceSessionContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopVoiceSessionRuntimeProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopVoiceSessionRetainedRuntimeV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/useVoiceSessionLeaseV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/useVoiceCall.ts",
+        "agi-stack/apps/desktop/src/features/chat/useVoiceTranscription.ts",
+        "agi-stack/apps/desktop/src/features/chat/voiceCallRuntime.ts",
+        "agi-stack/apps/desktop/src/features/chat/voiceTranscriptionRuntime.ts",
+        "agi-stack/apps/desktop/src/features/chat/voiceCallModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/voiceTranscriptionModel.ts",
+        "agi-stack/apps/desktop/src/api/cloudSocketBridge.ts",
+        "agi-stack/apps/desktop/tests/desktop-voice-session-authority-v2.test.mjs",
+        "agi-stack/apps/desktop/tests/voice-session-hook-lifecycle.test.mjs",
+        "agi-stack/apps/desktop/tests/voice-call.test.mjs",
+        "agi-stack/apps/desktop/tests/voice-transcription.test.mjs",
+        "agi-stack/packages/plugin-runtime/src/desktopRendererDelivery.ts",
+        "agi-stack/apps/desktop/sidecar/src/renderer_receipt_service_v2.rs",
+        "agi-stack/apps/desktop/sidecar/src/renderer_receipt_service_v2_tests.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/platform_plugin_sync_v2.rs",
+        "web/src/test/plugins/desktopRendererDeliveryV2.test.ts",
+        "agi-stack/apps/desktop/tests/desktop-plugin-generation-v2-wiring.test.mjs",
+        "agi-stack/apps/desktop/electron/main/rendererDeliveryAdmissionV2.ts",
+        "web/src/test/plugins/desktopRendererDeliveryAdmissionV2.test.ts"
       ],
-      "judgment_rationale": "Current-HEAD implements canonical Queue/Steer run inputs, atomic HITL denial feedback, encrypted secure-env responses, roster and SubAgent control, Activity read receipts, My Work summaries, and scoped Changes. Web, Cloud Desktop, and Local Desktop remain partial until one clean current-HEAD aggregate supplies every required renderer, backend or sidecar, and native Electron evidence channel without the recorded usage, direct-open, or Queue/Steer observation gaps."
+      "judgment_rationale": "Current-HEAD implements canonical Queue/Steer run inputs, atomic HITL denial feedback, encrypted secure-env responses, roster and SubAgent control, Activity read receipts, My Work summaries, and scoped Changes. Web, Cloud Desktop, and Local Desktop remain partial until one clean current-HEAD aggregate supplies every required renderer, backend or sidecar, and native Electron evidence channel without the recorded usage, direct-open, or Queue/Steer observation gaps. Chat and new-thread composers now share required V2 catalog composition and the Project Sandbox Upload authority. The former direct chat roster, marketplace, conversation-list and comparison-history calls use existing WorkspaceRoster, PluginMarketplace, WorkspaceConversationCatalog and NewTaskFlow operations while preserving legacy project/workspace/unbound filters and abort signals. Upload acquires a project lease with frozen tenant/project scope, validates Cloud project ownership before reading file bytes, and sends import_file with fixed /workspace/input destination and overwrite true through the existing project-authorized native broker path. Actual buffer size and successful authoritative return path/size must match the captured file metadata. Local upload is a loaded capability that explicitly rejects with local_sandbox_upload_unavailable; no sidecar execute authority is invented. Composer batch cancellation prevents late reads/uploads from dispatching subsequent files or attaching results after context replacement. Source wiring and software checks do not supply the clean aggregate renderer/backend/sidecar/native evidence required above, and do not promote actions, runtime status or native acceptance. The native Cloud request broker applies a narrowly scoped body-size exception for canonical import_file payloads up to 16 MiB of decoded bytes, with exact fields, canonical base64, fixed input destination and overwrite setting; the exception retains normal endpoint authorization, trusted-session loading and observed project-scope enforcement and is not native upload execution evidence. Sandbox capabilities, remote desktop sessions and structured file list/read/download now use a required project-scoped V2 Surface authority. Cloud operations retain project ownership preflight and sandbox/isolated file authority; Local files remain native_workspace/not_applicable and Local remote desktop remains not applicable, without inferred capability promotion. Remote desktop sessions retain their service lease until explicit release or cancellation, while hook context replacement invalidates late completions. Native Cloud binary downloads carry validated file contract version, authority and isolation through the broker response and renderer reconstruction; missing or mismatched authority is rejected instead of synthesizing headers. Bounded path, structured payload, UTF-8 read and 16 MiB download validation remain software contract checks, not native execution or clean aggregate acceptance evidence. The earlier Cloud native Kasm audit identified a missing authentication path: the backend desktop-session endpoint seeded a scoped HttpOnly cookie, while the vault-bound main-process request used net.fetch with credentials omit and returned only descriptor JSON. Local seedProxyAuthCookie was a no-op and Cloud TerminalSessionV2 used its independent authenticated socket bridge, so neither supplied Kasm authentication. That finding did not establish native Kasm success. The current frame-grant implementation described below replaces this missing native transport without globally installing or enabling ambient cookies; actual product Kasm execution still requires a clean native acceptance run. Activity read-state GET, PUT and flush now use the required project-scoped V2 authority with explicit principal/tenant/project/runtime scope, Cloud project ownership preflight and the existing Local authenticated sidecar protocol. Retry storage uses an authority-qualified v2 key and does not infer ownership for old unqualified v1 keys. Successful PUT acknowledges only the submitted receipt snapshot, preserving concurrent new entries and higher revision or later read timestamps. Flush reads pending state and performs GET/CAS PUT under one admitted operation; only a PUT transport failure may enqueue receipts, while aborts, scope failures, HTTP conflicts and contract failures do not become offline success. These composition and retry-integrity changes preserve the existing partial aggregate/native acceptance requirements. The native broker emits the dedicated activity_read_state_transport_unavailable marker only for a delivery failure of the authorized Activity read-state PUT, after trusted-session loading and observed-scope enforcement; preflight, GET, cancellation and HTTP/CAS failures retain their rejection semantics. Retry merges exceeding the 500-entry protocol bound reject before persistence and preserve the previous queue, rather than persisting data that would be discarded on the next read. Run summary and Changes review now extend the existing SessionProjection and SessionRunChanges V2 authorities rather than adding parallel modules. Cloud summary validates tenant, project, conversation and run identity; a missing persisted summary remains a legitimate partial result with null metrics. Cloud Changes performs summary ownership validation and the requested changes read within one session lease, preserving run, session and turn scopes, required turn_id for turn scope, and expected_revision >= 1. Local Changes retains its real run-only sidecar contract with expected_revision >= 0, nullable environment metadata and authoritative conversation/run/revision checks. The native vault-bound broker independently binds summary identity to the observed tenant/project and binds Changes responses to that summary conversation plus requested run, scope, turn and revision; it uses the real summary endpoint without inventing a generic Cloud run-detail preflight. UI context replacement and refresh cancellation suppress stale summary, snapshot, reference and loading updates. These authority and lifecycle changes do not supply missing clean aggregate or native execution evidence and retain the existing partial status and Cloud Kasm cookie limitation. The shared Workbench capability snapshot now uses a required V2 snapshot authority instead of App assembling its business dependencies through a static provider. The provider freezes configuration and forwards snapshot reads with an AbortSignal; the outer operation captures current generation actions once and obtains a parent service lease. Child capability reads derive leases from that admitted parent generation, including during generation replacement, and reject attempts to acquire children after release. The dependency factory constructs the existing business operation ports within this boundary. Branch settlement and operation tracking drain admitted reads before parent release, so an early failure or cancellation cannot leave successful sibling reads outside the snapshot lifetime. The UI ignores cancelled late success as well as late failure and performs no reads while disabled. These shared composition and lifecycle sources are recorded centrally here; they do not change individual business capability availability, observed authority provenance, existing partial aggregate requirements or the separate Cloud Kasm native cookie limitation. The snapshot journey dependency uses the existing Cloud request broker with same-origin and cancellation checks; construction failures are observed by the snapshot branch and never select a legacy fallback. App republishes the snapshot client when host generation actions change, so an initially unavailable generation is retried when ready and HMR aborts the previous UI request while retaining same-generation client stability. Ordinary conversation messaging now uses a required project-scoped coordinator and parent-generation child leases for existing NewThreadCreation and NewTaskFlow operations, covering workspace-message save, unbound conversation creation, workspace binding and Local HTTP dispatch. The workspace-binding contract checks returned conversation, user, tenant, project and target workspace identities. AbortSignal propagation and the messaging lifetime helper guard callbacks and deferred state updates across scope, selected conversation and authority changes. Native Cloud mode PATCH preserves the real backend collaboration-mode and workspace/task-link fields, including omitted versus explicit-null semantics, while rejecting unsupported fields and malformed values before credential access. The existing backend enforces project/user conversation access and linked workspace/task scope; no invented conversation-detail preflight is used. Local HTTP and WebSocket ordinary messages do not implement structured mentions, file metadata, app model context or permission-mode overrides. Unsupported context and permission overrides are rejected rather than silently treated as supported; the default preset makes no permission override and must not be interpreted as an implemented ask-mode mapping. Local PlanModeToolHost constraints and approved Build-run authority remain the actual execution rules. These source and software checks preserve partial aggregate/native acceptance and the separate Cloud Kasm cookie gap; queued transport acknowledgement is not native execution acceptance. The new Local messaging coordinator requires the actual four-field HTTP receipt and exact requested message_id, accepting both queued/created new delivery and queued false/created false/replayed true idempotent replay. The older NewThread transport retains its Cloud-compatible queued-only protocol while preserving available receipt fields; this compatibility is not stronger Local ownership evidence. Cloud cached conversations require the observed authenticated user identity. Local cache reuse checks runtime scope and rejects a prior session reference after an observed principal change, but the current Local conversation protocol does not establish true user ownership across a new UI mount. That missing owner provenance remains an explicit native acceptance limitation rather than an inferred identity guarantee. Structured Markdown artifact images now load through the required StructuredImagePreview V2 client with captured configuration and owner: conversation images obtain a session lease, while workspace images obtain a project lease and retain an explicit workspace owner. The UI binds the client to the currently selected conversation or workspace dataset and rejects provided identity conflicts; WorkspaceSummary tenant/project fields remain optional, and captured configuration does not fabricate missing server ownership evidence. Structured carrier matching resolves only an unambiguous declared image URL and rejects explicit carrier scope conflicts; it is not a server-side authorization decision or proof of resource ownership. The admitted projection fetches without ambient credentials or referrer, validates image MIME and streamed content size against the 25 MiB bound, and cancels incomplete reads. UI request replacement and unmount abort loading, suppress stale completion and release object URLs. These composition, structural contract and lifetime checks do not establish authenticated remote resource access or native execution acceptance. Existing partial aggregate status, Local cross-mount owner provenance limits and the Cloud Kasm cookie gap remain unchanged. Voice transcription and calls now acquire a required retained VoiceSession V2 operation before requesting microphone permission or creating capture, playback and socket resources. The captured Cloud connection is bound to the configured tenant/project/workspace and conversation session, exact voice endpoint and transport authentication protocol; Local remains unavailable and no sidecar voice protocol is invented. The retained runtime tracks media streams and tracks, audio contexts, worklet and source nodes, sockets and admitted asynchronous operations. Stop, context replacement, cancellation and unmount dispose resources and drain pending work, including late permission or media completions, before releasing the generation lease. The UI hooks use required operations and suppress obsolete callbacks; explicitly injected QA runtime fixtures are display/test inputs rather than real lease or native evidence. These source and software checks do not prove native microphone permission behavior, live speech transcription or synthesized playback. Existing partial aggregate acceptance, Local owner provenance limits and Cloud Kasm cookie requirements remain unchanged. For the native Voice socket, retained cleanup waits for the opening IPC to settle before issuing close, then drains tracked open, send and close IPC and removes the subscription before the generation lease can finish releasing. This prevents a late native open from escaping an earlier close and is a software lifecycle guarantee, not microphone, STT or TTS native acceptance evidence. The native Sandbox Desktop grant now validates a trusted main-frame IPC owner and obtains credentials only in main from the application vault after observing the current tenant/project workspace context. The renderer receives opaque grant/frame metadata and uses the exact named direct-child iframe. Main binds the first document request to its real frameTreeNodeId, permits only that frame and the exact project proxy HTTP resources or websockify endpoint, injects Authorization, removes request Cookie and strips response Set-Cookie. Other frames, replaced identities and retired grants cannot borrow the credential. Renderer cancellation handles pending-open tombstones and late grants, and closes the native grant before releasing the retained Surface service lease. Registry retirement revokes admission synchronously; authority transitions wait for pending authorization and frame cleanup before context/session replacement. The Electron adapter navigates the exact bound WebFrameMain to about:blank rather than relying on a unique DOM frame name, so a rejected same-name sibling cannot prevent cleanup. An isolated Electron 43.2.0 integration fixture with synthetic credentials verified eight authorization, cookie-filtering and close checks, including server-observed WebSocket closure after the same-name sibling regression fix. This fixture used a fake local HTTP/WS service and is not product Kasm authentication, desktop interaction, release or aggregate native acceptance. Earlier references to the Kasm gap retain that acceptance limitation; the missing code path is now implemented, while all existing partial statuses and final native gates remain unchanged."
     }
   ],
   "source_ownership": {

@@ -1,3 +1,7 @@
+const ownerFixture = vi.hoisted(() => ({ owner: {}, available: true }));
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => ({ ...ownerFixture }),
+}));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAgentHITLStore } from '../../../stores/agent/hitlStore';
@@ -24,6 +28,7 @@ function deferred<T>() {
 
 describe('agent HITL store', () => {
   beforeEach(() => {
+    ownerFixture.owner = {};
     useAgentHITLStore.setState({
       pendingClarification: null,
       pendingDecision: null,
@@ -80,4 +85,21 @@ describe('agent HITL store', () => {
       vi.useRealTimers();
     }
   });
+});
+
+it('does not restore old-owner HITL and does not join its pending request', async () => {
+  const { agentService } = await import('../../../services/agentService');
+  const firstResponse = deferred<any>();
+  vi.mocked(agentService.getPendingHITLRequests)
+    .mockReturnValueOnce(firstResponse.promise)
+    .mockResolvedValueOnce({ requests: [] } as any);
+  const old = useAgentHITLStore.getState().loadPendingHITL('same');
+  ownerFixture.owner = {};
+  await useAgentHITLStore.getState().loadPendingHITL('same');
+  firstResponse.resolve({
+    requests: [{ id: 'old', request_type: 'clarification', question: 'old' }],
+  });
+  await old;
+  expect(agentService.getPendingHITLRequests).toHaveBeenCalledTimes(2);
+  expect(useAgentHITLStore.getState().pendingClarification).toBeNull();
 });

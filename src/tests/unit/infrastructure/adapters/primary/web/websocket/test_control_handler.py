@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from src.infrastructure.adapters.primary.web.websocket.handlers import control_handler
 from src.infrastructure.adapters.primary.web.websocket.handlers.control_handler import (
     KillRunHandler,
     SteerSubAgentHandler,
@@ -42,6 +44,29 @@ class _FakeRedis:
         return int(self.values.pop(key, None) is not None)
 
 
+class _StaticContainerRedisProbe:
+    def __init__(self, redis: _FakeRedis) -> None:
+        self.redis = redis
+        self.accesses = 0
+
+    @property
+    def redis_client(self) -> _FakeRedis:
+        self.accesses += 1
+        return self.redis
+
+
+def _bind_v2_redis(monkeypatch: pytest.MonkeyPatch, redis: _FakeRedis) -> None:
+    @asynccontextmanager
+    async def operation_context(_reservation: object, **_kwargs: object):
+        yield None
+
+    monkeypatch.setattr(control_handler, "pin_scoped_agent_turn_operation_v2", operation_context)
+    monkeypatch.setattr(
+        control_handler, "_acquire_control_reservation_v2", AsyncMock(return_value=object())
+    )
+    monkeypatch.setattr(control_handler, "current_agent_worker_redis_client_v2", lambda: redis)
+
+
 def _context(*, participants: list[str] | None = None):
     conversation = SimpleNamespace(
         id="conversation-1",
@@ -74,7 +99,7 @@ def _context(*, participants: list[str] | None = None):
         user_id="user-1",
         tenant_id="tenant-1",
         db=db,
-        container=SimpleNamespace(redis_client=redis),
+        container=_StaticContainerRedisProbe(redis),
         send_json=AsyncMock(),
     )
     return context, redis
@@ -83,6 +108,7 @@ def _context(*, participants: list[str] | None = None):
 @pytest.mark.unit
 async def test_steer_is_revision_bound_and_exact_replay_returns_same_receipt(monkeypatch) -> None:
     context, _redis = _context()
+    _bind_v2_redis(monkeypatch, _redis)
     send_control = AsyncMock(return_value=True)
     monkeypatch.setattr(
         "src.infrastructure.adapters.primary.web.websocket.handlers.control_handler."
@@ -119,11 +145,13 @@ async def test_steer_is_revision_bound_and_exact_replay_returns_same_receipt(mon
     assert control.run_id == "execution-1"
     assert control.target_agent_id == "agent-1"
     assert control.idempotency_key == "control-key-1"
+    assert context.container.accesses == 0
 
 
 @pytest.mark.unit
 async def test_control_rejects_roster_mismatch_before_dispatch(monkeypatch) -> None:
     context, _redis = _context(participants=["different-agent"])
+    _bind_v2_redis(monkeypatch, _redis)
     send_control = AsyncMock(return_value=True)
     monkeypatch.setattr(
         "src.infrastructure.adapters.primary.web.websocket.handlers.control_handler."
@@ -151,8 +179,11 @@ async def test_control_rejects_roster_mismatch_before_dispatch(monkeypatch) -> N
 
 
 @pytest.mark.unit
-async def test_control_rejects_stale_revision_with_authority_revision() -> None:
+async def test_control_rejects_stale_revision_with_authority_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     context, _redis = _context()
+    _bind_v2_redis(monkeypatch, _redis)
     await SteerSubAgentHandler().handle(
         context,
         {
@@ -176,3 +207,46 @@ def test_handlers_expose_client_protocol_message_types() -> None:
     assert KillRunHandler().message_type == "kill_run"
     assert SteerSubAgentHandler().message_type == "steer"
     assert {"kill_run", "steer"}.issubset(get_message_router().registered_types)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("missing", [True, False])
+async def test_control_scoped_admission_failure_never_dispatches(monkeypatch, missing):
+    from unittest.mock import MagicMock
+
+    from src.infrastructure.adapters.primary.web.startup.scoped_profile_runtime_v2 import (
+        ScopedProfileRuntimeV2,
+    )
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    context, _redis = _context()
+    runtime = MagicMock(spec=ScopedProfileRuntimeV2)
+    runtime.acquire = AsyncMock(side_effect=RuntimeV2Error("scope_unavailable", "unavailable"))
+    context.scoped_profile_runtime_v2 = None if missing else runtime
+    send = AsyncMock()
+    redis = MagicMock(side_effect=AssertionError("No Redis before admission"))
+    monkeypatch.setattr(control_handler.RedisControlChannel, "send_control", send)
+    monkeypatch.setattr(control_handler, "current_agent_worker_redis_client_v2", redis)
+    await SteerSubAgentHandler().handle(
+        context,
+        {
+            "type": "steer",
+            "conversation_id": "conversation-1",
+            "run_id": "execution-1",
+            "instruction": "Continue",
+            "expected_run_revision": 7,
+            "idempotency_key": "deny-1",
+        },
+    )
+    assert context.send_json.await_args.args[0]["reason_code"] == "control_authority_unavailable"
+    send.assert_not_awaited()
+    redis.assert_not_called()
+    assert context.container.accesses == 0
+    if not missing:
+        runtime.acquire.assert_awaited_once()
+        scope = runtime.acquire.await_args.args[0]
+        assert (scope.tenant_id, scope.project_id, scope.session_id) == (
+            "tenant-1",
+            "project-1",
+            "conversation-1",
+        )

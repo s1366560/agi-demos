@@ -877,31 +877,44 @@ const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     const render = async () => {
       try {
         setLoading(true);
         setError(null);
-        const resp = await fetchArtifactResource(src);
-        if (!resp.ok) throw new Error(`Failed to fetch: ${String(resp.status)}`);
-        const buf = await resp.arrayBuffer();
-        const getContainer = () => (cancelled ? null : containerRef.current);
-        if (!getContainer()) return;
-        const { renderAsync } = await import('docx-preview');
-        const container = getContainer();
-        if (!container) return;
-        container.innerHTML = '';
-        await renderAsync(buf, container, undefined, {
-          className: 'docx-preview',
-          inWrapper: true,
-          ignoreWidth: false,
-          ignoreHeight: true,
-          breakPages: true,
-          renderHeaders: true,
-          renderFooters: true,
-          renderFootnotes: true,
-          renderEndnotes: true,
-        });
-        if (getContainer()) setLoading(false);
+        await fetchArtifactResource(
+          src,
+          async (resp, operation) => {
+            if (!resp.ok) throw new Error(`Failed to fetch: ${String(resp.status)}`);
+            const buf = await resp.arrayBuffer();
+            operation.check();
+            const getContainer = () => (cancelled ? null : containerRef.current);
+            if (!getContainer()) return;
+            const { renderAsync } = await import('docx-preview');
+            operation.check();
+            const container = getContainer();
+            if (!container) return;
+            // Render off-DOM so a late library completion cannot overwrite a newer preview.
+            const staging = document.createElement('div');
+            await renderAsync(buf, staging, undefined, {
+              className: 'docx-preview',
+              inWrapper: true,
+              ignoreWidth: false,
+              ignoreHeight: true,
+              breakPages: true,
+              renderHeaders: true,
+              renderFooters: true,
+              renderFootnotes: true,
+              renderEndnotes: true,
+            });
+            operation.check();
+            if (getContainer() === container) {
+              container.replaceChildren(...Array.from(staging.childNodes));
+              setLoading(false);
+            }
+          },
+          { signal: controller.signal }
+        );
       } catch (e) {
         if (!cancelled) {
           setError(
@@ -918,6 +931,7 @@ const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
     void render();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [src, t]);
 
@@ -948,34 +962,42 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     const render = async () => {
       try {
         setLoading(true);
         setError(null);
-        const resp = await fetchArtifactResource(src);
-        if (!resp.ok) throw new Error(`Failed to fetch: ${String(resp.status)}`);
-        const buf = await resp.arrayBuffer();
-        const shouldAbort = () => cancelled;
-        if (shouldAbort()) return;
-        const XLSX = await import('xlsx');
-        if (shouldAbort()) return;
-        const wb = XLSX.read(buf, { type: 'array' });
-        const result = wb.SheetNames.map((name) => {
-          const ws = wb.Sheets[name];
-          if (!ws) {
-            return {
-              name,
-              html: `<p>${t('agent.canvas.emptySheet', { defaultValue: 'Empty sheet' })}</p>`,
-            };
-          }
-          const html = XLSX.utils.sheet_to_html(ws, { editable: false });
-          return { name, html };
-        });
-        if (!shouldAbort()) {
-          setSheets(result);
-          setActiveSheet(0);
-          setLoading(false);
-        }
+        await fetchArtifactResource(
+          src,
+          async (resp, operation) => {
+            if (!resp.ok) throw new Error(`Failed to fetch: ${String(resp.status)}`);
+            const buf = await resp.arrayBuffer();
+            operation.check();
+            const shouldAbort = () => cancelled;
+            if (shouldAbort()) return;
+            const XLSX = await import('xlsx');
+            operation.check();
+            if (shouldAbort()) return;
+            const wb = XLSX.read(buf, { type: 'array' });
+            const result = wb.SheetNames.map((name) => {
+              const ws = wb.Sheets[name];
+              if (!ws) {
+                return {
+                  name,
+                  html: `<p>${t('agent.canvas.emptySheet', { defaultValue: 'Empty sheet' })}</p>`,
+                };
+              }
+              const html = XLSX.utils.sheet_to_html(ws, { editable: false });
+              return { name, html };
+            });
+            if (!shouldAbort()) {
+              setSheets(result);
+              setActiveSheet(0);
+              setLoading(false);
+            }
+          },
+          { signal: controller.signal }
+        );
       } catch (e) {
         if (!cancelled) {
           setError(
@@ -992,6 +1014,7 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
     void render();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [src, t]);
 
@@ -2173,7 +2196,8 @@ export const CanvasPanel = memo<{
     if (onSendPrompt && activeTab) {
       onSendPrompt(
         t('agent.canvas.askRefinePrompt', {
-          defaultValue: "I've edited the content below. Please review and improve it:\n\n{{content}}",
+          defaultValue:
+            "I've edited the content below. Please review and improve it:\n\n{{content}}",
           content: activeTab.content,
         })
       );

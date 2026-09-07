@@ -11,7 +11,11 @@ export type ProjectBlackboardPresentationInput =
       scope: ProjectBlackboardScope;
       scopeSwitch: boolean;
     }>
-  | Readonly<{ kind: 'snapshot'; snapshot: ProjectBlackboardSnapshot }>
+  | Readonly<{
+      kind: 'snapshot';
+      snapshot: ProjectBlackboardSnapshot;
+      collaborationClient: WorkspaceCollaborationClient;
+    }>
   | Readonly<{
       kind: 'failure';
       scope: ProjectBlackboardScope;
@@ -48,7 +52,7 @@ export function buildProjectBlackboardPresentation(
       reasonCode: input.snapshot.reasonCode,
       retryVisible: false,
       initialSurface: input.snapshot.initialSurface === 'status' ? 'status' : 'goals',
-      collaborationClient: input.snapshot.collaborationClient,
+      collaborationClient: input.collaborationClient,
     });
   }
   if (input.kind === 'loading') {

@@ -1,0 +1,263 @@
+{
+  "schema_version": 2,
+  "plugin_id": "memstack-native-target-hosts",
+  "version": "2.0.0",
+  "runtime": "rust-native",
+  "trust": "builtin",
+  "modules": [
+    {
+      "module_ref": "builtin://memstack/rust-server/skill-evolution-worker",
+      "entrypoint": "SkillEvolutionWorkerModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
+        "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
+      },
+      "targets": [
+        "rust-server"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:rust-server.skill-evolution-worker",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "autostart"
+          ],
+          "properties": {
+            "autostart": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:2507be6512e34c55b3730d1f6d022c186bdcc7f122efbb6a1a1e0f0582215021"
+    },
+    {
+      "module_ref": "builtin://memstack/rust-server/channel-outbox-worker",
+      "entrypoint": "ChannelOutboxWorkerModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
+        "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
+      },
+      "targets": [
+        "rust-server"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:rust-server.channel-outbox-worker",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "autostart"
+          ],
+          "properties": {
+            "autostart": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:0d1758bbf225811a434022ffae90c4b72ef5bdc6eb538ed0c85c29256bf75984"
+    },
+    {
+      "module_ref": "builtin://memstack/rust-server/cron-scheduler-worker",
+      "entrypoint": "CronSchedulerWorkerModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
+        "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
+      },
+      "targets": [
+        "rust-server"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:rust-server.cron-scheduler-worker",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "autostart"
+          ],
+          "properties": {
+            "autostart": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:86e82e004640593f1d1ce1017fec173af733f249fa3fab8e66ebd1786cf11867"
+    },
+    {
+      "module_ref": "builtin://memstack/rust-server/generation-host",
+      "entrypoint": "RustServerHostModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
+      },
+      "targets": ["rust-server"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:rust-server.runtime-descriptor", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generated-catalog-bootstrap", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8848f378b02460e0ba80ef8708a65e2f30f789033c7eb3ccf7d25e5460fa6e7e"
+    },
+    {
+      "module_ref": "builtin://memstack/rust-server/http-routes",
+      "entrypoint": "RustServerHttpRoutesModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
+      },
+      "targets": ["rust-server"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:rust-server.http-route-contribution",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contribution_id", "strategy"],
+          "properties": {
+            "contribution_id": {
+              "const": "memstack-rust-default-api.v1",
+              "type": "string"
+            },
+            "strategy": { "const": "axum-host-router", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:75443a63ac79d996d7bcba1a2015ab84320702e0157897cbd62970669a79d2b2"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop-sidecar/http-routes",
+      "entrypoint": "DesktopSidecarHttpRoutesModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
+      },
+      "targets": ["desktop-sidecar"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-sidecar.http-route-contribution",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contribution_id", "strategy"],
+          "properties": {
+            "contribution_id": {
+              "const": "memstack-desktop-local-api.v1",
+              "type": "string"
+            },
+            "strategy": { "const": "axum-host-router", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:aca3c6333f9094d591c3be9313b7e95be51385485b551a36281cd221e440ea5d"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop-sidecar/local-capability",
+      "entrypoint": "DesktopSidecarHostModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
+      },
+      "targets": ["desktop-sidecar"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:desktop-sidecar.local-capability", "version": "1.0.0" }
+          ],
+          "requires": [
+            {
+              "alias": "routes",
+              "service": "service:desktop-sidecar.http-route-contribution",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "native-local-capability", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b017f9051aba361bfd977d664f9b5ea89a752a64ac6e537422535bd7b24f4c1d"
+    }
+  ],
+  "permissions": [],
+  "quotas": {}
+}

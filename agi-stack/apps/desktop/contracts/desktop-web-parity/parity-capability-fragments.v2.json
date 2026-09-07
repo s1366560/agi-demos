@@ -2,6 +2,7 @@
   "fragments": [
     "parity-capability-definitions.01-conversation.v2.json",
     "parity-capability-definitions.02-tenant-operations.v2.json",
+    "parity-capability-definitions.02-tenant-tasks.v2.json",
     "parity-capability-definitions.03-agent-core.v2.json",
     "parity-capability-definitions.04-agent-skills.v2.json",
     "parity-capability-definitions.05-agent-evolution.v2.json",

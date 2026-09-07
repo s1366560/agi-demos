@@ -10,19 +10,16 @@ import argparse
 import difflib
 import hashlib
 import json
-import os
 import sys
 from collections import Counter, deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
-from pydantic import HttpUrl, SecretStr
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-
-    from fastapi import FastAPI
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -52,38 +49,28 @@ def _create_application() -> FastAPI:
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
 
-    # Importing ``main`` constructs its ASGI application at module scope. Supply
-    # manifest-only credentials for that import, then restore the caller's
-    # environment so this evidence command never mutates operator state.
-    environment = {
-        "WORKSPACE_CORE_BASE_URL": "http://workspace-core.manifest.invalid",
-        "WORKSPACE_CORE_SERVICE_TOKEN": "manifest-service-token",
-        "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "manifest-webhook-token",
-        "WORKSPACE_CORE_PROVIDER_EVENT_TOKEN": "manifest-event-token",
-        "WORKSPACE_CORE_AGENT_REGISTRY_TOKEN": "manifest-registry-token",
-    }
-    original = {name: os.environ.get(name) for name in environment}
-    os.environ.update(environment)
-    try:
-        from src.infrastructure.adapters.primary.web.main import create_app
-    finally:
-        for name, value in original.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
-
-    from src.configuration.workspace_core import WorkspaceCoreSettings
-
-    return create_app(
-        workspace_core_settings=WorkspaceCoreSettings(
-            WORKSPACE_CORE_BASE_URL=HttpUrl("http://workspace-core.manifest.invalid"),
-            WORKSPACE_CORE_SERVICE_TOKEN=SecretStr("manifest-service-token"),
-            WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN=SecretStr("manifest-webhook-token"),
-            WORKSPACE_CORE_PROVIDER_EVENT_TOKEN=SecretStr("manifest-event-token"),
-            WORKSPACE_CORE_AGENT_REGISTRY_TOKEN=SecretStr("manifest-registry-token"),
-        )
+    from src.infrastructure.plugins.v2.builtin_workspace_core_http_routes import (
+        workspace_core_route_definitions_v2,
     )
+    from src.infrastructure.plugins.v2.builtin_workspace_core_static_http_routes import (
+        workspace_core_static_route_definitions_v2,
+    )
+    from src.infrastructure.plugins.v2.http_routes import install_route_definitions_v2
+
+    app = FastAPI(
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        title="MemStack Workspace Core Routes V2",
+    )
+    install_route_definitions_v2(
+        app,
+        (
+            *workspace_core_static_route_definitions_v2(),
+            *workspace_core_route_definitions_v2(),
+        ),
+    )
+    return app
 
 
 def _iter_refs(value: object) -> Iterator[str]:
@@ -204,7 +191,7 @@ def build_manifest() -> dict[str, Any]:
     module_counts = Counter(route["module"] for route in routes)
     manifest: dict[str, Any] = {
         "manifestVersion": 1,
-        "source": "create_app().routes and create_app().openapi()",
+        "source": "Workspace Core V2 route contributions and generation OpenAPI",
         "routerModules": sorted(WORKSPACE_ROUTER_MODULES),
         "moduleCounts": {name: module_counts[name] for name in sorted(module_counts)},
         "routeCount": len(routes),

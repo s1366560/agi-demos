@@ -27,7 +27,11 @@ def _reset_local_task_tracking() -> None:
     AgentRuntimeBootstrapper._local_subprocesses.clear()
     AgentRuntimeBootstrapper._local_subprocess_request_paths.clear()
     AgentRuntimeBootstrapper._local_subprocess_superseded.clear()
-    yield
+    with patch(
+        "src.application.services.agent.runtime_bootstrapper._current_plugin_distribution_v2",
+        return_value=(None, None),
+    ):
+        yield
     AgentRuntimeBootstrapper._local_chat_tasks.clear()
     AgentRuntimeBootstrapper._local_chat_abort_signals.clear()
     AgentRuntimeBootstrapper._local_chat_queues.clear()
@@ -88,6 +92,7 @@ def conversation() -> SimpleNamespace:
         project_id="proj-1",
         user_id="user-1",
         is_in_plan_mode=False,
+        agent_config={"selected_agent_id": "builtin:all-access"},
     )
 
 
@@ -276,6 +281,16 @@ async def test_start_chat_actor_local_mode_uses_local_only(
         "src.infrastructure.security.encryption_service",
         get_encryption_service=lambda: encryption_service,
     )
+    descriptor = {
+        "profile_id": "default-v2",
+        "generation": 7,
+        "digest": "a" * 64,
+    }
+    distribution = {
+        "descriptor": descriptor,
+        "snapshot": {"schema_version": 2},
+        "envelope": {"version": 7},
+    }
 
     with (
         patch.dict(
@@ -298,6 +313,10 @@ async def test_start_chat_actor_local_mode_uses_local_only(
             return_value=tenant_agent_config,
         ),
         patch.object(bootstrapper, "_run_chat_local", new_callable=AsyncMock) as local_run_mock,
+        patch(
+            "src.application.services.agent.runtime_bootstrapper._current_plugin_distribution_v2",
+            return_value=(descriptor, distribution),
+        ),
         patch("asyncio.create_task", side_effect=_capture_task) as create_task_mock,
     ):
         actor_id = await bootstrapper.start_chat_actor(
@@ -315,6 +334,8 @@ async def test_start_chat_actor_local_mode_uses_local_only(
     queued = AgentRuntimeBootstrapper._local_chat_queues["conv-1"].get_nowait()
     assert queued.request.preferred_language == "zh-CN"
     assert queued.request.automation_run_id == queued.request.message_id == "msg-1"
+    assert queued.request.plugin_generation == descriptor
+    assert queued.request.plugin_distribution == distribution
     create_task_mock.assert_called_once()
     assert len(created_tasks) == 1
 
@@ -856,111 +877,58 @@ async def test_start_chat_actor_workspace_worker_forces_ray_when_runtime_is_auto
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_bootstrap_agent_orchestrator_wires_shared_run_registry(bootstrapper):
-    """Multi-agent bootstrap should attach the shared SubAgent run registry."""
-    sentinel_registry = object()
-    settings = SimpleNamespace(
-        multi_agent_enabled=True,
-        agent_subagent_terminal_retention_seconds=321,
-        agent_subagent_run_registry_path="/tmp/runs.json",
-        agent_subagent_run_postgres_dsn="postgresql://example/db",
-        agent_subagent_run_sqlite_path="/tmp/runs.sqlite",
-        agent_subagent_run_redis_cache_url="redis://localhost:6379/0",
-        agent_subagent_run_redis_cache_ttl_seconds=45,
-    )
-    get_settings_mock = MagicMock(return_value=settings)
-    get_shared_registry_mock = MagicMock(return_value=sentinel_registry)
-    get_agent_orchestrator_mock = MagicMock(return_value=None)
-    set_agent_orchestrator_mock = MagicMock()
-    get_redis_client_mock = AsyncMock(return_value="redis-client")
-    async_session_factory_mock = MagicMock(return_value="db-session")
-    sql_agent_registry_ctor = MagicMock(return_value="agent-registry")
-    message_bus_ctor = MagicMock(return_value="message-bus")
-    session_registry_ctor = MagicMock(return_value="session-registry")
-    spawn_manager_ctor = MagicMock(return_value="spawn-manager")
-    agent_orchestrator_ctor = MagicMock(return_value="agent-orchestrator")
-
-    fake_config_module = _build_fake_module(
-        "src.configuration.config",
-        get_settings=get_settings_mock,
-    )
-    fake_database_module = _build_fake_module(
-        "src.infrastructure.adapters.secondary.persistence.database",
-        async_session_factory=async_session_factory_mock,
-    )
-    fake_registry_module = _build_fake_module(
-        "src.infrastructure.adapters.secondary.persistence.sql_agent_registry",
-        SqlAgentRegistryRepository=sql_agent_registry_ctor,
-    )
-    fake_message_bus_module = _build_fake_module(
-        "src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus",
-        RedisAgentMessageBusAdapter=message_bus_ctor,
-    )
-    fake_orchestrator_module = _build_fake_module(
-        "src.infrastructure.agent.orchestration.orchestrator",
-        AgentOrchestrator=agent_orchestrator_ctor,
-    )
-    fake_session_registry_module = _build_fake_module(
-        "src.infrastructure.agent.orchestration.session_registry",
-        AgentSessionRegistry=session_registry_ctor,
-    )
-    fake_spawn_manager_module = _build_fake_module(
-        "src.infrastructure.agent.orchestration.spawn_manager",
-        SpawnManager=spawn_manager_ctor,
-    )
-    fake_run_registry_module = _build_fake_module(
-        "src.infrastructure.agent.subagent.run_registry",
-        get_shared_subagent_run_registry=get_shared_registry_mock,
-    )
-    fake_worker_state_module = _build_fake_module(
-        "src.infrastructure.agent.state.agent_worker_state",
-        get_agent_orchestrator=get_agent_orchestrator_mock,
-        set_agent_orchestrator=set_agent_orchestrator_mock,
-        get_redis_client=get_redis_client_mock,
+async def test_bootstrap_agent_orchestrator_binds_generation_owned_runtime(bootstrapper):
+    """Multi-agent bootstrap must bind through the admitted generation runtime."""
+    bind_orchestrator = AsyncMock(return_value="agent-orchestrator")
+    fake_agent_worker_runtime_module = _build_fake_module(
+        "src.infrastructure.plugins.v2.agent_worker_runtime",
+        bind_current_agent_orchestrator_v2=bind_orchestrator,
     )
 
     with patch.dict(
         "sys.modules",
         {
-            "src.configuration.config": fake_config_module,
-            "src.infrastructure.adapters.secondary.persistence.database": fake_database_module,
-            "src.infrastructure.adapters.secondary.persistence.sql_agent_registry": (
-                fake_registry_module
+            "src.infrastructure.plugins.v2.agent_worker_runtime": (
+                fake_agent_worker_runtime_module
             ),
-            "src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus": (
-                fake_message_bus_module
-            ),
-            "src.infrastructure.agent.orchestration.orchestrator": fake_orchestrator_module,
-            "src.infrastructure.agent.orchestration.session_registry": (
-                fake_session_registry_module
-            ),
-            "src.infrastructure.agent.orchestration.spawn_manager": fake_spawn_manager_module,
-            "src.infrastructure.agent.subagent.run_registry": fake_run_registry_module,
-            "src.infrastructure.agent.state.agent_worker_state": fake_worker_state_module,
         },
     ):
         await bootstrapper._bootstrap_agent_orchestrator()
 
-    get_shared_registry_mock.assert_called_once_with(
-        persistence_path="/tmp/runs.json",
-        postgres_persistence_dsn="postgresql://example/db",
-        sqlite_persistence_path="/tmp/runs.sqlite",
-        redis_cache_url="redis://localhost:6379/0",
-        redis_cache_ttl_seconds=45,
-        terminal_retention_seconds=321,
-    )
-    spawn_manager_ctor.assert_called_once_with(
-        session_registry="session-registry",
-        run_registry=sentinel_registry,
-    )
-    agent_orchestrator_ctor.assert_called_once()
-    spawn_executor = agent_orchestrator_ctor.call_args.kwargs["spawn_executor"]
+    bind_orchestrator.assert_awaited_once()
+    assert bind_orchestrator.await_args.kwargs["owner"] is AgentRuntimeBootstrapper
+    spawn_executor = bind_orchestrator.await_args.kwargs["spawn_executor"]
     assert getattr(spawn_executor, "__self__", None) is bootstrapper
     assert (
         getattr(spawn_executor, "__func__", None)
         is AgentRuntimeBootstrapper.launch_spawned_agent_session
     )
-    set_agent_orchestrator_mock.assert_called_once_with("agent-orchestrator")
+    session_turn_executor = bind_orchestrator.await_args.kwargs["session_turn_executor"]
+    assert getattr(session_turn_executor, "__self__", None) is bootstrapper
+    assert (
+        getattr(session_turn_executor, "__func__", None)
+        is AgentRuntimeBootstrapper.launch_agent_session_turn
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_local_runtime_rebinds_orchestrator_for_every_admitted_generation(
+    bootstrapper,
+    monkeypatch,
+):
+    """Process bootstrap is once-only, while generation binding happens per admission."""
+    monkeypatch.setattr(AgentRuntimeBootstrapper, "_local_bootstrapped", True)
+
+    with patch.object(
+        bootstrapper,
+        "_bootstrap_agent_orchestrator",
+        new_callable=AsyncMock,
+    ) as bind_orchestrator:
+        await bootstrapper._ensure_local_runtime_bootstrapped()
+        await bootstrapper._ensure_local_runtime_bootstrapped()
+
+    assert bind_orchestrator.await_count == 2
 
 
 @pytest.mark.unit

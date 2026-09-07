@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any
@@ -12,6 +13,7 @@ from src.domain.llm_providers.models import ModelMetadata
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.model_availability_tool import (
     list_available_models_tool,
+    make_model_awareness_tools,
     switch_model_next_turn_tool,
 )
 
@@ -105,6 +107,52 @@ def _make_ctx(**overrides: Any) -> ToolContext:
 
 @pytest.mark.unit
 class TestListAvailableModelsTool:
+    async def test_bound_runtimes_are_isolated_between_interleaved_calls(self) -> None:
+        first_entered = asyncio.Event()
+        release_first = asyncio.Event()
+
+        first_provider = _FakeProvider(
+            name="Generation A",
+            provider_type=_FakeProviderType("openai"),
+            llm_model="generation-a-model",
+        )
+        second_provider = _FakeProvider(
+            name="Generation B",
+            provider_type=_FakeProviderType("openai"),
+            llm_model="generation-b-model",
+        )
+
+        async def _first_providers(_tenant_id: str) -> list[_FakeProvider]:
+            first_entered.set()
+            await release_first.wait()
+            return [first_provider]
+
+        async def _second_providers(_tenant_id: str) -> list[_FakeProvider]:
+            await first_entered.wait()
+            release_first.set()
+            return [second_provider]
+
+        first_tools = make_model_awareness_tools(
+            provider_resolver=_first_providers,
+            model_catalog=_FakeCatalog([_make_model("generation-a-model", provider="openai")]),
+        )
+        second_tools = make_model_awareness_tools(
+            provider_resolver=_second_providers,
+            model_catalog=_FakeCatalog([_make_model("generation-b-model", provider="openai")]),
+        )
+
+        first_task = asyncio.create_task(
+            first_tools["list_available_models"].execute(_make_ctx(tenant_id="tenant-a"))
+        )
+        await first_entered.wait()
+        second_result = await second_tools["list_available_models"].execute(
+            _make_ctx(tenant_id="tenant-b")
+        )
+        first_result = await first_task
+
+        assert json.loads(first_result.output)["models"] == ["auto", "generation-a-model"]
+        assert json.loads(second_result.output)["models"] == ["auto", "generation-b-model"]
+
     async def test_returns_models_across_active_providers(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -190,7 +238,9 @@ class TestListAvailableModelsTool:
         assert payload["returned_models"] == 1
         assert payload["models"] == ["gpt-4o"]
 
-    async def test_supports_metadata_and_provider_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_supports_metadata_and_provider_alias(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         provider = _FakeProvider(
             name="Azure OpenAI",
             provider_type=_FakeProviderType("azure_openai"),
@@ -257,6 +307,34 @@ class TestListAvailableModelsTool:
 
 @pytest.mark.unit
 class TestSwitchModelNextTurnTool:
+    async def test_bound_runtime_uses_its_persistence_callback(self) -> None:
+        provider = _FakeProvider(
+            name="Bound OpenAI",
+            provider_type=_FakeProviderType("openai"),
+            llm_model="gpt-4o",
+        )
+        persisted: list[tuple[str, str]] = []
+
+        async def _providers(_tenant_id: str) -> list[_FakeProvider]:
+            return [provider]
+
+        async def _persist(conversation_id: str, model_name: str) -> None:
+            persisted.append((conversation_id, model_name))
+
+        tools = make_model_awareness_tools(
+            provider_resolver=_providers,
+            model_catalog=_FakeCatalog([_make_model("gpt-4o", provider="openai")]),
+            persist_model_override=_persist,
+        )
+
+        result = await tools["switch_model_next_turn"].execute(
+            _make_ctx(conversation_id="bound-conversation"),
+            model="gpt-4o",
+        )
+
+        assert result.is_error is False
+        assert persisted == [("bound-conversation", "gpt-4o")]
+
     async def test_emits_switch_event_for_available_model(
         self,
         monkeypatch: pytest.MonkeyPatch,

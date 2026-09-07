@@ -71,6 +71,14 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+vi.mock('@/routes/v2/webNavigationAuthorityStateV2', async () => {
+  const navigation =
+    await vi.importActual<typeof import('@/config/navigation')>('@/config/navigation');
+  return {
+    useWebTopNavigationItemsV2: navigation.deriveTopNavigationItems,
+  };
+});
+
 vi.mock('@/stores/agentV3', () => ({
   useAgentV3Store: (selector: (state: typeof agentState) => unknown) => selector(agentState),
 }));

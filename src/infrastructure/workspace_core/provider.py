@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
+from contextlib import AbstractAsyncContextManager, aclosing
 from typing import Any, Literal, Protocol, cast
 
 import httpx
@@ -141,6 +142,17 @@ class ProviderTerminalAcknowledger(Protocol):
     ) -> object: ...
 
 
+class ProviderGenerationReservation(Protocol):
+    """One exact generation retained for a detached Provider send bridge."""
+
+    def admit(self) -> AbstractAsyncContextManager[object]: ...
+
+    async def release(self) -> None: ...
+
+
+type ProviderGenerationReserver = Callable[[], Awaitable[ProviderGenerationReservation]]
+
+
 class AvernetProviderAdapter:
     """Translate Avernet Provider frames without owning Agent Runtime policy."""
 
@@ -150,6 +162,7 @@ class AvernetProviderAdapter:
         event_sink: ProviderEventSink,
         terminal_acknowledger: ProviderTerminalAcknowledger,
         *,
+        generation_reserver: ProviderGenerationReserver,
         terminal_callback_attempts: int = _DEFAULT_TERMINAL_CALLBACK_ATTEMPTS,
         terminal_callback_retry_delay_seconds: float = (
             _DEFAULT_TERMINAL_CALLBACK_RETRY_DELAY_SECONDS
@@ -163,6 +176,7 @@ class AvernetProviderAdapter:
         self._runtime = runtime
         self._event_sink = event_sink
         self._terminal_acknowledger = terminal_acknowledger
+        self._generation_reserver = generation_reserver
         self._terminal_callback_attempts = terminal_callback_attempts
         self._terminal_callback_retry_delay_seconds = terminal_callback_retry_delay_seconds
         self._tasks: set[asyncio.Task[None]] = set()
@@ -171,7 +185,7 @@ class AvernetProviderAdapter:
         """Dispatch one structurally validated Provider method."""
         match request.method:
             case "chat.send":
-                self._start_event_bridge(request)
+                await self._start_event_bridge(request)
                 return {"ok": True}
             case "chat.inject":
                 await self._runtime.inject(request)
@@ -200,23 +214,58 @@ class AvernetProviderAdapter:
                     "next_after": result.next_after,
                 }
 
-    def _start_event_bridge(self, request: ProviderWebhookRequest) -> None:
-        task = asyncio.create_task(
-            self._drive_send(request),
-            name=f"avernet-provider:{request.id}",
-        )
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+    async def _start_event_bridge(self, request: ProviderWebhookRequest) -> None:
+        from src.infrastructure.plugins.v2.boundary import detached_operation_task_context_v2
 
-    async def _drive_send(self, request: ProviderWebhookRequest) -> None:
+        reservation = await self._generation_reserver()
+        drive_send = self._drive_send(request, reservation)
+        try:
+            task = asyncio.create_task(
+                drive_send,
+                name=f"avernet-provider:{request.id}",
+                context=detached_operation_task_context_v2(),
+            )
+        except BaseException:
+            drive_send.close()
+            await reservation.release()
+            raise
+        self._tasks.add(task)
+        task.add_done_callback(lambda completed: self._finish_event_bridge(completed, reservation))
+
+    def _finish_event_bridge(
+        self,
+        task: asyncio.Task[None],
+        reservation: ProviderGenerationReservation,
+    ) -> None:
+        self._tasks.discard(task)
+        cleanup = asyncio.create_task(
+            reservation.release(),
+            name=f"{task.get_name()}:release-generation",
+        )
+        self._tasks.add(cleanup)
+        cleanup.add_done_callback(self._tasks.discard)
+
+    async def _drive_send(
+        self,
+        request: ProviderWebhookRequest,
+        reservation: ProviderGenerationReservation,
+    ) -> None:
         terminal_seen = False
         try:
-            async for event in self._runtime.stream_send(request):
-                if event.state in {"final", "aborted", "error"}:
-                    await self._publish_terminal(request, event)
-                    terminal_seen = True
-                    break
-                await self._event_sink.publish(request, event)
+            runtime_stream = cast(
+                AsyncGenerator[ProviderRuntimeEvent, None],
+                self._runtime.stream_send(request),
+            )
+            async with (
+                reservation.admit(),
+                aclosing(runtime_stream) as stream,
+            ):
+                async for event in stream:
+                    if event.state in {"final", "aborted", "error"}:
+                        await self._publish_terminal(request, event)
+                        terminal_seen = True
+                        break
+                    await self._event_sink.publish(request, event)
         except Exception:
             logger.exception(
                 "Avernet Provider send bridge failed",
@@ -274,7 +323,9 @@ class AvernetProviderAdapter:
     async def wait_until_idle(self) -> None:
         """Wait for tracked send bridges during tests or graceful shutdown."""
         while self._tasks:
-            _ = await asyncio.gather(*tuple(self._tasks))
+            pending = tuple(self._tasks)
+            _ = await asyncio.gather(*pending)
+            self._tasks.difference_update(pending)
 
 
 class AvernetBotEventHttpSink:

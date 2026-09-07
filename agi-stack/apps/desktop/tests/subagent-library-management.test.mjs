@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { createTenantSubAgentDefinitionsHttpClientV2Fixture } from './tenantSubAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
-const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
+const { createDesktopTenantTemplatesHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTemplatesHttpProjectionV2.js',
+);
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 const {
   subAgentDraftFrom,
@@ -52,6 +55,9 @@ test('managed SubAgent library APIs preserve template install and filesystem imp
         total: 1,
       });
     }
+    if (url.pathname.endsWith('/templates/categories')) {
+      return Response.json({ categories: ['engineering'] });
+    }
     return Response.json({
       id: 'subagent-release-reviewer',
       tenant_id: 'tenant-1',
@@ -63,16 +69,24 @@ test('managed SubAgent library APIs preserve template install and filesystem imp
   };
 
   try {
-    const client = new DesktopApiClient({
+    const config = {
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',
       apiKey: 'cloud-session',
       tenantId: 'tenant-1',
       projectId: 'project-1',
-    });
-    const templates = await client.listManagedSubAgentTemplates();
-    await client.installManagedSubAgentTemplate(templates.templates[0].id);
+    };
+    const client = createTenantSubAgentDefinitionsHttpClientV2Fixture(config);
+    const authority = createDesktopTenantTemplatesHttpProjectionV2(config);
+    const templates = await authority.load(
+      { authority: 'cloud', tenantId: 'tenant-1' },
+      { page: 1, pageSize: 100, category: '', search: '' },
+    );
+    await authority.install(
+      { authority: 'cloud', tenantId: 'tenant-1' },
+      templates.templates[0].id,
+    );
     await client.importManagedFilesystemSubAgent('filesystem/researcher', 'project-1');
 
     assert.equal(templates.total, 1);
@@ -80,16 +94,16 @@ test('managed SubAgent library APIs preserve template install and filesystem imp
     assert.equal(calls[0].url.searchParams.get('tenant_id'), 'tenant-1');
     assert.equal(calls[0].url.searchParams.get('limit'), '100');
     assert.equal(
-      calls[1].url.pathname,
+      calls[2].url.pathname,
       '/api/v1/subagents/templates/template-release-reviewer/install',
     );
-    assert.equal(calls[1].init.method, 'POST');
+    assert.equal(calls[2].init.method, 'POST');
     assert.equal(
-      calls[2].url.pathname,
+      calls[3].url.pathname,
       '/api/v1/subagents/filesystem/filesystem%2Fresearcher/import',
     );
-    assert.equal(calls[2].url.searchParams.get('project_id'), 'project-1');
-    assert.equal(calls[2].url.searchParams.get('tenant_id'), 'tenant-1');
+    assert.equal(calls[3].url.searchParams.get('project_id'), 'project-1');
+    assert.equal(calls[3].url.searchParams.get('tenant_id'), 'tenant-1');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -125,7 +139,10 @@ test('Desktop SubAgent surfaces expose the governed library and filesystem impor
   assert.match(resourceSource, /settings\.subagentLibrary\.action/);
   assert.match(resourceSource, /settings\.subagentLibrary\.importFilesystem/);
   assert.match(dialogSource, /onInstall/);
-  assert.match(managementSource, /installManagedSubAgentTemplate/);
+  assert.match(managementSource, /tenantTemplatesOperationsV2\.installTenantTemplate/);
+  assert.match(managementSource, /tenantTemplatesOperationsV2\.loadTenantTemplates/);
+  assert.doesNotMatch(managementSource, /listManagedSubAgentTemplates/);
+  assert.doesNotMatch(managementSource, /installManagedSubAgentTemplate/);
   assert.match(managementSource, /importManagedFilesystemSubAgent/);
   assert.equal(
     managementSource.match(/await onReload\(created\.id\);/g)?.length,
@@ -165,7 +182,7 @@ test('managed SubAgent CRUD preserves tenant scope and authoritative mutation fi
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSubAgentDefinitionsHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',

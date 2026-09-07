@@ -1,7 +1,35 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
+import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
+import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
+import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
+import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 require.extensions['.css'] = () => {};
@@ -15,6 +43,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 const routeIds = Object.freeze([
   'project-agent-dashboard',
   'project-agent-logs',
@@ -35,9 +67,7 @@ const cloudConfig = Object.freeze({
 test('Project Agent production routes own native loaders and App bindings', async () => {
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders(
-      Object.fromEntries(
-        routeIds.map((routeId) => [routeId, implementedLoader(routeId)]),
-      ),
+      Object.fromEntries(routeIds.map((routeId) => [routeId, implementedLoader(routeId)])),
     ),
   });
   for (const routeId of routeIds) {
@@ -55,12 +85,39 @@ test('Project Agent production routes own native loaders and App bindings', asyn
     'createProjectAgentLogsController',
     'createProjectAgentPatternsController',
   ]) {
-    assert.match(appSource, new RegExp(symbol, 'u'), symbol);
+    assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
+    assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
   }
+  assert.match(registrySource, /createDesktopProjectAgentDashboardClientV2/u);
+  assert.match(registrySource, /projectAgentDashboardOperationsV2/u);
+  assert.match(appSource, /createDesktopProjectAgentDashboardOperationsV2/u);
+  assert.match(
+    appSource,
+    /projectAgentDashboardOperationsV2:\s*desktopProjectAgentDashboardOperationsV2/u,
+  );
+  assert.match(registrySource, /createDesktopProjectAgentLogsClientV2/u);
+  assert.match(registrySource, /projectAgentLogsOperationsV2/u);
+  assert.match(appSource, /createDesktopProjectAgentLogsOperationsV2/u);
+  assert.match(appSource, /projectAgentLogsOperationsV2:\s*desktopProjectAgentLogsOperationsV2/u);
+  assert.match(registrySource, /createDesktopProjectAgentPatternsClientV2/u);
+  assert.match(registrySource, /projectAgentPatternsOperationsV2/u);
+  assert.match(appSource, /createDesktopProjectAgentPatternsOperationsV2/u);
+  assert.match(
+    appSource,
+    /projectAgentPatternsOperationsV2:\s*desktopProjectAgentPatternsOperationsV2/u,
+  );
+  assert.doesNotMatch(registrySource, /createProjectAgentDashboardClient/u);
+  assert.doesNotMatch(appSource, /createProjectAgentDashboardClient/u);
+  assert.doesNotMatch(registrySource, /createProjectAgentLogsClient/u);
+  assert.doesNotMatch(appSource, /createProjectAgentLogsClient/u);
+  assert.doesNotMatch(registrySource, /createProjectAgentPatternsClient/u);
+  assert.doesNotMatch(appSource, /createProjectAgentPatternsClient/u);
+  assert.doesNotMatch(registrySource, /projectAgentClients\?/u);
+  assert.doesNotMatch(appSource, /projectAgentClients\?/u);
 });
 
 test('Project Agent Snapshot observes Cloud and declares Local authority', async () => {
-  const cloud = await loadSnapshot(cloudConfig, clients('cloud'));
+  const cloud = await loadSnapshot(cloudConfig);
   for (const routeId of routeIds) {
     const capability = cloud.capabilities[routeId];
     assert.equal(capability.provenance, 'observed', routeId);
@@ -69,23 +126,11 @@ test('Project Agent Snapshot observes Cloud and declares Local authority', async
     assert.equal(capability.authority_revision, 23, routeId);
   }
 
-  let calls = 0;
-  const localClients = Object.fromEntries(
-    routeIds.map((routeId) => [
-      routeId,
-      {
-        async load() {
-          calls += 1;
-          throw new Error(routeId);
-        },
-      },
-    ]),
-  );
-  const local = await loadSnapshot(
-    { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
-    localClients,
-  );
-  assert.equal(calls, 0);
+  const local = await loadSnapshot({
+    ...cloudConfig,
+    mode: 'local',
+    localApiToken: 'private-launch',
+  });
   for (const routeId of routeIds) {
     const capability = local.capabilities[routeId];
     assert.equal(capability.provenance, 'declared', routeId);
@@ -94,7 +139,7 @@ test('Project Agent Snapshot observes Cloud and declares Local authority', async
   }
 });
 
-async function loadSnapshot(config, projectAgentClients) {
+async function loadSnapshot(config) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ reason_code: 'unrelated_authority_unavailable' }), {
@@ -109,36 +154,95 @@ async function loadSnapshot(config, projectAgentClients) {
         },
       },
       config,
-      { projectAgentClients },
+      {
+        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture({
+          scopeRevision: 23,
+        }),
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture({
+          scopeRevision: 23,
+        }),
+        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+        projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+        projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+        projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+        projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+        projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+        runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+        runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+        runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        deadLetterQueueOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        backendStoresOperationsV2: {
+          async probeBackendStores({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  authorityRevision: 23,
+                };
+          },
+        },
+        projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+        tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      },
     ).loadSnapshot();
   } finally {
     globalThis.fetch = originalFetch;
   }
-}
-
-function clients(authority) {
-  return Object.fromEntries(
-    routeIds.map((routeId) => [
-      routeId,
-      {
-        async load(scope) {
-          assert.deepEqual(scope, {
-            authority,
-            tenantId: 'tenant-1',
-            projectId: 'project-1',
-          });
-          return {
-            scope,
-            scopeRevision: 23,
-            authority,
-            availability: 'available',
-            reasonCode: null,
-            allowedActions: ['view'],
-          };
-        },
-      },
-    ]),
-  );
 }
 
 function implementedLoader(routeId) {

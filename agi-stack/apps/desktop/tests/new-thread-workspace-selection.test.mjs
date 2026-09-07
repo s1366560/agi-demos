@@ -12,24 +12,35 @@ const agentConversationSource = [
   .join('\n');
 const composerSource = readFileSync(
   new URL('../src/features/task/NewThreadComposer.tsx', import.meta.url),
-  'utf8',
+  'utf8'
 );
 const chatPanelSource = readFileSync(
   new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
-  'utf8',
+  'utf8'
+);
+const workbenchSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
+  'utf8'
+);
+const newThreadComposerSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopNewThreadComposerSurfaceV2.tsx', import.meta.url),
+  'utf8'
 );
 const runtimeProviderHookSource = readFileSync(
   new URL('../src/features/settings/useWorkspaceRuntimeProvider.ts', import.meta.url),
-  'utf8',
+  'utf8'
 );
 const workspaceAgentPolicyHookSource = readFileSync(
   new URL('../src/features/settings/useWorkspaceAgentPolicy.ts', import.meta.url),
-  'utf8',
+  'utf8'
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
 const createThreadStart = agentConversationSource.indexOf('const createComposerThread');
-const createThreadEnd = agentConversationSource.indexOf('const ensureAgentConversation', createThreadStart);
+const createThreadEnd = agentConversationSource.indexOf(
+  'const ensureAgentConversation',
+  createThreadStart
+);
 const createThreadSource =
   createThreadStart >= 0 && createThreadEnd > createThreadStart
     ? agentConversationSource.slice(createThreadStart, createThreadEnd)
@@ -59,13 +70,19 @@ const unboundLoadSource =
     ? appSource.slice(unboundLoadStart, unboundLoadEnd)
     : '';
 const refreshRuntimeStart = appSource.indexOf('const refreshRuntime');
-const refreshRuntimeEnd = appSource.indexOf('\n\n  const loadWorkspaceConversations', refreshRuntimeStart);
+const refreshRuntimeEnd = appSource.indexOf(
+  '\n\n  const loadWorkspaceConversations',
+  refreshRuntimeStart
+);
 const refreshRuntimeSource =
   refreshRuntimeStart >= 0 && refreshRuntimeEnd > refreshRuntimeStart
     ? appSource.slice(refreshRuntimeStart, refreshRuntimeEnd)
     : '';
-const renderNewThreadStart = appSource.indexOf('const renderNewThreadComposer');
-const renderNewThreadEnd = appSource.indexOf('\n\n  const renderAuxiliaryView', renderNewThreadStart);
+const renderNewThreadStart = appSource.indexOf('const createHomeWorkbenchViewV2');
+const renderNewThreadEnd = appSource.indexOf(
+  '\n\n  const desktopSessionCanvasInputV2',
+  renderNewThreadStart
+);
 const renderNewThreadSource =
   renderNewThreadStart >= 0 && renderNewThreadEnd > renderNewThreadStart
     ? appSource.slice(renderNewThreadStart, renderNewThreadEnd)
@@ -73,11 +90,10 @@ const renderNewThreadSource =
 const canManageWorkspacePolicyStart = appSource.indexOf('const canManageWorkspacePolicy');
 const canManageWorkspacePolicyEnd = appSource.indexOf(
   '\n\n  const syncLocalRuntimeConfig',
-  canManageWorkspacePolicyStart,
+  canManageWorkspacePolicyStart
 );
 const canManageWorkspacePolicySource =
-  canManageWorkspacePolicyStart >= 0 &&
-  canManageWorkspacePolicyEnd > canManageWorkspacePolicyStart
+  canManageWorkspacePolicyStart >= 0 && canManageWorkspacePolicyEnd > canManageWorkspacePolicyStart
     ? appSource.slice(canManageWorkspacePolicyStart, canManageWorkspacePolicyEnd)
     : '';
 
@@ -101,12 +117,12 @@ test('new-thread model and local overrides are scoped by workspace without effec
   assert.match(composerSource, /model: WorkspaceRuntimeModelOption \| null;/);
   assert.match(
     composerSource,
-    /!workspaceId \|\| selectedModel[\s\S]*onCreate\(\{[\s\S]*workspaceId,[\s\S]*model: selectedModel/,
+    /!workspaceId \|\| selectedModel[\s\S]*onCreate\(\{[\s\S]*workspaceId,[\s\S]*model: selectedModel/
   );
   assert.match(composerSource, /!creating &&[\s\S]{0,80}!loadingPolicy/);
   assert.match(
     workspaceAgentPolicyHookSource,
-    /setState\(\{[\s\S]*scopeKey,[\s\S]*policy: null,[\s\S]*providers: \[\],[\s\S]*members: \[\],[\s\S]*loading: true/,
+    /setState\(\{[\s\S]*scopeKey,[\s\S]*policy: null,[\s\S]*providers: \[\],[\s\S]*members: \[\],[\s\S]*loading: true/
   );
 });
 
@@ -119,7 +135,10 @@ test('unbound new threads create an Agent conversation and preserve null workspa
   assert.match(unboundCreateSource, /activateUnboundNewThread\(/);
   assert.match(unboundCreateSource, /runNewTaskAgentTurn\(/);
   assert.doesNotMatch(unboundCreateSource, /createTaskSession\(/);
-  assert.match(agentConversationSource, /conversationsByWorkspace:[\s\S]*\[UNBOUND_CONVERSATIONS_KEY\]/);
+  assert.match(
+    agentConversationSource,
+    /conversationsByWorkspace:[\s\S]*\[UNBOUND_CONVERSATIONS_KEY\]/
+  );
 });
 
 test('unbound first-turn delivery failure remains visible after activating chat', () => {
@@ -127,25 +146,28 @@ test('unbound first-turn delivery failure remains visible after activating chat'
   assert.match(unboundCreateSource, /const outcome = await runNewTaskAgentTurn\(/);
   assert.doesNotMatch(
     appSource,
-    /deferUntilNextConnection:\s*!isSameDesktopRequestScope\(config, input\.config\)/,
+    /deferUntilNextConnection:\s*!isSameDesktopRequestScope\(config, input\.config\)/
   );
   assert.match(
     agentConversationSource,
-    /runNewTaskAgentTurn\(\s*\{[\s\S]*?conversationId: conversation\.id,[\s\S]*?\},\s*\{\s*deferUntilNextConnection:\s*!isSameDesktopRequestScope\(\s*requestConfig,\s*threadConfig/,
+    /runNewTaskAgentTurn\(\s*\{[\s\S]*?conversationId: conversation\.id,[\s\S]*?\},\s*\{\s*deferUntilNextConnection:\s*!isSameDesktopRequestScope\(\s*requestConfig,\s*threadConfig/
   );
   assert.match(
     unboundCreateSource,
-    /catch \(caught\)[\s\S]*setNewThreadError\(detail\)[\s\S]*setError\(detail\)/,
+    /catch \(caught\)[\s\S]*setNewThreadError\(detail\)[\s\S]*setError\(detail\)/
   );
   assert.match(
     unboundCreateSource,
-    /activatedConversation[\s\S]*upsertAgentTaskSignal\(\{[\s\S]*status: 'failed'/,
+    /activatedConversation[\s\S]*upsertAgentTaskSignal\(\{[\s\S]*status: 'failed'/
   );
 });
 
 test('workspace policy authority loads and checks the selected target workspace roster', () => {
   assert.match(workspaceAgentPolicyHookSource, /members: WorkspaceMemberSummary\[\]/);
-  assert.match(workspaceAgentPolicyHookSource, /client\.listWorkspaceMembers\(controller\.signal\)/);
+  assert.match(
+    workspaceAgentPolicyHookSource,
+    /workspaceRosterOperationsV2\.listWorkspaceMembers\(\{[\s\S]*?config,[\s\S]*?signal: controller\.signal/u
+  );
   assert.notEqual(canManageWorkspacePolicySource, '');
   assert.match(canManageWorkspacePolicySource, /workspaceAgentPolicy\.members\.find\(/);
   assert.doesNotMatch(canManageWorkspacePolicySource, /dataset\.workspaceMembers/);
@@ -155,42 +177,43 @@ test('bound new threads keep the atomic task-session behavior', () => {
   assert.match(createThreadSource, /const workspaceId = input\.workspaceId\.trim\(\)/);
   assert.match(createThreadSource, /buildRuntimeTaskSessionRequest\([\s\S]*workspaceId/);
   assert.match(createThreadSource, /createTaskSession\(request\)/);
-  assert.match(createThreadSource, /config: \{ \.\.\.threadConfig, workspaceId: result\.workspace\.id \}/);
   assert.match(
     createThreadSource,
-    /workspaceAgentPolicy\.loading[\s\S]*workspaceAgentPolicy\.scopeKey !== expectedPolicyScopeKey/,
+    /config: \{ \.\.\.threadConfig, workspaceId: result\.workspace\.id \}/
+  );
+  assert.match(
+    createThreadSource,
+    /workspaceAgentPolicy\.loading[\s\S]*workspaceAgentPolicy\.scopeKey !== expectedPolicyScopeKey/
   );
 });
 
 test('unbound conversation messages bypass workspace message persistence', () => {
   const unboundIndex = sendMessageSource.indexOf('if (!config.workspaceId.trim())');
-  const workspaceMessageIndex = sendMessageSource.indexOf('api.sendMessage(');
+  const workspaceMessageIndex = sendMessageSource.indexOf('client.sendMessage(');
   assert.notEqual(unboundIndex, -1);
   assert.notEqual(workspaceMessageIndex, -1);
   assert.ok(unboundIndex < workspaceMessageIndex);
   const unboundBranch = sendMessageSource.slice(unboundIndex, workspaceMessageIndex);
   assert.match(unboundBranch, /ensureAgentConversation\(content\)/);
   assert.match(unboundBranch, /dispatchAgentConversationMessage\(/);
-  assert.doesNotMatch(unboundBranch, /api\.sendMessage\(/);
+  assert.doesNotMatch(unboundBranch, /client\.sendMessage\(/);
   assert.doesNotMatch(chatDisabledSource, /!config\.workspaceId/);
 });
 
 test('new-thread recent conversations and open actions follow the selected creation scope', () => {
+  assert.match(appSource, /newThreadWorkspaceId \|\| UNBOUND_CONVERSATIONS_KEY/);
   assert.match(
     appSource,
-    /newThreadWorkspaceId \|\| UNBOUND_CONVERSATIONS_KEY/,
+    /selectConversation\(config\.projectId, newThreadWorkspaceId, conversation, 'chat'\)/
   );
+  assert.match(appSource, /workspaceId:\s*newThreadWorkspaceId/u);
+  assert.match(appSource, /onWorkspaceChange:\s*changeNewThreadWorkspace/u);
   assert.match(
     appSource,
-    /selectConversation\(config\.projectId, newThreadWorkspaceId, conversation, 'chat'\)/,
+    /desktopNewThreadComposerCatalogClientProviderV2\.publish\(\{[\s\S]*config: newThreadRuntimeConfig/
   );
-  assert.match(appSource, /workspaceId=\{newThreadWorkspaceId\}/);
-  assert.match(appSource, /onWorkspaceChange=\{changeNewThreadWorkspace\}/);
-  assert.match(
-    appSource,
-    /if \(newThreadWorkspaceId\) return newThreadApi;[\s\S]*unboundComposerCatalogClient\(newThreadApi\)/,
-  );
-  assert.match(appSource, /api=\{newThreadComposerApi\}/);
+  assert.match(appSource, /api:\s*desktopNewThreadComposerCatalogClientV2\.client/u);
+  assert.doesNotMatch(appSource, /const newThreadApi =/u);
 });
 
 test('desktop unbound group uses the authoritative server filter', () => {
@@ -201,17 +224,22 @@ test('desktop unbound group uses the authoritative server filter', () => {
 test('composer catalogs remount when new-thread or chat scope changes', () => {
   assert.match(
     renderNewThreadSource,
-    /const newThreadComposerScopeKey = \[[\s\S]*config\.mode,[\s\S]*config\.apiBaseUrl,[\s\S]*config\.tenantId,[\s\S]*config\.projectId,[\s\S]*auth\.user\?\.user_id/,
-  );
-  assert.match(renderNewThreadSource, /<NewThreadComposer[\s\S]{0,100}key=\{newThreadComposerScopeKey\}/);
-  assert.match(
-    composerSource,
-    /<ComposerPlusMenu[\s\S]{0,160}key=\{workspaceId \|\| 'unbound'\}/,
+    /const newThreadComposerScopeKey = \[[\s\S]*config\.mode,[\s\S]*config\.apiBaseUrl,[\s\S]*config\.tenantId,[\s\S]*config\.projectId,[\s\S]*auth\.user\?\.user_id/
   );
   assert.match(
-    chatPanelSource,
-    /<ChatComposer[\s\S]{0,240}key=\{composerResetKey\}/,
+    renderNewThreadSource,
+    /newThreadComposer:\s*\{[\s\S]*scopeKey:\s*newThreadComposerScopeKey/u
   );
+  assert.match(
+    workbenchSurfaceSource,
+    /<DesktopRendererNewThreadComposerV2 input=\{view\.newThreadComposer\}\s*\/>/u
+  );
+  assert.match(
+    newThreadComposerSurfaceSource,
+    /<NewThreadComposer key=\{input\.scopeKey\} \{\.\.\.input\.composer\} \/>/u
+  );
+  assert.match(composerSource, /<ComposerPlusMenu[\s\S]{0,160}key=\{workspaceId \|\| 'unbound'\}/);
+  assert.match(chatPanelSource, /<ChatComposer[\s\S]{0,240}key=\{composerResetKey\}/);
 });
 
 test('runtime refresh preserves an active explicit unbound session without changing initial defaults', () => {
@@ -227,7 +255,7 @@ test('cloud unbound creation fails preflight before creating a conversation', ()
   assert.ok(createIndex > preflightIndex);
   assert.match(
     renderNewThreadSource,
-    /!newThreadWorkspaceId[\s\S]{0,160}config\.mode === 'cloud'[\s\S]{0,160}connection !== 'ready'/,
+    /!newThreadWorkspaceId[\s\S]{0,160}config\.mode === 'cloud'[\s\S]{0,160}connection !== 'ready'/
   );
 });
 
@@ -235,26 +263,29 @@ test('unbound chat uses project model options and a scope-aware catalog client',
   assert.match(runtimeProviderHookSource, /projectRuntimeModelOptions/);
   assert.doesNotMatch(
     runtimeProviderHookSource,
-    /!config\.projectId\.trim\(\) \|\|\s*!config\.workspaceId\.trim\(\)/,
+    /!config\.projectId\.trim\(\) \|\|\s*!config\.workspaceId\.trim\(\)/
   );
   assert.match(
     runtimeProviderHookSource,
-    /config\.workspaceId\.trim\(\)[\s\S]*getLlmProviderRoutingPolicy[\s\S]*listLlmProviders/,
+    /config\.workspaceId\.trim\(\)[\s\S]*getLlmProviderRoutingPolicy[\s\S]*listLlmProviders/
   );
   assert.match(appSource, /const chatComposerApi = useMemo/);
-  assert.match(appSource, /api=\{chatComposerApi\}/);
+  assert.match(appSource, /api:\s*chatComposerApi/u);
   assert.match(appSource, /unboundComposerCatalogClient\(/);
-  assert.match(appSource, /updateAgentConversationConfig\([\s\S]*llm_model_override/);
+  assert.match(
+    appSource,
+    /desktopConversationConfigOperationsV2\.updateModelOverride\([\s\S]*llmModelOverride/
+  );
 });
 
 test('unbound creation sends the selected model atomically with conversation creation', () => {
   assert.match(
     unboundCreateSource,
-    /createAgentConversation\([\s\S]*llm_model_override: input\.model\.modelId/,
+    /createAgentConversation\([\s\S]*llm_model_override: input\.model\.modelId/
   );
   assert.match(
     unboundCreateSource,
-    /threadConfig\.mode === 'local'[\s\S]*llm_route_override:[\s\S]*provider_id: input\.model\.providerId[\s\S]*model_id: input\.model\.modelId/,
+    /threadConfig\.mode === 'local'[\s\S]*llm_route_override:[\s\S]*provider_id: input\.model\.providerId[\s\S]*model_id: input\.model\.modelId/
   );
   assert.doesNotMatch(unboundCreateSource, /updateAgentConversationConfig\(/);
 });
@@ -265,19 +296,22 @@ test('new-thread creation fails closed when its tenant or project scope becomes 
   assert.match(createThreadSource, /const expectedScopeEpoch = configScopeEpochRef\.current/);
   assert.match(
     createThreadSource,
-    /const requestScopeIsCurrent = \(\) =>[\s\S]*isCurrentContextRevision\([\s\S]*expectedScopeEpoch === configScopeEpochRef\.current[\s\S]*isSameDesktopRequestScope\(requestConfig, configRef\.current\)/,
+    /const requestScopeIsCurrent = \(\) =>[\s\S]*isCurrentContextRevision\([\s\S]*expectedScopeEpoch === configScopeEpochRef\.current[\s\S]*isSameDesktopRequestScope\(requestConfig, configRef\.current\)/
   );
   assert.match(
     unboundCreateSource,
-    /await client\.createAgentConversation\([\s\S]*if \(!requestScopeIsCurrent\(\)\) return;[\s\S]*activateUnboundNewThread/,
+    /await client\.createAgentConversation\([\s\S]*if \(!requestScopeIsCurrent\(\)\) return;[\s\S]*activateUnboundNewThread/
   );
   assert.match(
     createThreadSource,
-    /await client\.createTaskSession\(request\);[\s\S]*if \(!requestScopeIsCurrent\(\)\) return;[\s\S]*activateNewTaskSession/,
+    /await client\.createTaskSession\(request\);[\s\S]*if \(!requestScopeIsCurrent\(\)\) return;[\s\S]*activateNewTaskSession/
   );
   assert.match(
     createThreadSource,
-    /const activatedScopeIsCurrent = \(\) =>[\s\S]*activatedScopeEpoch === configScopeEpochRef\.current[\s\S]*isSameDesktopRequestScope\(activatedConfig, configRef\.current\)/,
+    /const activatedScopeIsCurrent = \(\) =>[\s\S]*activatedScopeEpoch === configScopeEpochRef\.current[\s\S]*isSameDesktopRequestScope\(activatedConfig, configRef\.current\)/
   );
-  assert.match(createThreadSource, /catch \(caught\) \{\s*if \(!creationScopeIsCurrent\(\)\) return;/);
+  assert.match(
+    createThreadSource,
+    /catch \(caught\) \{\s*if \(!creationScopeIsCurrent\(\)\) return;/
+  );
 });

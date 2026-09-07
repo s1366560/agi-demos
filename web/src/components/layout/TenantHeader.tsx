@@ -41,6 +41,8 @@ import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
 
 import { authAPI } from '@/services/api';
 
+import { useWebTopNavigationItemsV2 } from '@/routes/v2/webNavigationAuthorityStateV2';
+
 import { NotificationDropdown } from './NotificationDropdown';
 import {
   getContextualTopNavItems,
@@ -122,23 +124,34 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
       ? currentWorkspace
       : null;
   const preferredWorkspaceId = tenantCurrentWorkspace?.id ?? tenantProjectWorkspaces[0]?.id ?? null;
+  const currentNavigationContext = projectBasePath ? 'project' : 'tenant';
+  const generationNavigationItems = useWebTopNavigationItemsV2(currentNavigationContext, {
+    tenantId: normalizedTenantId || undefined,
+    projectId: effectiveProjectId,
+    preferredWorkspaceId,
+  });
   const contextualNavItems = useMemo(
     () =>
       getContextualTopNavItems({
         basePath,
+        navigationItems: generationNavigationItems,
         projectBasePath,
-        preferredWorkspaceId,
         t: (key, fallback) => (fallback ? t(key, fallback) : t(key)),
-        tenantId: normalizedTenantId || undefined,
-        projectId: effectiveProjectId,
       }),
-    [basePath, effectiveProjectId, normalizedTenantId, preferredWorkspaceId, projectBasePath, t]
+    [
+      basePath,
+      generationNavigationItems,
+      projectBasePath,
+      t,
+    ]
   );
   const contextualNavGroups = useMemo(
     () => groupTenantTopNavItems(contextualNavItems),
     [contextualNavItems]
   );
-  const searchPath = projectBasePath ? `${projectBasePath}/advanced-search` : null;
+  const searchPath = projectBasePath
+    ? (contextualNavItems.find(({ id }) => id === 'search')?.path ?? null)
+    : null;
   const isMacPlatform = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
   const commandPaletteLabel = isMacPlatform
     ? t('commandPalette.trigger', 'Command palette (⌘K)')

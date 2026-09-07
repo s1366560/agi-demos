@@ -46,13 +46,14 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
 
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
 
-def configure_workspace_leader_wtp(orchestrator: AgentOrchestrator) -> None:
-    """Inject the orchestrator used by leader-side WTP tools."""
-    global _orchestrator
-    _orchestrator = orchestrator
+    return current_agent_orchestrator_v2()
 
 
 def _runtime_string(ctx: ToolContext, key: str) -> str:
@@ -91,9 +92,7 @@ async def _send_envelope(
     to_agent_id: str,
 ) -> tuple[ToolResult, SendResult | None]:
     """Deliver envelope; return (ToolResult, SendResult-or-None)."""
-    if _orchestrator is None:
-        return _deny("workspace leader WTP not configured (multi-agent disabled?)"), None
-
+    orchestrator = _current_agent_orchestrator_v2()
     sender_agent_ref = _runtime_string(ctx, "selected_agent_id") or ctx.agent_name
     sender_agent_name = _runtime_string(ctx, "selected_agent_name") or ctx.agent_name
     leader_binding_id = _runtime_string(ctx, "workspace_agent_binding_id")
@@ -105,7 +104,7 @@ async def _send_envelope(
         }
 
     try:
-        result = await _orchestrator.send_message(
+        result = await orchestrator.send_message(
             from_agent_id=sender_agent_ref,
             to_agent_id=to_agent_id,
             message=envelope.to_content(),
@@ -140,8 +139,8 @@ async def _send_envelope(
     assert isinstance(result, SendResult)
 
     # Fan-in to the Phase 2 WorkspaceSupervisor stream for observability.
-    from src.infrastructure.agent.workspace.workspace_supervisor import (
-        publish_envelope_default,
+    from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
+        current_workspace_wtp_publisher_v2,
     )
 
     try:
@@ -167,7 +166,7 @@ async def _send_envelope(
     except Exception:
         logger.debug("workspace_leader_wtp: enrichment failed; publishing raw")
         enriched_envelope = envelope
-    _ = await publish_envelope_default(enriched_envelope)
+    _ = await current_workspace_wtp_publisher_v2().publish(enriched_envelope)
 
     await ctx.emit(
         AgentMessageSentEvent(
@@ -325,7 +324,7 @@ async def workspace_assign_task_tool(
             launch_info = {"scheduled": False, "reason": "task_not_found"}
         else:
             actor_user_id = _runtime_string(ctx, "user_id") or ctx.user_id or ""
-            schedule_worker_session(
+            await schedule_worker_session(
                 workspace_id=workspace_id,
                 task=task,
                 worker_agent_id=worker_agent_id,
@@ -418,7 +417,6 @@ async def workspace_cancel_task_tool(
 
 
 __all__ = [
-    "configure_workspace_leader_wtp",
     "workspace_assign_task_tool",
     "workspace_cancel_task_tool",
 ]

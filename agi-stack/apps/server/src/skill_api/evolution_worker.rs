@@ -4,8 +4,10 @@ use std::time::Duration;
 use agistack_adapters_postgres::{PgSkillEvolutionRepository, SkillEvolutionRunRecord};
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use tokio::task::JoinHandle;
+use tokio::sync::watch;
 use tokio::time::sleep;
+
+use crate::worker_lifecycle_v2::WorkerRuntimeV2;
 
 use super::*;
 
@@ -55,17 +57,7 @@ pub(crate) struct SkillEvolutionWorkerRunReport {
     pub(crate) skipped: usize,
 }
 
-pub(crate) struct SkillEvolutionWorkerRuntime {
-    join: Option<JoinHandle<()>>,
-}
-
-impl Drop for SkillEvolutionWorkerRuntime {
-    fn drop(&mut self) {
-        if let Some(join) = &self.join {
-            join.abort();
-        }
-    }
-}
+pub(crate) type SkillEvolutionWorkerRuntime = WorkerRuntimeV2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SkillEvolutionExecutionSummary {
@@ -234,10 +226,12 @@ impl PgSkillEvolutionWorker {
             return None;
         }
         let worker = Arc::clone(&self);
-        let join = tokio::spawn(async move {
-            worker.run_loop().await;
-        });
-        Some(SkillEvolutionWorkerRuntime { join: Some(join) })
+        Some(WorkerRuntimeV2::spawn(
+            "skill-evolution",
+            move |stop| async move {
+                worker.run_loop(stop).await;
+            },
+        ))
     }
 
     pub(crate) async fn run_once(&self) -> Result<SkillEvolutionWorkerRunReport, SkillApiError> {
@@ -276,18 +270,25 @@ impl PgSkillEvolutionWorker {
         Ok(report)
     }
 
-    async fn run_loop(self: Arc<Self>) {
+    async fn run_loop(self: Arc<Self>, mut stop: watch::Receiver<bool>) {
         loop {
+            if *stop.borrow() || stop.has_changed().is_err() {
+                break;
+            }
+            // A claimed operation must settle before the generation can drain.
             if let Err(err) = self.run_once().await {
                 eprintln!(
                     "[agistack] skill evolution worker poll failed: {}",
                     err.detail
                 );
             }
-            sleep(Duration::from_millis(
-                self.config.poll_interval_millis.max(1),
-            ))
-            .await;
+            tokio::select! {
+                biased;
+                _ = stop.changed() => {}
+                _ = sleep(Duration::from_millis(
+                    self.config.poll_interval_millis.max(1),
+                )) => {}
+            }
         }
     }
 }

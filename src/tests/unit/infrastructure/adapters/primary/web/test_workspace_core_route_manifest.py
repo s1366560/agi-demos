@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[7]
 GENERATOR_PATH = REPO_ROOT / "scripts/workspace-core/generate-route-manifest.py"
 MANIFEST_PATH = REPO_ROOT / "docs/architecture/workspace-core-route-manifest.json"
 
-EXPECTED_CONTRACT_SHA256 = "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768"
+EXPECTED_CONTRACT_SHA256 = "c7563012aaf94f8d798897013be127d9d60d0c4d38e078b18c71858a131ad113"
 EXPECTED_MODULE_COUNTS = {
     "src.infrastructure.adapters.primary.web.routers.blackboard": 19,
     "src.infrastructure.adapters.primary.web.routers.cyber_genes": 5,
@@ -80,9 +80,7 @@ def test_checked_in_manifest_matches_runtime_routes() -> None:
 
 def test_manifest_generator_is_independent_of_operator_core_credentials() -> None:
     environment = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith("WORKSPACE_CORE_")
+        key: value for key, value in os.environ.items() if not key.startswith("WORKSPACE_CORE_")
     }
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
 

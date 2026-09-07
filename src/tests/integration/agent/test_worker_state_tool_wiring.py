@@ -1,8 +1,8 @@
 """Integration tests for _add_session_comm_tools and _add_canvas_tools wiring.
 
 Verifies that agent_worker_state helper functions correctly register
-session comm and canvas tools into the tool dictionary, and degrade
-gracefully on import/setup failures.
+session comm and canvas tools into the tool dictionary, and fail closed
+when required V2 runtime services are unavailable.
 """
 
 from __future__ import annotations
@@ -145,15 +145,13 @@ class TestSessionCommToolsWiring:
     """Tests for _add_session_comm_tools adding tools to the dict."""
 
     async def test_session_comm_tools_added(self) -> None:
-        """Tools are added to the dict after configure_session_comm.
+        """Tools are added from the generation-bound factory.
 
-        Arrange: Patch imports to provide mock objects.
+        Arrange: Patch the session factory and bound tool factory.
         Act: Call _add_session_comm_tools.
         Assert: Three tool keys present in tools dict.
         """
-        # Arrange
-        mock_session = MagicMock()
-        mock_session_factory = MagicMock(return_value=mock_session)
+        mock_session_factory = MagicMock()
 
         mock_list_tool = MagicMock()
         mock_list_tool.name = "peer_sessions_list"
@@ -161,47 +159,24 @@ class TestSessionCommToolsWiring:
         mock_history_tool.name = "peer_sessions_history"
         mock_send_tool = MagicMock()
         mock_send_tool.name = "peer_sessions_send"
-        mock_configure = MagicMock()
-        mock_service_cls = MagicMock()
+        mock_bound_factory = MagicMock(
+            return_value={
+                mock_list_tool.name: mock_list_tool,
+                mock_history_tool.name: mock_history_tool,
+                mock_send_tool.name: mock_send_tool,
+            }
+        )
 
         tools: dict[str, Any] = {}
 
         with (
             patch(
-                "src.application.services.session_comm_service.SessionCommService",
-                mock_service_cls,
-            ),
-            patch(
                 "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
                 mock_session_factory,
             ),
             patch(
-                "src.infrastructure.adapters.secondary.persistence.sql_conversation_repository.SqlConversationRepository",
-                create=True,
-            ),
-            patch(
-                "src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository.SqlAgentExecutionEventRepository",
-                create=True,
-            ),
-            patch(
-                "src.infrastructure.adapters.secondary.persistence.sql_message_repository.SqlMessageRepository",
-                create=True,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.session_comm_tools.configure_session_comm",
-                mock_configure,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.session_comm_tools.sessions_list_tool",
-                mock_list_tool,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.session_comm_tools.sessions_history_tool",
-                mock_history_tool,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.session_comm_tools.sessions_send_tool",
-                mock_send_tool,
+                "src.infrastructure.agent.tools.session_comm_tools.make_session_comm_tools",
+                mock_bound_factory,
             ),
         ):
             # The function uses lazy imports, so we import here
@@ -217,8 +192,7 @@ class TestSessionCommToolsWiring:
         assert "peer_sessions_history" in tools
         assert "peer_sessions_send" in tools
         assert len(tools) == 3
-        assert mock_service_cls.call_args is not None
-        assert "agent_execution_event_repo" in mock_service_cls.call_args.kwargs
+        mock_bound_factory.assert_called_once_with(session_factory=mock_session_factory)
 
     async def test_session_comm_tools_graceful_failure(self) -> None:
         """Import failure is caught silently; tools dict unchanged.
@@ -230,13 +204,9 @@ class TestSessionCommToolsWiring:
         # Arrange
         tools: dict[str, Any] = {}
 
-        # Patch sys.modules so the lazy import inside
-        # _add_session_comm_tools raises ImportError.
-        with patch.dict(
-            "sys.modules",
-            {
-                "src.application.services.session_comm_service": None,
-            },
+        with patch(
+            "src.infrastructure.agent.tools.session_comm_tools.make_session_comm_tools",
+            side_effect=RuntimeError("factory unavailable"),
         ):
             import src.infrastructure.agent.state.agent_worker_state as mod
 
@@ -359,90 +329,51 @@ class TestCanvasToolsWiring:
     """Tests for _add_canvas_tools adding tools to the dict."""
 
     async def test_canvas_tools_added(self) -> None:
-        """Canvas tools are added to the dict after configure_canvas.
+        """Canvas tools are bound to the manager from the active V2 runtime.
 
-        Arrange: Patch canvas imports to provide mock objects.
+        Arrange: Patch the V2 manager projection and bound tool factory.
         Act: Call _add_canvas_tools.
-        Assert: Three canvas tool keys present in tools dict.
+        Assert: All four bound Canvas tools are present.
         """
-        # Arrange
-        mock_manager_cls = MagicMock()
-        mock_manager = MagicMock()
-        mock_manager_cls.return_value = mock_manager
-
-        mock_create = MagicMock()
-        mock_create.name = "canvas_create"
-        mock_update = MagicMock()
-        mock_update.name = "canvas_update"
-        mock_delete = MagicMock()
-        mock_delete.name = "canvas_delete"
-        mock_create_interactive = MagicMock()
-        mock_create_interactive.name = "canvas_create_interactive"
-        mock_configure = MagicMock()
-
+        manager = MagicMock()
+        bound_tools = {
+            "canvas_create": MagicMock(),
+            "canvas_create_interactive": MagicMock(),
+            "canvas_update": MagicMock(),
+            "canvas_delete": MagicMock(),
+        }
+        make_canvas_tools = MagicMock(return_value=bound_tools)
         tools: dict[str, Any] = {}
 
         with (
             patch(
-                "src.infrastructure.agent.canvas.manager.CanvasManager",
-                mock_manager_cls,
+                "src.infrastructure.plugins.v2.agent_worker_runtime."
+                "current_agent_canvas_manager_v2",
+                return_value=manager,
             ),
             patch(
-                "src.infrastructure.agent.canvas.tools.canvas_create",
-                mock_create,
-            ),
-            patch(
-                "src.infrastructure.agent.canvas.tools.canvas_update",
-                mock_update,
-            ),
-            patch(
-                "src.infrastructure.agent.canvas.tools.canvas_delete",
-                mock_delete,
-            ),
-            patch(
-                "src.infrastructure.agent.canvas.tools.canvas_create_interactive",
-                mock_create_interactive,
-            ),
-            patch(
-                "src.infrastructure.agent.canvas.tools.configure_canvas",
-                mock_configure,
+                "src.infrastructure.agent.canvas.tools.make_canvas_tools",
+                make_canvas_tools,
             ),
         ):
             from src.infrastructure.agent.state.agent_worker_state import (
                 _add_canvas_tools,
             )
 
-            # Act
             _add_canvas_tools(tools)
 
-        # Assert
-        assert "canvas_create" in tools
-        assert "canvas_create_interactive" in tools
-        assert "canvas_update" in tools
-        assert "canvas_delete" in tools
-        assert len(tools) == 4
-        mock_configure.assert_called_once_with(mock_manager)
+        assert tools == bound_tools
+        make_canvas_tools.assert_called_once_with(manager=manager)
 
-    async def test_canvas_tools_graceful_failure(self) -> None:
-        """Import failure is caught silently; tools dict unchanged.
+    async def test_canvas_tools_missing_v2_operation_fails_closed(self) -> None:
+        """Canvas cannot silently fall back when no V2 operation is pinned."""
+        from src.infrastructure.agent.state.agent_worker_state import _add_canvas_tools
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-        Arrange: Patch sys.modules to make canvas import fail.
-        Act: Call _add_canvas_tools.
-        Assert: tools dict is empty, no exception raised.
-        """
-        # Arrange
         tools: dict[str, Any] = {}
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "src.infrastructure.agent.canvas.manager": None,
-            },
-        ):
-            import src.infrastructure.agent.state.agent_worker_state as mod
+        with pytest.raises(RuntimeV2Error) as error:
+            _add_canvas_tools(tools)
 
-            # Act
-            mod._add_canvas_tools(tools)
-
-        # Assert -- no error raised, tools still empty
-        assert len(tools) == 0
+        assert error.value.code == "operation_context_not_pinned"
+        assert tools == {}

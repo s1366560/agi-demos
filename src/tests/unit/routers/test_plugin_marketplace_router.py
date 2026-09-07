@@ -1,96 +1,161 @@
-"""Unit tests for marketplace catalog governance endpoints."""
+"""Protocol-v2 marketplace router authority and publication tests."""
 
 from __future__ import annotations
 
+import hashlib
+from collections.abc import AsyncIterator
 from typing import Any
 
+import httpx
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI, status
-from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.plugin_marketplace_install_service import (
-    MarketplaceInstallDecision,
-)
-from src.domain.model.plugins import parse_plugin_manifest
+from src.domain.model.plugins.generated_v2 import DataPlaneTargetV2, ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import plugin_marketplace
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
-    PlatformPluginApplyStateModel,
+    PlatformPluginCatalogModel,
+    PlatformPluginDesiredStateModel,
+    PlatformPluginPackageModel,
+    PlatformPluginPermissionModel,
+    PlatformPluginV2DesiredBundleSetModel,
+    PlatformPluginV2PublicationModel,
     Tenant,
     User,
     UserTenant,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
+    PlatformPluginDesiredBundleSetRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
-    PlatformPluginRepository,
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
+    PYTHON_API_DATA_PLANE_ID_V2,
 )
-from src.infrastructure.plugins.llm_adapters import LlmAdapterProviderRegistry
-from src.infrastructure.plugins.runtime_host import (
-    PlatformPluginRuntimeHost,
-    set_platform_plugin_runtime_host,
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
+    PlatformPluginRepositoryV2,
+)
+from src.infrastructure.plugins.v2.production_bundle import PRODUCTION_BASE_BUNDLE_ID_V2
+from src.infrastructure.plugins.v2.protocol import (
+    bundle_manifest_v2_to_payload,
+    parse_profile_snapshot_v2,
+)
+from src.tests.unit.application.services.test_plugin_marketplace_install_service import (
+    FakeArtifactClient,
+    _public_key_pem,
+    _request,
+    _signed_bundle,
 )
 
-MANIFEST = {
-    "schemaVersion": 1,
-    "id": "third-party-tool",
-    "version": "1.0.0",
-    "runtime": "wasm",
-    "trust": "signed",
-    "provides": [{"kind": "tool", "id": "demo", "permissions": ["tools.execute"]}],
-}
+pytestmark = pytest.mark.unit
 
 
-async def seed_package(db: AsyncSession) -> None:
-    repository = PlatformPluginGovernanceRepository(db)
-    await repository.upsert_package(
-        plugin_id="third-party-tool",
-        version="1.0.0",
+def _app(db: AsyncSession, current_user: User) -> FastAPI:
+    app = FastAPI()
+    app.include_router(plugin_marketplace.router)
+
+    async def override_db() -> AsyncIterator[AsyncSession]:
+        yield db
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: current_user
+    return app
+
+
+def _client(app: FastAPI) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://marketplace.test",
+    )
+
+
+async def _tenant_admin(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    tenant_id: str,
+) -> tuple[User, Tenant]:
+    tenant = Tenant(
+        id=tenant_id,
+        name=f"Tenant {tenant_id}",
+        slug=tenant_id,
+        owner_id=user_id,
+    )
+    user = User(
+        id=user_id,
+        email=f"{user_id}@example.com",
+        hashed_password="hashed",
+        full_name=user_id,
+        is_active=True,
+    )
+    db.add_all(
+        [
+            tenant,
+            user,
+            UserTenant(
+                id=f"membership-{tenant_id}",
+                user_id=user.id,
+                tenant_id=tenant.id,
+                role="admin",
+            ),
+        ]
+    )
+    await db.commit()
+    return user, tenant
+
+
+async def _seed_package(
+    db: AsyncSession,
+    *,
+    signer: Ed25519PrivateKey,
+) -> tuple[Any, bytes, str]:
+    bundle, archive = _signed_bundle(signer)
+    public_key = _public_key_pem(signer)
+    signature = bundle.signature
+    assert signature is not None
+    _ = await PlatformPluginGovernanceRepository(db).upsert_package(
+        plugin_id=bundle.bundle_id,
+        version=bundle.version,
         publisher="memstack",
-        artifact_digest="a" * 64,
-        manifest=MANIFEST,
-        signature={"algorithm": "Ed25519", "public_key_sha256": "b" * 64},
+        artifact_digest=hashlib.sha256(archive).hexdigest(),
+        artifact_registry="https://registry.memstack.test",
+        artifact_repository="memstack/plugins/third-party-tools",
+        oci_manifest_digest="1" * 64,
+        manifest=bundle_manifest_v2_to_payload(bundle),
+        signature={
+            "algorithm": "Ed25519",
+            "public_key_sha256": hashlib.sha256(public_key.encode("utf-8")).hexdigest(),
+            "signature_sha256": hashlib.sha256(signature.encode("ascii")).hexdigest(),
+        },
         provenance={"predicateType": "https://slsa.dev/provenance/v1"},
         security_scan_status="passed",
     )
     await db.commit()
+    return bundle, archive, public_key
 
 
-def make_client(
-    db: AsyncSession,
-    current_user: User,
-) -> TestClient:
-    app = FastAPI()
-    app.include_router(plugin_marketplace.router)
-
-    async def override_db() -> AsyncSession:
-        return db
-
-    app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_current_user] = lambda: current_user
-    return TestClient(app)
+async def _legacy_row_counts(db: AsyncSession) -> tuple[int, int]:
+    catalog = await db.scalar(select(func.count()).select_from(PlatformPluginCatalogModel))
+    desired = await db.scalar(select(func.count()).select_from(PlatformPluginDesiredStateModel))
+    return int(catalog or 0), int(desired or 0)
 
 
-@pytest.fixture(autouse=True)
-def isolated_runtime_host() -> Any:
-    """Give every marketplace mutation an isolated local data plane."""
-    host = PlatformPluginRuntimeHost(adapter_registry=LlmAdapterProviderRegistry())
-    set_platform_plugin_runtime_host(host)
-    try:
-        yield host
-    finally:
-        set_platform_plugin_runtime_host(None)
-
-
-@pytest.mark.unit
-async def test_marketplace_list_and_detail_hide_revoked_by_default(
+async def test_marketplace_list_and_detail_expose_only_v2_bundle_metadata(
     db_session: AsyncSession,
 ) -> None:
-    await seed_package(db_session)
+    bundle, _archive, _public_key = await _seed_package(
+        db_session,
+        signer=Ed25519PrivateKey.generate(),
+    )
     user = User(
         id="marketplace-reader",
         email="reader@example.com",
@@ -100,77 +165,58 @@ async def test_marketplace_list_and_detail_hide_revoked_by_default(
     )
     db_session.add(user)
     await db_session.commit()
-    client = make_client(db_session, user)
 
-    listing = client.get("/api/v1/plugin-marketplace/packages")
-    detail = client.get("/api/v1/plugin-marketplace/packages/third-party-tool")
+    async with _client(_app(db_session, user)) as client:
+        listing = await client.get("/api/v1/plugin-marketplace/packages")
+        detail = await client.get(f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}")
 
     assert listing.status_code == status.HTTP_200_OK
-    assert listing.json()[0]["plugin_id"] == "third-party-tool"
+    assert listing.json()[0]["plugin_id"] == bundle.bundle_id
     assert "public_key_pem" not in listing.json()[0]["signature"]
     assert detail.status_code == status.HTTP_200_OK
-    assert detail.json()["versions"][0]["manifest"] == MANIFEST
+    assert detail.json()["versions"][0]["manifest"]["schema_version"] == 2
+    assert await _legacy_row_counts(db_session) == (0, 0)
 
 
-@pytest.mark.unit
-async def test_marketplace_approval_requires_tenant_admin_and_persists_grant(
+async def test_marketplace_approval_requires_tenant_admin_and_persists_scoped_grant(
     db_session: AsyncSession,
 ) -> None:
-    await seed_package(db_session)
-    tenant = Tenant(
-        id="marketplace-tenant",
-        name="Marketplace Tenant",
-        slug="marketplace-tenant",
-        owner_id="marketplace-admin",
+    bundle, _archive, _public_key = await _seed_package(
+        db_session,
+        signer=Ed25519PrivateKey.generate(),
     )
-    user = User(
-        id="marketplace-admin",
-        email="admin@example.com",
-        hashed_password="hashed",
-        full_name="Admin",
-        is_active=True,
+    user, tenant = await _tenant_admin(
+        db_session,
+        user_id="marketplace-admin",
+        tenant_id="marketplace-tenant",
     )
-    db_session.add_all(
-        [
-            tenant,
-            user,
-            UserTenant(
-                id="marketplace-membership",
-                user_id=user.id,
-                tenant_id=tenant.id,
-                role="admin",
-            ),
-        ]
-    )
-    await db_session.commit()
-    client = make_client(db_session, user)
 
-    response = client.post(
-        "/api/v1/plugin-marketplace/packages/third-party-tool/approve",
-        json={
-            "version": "1.0.0",
-            "tenant_id": tenant.id,
-            "approved_permissions": ["tools.execute"],
-        },
-    )
+    async with _client(_app(db_session, user)) as client:
+        response = await client.post(
+            f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/approve",
+            json={
+                "version": bundle.version,
+                "tenant_id": tenant.id,
+                "approved_permissions": ["tools.execute"],
+            },
+        )
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["granted_permissions"] == ["tools.execute"]
     repository = PlatformPluginGovernanceRepository(db_session)
     assert [
         row.permission
-        for row in await repository.list_permissions(
-            "third-party-tool",
-            scope_id=tenant.id,
-        )
+        for row in await repository.list_permissions(bundle.bundle_id, scope_id=tenant.id)
     ] == ["tools.execute"]
 
 
-@pytest.mark.unit
-async def test_marketplace_revocation_requires_superuser_and_fails_closed(
+async def test_marketplace_revocation_requires_superuser_and_never_writes_v1(
     db_session: AsyncSession,
 ) -> None:
-    await seed_package(db_session)
+    bundle, _archive, _public_key = await _seed_package(
+        db_session,
+        signer=Ed25519PrivateKey.generate(),
+    )
     non_admin = User(
         id="marketplace-member",
         email="member@example.com",
@@ -189,219 +235,209 @@ async def test_marketplace_revocation_requires_superuser_and_fails_closed(
     db_session.add_all([non_admin, superuser])
     await db_session.commit()
 
-    forbidden = make_client(db_session, non_admin).post(
-        "/api/v1/plugin-marketplace/packages/third-party-tool/revoke",
-        json={"reason": "publisher compromised"},
-    )
-    revoked = make_client(db_session, superuser).post(
-        "/api/v1/plugin-marketplace/packages/third-party-tool/revoke",
-        json={"reason": "publisher compromised"},
-    )
-    listing = make_client(db_session, superuser).get(
-        "/api/v1/plugin-marketplace/packages",
-        params={"include_revoked": True},
-    )
+    async with _client(_app(db_session, non_admin)) as client:
+        forbidden = await client.post(
+            f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/revoke",
+            json={"reason": "publisher compromised"},
+        )
+    async with _client(_app(db_session, superuser)) as client:
+        revoked = await client.post(
+            f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/revoke",
+            json={"reason": "publisher compromised"},
+        )
+        listing = await client.get(
+            "/api/v1/plugin-marketplace/packages",
+            params={"include_revoked": True},
+        )
 
     assert forbidden.status_code == status.HTTP_403_FORBIDDEN
     assert revoked.status_code == status.HTTP_200_OK
-    assert revoked.json()["revoked_versions"] == ["1.0.0"]
+    assert revoked.json()["revoked_versions"] == [bundle.version]
     assert listing.json()[0]["revoked"] is True
+    assert await _legacy_row_counts(db_session) == (0, 0)
 
 
-@pytest.mark.unit
-async def test_marketplace_uninstall_removes_desired_state(
+async def test_marketplace_install_with_empty_trust_store_fails_closed(
     db_session: AsyncSession,
 ) -> None:
-    await seed_package(db_session)
-    tenant = Tenant(
-        id="marketplace-uninstall-tenant",
-        name="Uninstall Tenant",
-        slug="marketplace-uninstall-tenant",
-        owner_id="marketplace-uninstaller",
+    signer = Ed25519PrivateKey.generate()
+    bundle, archive = _signed_bundle(signer)
+    public_key = _public_key_pem(signer)
+    user, tenant = await _tenant_admin(
+        db_session,
+        user_id="marketplace-empty-trust-admin",
+        tenant_id="marketplace-empty-trust-tenant",
     )
-    user = User(
-        id="marketplace-uninstaller",
-        email="uninstaller@example.com",
-        hashed_password="hashed",
-        full_name="Uninstaller",
-        is_active=True,
-    )
-    db_session.add_all(
-        [
-            tenant,
-            user,
-            UserTenant(
-                id="marketplace-uninstall-membership",
-                user_id=user.id,
-                tenant_id=tenant.id,
-                role="admin",
-            ),
-        ]
-    )
-    await PlatformPluginRepository(db_session).set_desired_state(
-        plugin_id="third-party-tool",
-        enabled=True,
-        config={},
-    )
-    await db_session.commit()
+    user.is_superuser = True
     await db_session.commit()
 
-    response = make_client(db_session, user).post(
-        "/api/v1/plugin-marketplace/packages/third-party-tool/uninstall",
-        json={"version": "1.0.0", "tenant_id": tenant.id},
+    async with _client(_app(db_session, user)) as client:
+        response = await client.post(
+            f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/install",
+            json=_request(bundle, archive, public_key)
+            .model_copy(update={"tenant_id": tenant.id})
+            .model_dump(mode="json"),
+        )
+
+    desired = await PlatformPluginDesiredBundleSetRepositoryV2(db_session).current_desired_set(
+        ScopeV2(kind=ScopeKindV2.ROOT)
     )
-    desired = await PlatformPluginRepository(db_session).get_desired_state("third-party-tool")
     package = await PlatformPluginGovernanceRepository(db_session).get_package_version(
-        "third-party-tool",
-        "1.0.0",
+        bundle.bundle_id,
+        bundle.version,
     )
-
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json() == {
-        "plugin_id": "third-party-tool",
-        "version": "1.0.0",
-        "status": "uninstalled",
-        "desired_removed": True,
-        "revoked_permissions": 0,
-    }
+    assert response.status_code == status.HTTP_202_ACCEPTED
+    assert response.json()["status"] == "quarantined"
+    assert "trust store is empty" in response.json()["reason"]
     assert desired is None
-    assert package is not None
-    assert package.install_status == "uninstalled"
+    assert package is None
+    assert await _legacy_row_counts(db_session) == (0, 0)
 
 
-class _ApprovedInstallService:
-    """Fake install service persisting the same rows as an approved install."""
-
-    def __init__(self, db: AsyncSession) -> None:
-        self._db = db
-
-    async def request_install(self, *, request: Any) -> MarketplaceInstallDecision:
-        governance = PlatformPluginGovernanceRepository(self._db)
-        plugins = PlatformPluginRepository(self._db)
-        await governance.upsert_package(
-            plugin_id=request.plugin_id,
-            version=request.version,
-            publisher=request.publisher,
-            artifact_digest=request.artifact_sha256,
-            manifest=request.manifest,
-            signature={"algorithm": "Ed25519", "public_key_sha256": "b" * 64},
-            provenance={"predicateType": request.provenance.predicate_type},
-            security_scan_status="passed",
-        )
-        await plugins.upsert_catalog_manifest(parse_plugin_manifest(request.manifest))
-        await plugins.set_desired_state(
-            plugin_id=request.plugin_id,
-            enabled=True,
-            config={},
-        )
-        return MarketplaceInstallDecision(
-            status="approved",
-            plugin_id=request.plugin_id,
-            version=request.version,
-            reason="verified",
-            desired_revision=1,
-        )
-
-
-def _install_payload(tenant_id: str) -> dict[str, Any]:
-    return {
-        "plugin_id": "third-party-tool",
-        "version": "1.0.0",
-        "publisher": "memstack",
-        "tenant_id": tenant_id,
-        "artifact": {
-            "registry": "https://registry.example.test",
-            "repository": "memstack/third-party-tool",
-            "manifest_sha256": "c" * 64,
-        },
-        "artifact_sha256": "a" * 64,
-        "manifest": MANIFEST,
-        "signature": {
-            "algorithm": "Ed25519",
-            "public_key_pem": "pem",
-            "signature_base64": "c2ln",
-        },
-        "provenance": {
-            "predicate_type": "https://slsa.dev/provenance/v1",
-            "builder_id": "test-builder",
-            "subject_name": "third-party-tool",
-        },
-        "approved_permissions": ["tools.execute"],
-        "tenant_admin_approved": True,
-        "security_scan_passed": True,
-    }
-
-
-@pytest.mark.unit
-async def test_install_and_uninstall_close_the_snapshot_distribution_loop(
+async def test_marketplace_v2_publication_is_idempotent_retains_last_good_and_uninstalls(  # noqa: PLR0915
     db_session: AsyncSession,
-    isolated_runtime_host: PlatformPluginRuntimeHost,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tenant = Tenant(
-        id="marketplace-loop-tenant",
-        name="Loop Tenant",
-        slug="marketplace-loop-tenant",
-        owner_id="marketplace-loop-admin",
+    signer = Ed25519PrivateKey.generate()
+    public_key = _public_key_pem(signer)
+    bundle, archive = _signed_bundle(signer)
+    artifact_client = FakeArtifactClient(archive)
+    user, tenant = await _tenant_admin(
+        db_session,
+        user_id="marketplace-loop-admin",
+        tenant_id="marketplace-loop-tenant",
     )
-    user = User(
-        id="marketplace-loop-admin",
-        email="loop-admin@example.com",
-        hashed_password="hashed",
-        full_name="Loop Admin",
-        is_active=True,
-    )
-    db_session.add_all(
-        [
-            tenant,
-            user,
-            UserTenant(
-                id="marketplace-loop-membership",
-                user_id=user.id,
-                tenant_id=tenant.id,
-                role="admin",
-            ),
-        ]
-    )
+    user.is_superuser = True
     await db_session.commit()
-    client = make_client(db_session, user)
-
-    async def override_service() -> Any:
-        yield _ApprovedInstallService(db_session)
-
-    client.app.dependency_overrides[plugin_marketplace._service] = override_service
-
-    installed = client.post(
-        "/api/v1/plugin-marketplace/packages/third-party-tool/install",
-        json=_install_payload(tenant.id),
+    app = _app(db_session, user)
+    app.state.plugin_marketplace_trusted_public_keys_v2 = (public_key,)
+    monkeypatch.setattr(
+        plugin_marketplace,
+        "OciPluginArtifactClient",
+        lambda _client: artifact_client,
+    )
+    host = await initialize_plugin_runtime_v2(app)
+    payload = (
+        _request(bundle, archive, public_key)
+        .model_copy(update={"tenant_id": tenant.id})
+        .model_dump(mode="json")
     )
 
-    assert installed.status_code == status.HTTP_202_ACCEPTED
-    assert installed.json()["status"] == "approved"
+    try:
+        async with _client(app) as client:
+            installed = await client.post(
+                f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/install",
+                json=payload,
+            )
+            repeated = await client.post(
+                f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/install",
+                json=payload,
+            )
 
-    plugins = PlatformPluginRepository(db_session)
-    first_snapshot = await plugins.latest_snapshot()
-    assert first_snapshot is not None
-    assert first_snapshot.version == 1
-    installed_ids = [row["id"] for row in first_snapshot.payload["plugins"]]
-    assert "third-party-tool" in installed_ids
-    assert isolated_runtime_host.capabilities.list_capabilities("third-party-tool")
+            bad_bundle, bad_archive = _signed_bundle(
+                signer,
+                version="2.0.0",
+                module_ref="marketplace://unknown/runtime-v2",
+                target=DataPlaneTargetV2.PYTHON,
+            )
+            artifact_client.archive = bad_archive
+            artifact_client.layer_digest = hashlib.sha256(bad_archive).hexdigest()
+            bad_payload = (
+                _request(bad_bundle, bad_archive, public_key)
+                .model_copy(update={"tenant_id": tenant.id})
+                .model_dump(mode="json")
+            )
+            nacked = await client.post(
+                f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/install",
+                json=bad_payload,
+            )
 
-    apply_state = await db_session.execute(
-        select(PlatformPluginApplyStateModel).where(
-            PlatformPluginApplyStateModel.data_plane_id == "python-backend"
+            host_after_nack = host.current_distribution
+            assert host_after_nack is not None
+            assert host_after_nack.snapshot.generation == 2
+            repository = PlatformPluginRepositoryV2(db_session)
+            degraded = await repository.latest_publication_readiness()
+            assert degraded is not None
+            assert degraded.status.value == "degraded"
+            last_good = await repository.last_good_distribution(PYTHON_API_DATA_PLANE_ID_V2)
+            assert last_good is not None
+            assert parse_profile_snapshot_v2(last_good["snapshot"]).generation == 2
+
+            uninstalled = await client.post(
+                f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/uninstall",
+                json={"version": bad_bundle.version, "tenant_id": tenant.id},
+            )
+
+        desired = await PlatformPluginDesiredBundleSetRepositoryV2(db_session).current_desired_set(
+            ScopeV2(kind=ScopeKindV2.ROOT)
         )
-    )
-    assert apply_state.scalar_one().status == "ack"
+        readiness = await PlatformPluginRepositoryV2(db_session).latest_publication_readiness()
+        publication_count = await db_session.scalar(
+            select(func.count()).select_from(PlatformPluginV2PublicationModel)
+        )
+        current = host.current_distribution
 
-    uninstalled = client.post(
-        "/api/v1/plugin-marketplace/packages/third-party-tool/uninstall",
-        json={"version": "1.0.0", "tenant_id": tenant.id},
-    )
+        assert installed.status_code == status.HTTP_202_ACCEPTED
+        assert installed.json()["status"] == "approved"
+        assert repeated.status_code == status.HTTP_202_ACCEPTED
+        assert repeated.json()["status"] == "approved"
+        assert nacked.status_code == status.HTTP_202_ACCEPTED
+        assert nacked.json()["status"] == "approved"
+        assert uninstalled.status_code == status.HTTP_200_OK
+        assert uninstalled.json()["desired_removed"] is True
+        assert desired is not None
+        assert desired.desired_set.revision == 4
+        assert [reference.bundle_id for reference in desired.desired_set.bundles] == [
+            PRODUCTION_BASE_BUNDLE_ID_V2
+        ]
+        assert readiness is not None
+        assert readiness.status.value == "ready"
+        assert publication_count == 3
+        assert current is not None
+        assert current.snapshot.generation == 4
+        assert all(
+            manifest.plugin_id != "third-party-tool" for manifest in current.snapshot.manifests
+        )
+        assert await _legacy_row_counts(db_session) == (0, 0)
+    finally:
+        await shutdown_plugin_runtime_v2(app)
 
-    assert uninstalled.status_code == status.HTTP_200_OK
-    second_snapshot = await plugins.latest_snapshot()
-    assert second_snapshot is not None
-    assert second_snapshot.version == 2
-    remaining_ids = [row["id"] for row in second_snapshot.payload["plugins"]]
-    assert "third-party-tool" not in remaining_ids
-    assert isolated_runtime_host.capabilities.list_capabilities("third-party-tool") == ()
+
+@pytest.mark.parametrize("operation", ["install", "uninstall"])
+async def test_tenant_admin_cannot_mutate_root_marketplace_state(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    signer = Ed25519PrivateKey.generate()
+    public_key = _public_key_pem(signer)
+    bundle, archive = _signed_bundle(signer)
+    user, tenant = await _tenant_admin(
+        db_session, user_id="root-denied-admin", tenant_id="root-denied-tenant"
+    )
+    assert user.is_superuser is False
+    app = _app(db_session, user)
+    app.state.plugin_marketplace_trusted_public_keys_v2 = (public_key,)
+    monkeypatch.setattr(
+        plugin_marketplace, "OciPluginArtifactClient", lambda _client: FakeArtifactClient(archive)
+    )
+    payload = (
+        _request(bundle, archive, public_key)
+        .model_copy(update={"tenant_id": tenant.id})
+        .model_dump(mode="json")
+        if operation == "install"
+        else {"version": bundle.version, "tenant_id": tenant.id}
+    )
+    async with _client(app) as client:
+        response = await client.post(
+            f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/{operation}", json=payload
+        )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    for model in (
+        PlatformPluginV2DesiredBundleSetModel,
+        PlatformPluginV2PublicationModel,
+        PlatformPluginPackageModel,
+        PlatformPluginPermissionModel,
+    ):
+        assert await db_session.scalar(select(func.count()).select_from(model)) == 0
+    assert await _legacy_row_counts(db_session) == (0, 0)

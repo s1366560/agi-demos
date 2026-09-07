@@ -1,3 +1,9 @@
+config:
+  environment: production
+  # Logical data planes deployed by this chart. Pod replicas share the Python plane ID.
+  pluginV2RequiredDataPlaneIds: python-api-v2
+  pluginV2AckDeadlineSeconds: 30
+
 secrets:
   existingSecret: memstack-secrets
 

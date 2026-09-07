@@ -3,7 +3,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from src.infrastructure.logging_redaction import install_sensitive_log_redaction
 
@@ -27,52 +27,75 @@ from redis.asyncio import Redis
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from src.application.services.marketplace_receipt_recovery_v2 import MarketplaceReceiptRecoveryV2
 from src.configuration.config import get_settings
+from src.configuration.factories import create_native_graph_adapter
 from src.configuration.workspace_core import WorkspaceCoreSettings, get_workspace_core_settings
+from src.domain.ports.services.graph_store_port import GraphStorePort
+from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
+from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
     install_api_access_log_middleware,
 )
 from src.infrastructure.adapters.primary.web.startup import (
-    initialize_artifact_content_orphan_gc_worker,
-    initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
-    initialize_docker_services,
-    initialize_graph_service,
     initialize_llm_providers,
     initialize_redis_client,
-    initialize_sandbox_idle_reaper,
     initialize_telemetry,
-    initialize_websocket_manager,
-    initialize_workflow_engine,
-    install_http_route_capabilities,
-    shutdown_artifact_content_orphan_gc_worker,
-    shutdown_channel_manager,
-    shutdown_docker_services,
-    shutdown_sandbox_idle_reaper,
+    mount_generation_http_dispatcher_v2,
     shutdown_telemetry_services,
-    sync_health_checker_providers,
 )
-from src.infrastructure.adapters.primary.web.startup.graph import (
-    shutdown_graph_service,
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    plugin_runtime_host_v2_from_scope,
+    shutdown_plugin_runtime_v2,
+)
+from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+    get_connection_manager,
 )
 from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
-    shutdown_workspace_core_runtime,
-    start_workspace_core_runtime,
+    create_workspace_core_runtime_service_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
 )
-from src.infrastructure.llm.resilience.health_checker import (
-    start_health_checker,
-    stop_health_checker,
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_deadline_reconciler_v2 import (
+    PlatformPluginDeadlineReconcilerV2,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
+    PlatformPluginPublicationPolicyV2,
+)
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.middleware.rate_limit import limiter
-from src.infrastructure.plugins.route_loader import install_builtin_routes
+from src.infrastructure.plugins.v2.agent_pool_runtime import (
+    default_agent_pool_runtime_config_v2,
+)
+from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
+from src.infrastructure.plugins.v2.channel_runtime import ChannelRuntimeManagerV2
+from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
+from src.infrastructure.plugins.v2.reflection_runtime import ReflectionRuntimeManagerV2
+from src.infrastructure.plugins.v2.telemetry_runtime import TelemetryRuntimeManagerV2
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
+from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+class _RedisConfigurableGraph(Protocol):
+    def set_redis_client(self, redis_client: Redis) -> None: ...
+
+
+async def _create_generation_graph_runtime(redis_client: Redis | None) -> GraphStorePort:
+    """Build and configure the graph resource for every candidate generation."""
+    graph_service = await create_native_graph_adapter()
+    if redis_client is not None and hasattr(graph_service, "set_redis_client"):
+        configurable_graph = cast("_RedisConfigurableGraph", graph_service)
+        configurable_graph.set_redis_client(redis_client)
+    return graph_service
+
 
 # Fix LiteLLM duplicate logging - prevent log propagation to root logger
 # LiteLLM adds its own handler AND allows propagation by default, causing duplicate logs
@@ -89,326 +112,150 @@ logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915, C901, PLR0912
+async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     """Application lifespan manager - handles startup and shutdown."""
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
 
-    # Initialize OpenTelemetry and Langfuse
-    await initialize_telemetry()
+    from .startup.plugin_trust_v2 import configure_plugin_trust_v2
+    from .startup.scoped_profile_runtime_v2 import (
+        initialize_scoped_profile_runtime_v2,
+    )
+
+    configure_plugin_trust_v2(
+        app,
+        key_files=settings.plugin_marketplace_trusted_key_files,
+        allowed_registries=settings.plugin_marketplace_allowed_registries,
+    )
 
     # Initialize Database Schema and Default Credentials
     await initialize_database_schema()
-    http_route_assembler = await install_http_route_capabilities(
-        app,
-        session_factory=async_session_factory,
-    )
-    app.state.platform_plugin_http_routes = http_route_assembler
-
     # Initialize Default LLM Provider from environment
     await initialize_llm_providers()
-    health_provider_count = await sync_health_checker_providers()
-    await start_health_checker()
-    logger.info("LLM health checker started with %d active providers", health_provider_count)
-
-    # Initialize NativeGraphAdapter (self-developed knowledge graph engine)
-    graph_service = await initialize_graph_service()
-
-    # Initialize Workflow Engine
-    workflow_engine = await initialize_workflow_engine(graph_service)
-
-    # Initialize Background Task Manager
-    from src.infrastructure.adapters.secondary.background_tasks import task_manager
-
-    task_manager.start_cleanup()
-    logger.info("Background task manager started")
 
     # Initialize Redis client for event bus
     redis_client = await initialize_redis_client()
-    # Wire Redis into graph service for cached embedding support
-    if redis_client and graph_service and hasattr(graph_service, "set_redis_client"):
-        graph_service.set_redis_client(redis_client)  # type: ignore[arg-type]  # runtime type is Redis
-    try:
-        from src.infrastructure.retrieval.registry import register_env_default_retrieval_store
-        from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
-
-        retrieval_store = MemstackPgvectorRetrievalStore(
-            session_factory=async_session_factory,
-            embedding_service=getattr(graph_service, "embedder", None),
-        )
-        register_env_default_retrieval_store(retrieval_store)
-        app.state.retrieval_store = retrieval_store
-        logger.info("Registered env-default retrieval backend in registry")
-    except Exception:
-        logger.exception("Failed to register env-default retrieval backend")
-
-    # Initialize DI Container
-    container = initialize_container(
-        graph_service=graph_service,
-        redis_client=redis_client,
-        workflow_engine=workflow_engine,
+    telemetry_runtime_manager = TelemetryRuntimeManagerV2(
+        start=initialize_telemetry,
+        stop=shutdown_telemetry_services,
+    )
+    channel_runtime_manager = ChannelRuntimeManagerV2()
+    reflection_runtime_manager = (
+        ReflectionRuntimeManagerV2(redis_client=redis_client) if redis_client is not None else None
     )
 
-    app.state.container = container
-    app.state.workflow_engine = workflow_engine
-    app.state.graph_service = graph_service
+    async def graph_runtime_factory() -> GraphStorePort:
+        return await _create_generation_graph_runtime(cast("Redis | None", redis_client))
 
-    # Register WebSocket manager for lifecycle state notifications
-    initialize_websocket_manager()
+    def retrieval_runtime_factory(graph_runtime: GraphRuntimeServiceV2) -> RetrievalStorePort:
+        return MemstackPgvectorRetrievalStore(
+            session_factory=async_session_factory,
+            embedding_service=getattr(graph_runtime.graph_service, "embedder", None),
+        )
 
-    # Initialize Docker services (sandbox sync and event monitor)
-    await initialize_docker_services(container)
+    def sandbox_runtime_factory() -> MCPSandboxAdapter | None:
+        try:
+            return MCPSandboxAdapter(
+                mcp_image=settings.sandbox_default_image,
+                default_timeout=settings.sandbox_timeout_seconds,
+                default_memory_limit=settings.sandbox_memory_limit,
+                default_cpu_limit=settings.sandbox_cpu_limit,
+                workspace_base=settings.sandbox_workspace_base,
+                redis_client=redis_client,
+            )
+        except SandboxConnectionError:
+            logger.warning("Sandbox runtime unavailable because Docker is not reachable")
+            return None
 
-    # Initialize sandbox idle reaper (opt-in; disabled by default)
-    await initialize_sandbox_idle_reaper(container)
+    workspace_core_settings = getattr(app.state, "workspace_core_settings", None)
+    if not isinstance(workspace_core_settings, WorkspaceCoreSettings):
+        raise RuntimeError("Workspace Core settings are not installed")
+
+    async def workspace_core_runtime_factory() -> WorkspaceCoreRuntimeServiceV2:
+        return await create_workspace_core_runtime_service_v2(
+            workspace_core_settings,
+            scoped_runtime_provider=lambda: getattr(app.state, "scoped_profile_runtime_v2", None),
+        )
+
+    # Publish V2 before constructing legacy DI consumers. Graph, retrieval, and
+    # sandbox/workflow resources are created by candidate effects and are not
+    # retained by the legacy application container.
+    publication_policy = PlatformPluginPublicationPolicyV2.from_deployment(
+        environment=settings.environment,
+        required_data_plane_ids=settings.plugin_v2_required_data_plane_ids,
+        ack_deadline_seconds=settings.plugin_v2_ack_deadline_seconds,
+    )
+    _ = await initialize_plugin_runtime_v2(
+        app,
+        session_factory=async_session_factory,
+        agent_lifecycle_connection_manager=get_connection_manager(),
+        agent_pool_runtime_enabled=settings.agent_pool_enabled,
+        agent_pool_runtime_config=default_agent_pool_runtime_config_v2(
+            health_check_interval_seconds=settings.agent_pool_health_check_interval_seconds,
+        ),
+        graph_runtime_factory=graph_runtime_factory,
+        retrieval_runtime_factory=retrieval_runtime_factory,
+        sandbox_runtime_factory=sandbox_runtime_factory,
+        sandbox_redis_client=redis_client,
+        telemetry_runtime_manager=telemetry_runtime_manager,
+        channel_runtime_manager=channel_runtime_manager,
+        reflection_runtime_manager=reflection_runtime_manager,
+        workspace_core_runtime_factory=workspace_core_runtime_factory,
+        publication_policy=publication_policy,
+    )
+    try:
+        _ = initialize_scoped_profile_runtime_v2(
+            app, session_factory=async_session_factory, redis_client=redis_client
+        )
+        # Initialize DI Container
+        container = initialize_container(redis_client=redis_client)
+
+        app.state.container = container
+        deadline_reconciler = PlatformPluginDeadlineReconcilerV2(
+            session_factory=async_session_factory,
+        )
+        app.state.platform_plugin_deadline_reconciler_v2 = deadline_reconciler
+        deadline_reconciler.start()
+        receipt_recovery = MarketplaceReceiptRecoveryV2(
+            host=app.state.platform_plugin_runtime_v2,
+            coordinator=app.state.platform_plugin_http_route_publication_v2,
+            session_factory=async_session_factory,
+            policy=publication_policy,
+            trusted_public_keys=tuple(app.state.plugin_marketplace_trusted_public_keys_v2),
+            allowed_registries=frozenset(app.state.plugin_marketplace_allowed_registries_v2),
+            on_route_commit=lambda graph: setattr(
+                app.state, "platform_plugin_route_graph_v2", graph
+            ),
+        )
+        app.state.platform_plugin_receipt_recovery_v2 = receipt_recovery
+        receipt_recovery.start()
+    except BaseException:
+        await _shutdown_application_plugins_v2(app)
+        raise
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
 
-    # Start Skill Evolution Plugin scheduler (periodic pipeline for SKILL.md improvement)
     try:
-        async with async_session_factory() as db:
-            plugin = container.with_db(db).skill_evolution_plugin()
-        if plugin is not None:
-            app.state.skill_evolution_plugin = plugin
-            await plugin.on_enable()
-            logger.info("Skill evolution plugin scheduler started")
-        else:
-            logger.info("Skill evolution plugin not started (disabled or missing dependencies)")
-    except Exception:
-        logger.exception("Failed to start skill evolution plugin")
+        yield
+    finally:
+        await _shutdown_application_plugins_v2(app)
 
-    # Resume bounded cleanup of provisional Artifact objects after process restarts.
-    await initialize_artifact_content_orphan_gc_worker(
-        storage_service=container.storage_service(),
-    )
 
-    # Start Avernet recovery only after DB-backed DI services are ready.
-    await start_workspace_core_runtime(app)
-
-    # Initialize Channel Connection Manager for IM integrations
-    channel_manager = await initialize_channel_manager()
-    if channel_manager:
-        app.state.channel_manager = channel_manager
-        logger.info("Channel connection manager initialized")
-
-    # Initialize APScheduler for cron jobs
-    try:
-        from src.infrastructure.scheduler.scheduler_service import (
-            start_scheduler,
-            sync_all_jobs,
-        )
-
-        _ = await start_scheduler()
-        await sync_all_jobs()
-        logger.info("Cron job scheduler initialized")
-    except Exception:
-        logger.exception("Failed to start cron scheduler -- cron jobs disabled")
-
-    # Wire the friction → playbook reflection loop. All three calls are
-    # best-effort: a failure here disables reflection but never blocks
-    # application startup.
-    try:
-        from src.application.services.friction_runtime import (
-            configure_friction_ingest,
-        )
-        from src.application.services.reflection_events import (
-            ReflectionCompleteStatus,
-            publish_reflection_complete,
-        )
-        from src.application.services.reflection_factory import (
-            default_in_memory_ledger,
-        )
-        from src.application.services.reflection_service import (
-            ReflectionService,
-        )
-        from src.domain.model.flow.reflection_verdict import ReflectionVerdict
-        from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
-        from src.infrastructure.adapters.secondary.cache.redis_friction_ledger import (
-            RedisFrictionLedger,
-        )
-        from src.infrastructure.agent.tools.reflection_tool import (
-            configure_reflection_complete_emitter,
-            configure_reflection_tool,
-        )
-
-        ledger: Any = (
-            RedisFrictionLedger(redis_client)  # type: ignore[arg-type]
-            if redis_client is not None
-            else default_in_memory_ledger()
-        )
-        # Canonical happy-path order; backward moves emit BOUNCE signals.
-        lane_order = (
-            WorkspaceTaskStatus.TODO.value,
-            WorkspaceTaskStatus.DISPATCHED.value,
-            WorkspaceTaskStatus.EXECUTING.value,
-            WorkspaceTaskStatus.REPORTED.value,
-            WorkspaceTaskStatus.ADJUDICATING.value,
-            WorkspaceTaskStatus.DONE.value,
-        )
-        configure_friction_ingest(ledger, lane_order=lane_order)
-
-        async def _reflection_provider(
-            project_id: str,
-        ) -> "ReflectionService | None":
-            """Per-call session-scoped ReflectionService for the agent tool.
-
-            Mirrors the contract used by ``ReflectionRunner``: opens a fresh
-            DB session, builds the SQL-backed service, and returns an object
-            whose ``reflect_window`` commits before returning.
-            """
-            session_factory = container._session_factory
-            if session_factory is None:
-                return None
-            active_session_factory = session_factory
-
-            class _SessionScopedReflection:
-                async def reflect_window(self, pid: str) -> list[ReflectionVerdict]:
-                    async with active_session_factory() as session:
-                        service = await container.reflection_service(pid, session=session)
-                        verdicts = await service.reflect_window(pid)
-                        await session.commit()
-                        return cast("list[ReflectionVerdict]", verdicts)
-
-            del project_id  # service is keyed by reflect_window's argument
-            return cast("ReflectionService", _SessionScopedReflection())
-
-        configure_reflection_tool(_reflection_provider)
-
-        async def _emit_completion(
-            project_id: str,
-            verdicts: list[ReflectionVerdict],
-            status: ReflectionCompleteStatus,
-            error: str | None,
-            run_id: str | None,
-        ) -> None:
-            if redis_client is None:
-                return
-            await publish_reflection_complete(
-                redis_client=cast("Redis", redis_client),
-                project_id=project_id,
-                verdicts=verdicts,
-                status=status,
-                source="tool",
-                run_id=run_id,
-                error=error,
-            )
-
-        configure_reflection_complete_emitter(_emit_completion)
-
-        runner = container.reflection_runner()
-        runner.start()
-        app.state.reflection_runner = runner
-        logger.info("Reflection runtime wired (friction ledger + runner started)")
-    except Exception:
-        logger.exception("Failed to wire reflection runtime -- loop disabled")
-
-    yield
-
-    # Remove plugin-owned routes before application state services unwind.
-    http_routes = getattr(app.state, "platform_plugin_http_routes", None)
-    if http_routes is not None:
-        http_routes.dispose()
-        app.state.platform_plugin_http_routes = None
-
-    # Stop new recovery claims and drain all persisted Provider callbacks
-    # before their DB, Redis, and Agent Runtime dependencies are torn down.
-    await shutdown_workspace_core_runtime(app)
-
-    # Stop cron job scheduler
-    try:
-        from src.infrastructure.scheduler.scheduler_service import stop_scheduler
-
-        await stop_scheduler()
-    except Exception:
-        logger.exception("Error stopping cron scheduler")
-
-    # Stop Skill Evolution Plugin scheduler
-    try:
-        plugin = getattr(app.state, "skill_evolution_plugin", None)
-        if plugin is not None:
-            await plugin.on_disable()
-            logger.info("Skill evolution plugin scheduler stopped")
-            app.state.skill_evolution_plugin = None
-    except Exception:
-        logger.exception("Error stopping skill evolution plugin")
-
-    # Stop reflection runner
-    try:
-        runner = getattr(app.state, "reflection_runner", None)
-        if runner is not None:
-            await runner.stop()
-            logger.info("Reflection runner stopped")
-    except Exception:
-        logger.exception("Error stopping reflection runner")
-    try:
-        from src.application.services.friction_runtime import (
-            reset_friction_ingest,
-        )
-        from src.infrastructure.agent.tools.reflection_tool import (
-            configure_reflection_complete_emitter,
-            configure_reflection_tool,
-        )
-
-        reset_friction_ingest()
-        configure_reflection_complete_emitter(None)
-        configure_reflection_tool(None)  # type: ignore[arg-type]
-    except Exception:
-        logger.exception("Error tearing down friction/reflection wiring")
-
-    await stop_health_checker()
-
-    # Stop sandbox idle reaper
-    await shutdown_sandbox_idle_reaper()
-
-    # Stop Artifact content orphan GC after current bounded work.
-    await shutdown_artifact_content_orphan_gc_worker()
-
-    # Close MCP websocket clients owned by sandbox adapters without
-    # terminating containers; they are recovered from Docker on startup.
-    try:
-        from src.infrastructure.adapters.primary.web.routers.sandbox.utils import (
-            shutdown_sandbox_adapter_singleton,
-        )
-
-        await shutdown_sandbox_adapter_singleton()
-    except Exception:
-        logger.exception("Error closing API sandbox adapter")
+async def _shutdown_application_plugins_v2(app: FastAPI) -> None:
+    from .startup.scoped_profile_runtime_v2 import shutdown_scoped_profile_runtime_v2
 
     try:
-        from src.infrastructure.agent.state.agent_worker_state import (
-            shutdown_mcp_sandbox_adapter,
-        )
-
-        await shutdown_mcp_sandbox_adapter()
-    except Exception:
-        logger.exception("Error closing agent MCP sandbox adapter")
-
-    try:
-        infra_container = getattr(app.state.container, "_infra", None)
-        sandbox_adapter = getattr(infra_container, "_sandbox_adapter_instance", None)
-        if infra_container is not None and sandbox_adapter is not None:
-            await sandbox_adapter.close()
-            infra_container._sandbox_adapter_instance = None
-            logger.info("Container sandbox adapter closed")
-    except Exception:
-        logger.exception("Error closing container sandbox adapter")
-
-    # Shutdown
-    logger.info("Shutting down...")
-
-    # Shutdown channel manager (close all IM connections)
-    await shutdown_channel_manager()
-
-    # Stop Docker event monitor
-    await shutdown_docker_services()
-
-    # Shutdown OpenTelemetry
-    shutdown_telemetry_services()
-
-    # Close Neo4j connection
-    if graph_service is not None:
-        await shutdown_graph_service(graph_service)
+        await shutdown_scoped_profile_runtime_v2(app)
+    finally:
+        http_routes = getattr(app.state, "platform_plugin_http_routes", None)
+        try:
+            if http_routes is not None:
+                http_routes.dispose()
+                app.state.platform_plugin_http_routes = None
+        finally:
+            logger.info("Shutting down...")
+            await shutdown_plugin_runtime_v2(app)
 
 
 def create_app(
@@ -571,6 +418,10 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     from src.infrastructure.i18n.middleware import LocaleMiddleware
 
     app.add_middleware(LocaleMiddleware)
+    app.add_middleware(
+        PluginGenerationMiddlewareV2,
+        host_provider=plugin_runtime_host_v2_from_scope,
+    )
 
     # Configure rate limiting
     app.state.limiter = limiter
@@ -588,13 +439,20 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     if _static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
-    # Register builtin route rows from the data-driven baseline
-    # (config/plugin-profiles/builtin-routes.v1.json). The loader replays the
-    # exact registration order and prefixes recorded there; the interleaved
-    # workspace-core helpers mount at their baseline positions.
+    # Authentication remains a non-pluginized kernel route during v2 cutover.
+    from src.infrastructure.adapters.primary.web.routers import auth
+
+    app.include_router(auth.router, prefix="/api/v1")
+
+    # One stable catch-all route resolves the generation pinned by middleware.
+    # Legacy registrations remain after it as an unreachable rollback surface
+    # until REST/WS parity and native acceptance are complete.
+    mount_generation_http_dispatcher_v2(app)
+
+    # Workspace Core configuration remains kernel-owned while its routes and
+    # runtime capabilities are contributed by the pinned V2 generation.
     workspace_core_settings = workspace_core_settings or get_workspace_core_settings()
     app.state.workspace_core_settings = workspace_core_settings
-    install_builtin_routes(app, workspace_core_settings=workspace_core_settings)
 
     return app
 

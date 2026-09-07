@@ -708,6 +708,7 @@ impl DesktopSessionStore {
             .map_err(|error| AuthContextError::Storage(error.to_string()))
     }
 
+    #[cfg(test)]
     pub(super) fn workspace_context(
         &self,
         user_id: &str,

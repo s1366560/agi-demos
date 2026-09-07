@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
+import {
+  createDesktopProjectChannelsClientV2,
+  type DesktopProjectChannelsOperationsV2,
+} from '../../plugins/desktopProjectChannelsAuthorityModuleV2';
 import type {
   CreateManagedChannelConfigRequest,
   DesktopRuntimeConfig,
@@ -9,7 +12,6 @@ import type {
   ManagedChannelPluginConfigSchema,
   UpdateManagedChannelConfigRequest,
 } from '../../types';
-import { legacyChannelConfigSchema } from './channelConnectionModel';
 
 export type ChannelConnectionEditorState = {
   key: string;
@@ -24,11 +26,13 @@ export function useChannelConnectionManagement({
   config,
   contextKey,
   canManage,
+  projectChannelsOperationsV2,
 }: {
   active: boolean;
   config: DesktopRuntimeConfig;
   contextKey: string;
   canManage: boolean;
+  projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
 }) {
   const [openState, setOpenState] = useState(false);
   const [configs, setConfigs] = useState<ManagedChannelConfig[]>([]);
@@ -41,6 +45,19 @@ export function useChannelConnectionManagement({
   const contextKeyRef = useRef(contextKey);
   const requestIdRef = useRef(0);
   contextKeyRef.current = contextKey;
+  const client = useMemo(
+    () => createDesktopProjectChannelsClientV2(projectChannelsOperationsV2, config),
+    [config, projectChannelsOperationsV2],
+  );
+  const scope = useMemo(
+    () =>
+      Object.freeze({
+        authority: config.mode,
+        tenantId: config.tenantId,
+        projectId: config.projectId,
+      }),
+    [config.mode, config.projectId, config.tenantId],
+  );
 
   useEffect(() => {
     requestIdRef.current += 1;
@@ -61,14 +78,10 @@ export function useChannelConnectionManagement({
     setLoading(true);
     setError(null);
     try {
-      const client = new DesktopApiClient(config);
-      const [nextConfigs, nextCatalog] = await Promise.all([
-        client.listManagedChannelConfigs(),
-        client.listManagedChannelCatalog(),
-      ]);
+      const snapshot = await client.observe(scope);
       if (requestId !== requestIdRef.current || contextKeyRef.current !== requestContextKey) return;
-      setConfigs(nextConfigs);
-      setCatalog(nextCatalog);
+      setConfigs([...snapshot.configs]);
+      setCatalog([...snapshot.catalog]);
     } catch (caught) {
       if (requestId === requestIdRef.current && contextKeyRef.current === requestContextKey) {
         setError(errorMessage(caught));
@@ -78,7 +91,7 @@ export function useChannelConnectionManagement({
         setLoading(false);
       }
     }
-  }, [config, contextKey]);
+  }, [client, contextKey, scope]);
 
   const open = useCallback(() => {
     if (!canManage || config.mode !== 'cloud' || !config.tenantId || !config.projectId) return;
@@ -99,26 +112,23 @@ export function useChannelConnectionManagement({
       const requestContextKey = contextKey;
       const key = `${existing?.id ?? 'create'}:${channelType}:${crypto.randomUUID()}`;
       const catalogItem = catalog.find((item) => item.channel_type === channelType);
-      const fallback = legacyChannelConfigSchema(channelType);
       setError(null);
-      setEditor({ key, config: existing, channelType, schema: fallback, loading: true });
+      if (!catalogItem?.schema_supported) {
+        setEditor(null);
+        setError('project_channels_schema_unsupported');
+        return;
+      }
       try {
-        const schema = catalogItem?.schema_supported
-          ? await new DesktopApiClient(config).getManagedChannelSchema(channelType)
-          : fallback;
+        const schema = await client.getSchema(scope, channelType);
         if (contextKeyRef.current !== requestContextKey) return;
-        setEditor((current) =>
-          current?.key === key ? { ...current, key: `${key}:ready`, schema, loading: false } : current,
-        );
+        setEditor({ key: `${key}:ready`, config: existing, channelType, schema, loading: false });
       } catch (caught) {
         if (contextKeyRef.current !== requestContextKey) return;
-        setEditor((current) =>
-          current?.key === key ? { ...current, schema: fallback, loading: false } : current,
-        );
+        setEditor(null);
         setError(errorMessage(caught));
       }
     },
-    [catalog, config, contextKey],
+    [catalog, client, contextKey, scope],
   );
 
   const openCreate = useCallback(() => {
@@ -133,14 +143,14 @@ export function useChannelConnectionManagement({
       setBusyId(editor.config?.id ?? 'create');
       setError(null);
       try {
-        const client = new DesktopApiClient(config);
         if (editor.config) {
-          await client.updateManagedChannelConfig(
+          await client.update(
+            scope,
             editor.config.id,
             body as UpdateManagedChannelConfigRequest,
           );
         } else {
-          await client.createManagedChannelConfig(body as CreateManagedChannelConfigRequest);
+          await client.create(scope, body as CreateManagedChannelConfigRequest);
         }
         if (contextKeyRef.current !== requestContextKey) return;
         setNotice(editor.config ? 'updated' : 'created');
@@ -152,7 +162,7 @@ export function useChannelConnectionManagement({
         if (contextKeyRef.current === requestContextKey) setBusyId(null);
       }
     },
-    [canManage, config, contextKey, editor, reload],
+    [canManage, client, contextKey, editor, reload, scope],
   );
 
   const mutate = useCallback(
@@ -163,15 +173,14 @@ export function useChannelConnectionManagement({
       setError(null);
       setNotice(null);
       try {
-        const client = new DesktopApiClient(config);
         if (action === 'toggle') {
-          await client.updateManagedChannelConfig(target.id, { enabled: !target.enabled });
+          await client.update(scope, target.id, { enabled: !target.enabled });
         } else if (action === 'test') {
-          const result = await client.testManagedChannelConfig(target.id);
+          const result = await client.test(scope, target.id);
           if (contextKeyRef.current !== requestContextKey) return;
           setNotice(result.success ? 'testSuccess' : `testFailure:${result.message}`);
         } else {
-          await client.deleteManagedChannelConfig(target.id);
+          await client.remove(scope, target.id);
         }
         if (contextKeyRef.current !== requestContextKey) return;
         if (action === 'toggle') setNotice(target.enabled ? 'disabled' : 'enabled');
@@ -183,7 +192,7 @@ export function useChannelConnectionManagement({
         if (contextKeyRef.current === requestContextKey) setBusyId(null);
       }
     },
-    [canManage, config, contextKey, reload],
+    [canManage, client, contextKey, reload, scope],
   );
 
   return {

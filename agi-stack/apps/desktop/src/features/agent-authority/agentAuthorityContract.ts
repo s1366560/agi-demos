@@ -3,13 +3,7 @@ import type {
   ActivityReadEntry,
   ActivityReadState,
   ActivityAuthorityScope,
-  CloudRunInputAck,
-  CloudRunInputContextItem,
-  CloudRunInputListResponse,
-  CloudRunInputReceipt,
-  CloudRunInputReference,
   CloudAgentAuthorityScope,
-  CreateCloudRunInputRequest,
   GetRunChangesOptions,
   ProjectMyWorkResponse,
   ProjectWorkItem,
@@ -19,8 +13,6 @@ import type {
   RunChangeLine,
   RunChanges,
   RunSummary,
-  PromoteCloudRunInputRequest,
-  PromoteCloudRunInputResponse,
   UpdateActivityReadStateRequest,
 } from './agentAuthorityTypes';
 
@@ -60,29 +52,6 @@ const CHANGE_STATUSES = new Set([
   'unattributed',
   'unavailable',
   'failed',
-]);
-const RUN_INPUT_DELIVERIES = new Set(['steer_now', 'queue_next']);
-const RUN_INPUT_STATUSES = new Set([
-  'pending_boundary',
-  'queued',
-  'applied',
-  'ready',
-  'blocked',
-  'promoted_to_plan',
-]);
-const RUN_INPUT_DISPATCH_STATUSES = new Set([
-  'not_required',
-  'dispatching',
-  'dispatched',
-  'failed',
-]);
-const RUN_INPUT_CONTEXT_KINDS = new Set([
-  'attachment',
-  'agent',
-  'skill',
-  'plugin',
-  'command',
-  'thread',
 ]);
 
 export function parseProjectMyWorkResponse(
@@ -281,165 +250,6 @@ export function parseRunChanges(
   };
 }
 
-export function requireCreateRunInputRequest(
-  request: CreateCloudRunInputRequest,
-): CreateCloudRunInputRequest {
-  if (
-    !isRecord(request) ||
-    !isPositiveInteger(request.expected_run_revision) ||
-    !isNonemptyString(request.message) ||
-    !isIdentifier(request.message_id) ||
-    !isIdentifier(request.idempotency_key) ||
-    !RUN_INPUT_DELIVERIES.has(String(request.delivery)) ||
-    !Array.isArray(request.references) ||
-    request.references.length > 32 ||
-    !Array.isArray(request.context_items) ||
-    request.context_items.length > 32
-  ) {
-    throw contractError('cloud_run_input_request_invalid');
-  }
-  const references = request.references.map(parseRunInputReference);
-  const contextItems = request.context_items.map(parseRunInputContextItem);
-  if (
-    new Set(references.map(runInputReferenceKey)).size !== references.length ||
-    new Set(contextItems.map((item) => `${item.kind}:${item.resource_id}`))
-      .size !== contextItems.length
-  ) {
-    throw contractError('cloud_run_input_request_invalid');
-  }
-  return {
-    expected_run_revision: request.expected_run_revision,
-    message: request.message,
-    message_id: request.message_id,
-    idempotency_key: request.idempotency_key,
-    delivery: request.delivery as CreateCloudRunInputRequest['delivery'],
-    references,
-    context_items: contextItems,
-  };
-}
-
-export function requirePromoteRunInputRequest(
-  request: PromoteCloudRunInputRequest,
-): PromoteCloudRunInputRequest {
-  if (
-    !isRecord(request) ||
-    !isPositiveInteger(request.expected_source_run_revision) ||
-    !isIdentifier(request.idempotency_key)
-  ) {
-    throw contractError('cloud_run_input_promotion_request_invalid');
-  }
-  return {
-    expected_source_run_revision: request.expected_source_run_revision,
-    idempotency_key: request.idempotency_key,
-  };
-}
-
-export function parseRunInputAck(
-  payload: unknown,
-  runId: string,
-  request: CreateCloudRunInputRequest,
-): CloudRunInputAck {
-  if (
-    !isRecord(payload) ||
-    payload.accepted !== true ||
-    typeof payload.created !== 'boolean' ||
-    payload.action !== 'send_message' ||
-    !isIdentifier(payload.conversation_id) ||
-    payload.message_id !== request.message_id ||
-    payload.delivery_mode !== request.delivery ||
-    payload.run_id !== runId ||
-    payload.run_revision !== request.expected_run_revision ||
-    !isNullablePositiveInteger(payload.queue_position)
-  ) {
-    throw contractError('cloud_run_input_contract_invalid');
-  }
-  const input = parseRunInputReceipt(payload.input, runId);
-  if (
-    input.conversation_id !== payload.conversation_id ||
-    input.message_id !== request.message_id ||
-    input.idempotency_key !== request.idempotency_key ||
-    input.delivery !== request.delivery ||
-    input.expected_run_revision !== request.expected_run_revision
-  ) {
-    throw contractError('cloud_run_input_contract_invalid');
-  }
-  return {
-    accepted: true,
-    created: payload.created,
-    action: 'send_message',
-    conversation_id: payload.conversation_id,
-    message_id: payload.message_id,
-    delivery_mode: payload.delivery_mode as CloudRunInputAck['delivery_mode'],
-    run_id: runId,
-    run_revision: payload.run_revision,
-    queue_position: payload.queue_position,
-    input,
-  };
-}
-
-export function parseRunInputListResponse(
-  payload: unknown,
-  runId: string,
-): CloudRunInputListResponse {
-  if (
-    !isRecord(payload) ||
-    payload.run_id !== runId ||
-    !isPositiveInteger(payload.run_revision) ||
-    !Array.isArray(payload.inputs) ||
-    !isNonnegativeInteger(payload.total_count) ||
-    payload.total_count !== payload.inputs.length
-  ) {
-    throw contractError('cloud_run_input_contract_invalid');
-  }
-  return {
-    run_id: runId,
-    run_revision: payload.run_revision,
-    inputs: payload.inputs.map((input) => parseRunInputReceipt(input, runId)),
-    total_count: payload.total_count,
-  };
-}
-
-export function parsePromoteRunInputResponse(
-  payload: unknown,
-  scope: CloudAgentAuthorityScope,
-  runId: string,
-  request: PromoteCloudRunInputRequest,
-): PromoteCloudRunInputResponse {
-  if (
-    !isRecord(payload) ||
-    payload.accepted !== true ||
-    typeof payload.created !== 'boolean' ||
-    payload.action !== 'start_plan_turn' ||
-    !isRecord(payload.conversation) ||
-    !isRecord(payload.source_run)
-  ) {
-    throw contractError('cloud_run_input_promotion_contract_invalid');
-  }
-  const input = parseRunInputReceipt(payload.input, runId);
-  if (
-    payload.conversation.id !== input.conversation_id ||
-    payload.conversation.tenant_id !== scope.tenantId ||
-    payload.conversation.project_id !== scope.projectId ||
-    payload.source_run.id !== runId ||
-    payload.source_run.conversation_id !== input.conversation_id ||
-    payload.source_run.project_id !== scope.projectId ||
-    payload.source_run.revision !== request.expected_source_run_revision
-  ) {
-    throw contractError('cloud_run_input_promotion_contract_invalid');
-  }
-  return {
-    accepted: true,
-    created: payload.created,
-    action: 'start_plan_turn',
-    input,
-    conversation: { ...payload.conversation },
-    source_run: {
-      ...payload.source_run,
-      revision: payload.source_run.revision,
-    },
-  };
-}
-
 export function requireCloudAuthorityScope(
   scope: ActivityAuthorityScope,
 ): CloudAgentAuthorityScope {
@@ -563,125 +373,6 @@ function parseProjectWorkItem(
   } as ProjectWorkItem;
 }
 
-function parseRunInputReceipt(
-  value: unknown,
-  runId: string,
-): CloudRunInputReceipt {
-  if (
-    !isRecord(value) ||
-    !isIdentifier(value.id) ||
-    !isIdentifier(value.conversation_id) ||
-    value.run_id !== runId ||
-    !isPositiveInteger(value.expected_run_revision) ||
-    !isIdentifier(value.message_id) ||
-    !isIdentifier(value.idempotency_key) ||
-    !RUN_INPUT_DELIVERIES.has(String(value.delivery)) ||
-    !RUN_INPUT_STATUSES.has(String(value.status)) ||
-    !isPositiveInteger(value.sequence) ||
-    !isNullablePositiveInteger(value.queue_position) ||
-    typeof value.content !== 'string' ||
-    !Array.isArray(value.references) ||
-    !Array.isArray(value.context_items) ||
-    !isNullableNonnegativeInteger(value.applied_round) ||
-    !isNullableTimestamp(value.applied_at) ||
-    !isNullableString(value.injected_via) ||
-    !RUN_INPUT_DISPATCH_STATUSES.has(String(value.dispatch_status)) ||
-    !isNonnegativeInteger(value.dispatch_attempts) ||
-    !isNullableTimestamp(value.dispatch_lease_expires_at) ||
-    !isNullableString(value.dispatch_error_code) ||
-    !isNullableString(value.promotion_idempotency_key) ||
-    !isNullableTimestamp(value.promoted_at) ||
-    !isTimestamp(value.created_at) ||
-    !isTimestamp(value.updated_at)
-  ) {
-    throw contractError('cloud_run_input_contract_invalid');
-  }
-  return {
-    id: value.id,
-    conversation_id: value.conversation_id,
-    run_id: runId,
-    expected_run_revision: value.expected_run_revision,
-    message_id: value.message_id,
-    idempotency_key: value.idempotency_key,
-    delivery: value.delivery as CloudRunInputReceipt['delivery'],
-    status: value.status as CloudRunInputReceipt['status'],
-    sequence: value.sequence,
-    queue_position: value.queue_position,
-    content: value.content,
-    references: value.references.map(parseRunInputReference),
-    context_items: value.context_items.map(parseRunInputContextItem),
-    applied_round: value.applied_round,
-    applied_at: value.applied_at,
-    injected_via: value.injected_via,
-    dispatch_status:
-      value.dispatch_status as CloudRunInputReceipt['dispatch_status'],
-    dispatch_attempts: value.dispatch_attempts,
-    dispatch_lease_expires_at: value.dispatch_lease_expires_at,
-    dispatch_error_code: value.dispatch_error_code,
-    promotion_idempotency_key: value.promotion_idempotency_key,
-    promoted_at: value.promoted_at,
-    created_at: value.created_at,
-    updated_at: value.updated_at,
-  };
-}
-
-function parseRunInputReference(value: unknown): CloudRunInputReference {
-  if (
-    !isRecord(value) ||
-    value.type !== 'code_range' ||
-    !isIdentifier(value.snapshot_id) ||
-    !isIdentifier(value.environment_id) ||
-    !isIdentifier(value.path) ||
-    !isPositiveInteger(value.start_line) ||
-    !isPositiveInteger(value.end_line) ||
-    value.end_line < value.start_line ||
-    (value.side !== 'old' && value.side !== 'new') ||
-    !isIdentifier(value.patch_digest)
-  ) {
-    throw contractError('cloud_run_input_contract_invalid');
-  }
-  return {
-    type: 'code_range',
-    snapshot_id: value.snapshot_id,
-    environment_id: value.environment_id,
-    path: value.path,
-    start_line: value.start_line,
-    end_line: value.end_line,
-    side: value.side,
-    patch_digest: value.patch_digest,
-  };
-}
-
-function parseRunInputContextItem(value: unknown): CloudRunInputContextItem {
-  if (
-    !isRecord(value) ||
-    !RUN_INPUT_CONTEXT_KINDS.has(String(value.kind)) ||
-    !isIdentifier(value.resource_id) ||
-    !isIdentifier(value.label) ||
-    !isNullablePrimitiveRecord(value.metadata)
-  ) {
-    throw contractError('cloud_run_input_contract_invalid');
-  }
-  return {
-    kind: value.kind as CloudRunInputContextItem['kind'],
-    resource_id: value.resource_id,
-    label: value.label,
-    metadata: value.metadata === null ? null : { ...value.metadata },
-  };
-}
-
-function runInputReferenceKey(value: CloudRunInputReference): string {
-  return [
-    value.snapshot_id,
-    value.environment_id,
-    value.path,
-    value.start_line,
-    value.end_line,
-    value.side,
-    value.patch_digest,
-  ].join('\u0000');
-}
-
 function parseActivityReadEntry(value: unknown): ActivityReadEntry {
   if (
     !isRecord(value) ||
@@ -801,22 +492,6 @@ function isRecordArray(value: unknown): value is Record<string, unknown>[] {
   return Array.isArray(value) && value.every(isRecord);
 }
 
-function isNullablePrimitiveRecord(
-  value: unknown,
-): value is Record<string, string | number | boolean | null> | null {
-  return (
-    value === null ||
-    (isRecord(value) &&
-      Object.values(value).every(
-        (item) =>
-          item === null ||
-          typeof item === 'string' ||
-          (typeof item === 'number' && Number.isFinite(item)) ||
-          typeof item === 'boolean',
-      ))
-  );
-}
-
 function isIdentifier(value: unknown): value is string {
   return (
     typeof value === 'string' && value.length > 0 && value === value.trim()
@@ -853,10 +528,6 @@ function isNonnegativeInteger(value: unknown): value is number {
 
 function isPositiveInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 1;
-}
-
-function isNullablePositiveInteger(value: unknown): value is number | null {
-  return value === null || isPositiveInteger(value);
 }
 
 function isNullableNonnegativeInteger(value: unknown): value is number | null {

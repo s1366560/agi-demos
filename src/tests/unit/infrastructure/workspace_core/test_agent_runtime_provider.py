@@ -4,17 +4,41 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
+from inspect import getsource
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, cast
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
+import src.infrastructure.workspace_core.agent_runtime_provider as agent_runtime_provider_module
 from src.domain.events.types import AgentEventType
 from src.domain.model.agent import AgentExecutionEvent
 from src.domain.model.agent.conversation.conversation import Conversation
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2, ServiceRequiredV2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+    clear_process_generation_host_v2,
+    current_operation_context_v2,
+    install_process_generation_host_v2,
+    pin_generation_v2,
+)
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.composer import ProfileDocumentV2, compose_profile_v2
+from src.infrastructure.plugins.v2.protocol import control_envelope_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.scoped_boundary import pin_scoped_agent_turn_operation_v2
+from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeRegistryV2
+from src.infrastructure.plugins.v2.service_closure import project_service_closure_v2
 from src.infrastructure.workspace_core.agent_runtime_provider import (
     MemStackAgentRuntimeProvider,
 )
@@ -33,6 +57,56 @@ from src.infrastructure.workspace_core.provider import (
 )
 
 pytestmark = pytest.mark.unit
+_ROOT = Path(__file__).resolve().parents[5]
+_TURN_SERVICE: ContextVar[Any | None] = ContextVar("workspace_provider_turn_service", default=None)
+
+
+@asynccontextmanager
+async def _noop_agent_turn_operation(*_args: object, **_kwargs: object) -> AsyncIterator[None]:
+    yield None
+
+
+class _ImmediateGenerationReservation:
+    @asynccontextmanager
+    async def admit(self) -> AsyncIterator[object]:
+        yield object()
+
+    async def release(self) -> None:
+        return None
+
+
+async def _reserve_immediate_generation() -> _ImmediateGenerationReservation:
+    return _ImmediateGenerationReservation()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_legacy_provider_tests_from_generation_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def resolve_turn_service() -> Any:
+        service = _TURN_SERVICE.get()
+        if service is None:
+            raise AssertionError("workspace Provider test has no V2 turn service")
+        return service
+
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "pin_agent_turn_operation_v2",
+        _noop_agent_turn_operation,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "pin_scoped_agent_turn_operation_v2",
+        _noop_agent_turn_operation,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "current_agent_turn_service_v2",
+        resolve_turn_service,
+        raising=False,
+    )
 
 
 def _request(
@@ -77,9 +151,10 @@ def _request(
 
 
 class FakeDb:
-    def __init__(self) -> None:
+    def __init__(self, *, close_events: list[str] | None = None) -> None:
         self.rollback_count = 0
         self.commit_count = 0
+        self.close_events = close_events
 
     async def commit(self) -> None:
         self.commit_count += 1
@@ -96,6 +171,8 @@ class FakeSessionContext:
         return self.db
 
     async def __aexit__(self, *_args: object) -> None:
+        if self.db.close_events is not None:
+            self.db.close_events.append("db-session-closed")
         return None
 
 
@@ -355,9 +432,6 @@ class FakeScopedContainer:
     def agent_execution_event_repository(self) -> FakeEventRepository:
         return self.event_repo
 
-    def agent_service(self, _llm: object) -> FakeAgentService:
-        return self.service
-
 
 class FakeContainer:
     def __init__(self, scoped: FakeScopedContainer) -> None:
@@ -392,23 +466,76 @@ def _provider(
     scoped: FakeScopedContainer,
     db: FakeDb | None = None,
     core_client: FakeWorkspaceCoreClient | None = None,
+    scoped_admission: Any = True,
 ) -> MemStackAgentRuntimeProvider:
     active_db = db or FakeDb()
     active_core_client = core_client or FakeWorkspaceCoreClient()
-
-    async def llm_factory(_tenant_id: str) -> object:
-        return object()
+    _ = _TURN_SERVICE.set(scoped.service)
 
     def session_factory() -> AbstractAsyncContextManager[Any]:
         return FakeSessionContext(active_db)
 
+    @asynccontextmanager
+    async def repository_lease(**identity):
+        assert isinstance(identity["conversation_id"], str) and identity["conversation_id"]
+        assert {key: value for key, value in identity.items() if key != "conversation_id"} == {
+            "db": active_db,
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+        }
+        yield SimpleNamespace(
+            conversation=scoped.conversation_repo, execution_event=scoped.event_repo
+        )
+
     return MemStackAgentRuntimeProvider(
         workspace_core_client=cast(Any, active_core_client),
         session_factory=cast(Any, session_factory),
-        container_provider=cast(Any, lambda: FakeContainer(scoped)),
-        llm_factory=llm_factory,
+        repository_lease=cast(Any, repository_lease),
         terminal_persist_wait_seconds=0.2,
+        scoped_admission=(
+            SimpleNamespace(authorize=AsyncMock(), acquire=AsyncMock(return_value=object()))
+            if scoped_admission is True
+            else scoped_admission
+        ),
     )
+
+
+def test_workspace_provider_send_has_no_static_agent_composition() -> None:
+    init_source = getsource(MemStackAgentRuntimeProvider.__init__)
+    send_source = getsource(MemStackAgentRuntimeProvider.stream_send)
+
+    assert "current_agent_turn_service_v2" in send_source
+    assert "_llm_factory" not in send_source
+    assert ".agent_service(" not in send_source
+    assert "llm_factory" not in init_source
+
+
+async def test_workspace_provider_turn_resolution_failure_is_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scoped = FakeScopedContainer()
+    resolve_calls = 0
+
+    async def reject_turn_service() -> Any:
+        nonlocal resolve_calls
+        resolve_calls += 1
+        raise RuntimeV2Error(
+            "service_not_found",
+            "service:agent.turn-service is not available",
+        )
+
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "current_agent_turn_service_v2",
+        reject_turn_service,
+    )
+
+    events = [event async for event in _provider(scoped).stream_send(_request())]
+
+    assert resolve_calls == 1
+    assert [event.state for event in events] == ["error"]
+    assert events[0].persisted is True
+    assert scoped.service.stream_kwargs is None
 
 
 async def test_send_uses_real_runtime_contract_and_marks_persisted_terminal() -> None:
@@ -456,6 +583,143 @@ async def test_send_uses_real_runtime_contract_and_marks_persisted_terminal() ->
     assert events[-1].correlation_id == correlation.correlation_id
 
 
+async def test_send_closes_agent_stream_before_operation_disposal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scoped = FakeScopedContainer()
+    lifecycle: list[str] = []
+
+    class ClosingAgentService(FakeAgentService):
+        async def stream_chat_v2(self, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+            try:
+                async for event in super().stream_chat_v2(**kwargs):
+                    yield event
+            finally:
+                lifecycle.append("agent-stream-closed")
+
+    @asynccontextmanager
+    async def tracking_operation(_reservation: object, **_kwargs: object) -> AsyncIterator[None]:
+        lifecycle.append("operation-entered")
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-disposed")
+
+    scoped.service = ClosingAgentService(scoped.event_repo)
+    db = FakeDb(close_events=lifecycle)
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "pin_scoped_agent_turn_operation_v2",
+        tracking_operation,
+    )
+
+    events = [event async for event in _provider(scoped, db=db).stream_send(_request())]
+
+    assert [event.state for event in events] == ["delta", "final"]
+    assert lifecycle == [
+        "operation-entered",
+        "agent-stream-closed",
+        "operation-disposed",
+        "db-session-closed",
+    ]
+
+
+async def test_send_pins_workspace_provider_turn_with_complete_operation_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scoped = FakeScopedContainer()
+    observed: dict[str, object] = {}
+
+    class GenerationAwareAgentService(FakeAgentService):
+        async def stream_chat_v2(self, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+            operation = current_operation_context_v2()
+            observed["operation_id"] = operation.operation_id
+            observed["db"] = operation.require(OPERATION_DB_SESSION_SERVICE_V2)
+            observed["identity"] = operation.require(OPERATION_IDENTITY_SERVICE_V2)
+            observed["metadata"] = operation.require(OPERATION_METADATA_SERVICE_V2)
+            observed["distribution"] = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+            async for event in super().stream_chat_v2(**kwargs):
+                yield event
+
+    scoped.service = GenerationAwareAgentService(scoped.event_repo)
+    db = FakeDb()
+    provider = _provider(scoped, db=db)
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "pin_scoped_agent_turn_operation_v2",
+        pin_scoped_agent_turn_operation_v2,
+    )
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    publication = await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="workspace-provider-agent-turn",
+    )
+    install_process_generation_host_v2(host)
+    registry = ScopedRuntimeRegistryV2(builtin_runtime_definitions_v2())
+    scope = ScopeV2(
+        kind=ScopeKindV2.SESSION,
+        tenant_id="tenant-1",
+        project_id="project-1",
+        session_id="conversation-1",
+    )
+    snapshot = project_service_closure_v2(
+        publication.snapshot,
+        scope=scope,
+        required_services=(
+            ServiceRequiredV2(service="service:agent.turn-service", version="1.0.0", alias="turn"),
+        ),
+    )
+    snapshot = compose_profile_v2(
+        ProfileDocumentV2(profile_id=snapshot.profile_id, entries=snapshot.entries),
+        {manifest.plugin_id: manifest for manifest in snapshot.manifests},
+        generation=2,
+    )
+    published = await registry.publish(scope, snapshot, control_envelope_v2(snapshot, version=2))
+    assert published.accepted
+    reservation = await registry.acquire_bound(scope)
+    admission = SimpleNamespace(authorize=AsyncMock(), acquire=AsyncMock(return_value=reservation))
+    provider = _provider(scoped, db=db, scoped_admission=admission)
+
+    try:
+        async with pin_generation_v2(host) as outer:
+            events = [event async for event in provider.stream_send(_request())]
+            assert outer.generation == 1
+        assert reservation.lease._released
+        admission.authorize.assert_awaited_once()
+        admission.acquire.assert_awaited_once()
+
+        assert [event.state for event in events] == ["delta", "final"]
+        assert observed["operation_id"] == "workspace-provider:provider-run-1"
+        assert observed["db"] is db
+        assert observed["identity"] == {
+            "tenant_id": "tenant-1",
+            "user_id": "user-1",
+            "project_id": "project-1",
+        }
+        assert scoped.service.stream_kwargs is not None
+        assert observed["metadata"] == {
+            "kind": "agent-turn",
+            "channel": "workspace-core-provider",
+            "conversation_id": "conversation-1",
+            "run_id": "provider-run-1",
+            "message_id": scoped.service.stream_kwargs["execution_message_id"],
+            "workspace_id": "workspace-1",
+            "task_id": "task-1",
+            "plan_id": "plan-1",
+            "plan_node_id": "node-1",
+        }
+        distribution = observed["distribution"]
+        assert isinstance(distribution, dict)
+        assert distribution["descriptor"]["generation"] == 2
+    finally:
+        clear_process_generation_host_v2(host)
+        await registry.close()
+        await host.close()
+
+
 async def test_send_suppresses_terminal_when_core_transaction_fails() -> None:
     scoped = FakeScopedContainer()
     core_client = FakeWorkspaceCoreClient()
@@ -495,8 +759,12 @@ async def test_duplicate_delivery_does_not_execute_runtime_twice() -> None:
     core_client = FakeWorkspaceCoreClient()
     core_client.correlation_created = False
 
+    admission = SimpleNamespace(authorize=AsyncMock(), acquire=AsyncMock())
     events = [
-        event async for event in _provider(scoped, core_client=core_client).stream_send(_request())
+        event
+        async for event in _provider(
+            scoped, core_client=core_client, scoped_admission=admission
+        ).stream_send(_request())
     ]
 
     assert events == []
@@ -505,6 +773,9 @@ async def test_duplicate_delivery_does_not_execute_runtime_twice() -> None:
     assert core_client.terminals == []
     assert core_client.terminal_reads == []
 
+    admission.authorize.assert_awaited_once()
+    admission.acquire.assert_not_awaited()
+
 
 async def test_duplicate_terminal_delivery_replays_core_proof_without_runtime_side_effect() -> None:
     scoped = FakeScopedContainer()
@@ -512,8 +783,12 @@ async def test_duplicate_terminal_delivery_replays_core_proof_without_runtime_si
     core_client.correlation_created = False
     core_client.correlation_status = "completed"
 
+    admission = SimpleNamespace(authorize=AsyncMock(), acquire=AsyncMock())
     events = [
-        event async for event in _provider(scoped, core_client=core_client).stream_send(_request())
+        event
+        async for event in _provider(
+            scoped, core_client=core_client, scoped_admission=admission
+        ).stream_send(_request())
     ]
 
     assert len(events) == 1
@@ -532,6 +807,9 @@ async def test_duplicate_terminal_delivery_replays_core_proof_without_runtime_si
             "workspace-1",
         )
     ]
+
+    admission.authorize.assert_awaited_once()
+    admission.acquire.assert_not_awaited()
 
 
 async def test_inject_is_idempotent_and_loaded_into_next_send_context() -> None:
@@ -682,6 +960,7 @@ async def test_provider_e2e_preserves_terminal_four_way_authority_and_replay(
         runtime,
         sink,
         core,
+        generation_reserver=_reserve_immediate_generation,
         terminal_callback_retry_delay_seconds=0,
     )
 
@@ -738,3 +1017,149 @@ async def test_provider_e2e_preserves_terminal_four_way_authority_and_replay(
     assert len(core.outbox) == 1
     assert len(core.pipeline_progression) == 1
     assert core.acknowledged_correlations == {correlation_id}
+
+
+async def test_missing_scoped_admission_rejects_before_conversation_creation():
+    scoped = FakeScopedContainer()
+    repository = scoped.conversation_repository()
+    repository.conversation = None
+    provider = _provider(scoped, scoped_admission=None)
+    with pytest.raises(RuntimeV2Error) as failure:
+        _ = [event async for event in provider.stream_send(_request())]
+    assert failure.value.code == "scoped_runtime_missing"
+    assert repository.conversation is None
+    assert scoped.service.stream_kwargs is None
+
+
+async def test_authorization_denial_has_no_conversation_correlation_or_acquire():
+    scoped = FakeScopedContainer()
+    repository = scoped.conversation_repository()
+    repository.conversation = None
+    core_client = FakeWorkspaceCoreClient()
+    original = PermissionError("access denied")
+    admission = SimpleNamespace(authorize=AsyncMock(side_effect=original), acquire=AsyncMock())
+    provider = _provider(scoped, core_client=core_client, scoped_admission=admission)
+    with pytest.raises(PermissionError) as failure:
+        _ = [event async for event in provider.stream_send(_request())]
+    assert failure.value is original
+    admission.authorize.assert_awaited_once()
+    admission.acquire.assert_not_awaited()
+    assert repository.conversation is None
+    assert core_client.correlations == []
+    assert core_client.terminals == []
+    assert scoped.service.stream_kwargs is None
+
+
+@pytest.mark.parametrize("method", ["inject", "abort", "history"])
+@pytest.mark.parametrize("failure_kind", ["missing", "denied"])
+async def test_provider_control_authorization_precedes_all_side_effects(
+    monkeypatch, method, failure_kind
+):
+    from unittest.mock import MagicMock
+
+    scoped = FakeScopedContainer()
+    core = FakeWorkspaceCoreClient()
+    denied = PermissionError("scope access denied")
+    admission = (
+        None
+        if failure_kind == "missing"
+        else SimpleNamespace(authorize=AsyncMock(side_effect=denied), acquire=AsyncMock())
+    )
+    provider = _provider(scoped, core_client=core, scoped_admission=admission)
+    container = MagicMock(side_effect=AssertionError("container accessed before authorization"))
+    monkeypatch.setattr(provider, "_repository_lease", container)
+    cancel = AsyncMock()
+    monkeypatch.setattr(
+        "src.application.services.agent.runtime_cancellation.cancel_conversation_runtime", cancel
+    )
+    lookup = AsyncMock(wraps=scoped.conversation_repo.find_by_id)
+    save = AsyncMock(wraps=scoped.conversation_repo.save)
+    monkeypatch.setattr(scoped.conversation_repo, "find_by_id", lookup)
+    monkeypatch.setattr(scoped.conversation_repo, "save", save)
+    request = _request(f"chat.{method}")
+    with pytest.raises(RuntimeV2Error if failure_kind == "missing" else PermissionError) as failure:
+        await getattr(provider, method)(request)
+    if admission is None:
+        assert failure.value.code == "scoped_runtime_missing"
+    else:
+        assert failure.value is denied
+        admission.authorize.assert_awaited_once()
+        admission.acquire.assert_not_awaited()
+    container.assert_not_called()
+    lookup.assert_not_awaited()
+    save.assert_not_awaited()
+    cancel.assert_not_awaited()
+    assert scoped.event_repo.events == []
+    assert core.correlations == []
+    assert core.terminals == []
+
+
+@pytest.mark.parametrize("method", ["inject", "abort", "history"])
+async def test_provider_control_authorizes_without_runtime_acquisition(monkeypatch, method):
+    scoped = FakeScopedContainer()
+    admission = SimpleNamespace(authorize=AsyncMock(), acquire=AsyncMock())
+    db = FakeDb()
+    provider = _provider(scoped, db=db, scoped_admission=admission)
+    cancel = AsyncMock(
+        return_value=SimpleNamespace(ray_cancelled=False, local_worker_cancelled=False)
+    )
+    monkeypatch.setattr(
+        "src.application.services.agent.runtime_cancellation.cancel_conversation_runtime", cancel
+    )
+    await getattr(provider, method)(_request(f"chat.{method}"))
+    admission.authorize.assert_awaited_once()
+    actual_db, scope = admission.authorize.await_args.args
+    assert actual_db is db
+    assert (
+        scope.tenant_id,
+        scope.project_id,
+        scope.workspace_id,
+        scope.user_id,
+        scope.conversation_id,
+    ) == ("tenant-1", "project-1", "workspace-1", "user-1", "conversation-1")
+    admission.acquire.assert_not_awaited()
+
+
+@pytest.mark.parametrize("cancel_waiter", [False, True])
+async def test_repository_lease_covers_stream_close_and_cancellation(monkeypatch, cancel_waiter):
+    import asyncio
+
+    scoped = FakeScopedContainer()
+    lifecycle = []
+    blocked = asyncio.Event()
+
+    class BlockingService:
+        async def stream_chat_v2(self, **kwargs):
+            try:
+                yield {"type": "text_delta", "data": {"delta": "leased"}}
+                blocked.set()
+                await asyncio.Event().wait()
+            finally:
+                lifecycle.append("agent-closed")
+
+    scoped.service = BlockingService()
+    provider = _provider(scoped)
+
+    @asynccontextmanager
+    async def lease(**identity):
+        assert identity["conversation_id"] == "conversation-1"
+        lifecycle.append("lease-entered")
+        try:
+            yield SimpleNamespace(
+                conversation=scoped.conversation_repo, execution_event=scoped.event_repo
+            )
+        finally:
+            lifecycle.append("lease-released")
+
+    monkeypatch.setattr(provider, "_repository_lease", lease)
+    stream = provider.stream_send(_request())
+    await asyncio.wait_for(anext(stream), timeout=1)
+    assert lifecycle == ["lease-entered"]
+    if cancel_waiter:
+        waiter = asyncio.create_task(anext(stream))
+        await asyncio.wait_for(blocked.wait(), timeout=1)
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+    await stream.aclose()
+    assert lifecycle == ["lease-entered", "agent-closed", "lease-released"]

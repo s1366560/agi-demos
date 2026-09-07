@@ -1,11 +1,19 @@
+import { createTenantSkillHttpClientV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+const {
+  createDesktopTenantEvolutionOperationsV2,
+  DESKTOP_TENANT_EVOLUTION_AUTHORITY_SERVICE_V2,
+  DESKTOP_TENANT_EVOLUTION_AUTHORITY_VERSION_V2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantEvolutionAuthorityModuleV2.js');
+const { createDesktopTenantEvolutionHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantEvolutionHttpProjectionV2.js',
+);
 
 const settingsWindowSource = readFileSync(
   new URL('../src/features/settings/SettingsWindow.tsx', import.meta.url),
@@ -86,7 +94,7 @@ test('managed skill package APIs preserve JSON, multipart, version, and rollback
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',
@@ -228,20 +236,58 @@ test('managed skill inspection APIs preserve export, version detail, and evoluti
   };
 
   try {
-    const client = new DesktopApiClient({
+    const config = {
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',
       apiKey: 'cloud-session',
       tenantId: 'tenant-1',
       projectId: 'project-1',
-    });
+    };
+    const client = createTenantSkillHttpClientV2Fixture(config);
     const exported = await client.exportManagedSkillPackage(skill.id);
     const version = await client.getManagedSkillVersion(skill.id, 2);
     const evolution = await client.getManagedSkillEvolution(skill.id);
     await client.runManagedSkillEvolution(skill.id);
-    await client.applyManagedSkillEvolutionJob('job/1');
-    await client.rejectManagedSkillEvolutionJob('job/2');
+    const lifecycle = [];
+    const operations = createDesktopTenantEvolutionOperationsV2(() => ({
+      async acquireServiceOperationLease(input) {
+        lifecycle.push(['acquire', input]);
+        return {
+          status: 'acquired',
+          async useService(callback) {
+            return callback(Object.freeze({
+              bindOperation: createDesktopTenantEvolutionHttpProjectionV2,
+            }));
+          },
+          async release() { lifecycle.push(['release']); },
+        };
+      },
+    }));
+    const signal = new AbortController().signal;
+    for (const [jobId, action] of [['job/1', 'apply'], ['job/2', 'reject']]) {
+      await operations.reviewTenantEvolutionJob({
+        config,
+        scope: { authority: 'cloud', tenantId: 'tenant-1' },
+        jobId,
+        action,
+        signal,
+      });
+    }
+    const leaseRequest = {
+      service: DESKTOP_TENANT_EVOLUTION_AUTHORITY_SERVICE_V2,
+      version: DESKTOP_TENANT_EVOLUTION_AUTHORITY_VERSION_V2,
+      scope: { kind: 'tenant', tenant_id: 'tenant-1' },
+    };
+    assert.deepEqual(lifecycle, [
+      ['acquire', leaseRequest], ['release'],
+      ['acquire', leaseRequest], ['release'],
+    ]);
+    for (const call of calls.slice(-2)) {
+      assert.equal(call.init.signal, signal);
+      assert.equal(new Headers(call.init.headers).get('Authorization'), 'Bearer cloud-session');
+      assert.equal(call.init.body, undefined);
+    }
 
     assert.equal(exported.format, 'agentskills.io/skill-package');
     assert.equal(version.version_number, 2);

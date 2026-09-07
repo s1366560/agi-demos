@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime
-
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Query, status
 
 from src.application.schemas.workspace_cyber_schemas import (
     CyberGeneCreate,
@@ -12,65 +8,17 @@ from src.application.schemas.workspace_cyber_schemas import (
     CyberGeneResponse,
     CyberGeneUpdate,
 )
-from src.domain.model.workspace.cyber_gene import (
-    CyberGene,
-    CyberGeneCategory,
-)
+from src.domain.model.workspace.cyber_gene import CyberGeneCategory
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.routers.agent.utils import (
-    get_container_with_db,
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    workspace_core_unavailable_error,
 )
-from src.infrastructure.adapters.primary.web.routers.workspace_access import (
-    require_workspace_access,
-)
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(
     prefix=("/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes"),
     tags=["cyber-genes"],
 )
-
-
-def _validate_config_json(config_json: str | None) -> None:
-    """Reject config_json strings that are not JSON objects.
-
-    Empty / None values are allowed (config is optional). Anything else must
-    parse as a JSON object (dict). Arrays, primitives, or malformed text are
-    rejected with 422 so the structured editor on the front-end does not have
-    to compensate after the fact.
-    """
-    if config_json is None or config_json == "":
-        return
-    try:
-        parsed = json.loads(config_json)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=_("config_json is not valid JSON"),
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=_("config_json must be a JSON object"),
-        )
-
-
-def _to_response(gene: CyberGene) -> CyberGeneResponse:
-    return CyberGeneResponse(
-        id=gene.id,
-        workspace_id=gene.workspace_id,
-        name=gene.name,
-        category=gene.category,
-        description=gene.description,
-        config_json=gene.config_json,
-        version=gene.version,
-        is_active=gene.is_active,
-        created_by=gene.created_by,
-        created_at=gene.created_at,
-        updated_at=gene.updated_at,
-    )
 
 
 @router.post(
@@ -83,34 +31,9 @@ async def create_gene(
     project_id: str,
     workspace_id: str,
     payload: CyberGeneCreate,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> CyberGeneResponse:
-    await require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_editor=True,
-    )
-    _validate_config_json(payload.config_json)
-    container = get_container_with_db(request, db)
-    repo = container.cyber_gene_repository()
-    gene = CyberGene(
-        workspace_id=workspace_id,
-        name=payload.name,
-        category=payload.category,
-        description=payload.description,
-        config_json=payload.config_json,
-        version=payload.version,
-        is_active=payload.is_active,
-        created_by=current_user.id,
-    )
-    saved = await repo.save(gene)
-    await db.commit()
-    return _to_response(saved)
+    raise workspace_core_unavailable_error()
 
 
 @router.get("", response_model=CyberGeneListResponse)
@@ -118,29 +41,13 @@ async def list_genes(
     tenant_id: str,
     project_id: str,
     workspace_id: str,
-    request: Request,
     category: CyberGeneCategory | None = None,
     is_active: bool | None = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> CyberGeneListResponse:
-    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
-    container = get_container_with_db(request, db)
-    repo = container.cyber_gene_repository()
-    category_str = category.value if category is not None else None
-    items = await repo.find_by_workspace(
-        workspace_id=workspace_id,
-        category=category_str,
-        is_active=is_active,
-        limit=limit,
-        offset=offset,
-    )
-    return CyberGeneListResponse(
-        items=[_to_response(item) for item in items],
-        total=len(items),
-    )
+    raise workspace_core_unavailable_error()
 
 
 @router.get("/{gene_id}", response_model=CyberGeneResponse)
@@ -149,20 +56,9 @@ async def get_gene(
     project_id: str,
     workspace_id: str,
     gene_id: str,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> CyberGeneResponse:
-    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
-    container = get_container_with_db(request, db)
-    repo = container.cyber_gene_repository()
-    gene = await repo.find_by_id(gene_id)
-    if gene is None or gene.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Gene not found"),
-        )
-    return _to_response(gene)
+    raise workspace_core_unavailable_error()
 
 
 @router.patch("/{gene_id}", response_model=CyberGeneResponse)
@@ -172,43 +68,9 @@ async def update_gene(
     workspace_id: str,
     gene_id: str,
     payload: CyberGeneUpdate,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> CyberGeneResponse:
-    await require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_editor=True,
-    )
-    container = get_container_with_db(request, db)
-    repo = container.cyber_gene_repository()
-    gene = await repo.find_by_id(gene_id)
-    if gene is None or gene.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Gene not found"),
-        )
-    if payload.name is not None:
-        gene.name = payload.name
-    if payload.category is not None:
-        gene.category = payload.category
-    if payload.description is not None:
-        gene.description = payload.description
-    if payload.config_json is not None:
-        _validate_config_json(payload.config_json)
-        gene.config_json = payload.config_json
-    if payload.version is not None:
-        gene.version = payload.version
-    if payload.is_active is not None:
-        gene.is_active = payload.is_active
-    gene.updated_at = datetime.now(UTC)
-    saved = await repo.save(gene)
-    await db.commit()
-    return _to_response(saved)
+    raise workspace_core_unavailable_error()
 
 
 @router.delete(
@@ -220,25 +82,6 @@ async def delete_gene(
     project_id: str,
     workspace_id: str,
     gene_id: str,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> None:
-    await require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_editor=True,
-    )
-    container = get_container_with_db(request, db)
-    repo = container.cyber_gene_repository()
-    gene = await repo.find_by_id(gene_id)
-    if gene is None or gene.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Gene not found"),
-        )
-    await repo.delete(gene_id)
-    await db.commit()
+    raise workspace_core_unavailable_error()

@@ -63,3 +63,18 @@ test('canonical MCP refresh prunes committed and removed toggle attempts', () =>
 
   assert.deepEqual([...attempts], [[currentIdentity, 'current-attempt']]);
 });
+
+
+test('Cloud MCP toggles accept revisionless snapshots while Local retains CAS', () => {
+  const current = server({ runtime_metadata: {} });
+  const scope = 'tenant-1:project-1';
+  const identity = mcpToggleAttemptIdentity(scope, current, 'cloud');
+  assert.throws(() => mcpToggleAttemptIdentity(scope, current, 'local'), /revision is unavailable/);
+  assert.notEqual(identity, mcpToggleAttemptIdentity(scope, { ...current, enabled: false }, 'cloud'));
+  assert.notEqual(identity, mcpToggleAttemptIdentity('tenant-1:project-2', current, 'cloud'));
+  const attempts = new Map([[identity, 'cloud-attempt'], ['removed', 'old']]);
+  retainCurrentMCPToggleAttempts(attempts, scope, [current], 'cloud');
+  assert.deepEqual([...attempts], [[identity, 'cloud-attempt']]);
+  retainCurrentMCPToggleAttempts(attempts, scope, [{ ...current, enabled: false }], 'cloud');
+  assert.equal(attempts.size, 0);
+});

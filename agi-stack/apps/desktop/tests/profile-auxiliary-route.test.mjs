@@ -4,11 +4,11 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
-  createProfileFilteredHashLocationPort,
+  createProfileGenerationHashLocationPort,
   matchProfileAuxiliaryRoute,
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings-routes/profileAuxiliaryRoute.js');
 
-test('Profile auxiliary deep links are strict global aliases outside the 55-route registry', () => {
+test('Profile auxiliary deep links remain strict global aliases', () => {
   assert.deepEqual(matchProfileAuxiliaryRoute('#/tenant/profile'), {
     capability: 'user-profile',
     tenantId: null,
@@ -30,7 +30,7 @@ test('Profile auxiliary deep links are strict global aliases outside the 55-rout
   }
 });
 
-test('Profile filter hides only auxiliary aliases from the production router', () => {
+test('Profile generation location canonicalizes both auxiliary aliases for the V2 router', () => {
   let hash = '#/tenant/tenant-1/profile';
   const listeners = new Set();
   const base = {
@@ -40,9 +40,11 @@ test('Profile filter hides only auxiliary aliases from the production router', (
       return () => listeners.delete(listener);
     },
   };
-  const filtered = createProfileFilteredHashLocationPort(base);
-  assert.equal(filtered.readHash(), '');
+  const canonical = createProfileGenerationHashLocationPort(base);
+  assert.equal(canonical.readHash(), '#/tenant/profile');
+  hash = '#/tenant/profile';
+  assert.equal(canonical.readHash(), '#/tenant/profile');
   hash = '#/tenant/tenant-1/projects';
   for (const listener of listeners) listener();
-  assert.equal(filtered.readHash(), '#/tenant/tenant-1/projects');
+  assert.equal(canonical.readHash(), '#/tenant/tenant-1/projects');
 });

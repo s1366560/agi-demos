@@ -1,0 +1,4000 @@
+{
+  "schema_version": 2,
+  "plugin_id": "memstack-renderer-target-hosts",
+  "version": "2.0.0",
+  "runtime": "frontend",
+  "trust": "builtin",
+  "modules": [
+    {
+      "module_ref": "builtin://memstack/desktop/project-activity-read-state-authority",
+      "entrypoint": "applyDesktopProjectActivityReadStateAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectActivityReadStateAuthorityModuleV2.ts",
+        "digest": "sha256:e0e912b364949590c5ec38ddb4e4d98ac4fd1a31a194ad765bbc4a8d6c4f15e6"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-activity-read-state-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c54e3617c8dc4e011e3c1b092cacdc94de9209769ee217c98a41b58e3b2c6fb5"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-sandbox-surface-authority",
+      "entrypoint": "applyDesktopProjectSandboxSurfaceAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceAuthorityModuleV2.ts",
+        "digest": "sha256:f7d087a62a413f9ca78b8e7abf4d25926022241e5a8cd81a9c9187e6224baf67"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-sandbox-surface-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:699fdb4b3ea949d735b797f5a9b2168dd7268e423a4dce2d5d7bf3de344eb4cd"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-sandbox-upload-authority",
+      "entrypoint": "applyDesktopProjectSandboxUploadAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadAuthorityModuleV2.ts",
+        "digest": "sha256:42210937d04d09f991db739302bc0a1b27f86b4a8e35b5e93d0aff6c7247ac14"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-sandbox-upload-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:7dc134aa8a654fff524c61ee3f2569e918d3ab2b1d12046f01435ed8e1af02de"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/browser-integration-authority",
+      "entrypoint": "applyDesktopBrowserIntegrationAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationAuthorityModuleV2.ts",
+        "digest": "sha256:d5f2fe31774a1b242c1d8bd675a6543186f636cbf310026a243ba980df2927fc"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.browser-integration-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:3c66912a6af655866b71bd95b460b8dc9150b22d084e3d9d140095e32f8bd3da"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-mcp-apps-authority",
+      "entrypoint": "applyDesktopProjectMcpAppsAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsAuthorityModuleV2.ts",
+        "digest": "sha256:fa0401073601052082ca495546f51c15ac447e0f4c23abf15ff3276727dec841"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-mcp-apps-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8d652e9172e2e7b2974e0d99ae18094a14d242fae94bcfb54786359738f18d3a"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-mcp-servers-authority",
+      "entrypoint": "applyDesktopProjectMcpServersAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMcpServersAuthorityModuleV2.ts",
+        "digest": "sha256:60d2533a8b011c0134826e6a5aabc7229c13ebaedfe380e7ed4eca226680ccfd"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-mcp-servers-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:659eb9dcbc9f1da819f67ec7453efea390000fedbd5cce99492728eb309be604"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-agent-policy-authority",
+      "entrypoint": "applyDesktopWorkspaceAgentPolicyAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceAgentPolicyAuthorityModuleV2.ts",
+        "digest": "sha256:3553a2d249a38f5339b019a9c9baf6be5ee2f544a8b22e777088a8b66ca15513"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-agent-policy-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:9004d1f33091635bf89f49ab946badf9340d70fd1210113955e5cf1b453eb5f4"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-providers-authority",
+      "entrypoint": "applyDesktopTenantProvidersAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantProvidersAuthorityModuleV2.ts",
+        "digest": "sha256:bbf7c65d150480c455a954c7399a3752f926c0bcb62408f8ce545579efcee2e6"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-providers-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:eecff02497693fb05cddad1b41c03e51f743e0e2337e2083621963da1efd0371"
+    },
+    {
+      "module_ref": "builtin://memstack/web/renderer-host",
+      "entrypoint": "applyWebRendererHostV2",
+      "artifact": {
+        "digest": "sha256:0c59de1155e910d44dee2bf03dc3ca248e030f24beb5e88a9945ba481f02bedf",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/targetModules.ts"
+      },
+      "targets": [
+        "web"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:web.renderer-contributions",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "generation-renderer-host",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:738916402aa90851926cd84da1bfb89996eeb37b3776f7156c91fcc0bf46822b"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/renderer-host",
+      "entrypoint": "applyDesktopRendererHostV2",
+      "artifact": {
+        "digest": "sha256:0c59de1155e910d44dee2bf03dc3ca248e030f24beb5e88a9945ba481f02bedf",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/targetModules.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.renderer-contributions",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "native-generation-renderer-host",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:eecbc11fe07bb5cf90fe46909601ba112a22db2ad444339f93717d3f37703aa2"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-context-authority",
+      "entrypoint": "applyDesktopWorkspaceContextAuthorityV2",
+      "artifact": {
+        "digest": "sha256:15853d8f67f8de6fc24ded3aab0758a955e9bf11c60f1ad53f44146f6f804baf",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceContextAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-context-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:3981cd7f7216bc938ea2fac66867eabfc7b7f0c8d1a4f3a7e10dad3e02a61f7c"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/plugin-marketplace-catalog-authority",
+      "entrypoint": "applyDesktopPluginMarketplaceCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:a982d9c9d89ad9089b2025d21405c4368ddb69718889ad31b5959cd6c3a12b93",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.plugin-marketplace-catalog",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:f01b3ec169f834afd4e5c5b876acdffe41576c70bb8c4f08e9fa8591102d5ab6"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/plugin-marketplace-management-authority",
+      "entrypoint": "applyDesktopPluginMarketplaceManagementAuthorityV2",
+      "artifact": {
+        "digest": "sha256:a982d9c9d89ad9089b2025d21405c4368ddb69718889ad31b5959cd6c3a12b93",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.plugin-marketplace-management",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:be5b632ae6024037f5501a1d5a1942392e3b48183b68ded72561083db54cbd59"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/conversation-config-authority",
+      "entrypoint": "applyDesktopConversationConfigAuthorityV2",
+      "artifact": {
+        "digest": "sha256:914cfcfbd28a49d330b7f7d46b5c13c3e65880b5df34052d7955d7a3a2fee4b2",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationConfigAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.conversation-config-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:e3e86feceaf865f1d2575c6ce5fcd2d6ded7b47790a0e2bbea4b8589720b5671"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/conversation-lifecycle-authority",
+      "entrypoint": "applyDesktopConversationLifecycleAuthorityV2",
+      "artifact": {
+        "digest": "sha256:d38d6f072a03f1a6873943e53092346e29c827a0e0e8345e047426f7c7895859",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationLifecycleAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.conversation-lifecycle-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:b35dd389aa456a5ebc6a460cbb0fa9ebfeeeba17a9bbfc7e288c3d2fc48af2a8"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-message-catalog-authority",
+      "entrypoint": "applyDesktopWorkspaceMessageCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ba34971b39310f94080e4ca1f3f3a46b49d4c918d6e89bd07222704577096d53",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-message-catalog-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:055c0926e9291761ed9648c291b6bcc86eb4923716cf87678bd7113ad8d4914c"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-catalog-authority",
+      "entrypoint": "applyDesktopWorkspaceCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ffa34611be57332dcb12c02ec2043fa91e79518f346b2c0886ed681f9361680f",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-catalog-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:fc7690fe093a7f1578e3ca7dae268339e67960cf3746197d357b9a97149d2577"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-lifecycle-authority",
+      "entrypoint": "applyDesktopWorkspaceLifecycleAuthorityV2",
+      "artifact": {
+        "digest": "sha256:7468f70bc897f95da22176a300a8d0b4f5ffd1a1d1c5ea3c5532c21cca2dd709",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-lifecycle-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:7f6d77c065f6396c88a37f24ddb4c8d9d5a709366a8c57272bd720c019aa9462"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-roster-authority",
+      "entrypoint": "applyDesktopWorkspaceRosterAuthorityV2",
+      "artifact": {
+        "digest": "sha256:76315dd2c359828a34787922fc0836a1d06f15938ba99f425a7464d5bb53fe18",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-roster-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:43084aa8b836be281a2f32a77bfdb38319faa5a217eb26f1378722a787d824e8"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-agent-binding-authority",
+      "entrypoint": "applyDesktopWorkspaceAgentBindingAuthorityV2",
+      "artifact": {
+        "digest": "sha256:9bd015f66ea8bcde588bf870fa41c47e542b8309083976a216d1aae27ebaa510",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceAgentBindingAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-agent-binding-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:329680a143895e16d32e166e9a362d2b193253211bf214fdc5fdde521ea7e3aa"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-autonomy-attention-authority",
+      "entrypoint": "applyDesktopWorkspaceAutonomyAttentionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:750788df4ccd61537007d3d9e46ac0aff921fc2b3540655915860dfd64fdc6fc",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceAutonomyAttentionAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-autonomy-attention-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8dcbd44dad039e028f382581866a41f464dfa7d76629dd82702fa3e17ea1b748"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-member-mutation-authority",
+      "entrypoint": "applyDesktopWorkspaceMemberMutationAuthorityV2",
+      "artifact": {
+        "digest": "sha256:8e83e9f678c47346465f0f0b4f41a7c9faf80007e073d823c0cbb03129b21ae0",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-member-mutation-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:25762524ec3c6eb618fce4b1ef6f6cb008f40a37b9d38c8a2f62f7f66e59e93e"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-conversation-catalog-authority",
+      "entrypoint": "applyDesktopWorkspaceConversationCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:68108e1fc2b58fc0f61df9300fc7f9e990c77339984de310aeaebc6929fa101f",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-conversation-catalog-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:1c71ce981db6d3039f68ff325de90d8361fc9dbe5216d223c3b9e1dc9f4e715a"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-execution-snapshot-authority",
+      "entrypoint": "applyDesktopWorkspaceExecutionSnapshotAuthorityV2",
+      "artifact": {
+        "digest": "sha256:54c06b2e137d2941b1a4694f99503cbe4ae80f2bcb3e14c6a78b92fdb64c7f3b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-execution-snapshot-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:29e1d038b902b4448658d3739210572703af2c77198d9b49f83381a119de1dda"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/backend-stores-authority",
+      "entrypoint": "applyDesktopBackendStoresAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ae64eeb37443c5ab012ef4586e86a3befba7107a0ba292882004c2724560717b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopBackendStoresAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.backend-stores-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-vault-broker",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:9719fcebc65a9e91084db30c9814545c4fba536fc97d9d8c49f3c7a66484c0cb"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/dead-letter-queue-authority",
+      "entrypoint": "applyDesktopDeadLetterQueueAuthorityV2",
+      "artifact": {
+        "digest": "sha256:001cce6dbe218e76f015d394a6937c00b5d35d108397db85338d8b047e68d82b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.dead-letter-queue-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-vault-broker",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:51634b0f3c4dfef941670937938d11b0040d014e50a58805bda9f1301efa5dbe"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/instance-templates-authority",
+      "entrypoint": "applyDesktopInstanceTemplatesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:111e67f440879d2242e98542078f71e00f5859b78620ae069a7d18ad1abcf472",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.instance-templates-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-vault-broker",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8301debe66665926ef19055c16f215b16424cf7d04126dd0c458aa38e2ffee1b"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/unified-runtimes-authority",
+      "entrypoint": "applyDesktopUnifiedRuntimesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:eb179fae81653afc05c4aa51b0e72a9f8ce8be8f1762f44a3a987962a87fdb67",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopUnifiedRuntimesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.unified-runtimes-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "runtime_pool",
+              "service": "service:desktop-renderer.runtime-pool-authority",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:2e08740f7954702ae9479d1a0632a3ea98f80b99c35aae71891f02ccae10c0c5"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-patterns-authority",
+      "entrypoint": "applyDesktopTenantPatternsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:b0236b5dbfa344b72e2b2ceaa3ad72e4f78a5b164c88bb1f441ca33a9a0307ca",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantPatternsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-patterns-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:be996e7facba9664ffbe7f5f5bbf794f8bf92df076b140aa951c698f9bce061a"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-evolution-authority",
+      "entrypoint": "applyDesktopTenantEvolutionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:5f84ec2e18af05c56aed69647178caa193c5680a7f6c2ead38a5b9363c96d226",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantEvolutionAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-evolution-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:f7bc82b8144c7fb61597758af895f34b301d42ba2b0a1e27eeb90ecdd38baa75"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-genes-authority",
+      "entrypoint": "applyDesktopTenantGenesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:2f970cd9bbe100c0f6845d73b9ac9fd0edad048489d63deffea5196045096147",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantGenesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-genes-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:5aaca52685d58b1fd01f98c0575b5a226ae82b434a4292e3dda6181d4f68e1e3"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-templates-authority",
+      "entrypoint": "applyDesktopTenantTemplatesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:1ec1ce75b011fc00f577966090efaba529be65015d74f8d5aa1dacfd60299b66",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantTemplatesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-templates-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c224c862118ebfe62c08a4f652b5499075dcf7c30518cb0035c5e471842a2655"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-agent-definitions-authority",
+      "entrypoint": "applyDesktopTenantAgentDefinitionsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:6d03142c94737e1496dcd1c613ed61c4859fb8996888f5284520f22bf921a8fc",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantAgentDefinitionsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-agent-definitions-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:0e9f613d261173faa97573d74cda2f75bbf13870c58e2c6b4c1c0c8f1bf86843"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-prompt-templates-authority",
+      "entrypoint": "applyDesktopTenantPromptTemplatesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:10e5e2fc3f6bd6c8da5f57a09c1ac9d5c1faa2bb243656da0c2488c83b7b945d",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantPromptTemplatesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-prompt-templates-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:11874933f8ad9c05649d3c6378a0ac2749c8984b3728597dce87d0fc2f5b2726"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-skill-definitions-authority",
+      "entrypoint": "applyDesktopTenantSkillDefinitionsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f4b042413cdad4fb13197d16827312c0a42444d3b8dbc916f47cca6d2f5c6361",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSkillDefinitionsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-skill-definitions-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:6523d540c705e2a92563c3f70c3289be4be93a7167ea14c0d0445f0b9e2840eb"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-skill-packages-authority",
+      "entrypoint": "applyDesktopTenantSkillPackagesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:4e72cddcf6e93b51531a66419e454c017a11fb7ad08bd810e83e3b05fe022876",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSkillPackagesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-skill-packages-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:029e7b0030cb6d47926371b81875753004749aad81e260c57970ca09eac9299c"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-skill-evolution-authority",
+      "entrypoint": "applyDesktopTenantSkillEvolutionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:9060684e485963034bb509375dc2968270a3ec92c6a827eb44ea585ea01d0138",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-skill-evolution-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:46db6aa026a53eafd25b0d0e69e519e1f1f621cb6242e4b27484437dfde3fa87"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-subagent-definitions-authority",
+      "entrypoint": "applyDesktopTenantSubAgentDefinitionsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:74905d9a7b758e23414360d7a76be8830b9b88aa1e4a0a1cd2da6e3d460cbff6",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-subagent-definitions-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:93c5586b56db98dca8e8d0c2af592915d290a9d121e01fbeb87a66e4e34a1ddf"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-organization-settings-authority",
+      "entrypoint": "applyDesktopTenantOrganizationSettingsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:0356695ad0e01a1ad6ce991a3b5370a2943dff200f8f3278c5aefb6564b45886",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantOrganizationSettingsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-organization-settings-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:89e6fff0039a99b1ce6c82028d7eba794141aad76c7f642ee99ea181511cfff4"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-decision-records-authority",
+      "entrypoint": "applyDesktopTenantDecisionRecordsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:cddc85bd8ef772af4a38a8b8c5a0a0677e454ac9c0bfee4d56ba72a228fc7eea",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-decision-records-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:f4021aa513f7091c182d6039c7a903925064f25225ffd8d5a680dac64d52b51a"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-settings-authority",
+      "entrypoint": "applyDesktopTenantSettingsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:faecb7c135492b78934d679e681fb052d2085c384acc8c9a497818ad4c4cc174",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSettingsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-settings-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:f1d2448cca87e41a8ecb9132a9040cece45066a7c365b7c85f0a96640303a577"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-webhooks-authority",
+      "entrypoint": "applyDesktopTenantWebhooksAuthorityV2",
+      "artifact": {
+        "digest": "sha256:e19d2a68bd4f8b48c915e0b5814594d89ab60c3115902056c85db75ce50eed10",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantWebhooksAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-webhooks-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:d27658cfd99e28553266369de4c494a006c1a0744cfa5e3d0986450b9f2df7d7"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-billing-authority",
+      "entrypoint": "applyDesktopTenantBillingAuthorityV2",
+      "artifact": {
+        "digest": "sha256:bc5cbdaa1cfc885ade5e2efe756a5eda0fc6b3e177e90d768b9f179cd57830e8",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantBillingAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-billing-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8e8e2d0f2dca4f710f377309f5a819387d3af121563c09045e9be24bc9e0da85"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-audit-authority",
+      "entrypoint": "applyDesktopTenantAuditAuthorityV2",
+      "artifact": {
+        "digest": "sha256:2d41767df0e7ceaa1341ffee49183060d7ced00321f06ead0b8f15fd182f321a",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantAuditAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-audit-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:edcf0fee85610c7ca68dd97c2bca314ef59c9543ce35b3236ba26a2d612b3aa7"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-acp-authority",
+      "entrypoint": "applyDesktopTenantAcpAuthorityV2",
+      "artifact": {
+        "digest": "sha256:799fccf1521ef4811759a1331f60279f7d8089ea0b21b87783c3d75cedc946a3",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantAcpAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-acp-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:614cb0ce8238d6f0d1c35c2316444f8b02d18b32cdf0b7c249264c7bb570038d"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-governance-authority",
+      "entrypoint": "applyDesktopTenantGovernanceAuthorityV2",
+      "artifact": {
+        "digest": "sha256:7d17cca19c763b50e04a09f036c46d009b19d854aed0dfd9f28c5bb1d0108e70",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantGovernanceAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-governance-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:d963f4b28de75b8c3a15d9a7de31cd91d4654c3d8e19a4d207d4ac2e901589f2"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-trust-authority",
+      "entrypoint": "applyDesktopTenantTrustAuthorityV2",
+      "artifact": {
+        "digest": "sha256:720150f650a0e70c951270869030215f9d3618806cf37d36a240b004ff518b11",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantTrustAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-trust-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:1cbd35b080ce5bf87126642e1481ae46f587e5141a3a0840d57fe084d319c7c0"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-events-authority",
+      "entrypoint": "applyDesktopTenantEventsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:d06654a71c70426583641d5cb5b909979e652b0f9cfa158d491aacc2a81f52fd",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantEventsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-events-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:b3823e0ddb9815cd787df6f368f047a9aee827467f69d6e245e2b011f5871f89"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/artifact-content-authority",
+      "entrypoint": "applyDesktopArtifactContentAuthorityV2",
+      "artifact": {
+        "digest": "sha256:297e39170232dac06542589270479d6cd79e38a5a9af721685fb6572dea216e3",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopArtifactContentAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.artifact-content-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:3916579a46edffd5aca3080beea0f8c3be859f40a57113b4b075cc12fdb43c04"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/automation-authority",
+      "entrypoint": "applyDesktopAutomationAuthorityV2",
+      "artifact": {
+        "digest": "sha256:da8faced811d629018735ca6896369fabbf906c91c2de0ab856850998477f92d",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopAutomationAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.automation-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:04ffffd3ce3f7a25be14d7583324a3c0f31874597b09b47235df321e55072528"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/new-task-flow-authority",
+      "entrypoint": "applyDesktopNewTaskFlowAuthorityV2",
+      "artifact": {
+        "digest": "sha256:02bd9a93f8e73ba6d6fa2a3a818a734f7d060ee8f32e1c772ed8947b7c5b5f76",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.new-task-flow-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:1b0c12496a6efcef6a546a0f7a26d62871c7d5959f1d7ea947661b033cf01c88"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/new-thread-creation-authority",
+      "entrypoint": "applyDesktopNewThreadCreationAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f5342ef9df6ecf80ae961ef171393a3349ee599fc4e23992c3174547dcaa0eff",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopNewThreadCreationAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.new-thread-creation-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "task_flow",
+              "service": "service:desktop-renderer.new-task-flow-authority",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:9401877965af6ff73c82e7fafb9bddf6d0ad730fff5e86060a1c344bdea7a998"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-blackboard-authority",
+      "entrypoint": "applyDesktopProjectBlackboardAuthorityV2",
+      "artifact": {
+        "digest": "sha256:c7f7ad4ea54580660ada225f8b277c3be2ebd1a0660b19986a82e11d5b096453",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectBlackboardAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-blackboard-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c1f2a054c19c93918dab9478e155e92eb3fdcd10b7e790345e7505faef3f5d88"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-agent-dashboard-authority",
+      "entrypoint": "applyDesktopProjectAgentDashboardAuthorityV2",
+      "artifact": {
+        "digest": "sha256:661a6a192d5c6297173f2962e06eb985bb606eb340e34ad612dcfe41ace1380a",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-agent-dashboard-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:77729b1dab7d1ef6cf48c3fd3b84d98d4aa6f337fb6fa07c961c4009e31dd8f1"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-agent-patterns-authority",
+      "entrypoint": "applyDesktopProjectAgentPatternsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:32db57ada48426fa080b5eb9cea920648d956d87c22d37499c5f6079e8b5813b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectAgentPatternsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-agent-patterns-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8abee960bc09a63689caaf3deb26a3721ae212bf3774f1a0f13d3f36c4d3bb15"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-agent-logs-authority",
+      "entrypoint": "applyDesktopProjectAgentLogsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f373c6028f4515c730d89added175895229c976d2b11a23f803d9f819deed26e",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-agent-logs-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:5965f2e57ad5bcfe77fefaba98df26cb84db10eee3352d8f05b10c3dbf14f05f"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-communities-authority",
+      "entrypoint": "applyDesktopProjectCommunitiesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:b24e9ba6f74d6add4722cb4e43af9435bdc393d06bafa24686b6723940604a68",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectCommunitiesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-communities-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:336fb5c82c9930f6003014f09da38044dc82badbb24014a4cb086070d895990a"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-memories-authority",
+      "entrypoint": "applyDesktopProjectMemoriesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:feb6be54d625637099ab26328f5c9aa860b26c5ce8969520b05ec22b8e63dd9a",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-memories-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:d870fa6642c19da2faf3c6518c8065cd2e66be2c0b2456a7405def53823e0ff5"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-team-authority",
+      "entrypoint": "applyDesktopProjectTeamAuthorityV2",
+      "artifact": {
+        "digest": "sha256:feebb5a0c390ac0357025c536ce2d37b9a0cc4d9d26309c1b48e723b878a803e",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectTeamAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-team-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:14e3ffbf0cb78151a5f3ece44f79d55794c32ef15509b6d4276e4dc38d40ab9a"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-schema-authority",
+      "entrypoint": "applyDesktopProjectSchemaAuthorityV2",
+      "artifact": {
+        "digest": "sha256:26db74329e13855d10ed85aeb6bc191b846e0be7a0ff1818e860d979789b6611",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSchemaAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-schema-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:a90c412103961dd279a80f1538e4b110fa892f220784533993d19f7e462540e6"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-maintenance-authority",
+      "entrypoint": "applyDesktopProjectMaintenanceAuthorityV2",
+      "artifact": {
+        "digest": "sha256:3f725a302fa795b1c1f31a1f185c9f27bfc1761e125ea0178d0a838f2dc2bd71",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-maintenance-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:301d889f52c7a47b5904e6d9f85dce47d60ef94b626a24c6c573dd9e205aa488"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-settings-authority",
+      "entrypoint": "applyDesktopProjectSettingsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ddbe21c9911b9f314e00f9d6a4291f692245605c9ecb63b2b494667071bc8a23",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSettingsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-settings-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:0a1cdc178d1744c6e161cb27f251d02a4974d3966c348b143a0fc96ca356e63d"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-channels-authority",
+      "entrypoint": "applyDesktopProjectChannelsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:7cb9eaa01cd0b5fe1a90825ecd97efc8717b1471812d942ed08e55a2f9ea2a8c",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectChannelsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-channels-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:648fc2ba1645accb861668c77708288e7c14c7071f644a6d17be1b5ab6a477c3"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/user-profile-authority",
+      "entrypoint": "applyDesktopUserProfileAuthorityV2",
+      "artifact": {
+        "digest": "sha256:b20ab53c4a08685cbbc68c99b49eb0720b1e5404d8979cda2fb8c392043d4f5a",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopUserProfileAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.user-profile-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:ce385aa1291b5bf9bca7f691d1c8bedcae75be8656528f7389888f75b5541680"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-creation-authority",
+      "entrypoint": "applyDesktopTenantCreationAuthorityV2",
+      "artifact": {
+        "digest": "sha256:b0a513e1544611ec91d29ed14a7b985368ff0022769564475a8cb6b65524b3b7",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantCreationAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-creation-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:6832ad35001b7a62ccb03a93cd9416cce7332f92e4ef729d06e9bfc39a432c1f"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-support-authority",
+      "entrypoint": "applyDesktopProjectSupportAuthorityV2",
+      "artifact": {
+        "digest": "sha256:d28dea23a4b966b41a6d772e6eb38338116ce87c760530d78b04e3b26ba34d2a",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSupportAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-support-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:88a20deabaf21c9d699991f6d25b892c843be07504eecad76495da070bb7de12"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-playbooks-read-authority",
+      "entrypoint": "applyDesktopProjectPlaybooksReadAuthorityV2",
+      "artifact": {
+        "digest": "sha256:358f6a42ca0f67af0b04f2d3aad7a9de1c96c00b40146e21fa9f89886f39b2ec",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-playbooks-read-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "vault-bound-cloud-request-broker",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:4e9ddb0ddd4a40ff9bc4502ee01cd57ebaa7bb3b389008a8e6dd71ec82ae0899"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-playbooks-events-authority",
+      "entrypoint": "applyDesktopProjectPlaybooksEventsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:62afd03d06d2f3d102b25524842294c1d45c61a817fb403bf8cdf50d0ad5d218",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-playbooks-events-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-vault-socket",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:ae9ee3de76c655353f9c200dcb262a6dc948d0de071698bf45dcf3ef8dfaae2e"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-entities-authority",
+      "entrypoint": "applyDesktopProjectEntitiesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:b42a840a4aab4798f82b886a3ae2f6c56e07329502195b4cce0078d8a05d670b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-entities-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:48351cc558ec5030d0533ac8d2ca61e95ef4ce46ebba1b7c3429e9cff9c03c81"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-graph-authority",
+      "entrypoint": "applyDesktopProjectGraphAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ef4098e785a57f2c891db3e6f030bec7dcb6b54eaaf2e13cdb096c01a0f6f4d2",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectGraphAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-graph-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:48bb3733c93f50f442188dab8b835a0b7a4332f21fb33da533ef3462338c94cb"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-search-authority",
+      "entrypoint": "applyDesktopProjectSearchAuthorityV2",
+      "artifact": {
+        "digest": "sha256:2e92f7ed4dcf451ecd0fdbda155f802c652a8c8cc9ab41c128d2bff9ba6176ed",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSearchAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-search-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8ecb9f84ebc667bfeee3313e26fe1abe41e57799450a3cf7d494577f3059e093"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/project-overview-authority",
+      "entrypoint": "applyDesktopProjectOverviewAuthorityV2",
+      "artifact": {
+        "digest": "sha256:e0e7310ccf69dd43db85699655b84bcfc549c09793bd91e28d19adc16769dca1",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectOverviewAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-overview-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:3318905149a179a3b47ff6b47d23f1bba694997a9a08698f186884055dacbc61"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/runtime-clusters-authority",
+      "entrypoint": "applyDesktopRuntimeClustersAuthorityV2",
+      "artifact": {
+        "digest": "sha256:c1c13312d62c11e89a58f50e30958b26a07f8274eae392087660995a6cf950f3",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.runtime-clusters-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c1451e90c31d5babc92be72be0a2e0c07248f1bb6e929961eb82df0b7cc00b4f"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/runtime-deployments-authority",
+      "entrypoint": "applyDesktopRuntimeDeploymentsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f24f5263e39e96c98070f0ac762ba17ca6f58e50f381508b922de76ac0463001",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.runtime-deployments-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:a2dcd3af4622f9387b84ee3ef4ff723ff0cf154ecf70e011ba699c0ca9aeb6b0"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/runtime-instances-authority",
+      "entrypoint": "applyDesktopRuntimeInstancesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:0d99e01d736ff45c8ca06f9a9a0451d7b203b2ae00047ea5ad352e2a5845e980",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.runtime-instances-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:9b8270f806d3af7c629d2156560a56eb098a1d98c5e5e9e8cb804e4a0a7f2548"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/runtime-pool-authority",
+      "entrypoint": "applyDesktopRuntimePoolAuthorityV2",
+      "artifact": {
+        "digest": "sha256:a29f15a68c1e27fbf5839ed68473f91d0ec6875c7d69cdb53f745c3bf17ac904",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopRuntimePoolAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.runtime-pool-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:76777c7033e843edad11d229ee87fabe5fa66bdcc0b5c5f402b87c60ed0d73ae"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/session-artifact-action-authority",
+      "entrypoint": "applyDesktopSessionArtifactActionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ece2b0e4213fa3585b9155261614f944b84cad321195d176f63912cee624f077",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-artifact-action-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:ca7cef1df427814b6e85f2b2f753533f4fc5ee31a0afb624589e108edccd18db"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/session-run-control-authority",
+      "entrypoint": "applyDesktopSessionRunControlAuthorityV2",
+      "artifact": {
+        "digest": "sha256:7850efff1b6d3abe92a125d0ad0ee070f04e4443ea193f5d8b8603eb840d6f99",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionRunControlAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-run-control-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:834c4bfb309e2947ca6ab97dc02ad609a8216c71a94c111fd1d5f9e7e1d50682"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/my-work-authority",
+      "entrypoint": "applyDesktopMyWorkAuthorityV2",
+      "artifact": {
+        "digest": "sha256:8abadbe33b5ea852ea8973a204e2af7fa0dc40953e2cfc5fc55a1af290899ebe",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopMyWorkAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.my-work-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8cd9cc69888c0cc154907f29553b17810bafd13ca441fb7974b11f90380ac536"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/session-timeline-authority",
+      "entrypoint": "applyDesktopSessionTimelineAuthorityV2",
+      "artifact": {
+        "digest": "sha256:3b6e6200846dd116c870fe283d99a6c326b3e4fbfcccb891c27a58b1e760e172",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionTimelineAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-timeline-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:362a401de727e3e34aaeca460babf23442ee1153d73c61e48717c8c715e5e360"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/hitl-response-authority",
+      "entrypoint": "applyDesktopHitlResponseAuthorityV2",
+      "artifact": {
+        "digest": "sha256:54320982bebd86091d7cc174517847379441a5627a5327ebf18ec0e429a6d49d",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopHitlResponseAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.hitl-response-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:b3f6b46fda9d0748e5dc02c6a8b7ebc8cc74fed027dbb738d01b1548aef7c9e0"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/session-projection-authority",
+      "entrypoint": "applyDesktopSessionProjectionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:fe9b67ec306df988549f4d780d015149b63de298f78497646de9193c3ec211ef",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-projection-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:3d55ba61108434385bf01d5d9ade9d67e545c7f96314bf8775f257d90e03b940"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/session-run-changes-authority",
+      "entrypoint": "applyDesktopSessionRunChangesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f5120c3102942314c7942ff0dada682a39fc5379c1e4f046df7305dd5aec4878",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionRunChangesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-run-changes-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:139b46d7786e3a63a8ba30b8c6f8f2ab67442123c53b8991e84ca8ecf4ab64c2"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/session-run-input-authority",
+      "entrypoint": "applyDesktopSessionRunInputAuthorityV2",
+      "artifact": {
+        "digest": "sha256:a20cbf18e367b99d7bcb031f9590fdfd6df76d2e34c031c373ff64020ce50100",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionRunInputAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-run-input-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:248b6eb9f91c1ea65e537bd7a54feeb2d1ed62195b30aeeb896ae708a568c4c3"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/terminal-lifecycle-authority",
+      "entrypoint": "applyDesktopTerminalLifecycleAuthorityV2",
+      "artifact": {
+        "digest": "sha256:e5c269c879ca84ae3182c906c499b80fd97b374eb9d795d9b789422d9ff4db71",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.terminal-lifecycle-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-terminal-v2",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:bebf6a96ce68e538693a9b04548fa9fc5b6236eaa4f01774d40db5b3fc3510c6"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-agent-bindings-authority",
+      "entrypoint": "applyDesktopTenantAgentBindingsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:9d0cdb989f3bcb8c89206b36c7757cbd1ae49a54d33ea7bf003a6b3ad629e528",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantAgentBindingsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-agent-bindings-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:983793b4a306be4c2187f42d15c352f7ad582146b882780833d339a72b95b360"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-agent-dashboard-authority",
+      "entrypoint": "applyDesktopTenantAgentDashboardAuthorityV2",
+      "artifact": {
+        "digest": "sha256:b2fb9f69dd27002a98a272a06f467699698dbf1ec477db08525ce602d51c05ef",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-agent-dashboard-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:1026dd5259a339e034c4237b143773fecb4655446d22387532fb31523a5007b9"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-projects-authority",
+      "entrypoint": "applyDesktopTenantProjectsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f6f9de7dce7d2c5dcc583234318ea52c1ac326608d7560dc3b25ce9f268b3ee6",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantProjectsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-projects-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:320d271dbf2f883db936501c562d326f3496910c9323a1fb977e4667d5d0cff6"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-tasks-authority",
+      "entrypoint": "applyDesktopTenantTasksAuthorityV2",
+      "artifact": {
+        "digest": "sha256:96593f43353bf4991aad38400b5bb0572c3af4e2b0e431cbb96ed5b6c22389b4",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantTasksAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-tasks-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:1e4d3943c372e961fa2426b8f8de90522aae1dcf5e4b12b71b0b6ff9b38b9c43"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-analytics-authority",
+      "entrypoint": "applyDesktopTenantAnalyticsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:0a865796ca7df55c649a4dd87bdb8404320e5a0914a3ad9703d5171d8a8582d4",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantAnalyticsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-analytics-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:732ab7038a6b3bf0b6b4ad77634b16820c3c34c44e51859222fd40e2330001fa"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-catalog-authority",
+      "entrypoint": "applyDesktopTenantCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:cf607347acf450d0e96ea36647f5abfa7413dd4937bccebd4649c6cc12520d46",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantCatalogAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-catalog-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-client",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:89213cec91a23b4f3cbb6050059ce15af96da798eef093ed5b905da6a623d364"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-overview-authority",
+      "entrypoint": "applyDesktopTenantOverviewAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f245ecee0ed7526a2de020f0c589f23ee65fc32daa1894398b22cb77cbc1b263",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantOverviewAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-overview-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:212f0d67dc5b6077648619866b1939a18a94375db32decae9761a0a838637f98"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workbench-snapshot-authority",
+      "entrypoint": "applyDesktopWorkbenchSnapshotAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.ts",
+        "digest": "sha256:49a9b4c4bcec9407ec3a821e4bbef6abd031ecee9f79bf142803a07f26744c0f"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workbench-snapshot-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "same-generation-snapshot",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:4e6917880e2aa16eb9713b94e0c72f9bca5a8111bbdfdad24d8ddb4e53634f3d"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/conversation-messaging-authority",
+      "entrypoint": "applyDesktopConversationMessagingAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationMessagingAuthorityModuleV2.ts",
+        "digest": "sha256:71186edbc0fdc7486e7cee06ee0b587252d4bdf723479b7bd28bb724b8799b46"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.conversation-messaging-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "parent-bound-messaging",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:a594f75a28df175e68c9ff19bc1f9f42a2645a4cd1e1d64d950b29e415125117"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/structured-image-preview-authority",
+      "entrypoint": "applyDesktopStructuredImagePreviewAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopStructuredImagePreviewAuthorityModuleV2.ts",
+        "digest": "sha256:7c9418995931ba5d3b2b7f0a6f82e41dc6e42d2f641eeed5c8a333d6ef0384be"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.structured-image-preview-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "structured-preview-url",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:d25fa154819dd855733ffe4942ebb32898ccc023c56b06b8ac817000ab633ad1"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/voice-session-authority",
+      "entrypoint": "applyDesktopVoiceSessionAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopVoiceSessionAuthorityModuleV2.ts",
+        "digest": "sha256:4bd426f1f20f559bad33793048a51717c2fb7ffe359d00b3da24593fc91f46c3"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.voice-session-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "retained-voice-session",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:fb49dd480ae1ebabbbac02578672f1b597d43c9aea62d4b19a64763e1ee3e1a3"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/browser-bridge-management-authority",
+      "entrypoint": "applyDesktopBrowserBridgeManagementAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementAuthorityModuleV2.ts",
+        "digest": "sha256:4374bf4192e55fd099a1c170cb0c32de57761edf6de5717dc340277df94103bd"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.browser-bridge-management-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "native-browser-bridge",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8a8f1059db24c8ed8a1c583b42c49fc1dc47656da4a4fb228ff58217b41cc5e8"
+    }
+  ],
+  "permissions": [],
+  "quotas": {}
+}

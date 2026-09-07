@@ -35,7 +35,9 @@ Existing class-based tools (``AgentToolBase`` subclasses) can be wrapped via
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -89,6 +91,21 @@ class ToolInfo:
 # ---------------------------------------------------------------------------
 
 _TOOL_REGISTRY: dict[str, ToolInfo] = {}
+_TOOL_REGISTRY_CAPTURE: ContextVar[dict[str, ToolInfo] | None] = ContextVar(
+    f"{__name__}.tool_registry_capture",
+    default=None,
+)
+
+
+@contextmanager
+def capture_tool_definitions() -> Iterator[dict[str, ToolInfo]]:
+    """Capture decorator registrations in one invocation-local registry."""
+    captured: dict[str, ToolInfo] = {}
+    token = _TOOL_REGISTRY_CAPTURE.set(captured)
+    try:
+        yield captured
+    finally:
+        _TOOL_REGISTRY_CAPTURE.reset(token)
 
 
 def get_registered_tools() -> dict[str, ToolInfo]:
@@ -169,8 +186,11 @@ def tool_define(
         # Attach metadata to the original function for introspection.
         fn._tool_info = info  # type: ignore[attr-defined]
 
-        # Register for auto-discovery.
-        _TOOL_REGISTRY[name] = info
+        # Custom loaders can opt into an invocation-local capture without
+        # changing the default module auto-discovery registry semantics.
+        capture = _TOOL_REGISTRY_CAPTURE.get()
+        registry = capture if capture is not None else _TOOL_REGISTRY
+        registry[name] = info
 
         return info
 
@@ -252,6 +272,7 @@ def wrap_legacy_tool(tool: Any) -> ToolInfo:
 
 __all__ = [
     "ToolInfo",
+    "capture_tool_definitions",
     "clear_registry",
     "get_registered_tools",
     "pop_registered_tool",

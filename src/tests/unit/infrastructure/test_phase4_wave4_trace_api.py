@@ -70,16 +70,8 @@ def mock_registry():
 
 
 @pytest.fixture
-def mock_container(mock_registry: MagicMock):
-    container = MagicMock()
-    container.subagent_run_registry.return_value = mock_registry
-    return container
-
-
-@pytest.fixture
-def app(mock_container: MagicMock):
+def app():
     test_app = FastAPI()
-    test_app.state.container = mock_container
 
     mock_user = SimpleNamespace(id="user-1", email="test@test.com", tenant_id="t-1")
     mock_db = MagicMock()
@@ -98,7 +90,7 @@ def client(app: FastAPI):
 
 @pytest.fixture(autouse=True)
 def _patch_container_helper(
-    mock_container: MagicMock,
+    mock_registry: MagicMock,
     mock_get_accessible_conversation: AsyncMock,
     mock_list_accessible_tenant_conversation_ids: AsyncMock,
     mock_list_accessible_project_conversation_ids: AsyncMock,
@@ -106,8 +98,9 @@ def _patch_container_helper(
 ):
     with (
         patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.trace_router.get_container_with_db",
-            return_value=mock_container,
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router."
+            "current_subagent_run_registry_v2",
+            return_value=mock_registry,
         ),
         patch(
             "src.infrastructure.adapters.primary.web.routers.agent.trace_router._get_accessible_conversation",

@@ -23,7 +23,7 @@ test('unbound composer catalog skips workspace agents and loads every project ca
       calls.push('skills');
       return [{ id: 'skill-1' }];
     },
-    listManagedPlugins: async () => {
+    listMarketplacePlugins: async () => {
       calls.push('plugins');
       return [{ id: 'plugin-1' }];
     },
@@ -31,6 +31,9 @@ test('unbound composer catalog skips workspace agents and loads every project ca
       calls.push('subagents');
       return [{ id: 'subagent-1' }];
     },
+    listPromptTemplates: async () => [],
+    createPromptTemplate: async () => ({ id: 'template-1' }),
+    deletePromptTemplate: async () => undefined,
   };
 
   const catalog = await loadComposerCatalog(unboundComposerCatalogClient(client));
@@ -50,7 +53,11 @@ test('composer catalog keeps workspace scope behavior for bound clients', async 
     listWorkspaceAgents: async () => [{ id: 'binding-1' }],
     listManagedAgents: async () => [],
     listManagedSkills: async () => [],
-    listManagedPlugins: async () => [],
+    listManagedSubAgents: async () => [],
+    listMarketplacePlugins: async () => [],
+    listPromptTemplates: async () => [],
+    createPromptTemplate: async () => ({ id: 'template-1' }),
+    deletePromptTemplate: async () => undefined,
   });
 
   assert.deepEqual(catalog.workspaceAgents, [{ id: 'binding-1' }]);

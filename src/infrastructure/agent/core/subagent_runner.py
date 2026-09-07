@@ -11,9 +11,11 @@ import asyncio
 import inspect
 import logging
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.events.agent_events import (
@@ -29,9 +31,27 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
+from src.domain.model.agent.subagent_run import SubAgentRunStatus
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
+from src.infrastructure.plugins.v2.agent_operation_tool_contributions import (
+    lease_operation_tool_definitions_v2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    ForkedAgentOperationV2,
+    detached_operation_task_context_v2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
 
+from .detached_subagent_task_supervisor import DetachedSubAgentTaskSupervisor
 from .processor import ProcessorConfig, ToolDefinition
+from .subagent_registry_authority import (
+    SubAgentRunRegistryResolverV2,
+    require_subagent_run_registry_v2,
+)
+from .subagent_tool_set_v2 import InheritedToolSetV2, SubAgentToolSetBindingV2
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
@@ -58,17 +78,19 @@ class SubAgentRunnerDeps:
     artifact_service: ArtifactService | None
     background_executor: Any
     result_aggregator: Any
+    operation_reserver: Callable[[], Awaitable[ForkedAgentOperationV2]]
+    session_factory: Callable[[], Any] | None
 
     # -- Shared registries / state --
-    subagent_run_registry: Any
+    subagent_run_registry_resolver: SubAgentRunRegistryResolverV2
     subagent_lane_semaphore: asyncio.Semaphore
     subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None
     # Mutable int counter wrapped in a list for shared mutation
     subagent_lifecycle_hook_failures: list[int] = field(
         default_factory=lambda: [0],
     )
-    subagent_session_tasks: dict[str, asyncio.Task[Any]] = field(
-        default_factory=dict,
+    detached_subagent_task_supervisor: DetachedSubAgentTaskSupervisor = field(
+        default_factory=DetachedSubAgentTaskSupervisor,
     )
 
     # -- Model config --
@@ -81,7 +103,6 @@ class SubAgentRunnerDeps:
     factory: ProcessorFactory | None = None
 
     # -- SubAgent limits --
-    subagents: list[SubAgent] = field(default_factory=list)
     max_subagent_delegation_depth: int = 2
     max_subagent_active_runs: int = 16
     max_subagent_active_runs_per_lineage: int = 8
@@ -94,33 +115,18 @@ class SubAgentRunnerDeps:
     subagent_announce_retry_delay_ms: int = 200
 
     # -- Callbacks to ReActAgent (set after init) --
-    get_current_tools_fn: Callable[..., tuple[dict[str, Any], list[ToolDefinition]]] | None = None
-    filter_tools_fn: Callable[[SubAgent], tuple[list[ToolDefinition], set[str]]] | None = None
+    inherited_tool_set_fn: Callable[[], InheritedToolSetV2] | None = None
+    operation_context_fn: Callable[[], Any] | None = None
+    filter_tools_fn: Callable[..., tuple[list[ToolDefinition], set[str]]] | None = None
     inject_nested_tools_fn: Callable[..., None] | None = None
-
-    # -- Plugin registry (P1-C) --
-    plugin_registry: Any = None  # AgentPluginRegistry | None
 
     # -- Spawn validation --
     spawn_validator: SpawnValidator | None = None
 
-
-# Mapping from SubAgent lifecycle event ``type`` values to
-# ``WELL_KNOWN_HOOKS`` names in the plugin registry.
-_EVENT_TYPE_TO_HOOK: dict[str, str] = {
-    "subagent_spawning": "before_subagent_spawn",
-    "subagent_spawned": "after_subagent_spawn",
-    "subagent_started": "after_subagent_spawn",
-    "subagent_completed": "after_subagent_complete",
-    "subagent_failed": "after_subagent_complete",
-    "subagent_ended": "after_subagent_complete",
-    "subagent_doom_loop": "on_subagent_doom_loop",
-    "subagent_routed": "on_subagent_routed",
-    "subagent_queued": "before_subagent_spawn",
-    "subagent_killed": "after_subagent_complete",
-    "subagent_depth_limited": "on_subagent_depth_limited",
-    "subagent_session_update": "on_subagent_progress",
-}
+    @property
+    def subagent_run_registry(self) -> SubAgentRunRegistry:
+        """Resolve the registry from the exact V2 operation on every access."""
+        return require_subagent_run_registry_v2(self.subagent_run_registry_resolver)
 
 
 class SubAgentSessionRunner:
@@ -132,6 +138,141 @@ class SubAgentSessionRunner:
 
     def __init__(self, deps: SubAgentRunnerDeps) -> None:
         self.deps = deps
+
+    def _resolve_inherited_tool_set(
+        self,
+        inherited_tool_set: InheritedToolSetV2 | None,
+    ) -> InheritedToolSetV2:
+        if inherited_tool_set is None:
+            resolver = self.deps.inherited_tool_set_fn
+            if resolver is None:
+                raise RuntimeV2Error(
+                    "subagent_tool_set_not_inherited",
+                    "SubAgent execution requires an explicit parent ToolSet snapshot",
+                )
+            inherited_tool_set = resolver()
+        if not isinstance(inherited_tool_set, InheritedToolSetV2):
+            raise RuntimeV2Error(
+                "invalid_subagent_tool_set",
+                "SubAgent ToolSet inheritance resolver returned an invalid snapshot",
+            )
+        return inherited_tool_set
+
+    def _policy_intersection_definitions(
+        self,
+        subagents: Sequence[SubAgent],
+        inherited_tool_set: InheritedToolSetV2,
+    ) -> list[ToolDefinition]:
+        """Return the parent-ordered intersection permitted to every child."""
+        assert self.deps.filter_tools_fn is not None
+        allowed_names: set[str] | None = None
+        seen: set[str] = set()
+        for subagent in subagents:
+            identity = subagent.id or subagent.name
+            if identity in seen:
+                continue
+            seen.add(identity)
+            filtered, names = self.deps.filter_tools_fn(
+                subagent,
+                inherited_tool_set=inherited_tool_set,
+            )
+            filtered_names = {definition.name for definition in filtered} & names
+            allowed_names = (
+                filtered_names if allowed_names is None else allowed_names & filtered_names
+            )
+        allowed_names = (allowed_names or set()) - inherited_tool_set.rebindable_tool_names
+        return [
+            definition
+            for definition in inherited_tool_set.tool_set.definitions
+            if definition.name in allowed_names
+        ]
+
+    async def _prepare_child_tool_definitions(
+        self,
+        *,
+        subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
+        conversation_context: list[dict[str, str]],
+        project_id: str,
+        tenant_id: str,
+        conversation_id: str,
+        abort_signal: asyncio.Event | None,
+        delegation_depth: int,
+        inherited_tool_set: InheritedToolSetV2,
+    ) -> list[ToolDefinition]:
+        """Filter and rebind nested tools without expanding the parent snapshot."""
+        assert self.deps.filter_tools_fn is not None
+        filtered_tools, existing_tool_names = self.deps.filter_tools_fn(
+            subagent,
+            inherited_tool_set=inherited_tool_set,
+        )
+        allowed_rebindable_names = frozenset(
+            existing_tool_names & inherited_tool_set.rebindable_tool_names
+        )
+        base_definitions = [
+            definition
+            for definition in filtered_tools
+            if definition.name not in inherited_tool_set.rebindable_tool_names
+        ]
+        if not allowed_rebindable_names:
+            return base_definitions
+
+        if self.deps.operation_context_fn is None:
+            from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+            operation = current_operation_context_v2()
+        else:
+            operation = self.deps.operation_context_fn()
+        inherited_tool_set.validate_generation(operation.descriptor)
+        child_binding = SubAgentToolSetBindingV2(operation=operation)
+        nested_definitions: list[ToolDefinition] = []
+        nested_names: set[str] = set()
+        assert self.deps.inject_nested_tools_fn is not None
+        self.deps.inject_nested_tools_fn(
+            subagent=subagent,
+            available_subagents=available_subagents,
+            conversation_context=conversation_context,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            abort_signal=abort_signal,
+            delegation_depth=delegation_depth,
+            tool_set_binding=child_binding,
+            allowed_tool_names=allowed_rebindable_names,
+            filtered_tools=nested_definitions,
+            existing_tool_names=nested_names,
+        )
+        if not nested_definitions:
+            return base_definitions
+
+        nested_tool_set = await lease_operation_tool_definitions_v2(
+            operation=operation,
+            source_id=f"nested-subagent:{subagent.id}:depth-{delegation_depth + 1}",
+            definitions=nested_definitions,
+        )
+        nested_by_name = {definition.name: definition for definition in nested_tool_set.definitions}
+        combined_definitions: list[ToolDefinition] = []
+        combined_tools: dict[str, Any] = {}
+        for definition in filtered_tools:
+            name = definition.name
+            if name in inherited_tool_set.rebindable_tool_names:
+                replacement = nested_by_name.get(name)
+                if replacement is None:
+                    continue
+                combined_definitions.append(replacement)
+                combined_tools[name] = nested_tool_set.tools[name]
+                continue
+            combined_definitions.append(definition)
+            combined_tools[name] = inherited_tool_set.tool_set.tools[name]
+        child_binding.bind(
+            ToolSetV2(
+                tools=MappingProxyType(combined_tools),
+                definitions=tuple(combined_definitions),
+                selection_trace=inherited_tool_set.tool_set.selection_trace,
+            ),
+            rebindable_tool_names=nested_by_name,
+        )
+        return combined_definitions
 
     # ------------------------------------------------------------------
     # Memory context
@@ -171,6 +312,7 @@ class SubAgentSessionRunner:
     async def execute_subagent(
         self,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -180,6 +322,7 @@ class SubAgentSessionRunner:
         delegation_depth: int = 0,
         model_override: str | None = None,
         thinking_override: str | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute a SubAgent in an independent ReAct loop.
 
@@ -208,24 +351,17 @@ class SubAgentSessionRunner:
             memory_context=memory_context,
         )
 
-        # Filter tools via callback
-        assert self.deps.filter_tools_fn is not None
-        filtered_tools, existing_tool_names = self.deps.filter_tools_fn(
-            subagent,
-        )
-
-        # Inject nested tools via callback
-        assert self.deps.inject_nested_tools_fn is not None
-        self.deps.inject_nested_tools_fn(
+        parent_tool_set = self._resolve_inherited_tool_set(inherited_tool_set)
+        filtered_tools = await self._prepare_child_tool_definitions(
             subagent=subagent,
+            available_subagents=available_subagents,
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,
             conversation_id=conversation_id,
             abort_signal=abort_signal,
             delegation_depth=delegation_depth,
-            filtered_tools=filtered_tools,
-            existing_tool_names=existing_tool_names,
+            inherited_tool_set=parent_tool_set,
         )
 
         process = SubAgentProcess(
@@ -259,6 +395,7 @@ class SubAgentSessionRunner:
     async def execute_parallel(
         self,
         subtasks: list[Any],
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -266,6 +403,7 @@ class SubAgentSessionRunner:
         conversation_id: str | None = None,
         route_id: str | None = None,
         abort_signal: asyncio.Event | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute multiple SubAgents in parallel via ParallelScheduler."""
         from ..subagent.parallel_scheduler import ParallelScheduler
@@ -288,10 +426,17 @@ class SubAgentSessionRunner:
             ).to_event_dict(),
         )
 
-        subagent_map = {sa.name: sa for sa in self.deps.subagents}
-
-        assert self.deps.get_current_tools_fn is not None
-        _, current_tool_definitions = self.deps.get_current_tools_fn()
+        subagent_map = {sa.name: sa for sa in available_subagents}
+        parent_tool_set = self._resolve_inherited_tool_set(inherited_tool_set)
+        execution_subagents = [
+            subagent_map.get(st.target_subagent)
+            or (available_subagents[0] if available_subagents else None)
+            for st in subtasks
+        ]
+        current_tool_definitions = self._policy_intersection_definitions(
+            [subagent for subagent in execution_subagents if subagent is not None],
+            parent_tool_set,
+        )
 
         config = self.deps.config
         context_limit = config.context_limit if config else 128000
@@ -367,6 +512,7 @@ class SubAgentSessionRunner:
     async def execute_chain(
         self,
         subtasks: list[Any],
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -374,18 +520,19 @@ class SubAgentSessionRunner:
         conversation_id: str | None = None,
         route_id: str | None = None,
         abort_signal: asyncio.Event | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute SubAgents as a sequential chain (pipeline)."""
         from ..subagent.chain import ChainStep, SubAgentChain
 
-        subagent_map = {sa.name: sa for sa in self.deps.subagents}
+        subagent_map = {sa.name: sa for sa in available_subagents}
 
         ordered = self.topological_sort_subtasks(subtasks)
         chain_steps = []
         for i, st in enumerate(ordered):
             agent = subagent_map.get(st.target_subagent)
             if not agent:
-                agent = self.deps.subagents[0] if self.deps.subagents else None
+                agent = available_subagents[0] if available_subagents else None
             if agent:
                 template = "{input}" if i == 0 else "{input}\n\nPrevious result:\n{prev}"
                 chain_steps.append(
@@ -400,8 +547,11 @@ class SubAgentSessionRunner:
             return
 
         chain = SubAgentChain(steps=chain_steps)
-        assert self.deps.get_current_tools_fn is not None
-        _, current_tool_definitions = self.deps.get_current_tools_fn()
+        parent_tool_set = self._resolve_inherited_tool_set(inherited_tool_set)
+        current_tool_definitions = self._policy_intersection_definitions(
+            [step.subagent for step in chain_steps],
+            parent_tool_set,
+        )
 
         config = self.deps.config
         context_limit = config.context_limit if config else 128000
@@ -457,10 +607,14 @@ class SubAgentSessionRunner:
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Launch a SubAgent for background execution (non-blocking)."""
-        assert self.deps.get_current_tools_fn is not None
-        _, current_tool_definitions = self.deps.get_current_tools_fn()
+        parent_tool_set = self._resolve_inherited_tool_set(inherited_tool_set)
+        current_tool_definitions = self._policy_intersection_definitions(
+            [subagent],
+            parent_tool_set,
+        )
 
         config = self.deps.config
         context_limit = config.context_limit if config else 128000
@@ -513,13 +667,7 @@ class SubAgentSessionRunner:
         self,
         event: dict[str, Any],
     ) -> None:
-        """Emit detached SubAgent lifecycle hook event if configured.
-
-        Also notifies the plugin registry if available, mapping event types
-        to well-known hook names (e.g. ``subagent_spawning`` ->
-        ``before_subagent_spawn``).
-        """
-        # 1. Fire the legacy bare-callback hook.
+        """Emit the explicitly configured detached SubAgent lifecycle callback."""
         if self.deps.subagent_lifecycle_hook:
             try:
                 result = self.deps.subagent_lifecycle_hook(event)
@@ -535,20 +683,6 @@ class SubAgentSessionRunner:
                     },
                     exc_info=True,
                 )
-
-        # 2. Bridge to plugin registry hooks (P1-C).
-        registry = self.deps.plugin_registry
-        if registry is not None:
-            hook_name = _EVENT_TYPE_TO_HOOK.get(str(event.get("type", "")))
-            if hook_name:
-                try:
-                    await registry.notify_hook(hook_name, payload=event)
-                except Exception:
-                    logger.warning(
-                        "Plugin registry hook notification failed",
-                        extra={"hook_name": hook_name},
-                        exc_info=True,
-                    )
 
     def get_subagent_observability_stats(self) -> dict[str, int]:
         """Return subagent lifecycle observability counters."""
@@ -634,8 +768,6 @@ class SubAgentSessionRunner:
         started_at: float,
     ) -> None:
         """Mark a SubAgent run as completed or failed in the registry."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         current = self.deps.subagent_run_registry.get_run(
             conversation_id,
             run_id,
@@ -677,8 +809,6 @@ class SubAgentSessionRunner:
         configured_timeout: float,
     ) -> None:
         """Handle TimeoutError for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         current = self.deps.subagent_run_registry.get_run(
             conversation_id,
             run_id,
@@ -704,8 +834,6 @@ class SubAgentSessionRunner:
         run_id: str,
     ) -> None:
         """Handle CancelledError for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         current = self.deps.subagent_run_registry.get_run(
             conversation_id,
             run_id,
@@ -769,8 +897,6 @@ class SubAgentSessionRunner:
         started_at: float,
     ) -> None:
         """Handle generic Exception for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         current = self.deps.subagent_run_registry.get_run(
             conversation_id,
             run_id,
@@ -862,7 +988,6 @@ class SubAgentSessionRunner:
                 "cleanup": normalized_cleanup,
             }
         )
-        self.deps.subagent_session_tasks.pop(run_id, None)
 
     async def _maybe_apply_workspace_task_report_from_run(
         self,
@@ -879,7 +1004,10 @@ class SubAgentSessionRunner:
         attempt_id = metadata.get("attempt_id")
         actor_user_id = metadata.get("actor_user_id")
         leader_agent_id = metadata.get("leader_agent_id")
-        if not all(isinstance(value, str) and value for value in (workspace_id, root_goal_task_id, workspace_task_id, actor_user_id)):
+        if not all(
+            isinstance(value, str) and value
+            for value in (workspace_id, root_goal_task_id, workspace_task_id, actor_user_id)
+        ):
             return
         workspace_id_str = cast("str", workspace_id)
         root_goal_task_id_str = cast("str", root_goal_task_id)
@@ -975,6 +1103,36 @@ class SubAgentSessionRunner:
             }
         )
 
+    @staticmethod
+    def _record_launch_failure(
+        registry: SubAgentRunRegistry,
+        *,
+        conversation_id: str,
+        run_id: str,
+        error: BaseException,
+    ) -> None:
+        expected_statuses = [
+            SubAgentRunStatus.PENDING,
+            SubAgentRunStatus.RUNNING,
+        ]
+        launch_cancelled = isinstance(error, asyncio.CancelledError) or (
+            isinstance(error, RuntimeV2Error) and error.code == "detached_subagent_launch_cancelled"
+        )
+        if launch_cancelled:
+            _ = registry.mark_cancelled(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                reason="Detached SubAgent launch was cancelled",
+                expected_statuses=expected_statuses,
+            )
+        elif isinstance(error, Exception):
+            _ = registry.mark_failed(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                error=str(error),
+                expected_statuses=expected_statuses,
+            )
+
     # ------------------------------------------------------------------
     # Launch / consume / cancel
     # ------------------------------------------------------------------
@@ -1007,6 +1165,7 @@ class SubAgentSessionRunner:
         self,
         *,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -1015,6 +1174,7 @@ class SubAgentSessionRunner:
         abort_signal: asyncio.Event | None,
         model_override: str | None,
         thinking_override: str | None,
+        inherited_tool_set: InheritedToolSetV2,
     ) -> tuple[str, int | None, int | None, bool, str | None]:
         """Consume subagent events and extract completion results.
 
@@ -1029,6 +1189,7 @@ class SubAgentSessionRunner:
 
         async for evt in self.execute_subagent(
             subagent=subagent,
+            available_subagents=available_subagents,
             user_message=user_message,
             conversation_context=conversation_context,
             project_id=project_id,
@@ -1037,6 +1198,7 @@ class SubAgentSessionRunner:
             abort_signal=abort_signal,
             model_override=model_override,
             thinking_override=thinking_override,
+            inherited_tool_set=inherited_tool_set,
         ):
             if evt.get("type") != "complete":
                 continue
@@ -1097,10 +1259,11 @@ class SubAgentSessionRunner:
         await self.emit_subagent_lifecycle_hook(payload)
         return True
 
-    async def launch_subagent_session(  # noqa: PLR0913,PLR0915
+    async def launch_subagent_session(  # noqa: C901,PLR0913,PLR0915
         self,
         run_id: str,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_id: str,
         conversation_context: list[dict[str, str]],
@@ -1113,9 +1276,10 @@ class SubAgentSessionRunner:
         thread_requested: bool = False,
         cleanup: str = "keep",
         run_metadata: dict[str, str] | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> None:
         """Launch a detached SubAgent session tied to a run_id."""
-        if run_id in self.deps.subagent_session_tasks:
+        if self.deps.detached_subagent_task_supervisor.task_for(run_id) is not None:
             raise ValueError(f"Run {run_id} is already running")
 
         (
@@ -1141,12 +1305,15 @@ class SubAgentSessionRunner:
             if rejected:
                 return
 
+        parent_tool_set = self._resolve_inherited_tool_set(inherited_tool_set)
+        session_registry = self.deps.subagent_run_registry
         if run_metadata:
+            metadata: dict[str, object] = dict(run_metadata)
             try:
-                self.deps.subagent_run_registry.attach_metadata(
+                session_registry.attach_metadata(
                     conversation_id=conversation_id,
                     run_id=run_id,
-                    metadata=run_metadata,
+                    metadata=metadata,
                 )
             except Exception:
                 logger.warning(
@@ -1155,26 +1322,53 @@ class SubAgentSessionRunner:
                     exc_info=True,
                 )
 
-        start_gate = asyncio.Event()
-
-        async def _runner() -> None:
-            await start_gate.wait()
-            started_at = time.time()
-            cancelled_by_control = False
-            (
-                resolved_model_override,
-                resolved_thinking_override,
-                configured_timeout,
-            ) = self.runner_resolve_overrides(
+        reservation = await self.deps.operation_reserver()
+        try:
+            parent_tool_set.validate_generation(reservation.descriptor)
+        except BaseException as exc:
+            await reservation.release()
+            self._record_launch_failure(
+                session_registry,
                 conversation_id=conversation_id,
                 run_id=run_id,
-                requested_model=requested_model_override,
-                requested_thinking=requested_thinking_override,
-                normalized_spawn_mode=normalized_spawn_mode,
-                thread_requested=thread_requested,
-                normalized_cleanup=normalized_cleanup,
+                error=exc,
             )
+            raise
+        generation_metadata: dict[str, object] = {
+            "plugin_generation": reservation.descriptor.to_payload(),
+            "inherited_tool_set_generation": parent_tool_set.generation_descriptor.to_payload(),
+            "inherited_tool_set_owner_operation_id": parent_tool_set.owner_operation_id,
+        }
+        try:
+            updated_run = session_registry.attach_metadata(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                metadata=generation_metadata,
+            )
+            if updated_run is None:
+                raise RuntimeV2Error(
+                    "subagent_generation_metadata_rejected",
+                    "detached SubAgent run rejected its exact generation descriptor",
+                )
+        except BaseException as exc:
+            await reservation.release()
+            self._record_launch_failure(
+                session_registry,
+                conversation_id=conversation_id,
+                run_id=run_id,
+                error=exc,
+            )
+            raise
 
+        start_gate = asyncio.Event()
+        admission: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+
+        async def _run_admitted_session() -> None:
+            started_at = time.time()
+            cancelled_by_control = False
+            resolved_model_override = requested_model_override
+            resolved_thinking_override = requested_thinking_override
+            configured_timeout = 0.0
             summary = ""
             tokens_used: int | None = None
             execution_time_ms: int | None = None
@@ -1182,6 +1376,20 @@ class SubAgentSessionRunner:
             result_error: str | None = None
 
             try:
+                await start_gate.wait()
+                (
+                    resolved_model_override,
+                    resolved_thinking_override,
+                    configured_timeout,
+                ) = self.runner_resolve_overrides(
+                    conversation_id=conversation_id,
+                    run_id=run_id,
+                    requested_model=requested_model_override,
+                    requested_thinking=requested_thinking_override,
+                    normalized_spawn_mode=normalized_spawn_mode,
+                    thread_requested=thread_requested,
+                    normalized_cleanup=normalized_cleanup,
+                )
                 queued_payload = dict(
                     SubAgentQueuedEvent(
                         subagent_id=subagent.id,
@@ -1204,6 +1412,7 @@ class SubAgentSessionRunner:
                         )
                     consume_coro = self.runner_consume_and_extract(
                         subagent=subagent,
+                        available_subagents=available_subagents,
                         user_message=user_message,
                         conversation_context=conversation_context,
                         project_id=project_id,
@@ -1212,6 +1421,7 @@ class SubAgentSessionRunner:
                         abort_signal=abort_signal,
                         model_override=resolved_model_override,
                         thinking_override=resolved_thinking_override,
+                        inherited_tool_set=parent_tool_set,
                     )
                     if configured_timeout > 0:
                         result = await asyncio.wait_for(
@@ -1293,23 +1503,101 @@ class SubAgentSessionRunner:
                     resolved_thinking_override=(resolved_thinking_override),
                 )
 
-        task = asyncio.create_task(
-            _runner(),
-            name=f"subagent-session-{run_id}",
-        )
-        self.deps.subagent_session_tasks[run_id] = task
-        await self.launch_emit_lifecycle_hooks(
-            conversation_id=conversation_id,
-            run_id=run_id,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            subagent=subagent,
-            normalized_spawn_mode=normalized_spawn_mode,
-            thread_requested=thread_requested,
-            normalized_cleanup=normalized_cleanup,
-            requested_model_override=requested_model_override,
-            requested_thinking_override=requested_thinking_override,
-        )
+        async def _runner() -> None:
+            try:
+                operation_services: dict[str, object] = {}
+                async with AsyncExitStack() as stack:
+                    if self.deps.session_factory is not None:
+                        child_db = await stack.enter_async_context(self.deps.session_factory())
+                        operation_services[OPERATION_DB_SESSION_SERVICE_V2] = child_db
+                    async with reservation.admit(
+                        operation_id=f"detached-subagent:{run_id}",
+                        metadata={
+                            "kind": "detached-subagent",
+                            "run_id": run_id,
+                            "conversation_id": conversation_id,
+                            "subagent_id": subagent.id,
+                            "subagent_name": subagent.name,
+                            "spawn_mode": normalized_spawn_mode,
+                        },
+                        services=operation_services,
+                    ) as child_operation:
+                        parent_tool_set.validate_generation(child_operation.descriptor)
+                        child_registry = self.deps.subagent_run_registry
+                        if child_registry is not session_registry:
+                            raise RuntimeV2Error(
+                                "subagent_registry_generation_mismatch",
+                                "detached SubAgent resolved a different generation registry",
+                            )
+                        if not admission.done():
+                            admission.set_result(None)
+                        await _run_admitted_session()
+            except BaseException as exc:
+                if not admission.done():
+                    admission.set_exception(exc)
+                raise
+
+        def _settle_admission_from_task(completed: asyncio.Task[None]) -> None:
+            if admission.done():
+                return
+            if completed.cancelled():
+                admission.set_exception(
+                    RuntimeV2Error(
+                        "detached_subagent_launch_cancelled",
+                        "detached SubAgent task was cancelled before generation admission",
+                    )
+                )
+                return
+            error = completed.exception()
+            admission.set_exception(
+                error
+                or RuntimeV2Error(
+                    "detached_subagent_launch_terminated",
+                    "detached SubAgent task terminated before generation admission",
+                )
+            )
+
+        task: asyncio.Task[None] | None = None
+        try:
+            task = self.deps.detached_subagent_task_supervisor.create_task(
+                run_id=run_id,
+                coroutine=_runner(),
+                name=f"subagent-session-{run_id}",
+                context=detached_operation_task_context_v2(),
+            )
+            task.add_done_callback(_settle_admission_from_task)
+            await admission
+            await self.launch_emit_lifecycle_hooks(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                subagent=subagent,
+                normalized_spawn_mode=normalized_spawn_mode,
+                thread_requested=thread_requested,
+                normalized_cleanup=normalized_cleanup,
+                requested_model_override=requested_model_override,
+                requested_thinking_override=requested_thinking_override,
+            )
+            task_is_owned = self.deps.detached_subagent_task_supervisor.task_for(run_id) is task
+            if task.cancelled() or task.cancelling() or task.done() or not task_is_owned:
+                raise RuntimeV2Error(
+                    "detached_subagent_launch_cancelled",
+                    "detached SubAgent task stopped before its launch gate opened",
+                )
+        except BaseException as exc:
+            self._record_launch_failure(
+                session_registry,
+                conversation_id=conversation_id,
+                run_id=run_id,
+                error=exc,
+            )
+            if task is not None:
+                _ = task.cancel()
+                _ = await asyncio.gather(task, return_exceptions=True)
+                self.deps.detached_subagent_task_supervisor.discard(run_id, task)
+            await reservation.release()
+            raise
         start_gate.set()
 
     @staticmethod
@@ -1403,8 +1691,6 @@ class SubAgentSessionRunner:
         max_retries: int,
     ) -> None:
         """Persist terminal announce payload with retry/backoff."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         terminal_statuses = [
             SubAgentRunStatus.COMPLETED,
             SubAgentRunStatus.FAILED,
@@ -1544,11 +1830,7 @@ class SubAgentSessionRunner:
 
     async def cancel_subagent_session(self, run_id: str) -> bool:
         """Cancel a detached SubAgent session by run_id."""
-        task = self.deps.subagent_session_tasks.get(run_id)
-        if task and not task.done():
-            task.cancel()
-            return True
-        return False
+        return self.deps.detached_subagent_task_supervisor.cancel(run_id)
 
     @staticmethod
     def topological_sort_subtasks(subtasks: list[Any]) -> list[Any]:

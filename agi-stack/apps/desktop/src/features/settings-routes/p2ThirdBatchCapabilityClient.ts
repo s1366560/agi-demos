@@ -4,24 +4,14 @@ import type {
   DesktopCapabilityProvenance,
   DesktopCapabilityScope,
 } from '../runtime/capabilitySnapshot';
-import {
-  createChannelsRouteClient,
-  type ChannelsRouteClient,
-  type ChannelsRouteScope,
-} from './channelsRouteClient';
-import {
-  createEvolutionRouteClient,
-  type EvolutionRouteClient,
-  type EvolutionRouteScope,
-} from './evolutionRouteClient';
+import type { ChannelsRouteClient, ChannelsRouteScope } from './channelsRouteClient';
+import type { EvolutionRouteClient, EvolutionRouteScope } from './evolutionRouteClient';
 import { NativeRouteClientError } from './nativeRouteHttpClient';
 import {
-  createProfileRouteClient,
   type ProfileRouteClient,
   type ProfileRouteScope,
 } from './profileRouteClient';
 import {
-  createTemplatesRouteClient,
   type TemplatesRouteClient,
   type TemplatesRouteScope,
 } from './templatesRouteClient';
@@ -53,10 +43,10 @@ export type P2ThirdBatchCapabilityClient = Readonly<{
 }>;
 
 export type P2ThirdBatchCapabilityDependencies = Readonly<{
-  evolution?: Pick<EvolutionRouteClient, 'observe'>;
-  channels?: Pick<ChannelsRouteClient, 'observe'>;
-  templates?: Pick<TemplatesRouteClient, 'observe'>;
-  profile?: Pick<ProfileRouteClient, 'observe'>;
+  evolution: Pick<EvolutionRouteClient, 'observe'>;
+  channels: Pick<ChannelsRouteClient, 'observe'>;
+  templates: Pick<TemplatesRouteClient, 'observe'>;
+  profile: Pick<ProfileRouteClient, 'observe'>;
 }>;
 
 type RouteObservation = Readonly<{
@@ -113,14 +103,14 @@ const REASON_PREFIX = Object.freeze({
 
 export function createP2ThirdBatchCapabilityClient(
   config: DesktopRuntimeConfig,
-  dependencies: P2ThirdBatchCapabilityDependencies = {},
+  dependencies: P2ThirdBatchCapabilityDependencies,
 ): P2ThirdBatchCapabilityClient {
   const runtime = Object.freeze({ ...config });
   const clients = Object.freeze({
-    evolution: dependencies.evolution ?? createEvolutionRouteClient(runtime),
-    channels: dependencies.channels ?? createChannelsRouteClient(runtime),
-    templates: dependencies.templates ?? createTemplatesRouteClient(runtime),
-    profile: dependencies.profile ?? createProfileRouteClient(runtime),
+    evolution: dependencies.evolution,
+    channels: dependencies.channels,
+    templates: dependencies.templates,
+    profile: dependencies.profile,
   });
 
   return Object.freeze({

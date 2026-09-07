@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { httpClient } from './client/httpClient';
+import { kernelHttpClient } from './client/kernelHttpClient';
 
 import type {
   ProjectCreate,
@@ -225,7 +226,7 @@ export const authAPI = {
     const formData = new FormData();
     formData.append('username', email);
     formData.append('password', password);
-    const tokenResponse = await api.post<TokenResponse>('/auth/token', formData, {
+    const tokenResponse = await kernelHttpClient.post<TokenResponse>('/auth/token', formData, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -235,7 +236,7 @@ export const authAPI = {
     const must_change_password = tokenResponse.must_change_password;
 
     // Fetch user details
-    const userResponse = await api.get<BackendUserResponse>('/auth/me', {
+    const userResponse = await kernelHttpClient.get<BackendUserResponse>('/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -255,7 +256,7 @@ export const authAPI = {
     return { token, user, must_change_password: must_change_password ?? false };
   },
   verifyToken: async (_token: string): Promise<User> => {
-    const userResponse = await api.get<BackendUserResponse>('/auth/me');
+    const userResponse = await kernelHttpClient.get<BackendUserResponse>('/auth/me');
     // Map backend response (user_id) to frontend format (id)
     return {
       id: userResponse.user_id,
@@ -300,7 +301,7 @@ export const authAPI = {
     oldPassword: string,
     newPassword: string
   ): Promise<{ success: boolean; message: string }> => {
-    return await api.post('/auth/force-change-password', {
+    return await kernelHttpClient.post('/auth/force-change-password', {
       old_password: oldPassword,
       new_password: newPassword,
     });

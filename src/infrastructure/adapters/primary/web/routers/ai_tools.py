@@ -6,18 +6,14 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.factories import create_llm_client
 from src.domain.llm_providers.llm_types import LLMClient
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_db,
+from src.infrastructure.adapters.primary.web.ai_tool_application_authority_v2 import (
+    AiToolApplicationAuthorityV2,
+    ai_tool_application_authority_dependency_v2,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.models import User, UserTenant
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.ai_tool_services import AiToolClientUnavailableV2
 
 logger = logging.getLogger(__name__)
 
@@ -49,27 +45,19 @@ class TitleResponse(BaseModel):
 # --- Endpoints ---
 
 
-async def get_ai_tools_llm_client(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+async def _resolve_ai_tool_client_v2(
+    authority: AiToolApplicationAuthorityV2,
 ) -> LLMClient:
-    """Resolve the tenant-bound LLM client used by lightweight AI endpoints."""
-    tenant_id = getattr(current_user, "tenant_id", None)
-    if not isinstance(tenant_id, str) or not tenant_id.strip():
-        result = await db.execute(
-            refresh_select_statement(
-                select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id).limit(1)
-            )
+    try:
+        return await authority.services.resolve_client(
+            user_id=authority.user_id,
+            tenant_id=authority.tenant_id,
         )
-        tenant_id = result.scalar_one_or_none()
-
-    llm_client = cast(
-        LLMClient | None,
-        await create_llm_client(tenant_id if isinstance(tenant_id, str) else None),
-    )
-    if llm_client is None:
-        raise HTTPException(status_code=501, detail=LLM_CLIENT_UNAVAILABLE_DETAIL)
-    return llm_client
+    except AiToolClientUnavailableV2 as error:
+        raise HTTPException(
+            status_code=501,
+            detail=LLM_CLIENT_UNAVAILABLE_DETAIL,
+        ) from error
 
 
 def _extract_llm_content(response: object) -> str:
@@ -85,12 +73,15 @@ def _extract_llm_content(response: object) -> str:
 @router.post("/optimize", response_model=OptimizeResponse)
 async def optimize_content(
     request: OptimizeRequest,
-    llm_client: LLMClient = Depends(get_ai_tools_llm_client),
+    ai_tool_application: AiToolApplicationAuthorityV2 = Depends(
+        ai_tool_application_authority_dependency_v2
+    ),
 ) -> OptimizeResponse:
     """
     Optimize content using AI.
     """
     try:
+        llm_client = await _resolve_ai_tool_client_v2(ai_tool_application)
         prompt = f"""
         You are an intelligent writing assistant.
         Please rewrite the following text according to these instructions: {request.instruction}
@@ -118,12 +109,15 @@ async def optimize_content(
 @router.post("/generate-title", response_model=TitleResponse)
 async def generate_title(
     request: TitleRequest,
-    llm_client: LLMClient = Depends(get_ai_tools_llm_client),
+    ai_tool_application: AiToolApplicationAuthorityV2 = Depends(
+        ai_tool_application_authority_dependency_v2
+    ),
 ) -> TitleResponse:
     """
     Generate a title for the content using AI.
     """
     try:
+        llm_client = await _resolve_ai_tool_client_v2(ai_tool_application)
         # Truncate content if too long
         content_preview = request.content[:1000] if len(request.content) > 1000 else request.content
 

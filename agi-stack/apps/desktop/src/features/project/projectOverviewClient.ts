@@ -1,3 +1,9 @@
+import type {
+  LocalProjectOverviewReadOptions,
+  LocalProjectOverviewScope,
+  LocalProjectOverviewSnapshot,
+} from './projectOverviewLocalClient';
+
 export type CloudProjectOverviewScope = Readonly<{
   authority: 'cloud';
   tenantId: string;
@@ -60,6 +66,20 @@ export type CloudProjectOverviewSnapshot = Readonly<{
 export type CloudProjectOverviewReadResult =
   | Readonly<{ kind: 'ready'; snapshot: CloudProjectOverviewSnapshot }>
   | Readonly<{ kind: 'empty' }>;
+
+export type ProjectOverviewScope = CloudProjectOverviewScope | LocalProjectOverviewScope;
+
+export type ProjectOverviewReadResult =
+  | Readonly<{ kind: 'cloud-ready'; snapshot: CloudProjectOverviewSnapshot }>
+  | Readonly<{ kind: 'local-ready'; snapshot: LocalProjectOverviewSnapshot }>
+  | Readonly<{ kind: 'empty' }>;
+
+export interface ProjectOverviewClient {
+  load(
+    scope: ProjectOverviewScope,
+    options?: CloudProjectOverviewReadOptions | LocalProjectOverviewReadOptions,
+  ): Promise<ProjectOverviewReadResult>;
+}
 
 // Local Project Overview must use a separate availability-bearing projection. It must not
 // implement this Cloud port by fabricating Memory, quota, node, or collaborator values.

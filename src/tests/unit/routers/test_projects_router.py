@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -6,6 +7,8 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.project import ProjectCreate
+from src.application.services.graph_store_service import GraphStoreService
+from src.application.services.retrieval_store_service import RetrievalStoreService
 from src.infrastructure.adapters.primary.web.routers.projects import create_project, get_project
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
@@ -13,6 +16,35 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_graph_store_repository import (
+    SqlGraphStoreRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_retrieval_store_repository import (
+    SqlRetrievalStoreRepository,
+)
+from src.infrastructure.graph.backend_factory import build_default_factory
+from src.infrastructure.graph.registry import get_graph_backend_registry
+from src.infrastructure.plugins.v2.backend_store_services import BackendStoreServicesV2
+from src.infrastructure.retrieval.backend_factory import build_default_retrieval_factory
+from src.infrastructure.retrieval.registry import get_retrieval_backend_registry
+
+
+def _backend_store_authority(db: AsyncSession) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        services=BackendStoreServicesV2(
+            graph_service=GraphStoreService(
+                repo=SqlGraphStoreRepository(db),
+                registry=get_graph_backend_registry(),
+                factory=build_default_factory(),
+            ),
+            retrieval_service=RetrievalStoreService(
+                repo=SqlRetrievalStoreRepository(db),
+                registry=get_retrieval_backend_registry(),
+                factory=build_default_retrieval_factory(),
+            ),
+        ),
+    )
 
 
 @pytest.mark.unit
@@ -32,7 +64,7 @@ async def test_create_project_internal_error_is_sanitized(
         await create_project(
             ProjectCreate(name="Broken Project", tenant_id=test_tenant_db.id),
             current_user=test_user,
-            db=test_db,
+            backend_store=_backend_store_authority(test_db),
         )
 
     assert exc_info.value.status_code == 500
@@ -54,7 +86,7 @@ async def test_create_project_returns_effective_backend_summaries(
             retrieval_store_id="__env_memstack_pgvector__",
         ),
         current_user=test_user,
-        db=test_db,
+        backend_store=_backend_store_authority(test_db),
     )
 
     assert response.graph_store_id is None
@@ -108,7 +140,7 @@ async def test_get_project_rejects_requested_tenant_mismatch(
             project.id,
             tenant_id=test_tenant_db.id,
             current_user=test_user,
-            db=test_db,
+            backend_store=_backend_store_authority(test_db),
         )
 
     assert exc_info.value.status_code == 404

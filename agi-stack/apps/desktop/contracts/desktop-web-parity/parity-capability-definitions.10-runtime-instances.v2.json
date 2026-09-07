@@ -385,28 +385,28 @@
       "cloud_status": "unavailable",
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "renderer_capability_authority_unobserved",
-      "local_deviation": "The Local helper projects exactly one supervised sidecar with safe read fields, but its workbench wrapper still marks the active result as renderer-declared. Snapshot v4 promotes no Local instance action until observed sidecar provenance is carried end to end.",
-      "judgment_rationale": "The Web Instances capability still owns list, create, nested overview, files, channels, members, installed genes, settings and evolution pages, and retains documented authorization defects. Member role update still passes a user identifier to the member-identifier route, while the selected tenant scope is still overridden by the default tenant chosen from the earliest membership. Desktop has real native Cloud and Local loaders, App bindings, typed clients and a shared controller for their reviewed slices. However, workbenchCapabilityClient still wraps both runtimeInstancesCapability results with declared renderer provenance, so Snapshot v4 closes both modes to renderer_capability_authority_unobserved and promotes no action while retaining their auditable desired actions and entries.",
+      "local_reason_code": "capability_authority_revision_unavailable",
+      "local_deviation": "The Local V2 authority projects exactly one supervised sidecar with safe read fields through local_runtime_status and rejects lifecycle mutations. Its observed sidecar result has no authority revision, so Snapshot v4 promotes no Local instance action.",
+      "judgment_rationale": "At 2f189fd68, Desktop Runtime Instances route and workbench consumers resolve service:desktop-renderer.runtime-instances-authority@1.0.0 through a root Provider and tenant-scoped immutable generation leases. Operations freeze and validate inputs, preserve primary errors over release failures, revoke escaped authorities after release, keep Cloud transport vault-bound through desktopApiFetch, and keep Local reads on local_runtime_status while rejecting Local lifecycle mutations. This establishes generation-consistent renderer wiring and observed cloud_service/sidecar provenance only. Because neither Cloud /instances responses nor local_runtime_status carries an authority revision, both Desktop modes must fail closed to capability_authority_revision_unavailable with no promoted actions. Web remains partial for its broader contract and authorization gaps.",
       "cloud_actions": [],
-      "local_actions": [
-        "view",
-        "list",
-        "refresh",
-        "search",
-        "filter-status"
-      ],
+      "local_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesCapability.ts",
-        "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesClient.ts",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesContract.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesController.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/runtime-instances/RuntimeInstancesPage.tsx"
+        "agi-stack/apps/desktop/src/features/runtime-instances/RuntimeInstancesPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
@@ -414,13 +414,20 @@
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesCapability.ts",
-        "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesClient.ts",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesContract.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesController.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/runtime-instances/RuntimeInstancesPage.tsx"
+        "agi-stack/apps/desktop/src/features/runtime-instances/RuntimeInstancesPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
+        "agi-stack/apps/desktop/sidecar/src/control.rs"
       ],
-      "cloud_reason_code": "renderer_capability_authority_unobserved"
+      "cloud_reason_code": "capability_authority_revision_unavailable"
     }
   ],
   "source_ownership": {

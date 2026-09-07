@@ -7,28 +7,28 @@ const desktopRoot = new URL('../', import.meta.url);
 const BROKER_BOUND_CLIENTS = [
   'src/features/automations/automationClient.ts',
   'src/features/runtime/workbenchCapabilityClient.ts',
-  'src/features/tenant/tenantOverviewHttpClient.ts',
-  'src/features/tenant/tenantProjectsHttpClient.ts',
-  'src/features/tenant/tenantTasksHttpClient.ts',
-  'src/features/tenant/tenantAnalyticsHttpClient.ts',
-  'src/features/tenant/tenantAgentBindingsHttpClient.ts',
-  'src/features/tenant/tenantAgentDashboardHttpClient.ts',
+  'src/plugins/desktopTenantOverviewAuthorityModuleV2.ts',
+  'src/plugins/desktopTenantProjectsAuthorityModuleV2.ts',
+  'src/plugins/desktopTenantTasksAuthorityModuleV2.ts',
+  'src/plugins/desktopTenantAnalyticsAuthorityModuleV2.ts',
+  'src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.ts',
+  'src/plugins/desktopTenantAgentBindingsAuthorityModuleV2.ts',
+  'src/plugins/desktopTenantCreationHttpProjectionV2.ts',
   'src/features/tenant-admin/tenantAdminHttp.ts',
   'src/features/tenant-admin/tenantManagementHttp.ts',
   'src/features/runtime-pool/runtimePoolClient.ts',
-  'src/features/governance/deadLetterQueueHttpClient.ts',
-  'src/features/sandbox/sandboxRuntimeSurfaceClient.ts',
+  'src/plugins/desktopRuntimeClustersHttpProjectionV2.ts',
+  'src/plugins/desktopRuntimeInstancesHttpProjectionV2.ts',
+  'src/plugins/desktopRuntimeDeploymentsHttpProjectionV2.ts',
+  'src/plugins/desktopDeadLetterQueueHttpProjectionV2.ts',
+  'src/plugins/desktopProjectSandboxSurfaceHttpProjectionV2.ts',
   'src/features/sandbox/terminalSessionV2Client.ts',
 ];
 
 const INJECTABLE_BROKER_CLIENTS = [
   'src/features/device-approval/deviceApprovalClient.ts',
-  'src/features/instance-templates/instanceTemplatesClient.ts',
+  'src/plugins/desktopInstanceTemplatesHttpProjectionV2.ts',
   'src/features/invitation-acceptance/invitationAcceptanceClient.ts',
-  'src/features/runtime-clusters/runtimeClustersClient.ts',
-  'src/features/runtime-deployments/runtimeDeploymentsClient.ts',
-  'src/features/runtime-instances/runtimeInstancesClient.ts',
-  'src/features/tenant-creation/tenantCreationClient.ts',
   'src/features/unified-runtimes/unifiedRuntimesClient.ts',
   'src/features/settings-routes/nativeRouteHttpClient.ts',
 ];
@@ -66,10 +66,20 @@ test('Cloud-only creation, approval, invitation, and settings gates accept vault
   for (const path of [
     'src/features/device-approval/deviceApprovalClient.ts',
     'src/features/invitation-acceptance/invitationAcceptanceClient.ts',
-    'src/features/tenant-creation/tenantCreationClient.ts',
+    'src/plugins/desktopTenantCreationHttpProjectionV2.ts',
     'src/features/settings-routes/nativeRouteHttpClient.ts',
   ]) {
     const source = readFileSync(new URL(path, desktopRoot), 'utf8');
     assert.match(source, /desktopApiAuthenticationAvailable\(/u, path);
+  }
+});
+
+test('Sandbox surface wrappers contain no retired HTTP transport fallback', () => {
+  for (const path of [
+    'src/features/sandbox/sandboxRuntimeClient.ts',
+    'src/features/sandbox/sandboxRuntimeSurfaceClient.ts',
+  ]) {
+    const source = readFileSync(new URL(path, desktopRoot), 'utf8');
+    assert.doesNotMatch(source, /\b(?:desktopApiFetch|fetch|DesktopRuntimeConfig)\b/u, path);
   }
 });

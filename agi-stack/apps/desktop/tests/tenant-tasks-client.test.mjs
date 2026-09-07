@@ -1,13 +1,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { createTenantTasksHttpClient } =
-  await import('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantTasksHttpClient.js');
+const {
+  applyDesktopTenantTasksAuthorityV2,
+  createDesktopTenantTasksClientV2,
+  createDesktopTenantTasksOperationsV2,
+} = await import(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTasksAuthorityModuleV2.js'
+);
+const { loadTenantTasksCapability } = await import(
+  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantTasksCapability.js'
+);
 
 const originalFetch = globalThis.fetch;
+const originalWindow = globalThis.window;
 
 test.afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalWindow === undefined) delete globalThis.window;
+  else globalThis.window = originalWindow;
 });
 
 test('Cloud Tenant Tasks binds the complete Web task dashboard authority', async () => {
@@ -52,7 +63,7 @@ test('Cloud Tenant Tasks binds the complete Web task dashboard authority', async
     return jsonResponse({ accepted: true });
   };
 
-  const client = createTenantTasksHttpClient(runtimeConfig());
+  const client = tenantTasksClient(runtimeConfig());
   const snapshot = await client.load(scope(), {
     status: 'failed',
     search: 'episode',
@@ -97,6 +108,78 @@ test('Cloud Tenant Tasks binds the complete Web task dashboard authority', async
   assert.match(requests[2][1], /search=episode/u);
 });
 
+test('Cloud Tenant Tasks uses the vault broker for reads and mutations without a renderer bearer', async () => {
+  const commands = [];
+  globalThis.fetch = async () => assert.fail('vault-backed Cloud requests must not use fetch');
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      core: {
+        async invoke(command, args) {
+          commands.push({ command, args });
+          const path = new URL(args.request.path, 'https://desktop.invalid').pathname;
+          if (path.endsWith('/stats')) {
+            return {
+              status: 200,
+              body: {
+                total: 1,
+                pending: 0,
+                processing: 0,
+                completed: 0,
+                failed: 1,
+                throughput_per_minute: 0,
+                error_rate: 100,
+              },
+            };
+          }
+          if (path.endsWith('/queue-depth')) {
+            return { status: 200, body: [{ timestamp: '12:00', depth: 0 }] };
+          }
+          if (path.endsWith('/recent')) {
+            return {
+              status: 200,
+              body: {
+                tasks: [cloudTask()],
+                total: 1,
+                limit: 1,
+                offset: 0,
+                has_more: false,
+              },
+            };
+          }
+          if (path.endsWith('/retry-pending')) {
+            return {
+              status: 200,
+              body: {
+                submitted: 1,
+                skipped: 0,
+                limit: 5,
+                task_ids: ['task-1'],
+              },
+            };
+          }
+          if (path.endsWith('/retry') || path.endsWith('/stop')) {
+            return { status: 200, body: { accepted: true } };
+          }
+          assert.fail(`Unexpected vault request ${args.request.path}`);
+        },
+      },
+    },
+  };
+
+  const client = tenantTasksClient(runtimeConfig({ apiKey: '', localApiToken: '' }));
+  const snapshot = await client.load(scope(), { limit: 1 });
+  await client.retryTask(scope(), snapshot.tasks[0]);
+  await client.stopTask(scope(), snapshot.tasks[0]);
+  await client.retryPending(scope(), 5);
+
+  assert.equal(commands.length, 6);
+  assert.ok(commands.every(({ command }) => command === 'cloud_request'));
+  assert.doesNotMatch(
+    JSON.stringify(commands),
+    /Authorization|Bearer|cloud-token|launch-capability/u,
+  );
+});
+
 test('Local Tenant Tasks projects My Work and fails closed for unsupported mutations', async () => {
   const requests = [];
   globalThis.fetch = async (url, init) => {
@@ -129,10 +212,18 @@ test('Local Tenant Tasks projects My Work and fails closed for unsupported mutat
     });
   };
 
-  const client = createTenantTasksHttpClient(
-    runtimeConfig({ mode: 'local', apiBaseUrl: 'http://127.0.0.1:4777' }),
+  const client = tenantTasksClient(
+    runtimeConfig({
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:4777',
+      projectId: 'project-1',
+    }),
   );
-  const localScope = { ...scope(), authority: 'local' };
+  const localScope = {
+    authority: 'local',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+  };
   const snapshot = await client.load(localScope);
 
   assert.equal(snapshot.availability, 'degraded');
@@ -150,8 +241,8 @@ test('Local Tenant Tasks projects My Work and fails closed for unsupported mutat
   assert.equal(snapshot.tasks[0].projectId, 'project-1');
   assert.equal(snapshot.tasks[0].canRetry, false);
   assert.equal(snapshot.tasks[0].canStop, false);
-  await assert.rejects(
-    client.retryTask(localScope, snapshot.tasks[0]),
+  assert.throws(
+    () => client.retryTask(localScope, snapshot.tasks[0]),
     /local_task_mutation_unavailable:retry-task/u,
   );
   assert.deepEqual(requests, [['/api/v1/projects/project-1/my-work', 'GET']]);
@@ -163,11 +254,11 @@ test('Tenant Tasks fails closed before fetch when runtime scope drifts', async (
     calls += 1;
     return jsonResponse({});
   };
-  const client = createTenantTasksHttpClient(runtimeConfig());
+  const client = tenantTasksClient(runtimeConfig());
 
-  await assert.rejects(
-    client.load({ ...scope(), tenantId: 'other-tenant' }),
-    /tenant_tasks_runtime_scope_mismatch/u,
+  assert.throws(
+    () => client.load({ ...scope(), tenantId: 'other-tenant' }),
+    (error) => error?.code === 'desktop_tenant_tasks_operation_input_invalid',
   );
   assert.equal(calls, 0);
 });
@@ -180,7 +271,7 @@ function runtimeConfig(overrides = {}) {
     apiKey: 'test-token',
     localApiToken: 'test-local-token',
     tenantId: 'tenant-1',
-    projectId: 'project-1',
+    projectId: '',
     workspaceId: '',
     workspaceRoot: '/workspace',
     ...overrides,
@@ -191,7 +282,7 @@ function scope() {
   return {
     authority: 'cloud',
     tenantId: 'tenant-1',
-    projectId: 'project-1',
+    projectId: null,
   };
 }
 
@@ -218,4 +309,36 @@ function jsonResponse(value, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+function tenantTasksOperations() {
+  let service = null;
+  applyDesktopTenantTasksAuthorityV2(
+    {
+      provide(_serviceKey, candidate) {
+        service = candidate;
+      },
+    },
+    { strategy: 'desktop-api-fetch' },
+  );
+  return createDesktopTenantTasksOperationsV2(() => ({
+    async acquireServiceOperationLease() {
+      let released = false;
+      return {
+        status: 'accepted',
+        digest: 'tenant-tasks-test',
+        useService(operation) {
+          if (released) throw new Error('lease_released');
+          return operation(service);
+        },
+        async release() {
+          released = true;
+        },
+      };
+    },
+  }));
+}
+
+function tenantTasksClient(config) {
+  return createDesktopTenantTasksClientV2(tenantTasksOperations(), config);
 }

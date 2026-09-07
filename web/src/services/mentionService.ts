@@ -40,38 +40,43 @@ interface EnhancedSearchResponse {
 
 export const mentionService = {
   async search(query: string, projectId: string): Promise<MentionItem[]> {
-    const res = await apiFetch.post('/search-enhanced/advanced', {
-      query,
-      project_id: projectId,
-      limit: 10,
-    });
-    const data = (await res.json()) as EnhancedSearchResponse;
+    return apiFetch.post(
+      '/search-enhanced/advanced',
+      {
+        query,
+        project_id: projectId,
+        limit: 10,
+      },
+      async (res) => {
+        const data = (await res.json()) as EnhancedSearchResponse;
 
-    const items: MentionItem[] = [];
+        const items: MentionItem[] = [];
 
-    if (data.entities) {
-      for (const e of data.entities) {
-        items.push({
-          id: e.id || e.uuid || e.name,
-          name: e.name,
-          type: 'entity',
-          entityType: e.entity_type || e.type,
-          summary: e.summary || e.description,
-        });
+        if (data.entities) {
+          for (const e of data.entities) {
+            items.push({
+              id: e.id || e.uuid || e.name,
+              name: e.name,
+              type: 'entity',
+              entityType: e.entity_type || e.type,
+              summary: e.summary || e.description,
+            });
+          }
+        }
+
+        if (data.episodes) {
+          for (const ep of data.episodes) {
+            items.push({
+              id: ep.id || ep.uuid || '',
+              name: ep.name || ep.title || ep.content?.slice(0, 40) || '',
+              type: 'memory',
+              summary: ep.content?.slice(0, 80),
+            });
+          }
+        }
+
+        return items.slice(0, 10);
       }
-    }
-
-    if (data.episodes) {
-      for (const ep of data.episodes) {
-        items.push({
-          id: ep.id || ep.uuid || '',
-          name: ep.name || ep.title || ep.content?.slice(0, 40) || '',
-          type: 'memory',
-          summary: ep.content?.slice(0, 80),
-        });
-      }
-    }
-
-    return items.slice(0, 10);
+    );
   },
 };

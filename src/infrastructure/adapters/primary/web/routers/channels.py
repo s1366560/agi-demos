@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from collections.abc import Mapping
+from typing import Any, Literal, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from jsonschema import Draft7Validator
+from jsonschema import Draft202012Validator
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import and_, desc, func, nullslast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.roles import RoleDefinition
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.startup import (
-    get_channel_manager,
-    reload_channel_manager_connections,
-)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
@@ -29,7 +27,6 @@ from src.infrastructure.adapters.secondary.persistence.channel_repository import
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
-    PluginConfigModel,
     Project,
     Role,
     User,
@@ -37,25 +34,34 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserRole,
     UserTenant,
 )
-from src.infrastructure.adapters.secondary.persistence.plugin_config_repository import (
-    PluginConfigRepository,
-)
-from src.infrastructure.agent.plugins.control_plane import PluginControlPlaneService
-from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
-from src.infrastructure.agent.plugins.registry import (
-    PluginSkillBuildContext,
-    PluginToolBuildContext,
-    get_plugin_registry,
-)
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v1_retirement import (
+    PLUGIN_MARKETPLACE_V2_PATH,
+    PLUGIN_PROTOCOL_V1_RETIRED_CODE,
+)
+from src.infrastructure.plugins.v2.boundary import current_generation_v2
+from src.infrastructure.plugins.v2.channel_adapters import (
+    CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
+    ChannelAdapterMetadataV2,
+    ChannelAdapterResolverProtocolV2,
+)
+from src.infrastructure.plugins.v2.channel_runtime import current_channel_runtime_v2
 from src.infrastructure.security.encryption_service import get_encryption_service
-
-if TYPE_CHECKING:
-    from src.infrastructure.agent.plugins.registry import ChannelTypeConfigMetadata
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/channels", tags=["channels"])
+
+
+def _raise_plugin_protocol_v1_retired() -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": PLUGIN_PROTOCOL_V1_RETIRED_CODE,
+            "message": _("Plugin protocol V1 is retired; use the V2 plugin marketplace"),
+            "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
+        },
+    )
 
 
 async def verify_project_access(
@@ -117,8 +123,11 @@ async def verify_tenant_access(
     return True
 
 
-async def _resolve_project_tenant_id(project_id: str, db: AsyncSession) -> str | None:
-    """Resolve tenant_id for project-scoped compatibility routes."""
+async def _resolve_project_tenant_id(  # pyright: ignore[reportUnusedFunction]
+    project_id: str,
+    db: AsyncSession,
+) -> str | None:
+    """Resolve tenant_id without exposing project identifiers in failure logs."""
     try:
         result = await db.execute(
             refresh_select_statement(select(Project.tenant_id).where(Project.id == project_id))
@@ -406,31 +415,32 @@ _CHANNEL_SETTING_FIELDS = {
 _SECRET_UNCHANGED_SENTINEL = "__MEMSTACK_SECRET_UNCHANGED__"
 
 
-def _resolve_channel_metadata(channel_type: str) -> ChannelTypeConfigMetadata | None:
-    normalized = (channel_type or "").strip().lower()
+def _channel_adapter_resolver_v2() -> ChannelAdapterResolverProtocolV2:
+    generation = current_generation_v2()
+    resolver = generation.resolve(
+        CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    if not isinstance(resolver, ChannelAdapterResolverProtocolV2):
+        raise TypeError("active generation has an invalid channel adapter resolver")
+    return resolver
+
+
+def _resolve_channel_metadata(channel_type: str) -> ChannelAdapterMetadataV2 | None:
+    normalized = (channel_type or "").strip().casefold()
     if not normalized:
         return None
-    return get_plugin_registry().list_channel_type_metadata().get(normalized)
+    return _channel_adapter_resolver_v2().metadata(normalized)
 
 
-def _resolve_secret_paths(metadata: ChannelTypeConfigMetadata | None) -> list[str]:
+def _resolve_secret_paths(metadata: ChannelAdapterMetadataV2 | None) -> list[str]:
     secret_paths = getattr(metadata, "secret_paths", None) if metadata is not None else None
-    if not isinstance(secret_paths, list):
+    if not isinstance(secret_paths, (list, tuple)):
         return []
     normalized: list[str] = []
     for path in secret_paths:
         if isinstance(path, str) and path.strip():
             normalized.append(path.strip())
-    return normalized
-
-
-def _as_string_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    normalized: list[str] = []
-    for item in value[:100]:
-        if isinstance(item, str) and item.strip():
-            normalized.append(item.strip()[:500])
     return normalized
 
 
@@ -505,7 +515,7 @@ def _collect_settings_from_config(
 def _build_plugin_settings_payload(
     *,
     payload: dict[str, Any],
-    metadata: ChannelTypeConfigMetadata | None,
+    metadata: ChannelAdapterMetadataV2 | None,
     existing_config: ChannelConfigModel | None = None,
     secret_paths: list[str] | None = None,
     apply_defaults: bool = False,
@@ -514,7 +524,7 @@ def _build_plugin_settings_payload(
     if existing_config is not None:
         settings.update(_collect_settings_from_config(existing_config, secret_paths=secret_paths))
     defaults = metadata.defaults if metadata else None
-    if isinstance(defaults, dict):
+    if isinstance(defaults, Mapping):
         settings.update(defaults)
 
     incoming_extra = payload.get("extra_settings")
@@ -609,14 +619,14 @@ def _mask_secret_values_for_response(
 def _validate_plugin_settings_schema(
     *,
     channel_type: str,
-    metadata: ChannelTypeConfigMetadata | None,
+    metadata: ChannelAdapterMetadataV2 | None,
     settings: dict[str, Any],
 ) -> None:
     schema = getattr(metadata, "config_schema", None) if metadata is not None else None
-    if not isinstance(schema, dict):
+    if not isinstance(schema, Mapping):
         return
 
-    validator = Draft7Validator(schema)
+    validator = Draft202012Validator(dict(schema))
     errors = sorted(validator.iter_errors(settings), key=lambda item: list(item.path))
     if not errors:
         return
@@ -632,155 +642,6 @@ def _validate_plugin_settings_schema(
             "message": _("Invalid channel settings"),
             "errors": formatted_errors,
         },
-    )
-
-
-def _validate_runtime_plugin_config_schema(
-    *,
-    plugin_name: str,
-    schema: dict[str, Any],
-    config: dict[str, Any],
-) -> None:
-    validator = Draft7Validator(schema)
-    errors = sorted(validator.iter_errors(config), key=lambda item: list(item.path))
-    if not errors:
-        return
-
-    formatted_errors = []
-    for error in errors:
-        path = ".".join(str(segment) for segment in error.path) or "$"
-        formatted_errors.append({"path": path, "message": _("Invalid plugin setting")})
-
-    raise HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={
-            "message": _("Invalid plugin settings"),
-            "plugin_name": plugin_name,
-            "errors": formatted_errors,
-        },
-    )
-
-
-def _runtime_plugin_schema_defaults(schema: dict[str, Any]) -> dict[str, Any]:
-    if schema.get("type") != "object":
-        return {}
-    properties = schema.get("properties")
-    if not isinstance(properties, dict):
-        return {}
-
-    defaults: dict[str, Any] = {}
-    for key, field_schema in properties.items():
-        if not isinstance(key, str) or not isinstance(field_schema, dict):
-            continue
-        if "default" in field_schema:
-            defaults[key] = field_schema["default"]
-            continue
-        nested = _runtime_plugin_schema_defaults(field_schema)
-        if nested:
-            defaults[key] = nested
-    return defaults
-
-
-def _adapt_runtime_plugin_config_to_schema(
-    *,
-    config: dict[str, Any],
-    schema: dict[str, Any],
-) -> dict[str, Any]:
-    """Drop config keys no longer declared by the plugin schema.
-
-    Runtime plugin schemas are plugin-owned and may shrink between versions. Persisted tenant
-    configs must therefore be interpreted through the current schema before validation.
-    """
-    if schema.get("type") != "object" or not isinstance(config, dict):
-        return dict(config)
-
-    properties = schema.get("properties")
-    if not isinstance(properties, dict):
-        return dict(config) if schema.get("additionalProperties", True) is not False else {}
-
-    adapted: dict[str, Any] = {}
-    for key, field_schema in properties.items():
-        if not isinstance(key, str) or key not in config:
-            continue
-        value = config[key]
-        if isinstance(field_schema, dict) and field_schema.get("type") == "object":
-            adapted[key] = (
-                _adapt_runtime_plugin_config_to_schema(config=value, schema=field_schema)
-                if isinstance(value, dict)
-                else value
-            )
-            continue
-        adapted[key] = value
-
-    if schema.get("additionalProperties", True) is not False:
-        for key, value in config.items():
-            if key not in adapted:
-                adapted[key] = value
-
-    return adapted
-
-
-def _runtime_plugin_schema_entry_defaults(schema_entry: Any) -> dict[str, Any]:
-    defaults: dict[str, Any] = {}
-    if isinstance(getattr(schema_entry, "schema", None), dict):
-        defaults.update(_runtime_plugin_schema_defaults(schema_entry.schema))
-    if isinstance(getattr(schema_entry, "defaults", None), dict):
-        defaults.update(schema_entry.defaults)
-    return defaults
-
-
-def _resolve_runtime_plugin_schema(plugin_name: str) -> Any | None:
-    normalized = (plugin_name or "").strip()
-    if not normalized:
-        return None
-    return get_plugin_registry().list_config_schemas().get(normalized)
-
-
-def _runtime_plugin_record(
-    plugin_records: list[dict[str, Any]],
-    plugin_name: str,
-) -> dict[str, Any] | None:
-    return next((record for record in plugin_records if record.get("name") == plugin_name), None)
-
-
-def _mask_runtime_plugin_config(
-    config: dict[str, Any],
-    secret_paths: list[str],
-) -> dict[str, Any]:
-    if not secret_paths:
-        return dict(config)
-    masked = dict(config)
-    for path in secret_paths:
-        if _get_path_value(masked, path) is not _MISSING:
-            _set_path_value(masked, path, _SECRET_UNCHANGED_SENTINEL)
-    return masked
-
-
-def _runtime_plugin_config_to_response(
-    *,
-    tenant_id: str,
-    plugin_name: str,
-    config: PluginConfigModel | None,
-    secret_paths: list[str],
-    schema: dict[str, Any] | None = None,
-) -> PluginConfigResponse:
-    stored_config = config.config if config is not None and isinstance(config.config, dict) else {}
-    if isinstance(schema, dict):
-        stored_config = _adapt_runtime_plugin_config_to_schema(
-            config=stored_config,
-            schema=schema,
-        )
-    return PluginConfigResponse(
-        id=config.id if config is not None else None,
-        tenant_id=tenant_id,
-        plugin_name=plugin_name,
-        config=_mask_runtime_plugin_config(stored_config, secret_paths),
-        created_at=config.created_at.isoformat()
-        if config is not None and config.created_at
-        else None,
-        updated_at=config.updated_at.isoformat()
-        if config is not None and config.updated_at
-        else None,
     )
 
 
@@ -823,295 +684,71 @@ def to_response(config: ChannelConfigModel) -> ChannelConfigResponse:
     )
 
 
-def _serialize_plugin_diagnostics(diagnostics: list[Any]) -> list[PluginDiagnosticResponse]:
-    """Serialize plugin diagnostics into API response models."""
-    serialized: list[PluginDiagnosticResponse] = []
-    for diagnostic in diagnostics:
-        if isinstance(diagnostic, dict):
-            serialized.append(
-                PluginDiagnosticResponse(
-                    plugin_name=str(diagnostic.get("plugin_name", "unknown")),
-                    code=str(diagnostic.get("code", "unknown")),
-                    message=str(diagnostic.get("message", "")),
-                    level=str(diagnostic.get("level", "warning")),
-                )
-            )
-            continue
-        serialized.append(
-            PluginDiagnosticResponse(
-                plugin_name=str(getattr(diagnostic, "plugin_name", "unknown")),
-                code=str(getattr(diagnostic, "code", "unknown")),
-                message=str(getattr(diagnostic, "message", "")),
-                level=str(getattr(diagnostic, "level", "warning")),
-            )
-        )
-    return serialized
-
-
-def _build_plugin_control_plane() -> PluginControlPlaneService:
-    """Build plugin control-plane service with runtime reconciliation hook."""
-    return PluginControlPlaneService(
-        runtime_manager=get_plugin_runtime_manager(),
-        registry=get_plugin_registry(),
-        reconcile_channel_runtime=_reconcile_channel_runtime_after_plugin_change,
-    )
-
-
-def _serialize_plugin_tool_definition(tool_name: str, tool_impl: Any) -> dict[str, Any]:
-    """Serialize a plugin tool implementation into a UI-safe definition."""
-    tags = getattr(tool_impl, "tags", None)
-    aliases = getattr(tool_impl, "aliases", None)
-    return {
-        "name": str(getattr(tool_impl, "name", tool_name)),
-        "description": str(getattr(tool_impl, "description", "")),
-        "parameters": getattr(tool_impl, "parameters", {}) or {},
-        "permission": getattr(tool_impl, "permission", None),
-        "category": str(getattr(tool_impl, "category", "general") or "general"),
-        "tags": sorted(str(tag) for tag in tags) if tags else [],
-        "aliases": [str(alias) for alias in aliases] if aliases else [],
-    }
-
-
-def _serialize_plugin_skill_definition(skill: dict[str, Any]) -> dict[str, Any]:
-    """Serialize a plugin skill definition into a UI-safe definition."""
-    payload: dict[str, Any] = {}
-    for key, value in skill.items():
-        if key.startswith("_"):
-            continue
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            payload[key] = value
-        elif isinstance(value, (list, tuple, set)):
-            payload[key] = list(value)
-        elif isinstance(value, dict):
-            payload[key] = value
-    return payload
-
-
-def _records_by_plugin_name(plugin_records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {str(record.get("name")): record for record in plugin_records if record.get("name")}
-
-
-async def _attach_plugin_tool_definitions(
-    *,
-    records_by_name: dict[str, dict[str, Any]],
-    tenant_id: str,
-) -> list[PluginDiagnosticResponse]:
-    registry = get_plugin_registry()
-    diagnostics: list[PluginDiagnosticResponse] = []
-    try:
-        plugin_tools, tool_diagnostics = await registry.build_tools(
-            PluginToolBuildContext(tenant_id=tenant_id, project_id="", base_tools={})
-        )
-    except Exception as exc:
-        logger.warning(
-            "Failed to build plugin tool definitions for UI: error_type=%s",
-            type(exc).__name__,
-        )
-        return diagnostics
-
-    diagnostics.extend(_serialize_plugin_diagnostics(tool_diagnostics))
-    for tool_name, tool_impl in plugin_tools.items():
-        plugin_name = getattr(tool_impl, "_plugin_origin", None)
-        if not isinstance(plugin_name, str):
-            continue
-        record = records_by_name.get(plugin_name)
-        if record is not None:
-            record.setdefault("tool_definitions", []).append(
-                _serialize_plugin_tool_definition(str(tool_name), tool_impl)
-            )
-    return diagnostics
-
-
-def _resolve_skill_plugin_name(
-    *,
-    skill: dict[str, Any],
-    plugin_records: list[dict[str, Any]],
-    records_by_name: dict[str, dict[str, Any]],
-) -> str:
-    plugin_name = str(skill.get("plugin_name") or "")
-    if plugin_name:
-        return plugin_name
-
-    skill_id = str(skill.get("id") or "")
-    if skill_id.startswith("plugin-"):
-        for candidate_name in records_by_name:
-            if skill_id.startswith(f"plugin-{candidate_name}-"):
-                return candidate_name
-
-    skill_name = str(skill.get("name") or "")
-    matching_records = [
-        record
-        for record in plugin_records
-        if skill_name in _as_string_list(record.get("skills"))
-        or skill_name in _as_string_list((record.get("contracts") or {}).get("skills"))
-    ]
-    return str(matching_records[0].get("name")) if len(matching_records) == 1 else ""
-
-
-async def _attach_plugin_skill_definitions(
-    *,
-    plugin_records: list[dict[str, Any]],
-    records_by_name: dict[str, dict[str, Any]],
-    tenant_id: str,
-) -> list[PluginDiagnosticResponse]:
-    registry = get_plugin_registry()
-    diagnostics: list[PluginDiagnosticResponse] = []
-    try:
-        plugin_skills, skill_diagnostics = await registry.build_skills(
-            PluginSkillBuildContext(tenant_id=tenant_id, project_id="", agent_mode="chat")
-        )
-    except Exception as exc:
-        logger.warning(
-            "Failed to build plugin skill definitions for UI: error_type=%s",
-            type(exc).__name__,
-        )
-        return diagnostics
-
-    diagnostics.extend(_serialize_plugin_diagnostics(skill_diagnostics))
-    for skill in plugin_skills:
-        plugin_name = _resolve_skill_plugin_name(
-            skill=skill,
-            plugin_records=plugin_records,
-            records_by_name=records_by_name,
-        )
-        record = records_by_name.get(plugin_name)
-        if record is not None:
-            record.setdefault("skill_definitions", []).append(
-                _serialize_plugin_skill_definition(skill)
-            )
-    return diagnostics
-
-
-async def _attach_plugin_runtime_definitions(
-    *,
-    plugin_records: list[dict[str, Any]],
-    tenant_id: str | None,
-) -> list[PluginDiagnosticResponse]:
-    """Attach concrete plugin tool and skill definitions to runtime records."""
-    records_by_name = _records_by_plugin_name(plugin_records)
-    context_tenant_id = tenant_id or ""
-
-    diagnostics = await _attach_plugin_tool_definitions(
-        records_by_name=records_by_name,
-        tenant_id=context_tenant_id,
-    )
-    diagnostics.extend(
-        await _attach_plugin_skill_definitions(
-            plugin_records=plugin_records,
-            records_by_name=records_by_name,
-            tenant_id=context_tenant_id,
-        )
-    )
-    for record in plugin_records:
-        record.setdefault("tool_definitions", [])
-        record.setdefault("skill_definitions", [])
-    return diagnostics
-
-
-async def _load_runtime_plugins(
-    *,
-    tenant_id: str | None = None,
-) -> tuple[
-    list[dict[str, Any]],
-    list[PluginDiagnosticResponse],
-    dict[str, list[str]],
-]:
-    """Load plugin runtime view enriched with channel adapter ownership."""
-    control_plane = _build_plugin_control_plane()
-    plugin_records, diagnostics, channel_types_by_plugin = await control_plane.list_runtime_plugins(
-        tenant_id=tenant_id,
-    )
-    plugin_config_schemas = get_plugin_registry().list_config_schemas()
-    for record in plugin_records:
-        plugin_name = record.get("name")
-        record["schema_supported"] = (
-            isinstance(plugin_name, str) and plugin_name in plugin_config_schemas
-        )
-    definition_diagnostics = await _attach_plugin_runtime_definitions(
-        plugin_records=plugin_records,
-        tenant_id=tenant_id,
-    )
-    return (
-        plugin_records,
-        [*_serialize_plugin_diagnostics(diagnostics), *definition_diagnostics],
-        channel_types_by_plugin,
-    )
-
-
 async def _ensure_channel_plugin_enabled_for_project(
     *,
     project_id: str,
     channel_type: str,
     db: AsyncSession,
 ) -> None:
-    """Ensure plugin backing channel_type is enabled for the project's tenant."""
+    """Admit configs only for contributions active in the pinned V2 generation."""
     metadata = _resolve_channel_metadata(channel_type)
     if metadata is None:
-        return
-
-    tenant_id = await _resolve_project_tenant_id(project_id, db)
-    if not tenant_id:
-        return
-
-    plugin_name = str(getattr(metadata, "plugin_name", "")).strip()
-    if not plugin_name:
-        return
-
-    runtime_manager = get_plugin_runtime_manager()
-    plugin_records, _plugin_diagnostics = runtime_manager.list_plugins(tenant_id=tenant_id)
-    plugin_record = next((item for item in plugin_records if item.get("name") == plugin_name), None)
-    if plugin_record and not bool(plugin_record.get("enabled", True)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_("Plugin is disabled for this tenant"),
+            detail={
+                "code": "channel_adapter_not_found",
+                "message": _("Channel type is unavailable in the active plugin generation"),
+            },
         )
 
 
-async def _reconcile_channel_runtime_after_plugin_change() -> dict[str, int] | None:
-    """Reconcile running channel connections after plugin runtime changes."""
-    if get_channel_manager() is None:
-        return None
-    try:
-        reload_plan = await reload_channel_manager_connections(apply_changes=True)
-    except Exception as exc:
-        logger.warning(
-            "Failed to reconcile channel runtime after plugin change: error_type=%s",
-            type(exc).__name__,
-        )
-        return None
-    return reload_plan.summary() if reload_plan else None
-
-
-def _build_channel_catalog_items(
-    *,
-    plugin_records: list[dict[str, Any]],
-) -> list[ChannelPluginCatalogItemResponse]:
-    plugin_by_name = {record["name"]: record for record in plugin_records}
-    plugin_registry = get_plugin_registry()
-    channel_factories = plugin_registry.list_channel_adapter_factories()
-    channel_metadata = plugin_registry.list_channel_type_metadata()
-
+def _build_channel_catalog_items() -> list[ChannelPluginCatalogItemResponse]:
+    """Serialize channel contributions from the current pinned V2 generation."""
+    metadata_by_channel = _channel_adapter_resolver_v2().list_metadata()
     items: list[ChannelPluginCatalogItemResponse] = []
-    for channel_type, (plugin_name, _factory) in sorted(channel_factories.items()):
-        plugin_record = plugin_by_name.get(plugin_name, {})
-        metadata = channel_metadata.get(channel_type)
+    for channel_type, metadata in sorted(metadata_by_channel.items()):
+        source_id = metadata.source_id
+        if not source_id:
+            raise TypeError("active generation returned channel metadata without source identity")
         items.append(
             ChannelPluginCatalogItemResponse(
                 channel_type=channel_type,
-                plugin_name=plugin_name,
-                source=str(plugin_record.get("source", "entrypoint")),
-                package=plugin_record.get("package"),
-                version=plugin_record.get("version"),
-                kind=plugin_record.get("kind"),
-                manifest_id=plugin_record.get("manifest_id"),
-                providers=_as_string_list(plugin_record.get("providers")),
-                skills=_as_string_list(plugin_record.get("skills")),
-                enabled=bool(plugin_record.get("enabled", True)),
-                discovered=bool(plugin_record.get("discovered", True)),
-                schema_supported=bool(metadata and metadata.config_schema),
+                plugin_name=source_id,
+                source="v2-generation",
+                kind="channel",
+                manifest_id=source_id,
+                providers=[channel_type],
+                enabled=True,
+                discovered=True,
+                schema_supported=bool(metadata.config_schema),
             )
         )
     return items
+
+
+def _build_channel_schema_response(channel_type: str) -> ChannelPluginConfigSchemaResponse:
+    metadata = _channel_adapter_resolver_v2().metadata(channel_type)
+    if metadata is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Channel type not found in plugin catalog"),
+        )
+    source_id = metadata.source_id
+    if not source_id:
+        raise TypeError("active generation returned channel metadata without source identity")
+    return ChannelPluginConfigSchemaResponse(
+        channel_type=metadata.channel_type,
+        plugin_name=source_id,
+        source="v2-generation",
+        kind="channel",
+        manifest_id=source_id,
+        providers=[metadata.channel_type],
+        schema_supported=bool(metadata.config_schema),
+        config_schema=dict(metadata.config_schema),
+        config_ui_hints=dict(metadata.config_ui_hints),
+        defaults=dict(metadata.defaults),
+        secret_paths=list(metadata.secret_paths),
+    )
 
 
 # API Endpoints
@@ -1126,14 +763,9 @@ async def list_project_plugins(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RuntimePluginListResponse:
-    """List runtime plugins available to the current deployment."""
+    """Reject the retired V1 project plugin inventory surface."""
     await verify_project_access(project_id, current_user, db)
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    plugin_records, diagnostics, _ = await _load_runtime_plugins(tenant_id=project_tenant_id)
-    return RuntimePluginListResponse(
-        items=[RuntimePluginResponse(**record) for record in plugin_records],
-        diagnostics=diagnostics,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.get(
@@ -1145,13 +777,9 @@ async def list_tenant_plugins(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RuntimePluginListResponse:
-    """List runtime plugins for tenant-scoped plugin hub."""
+    """Reject the retired V1 tenant plugin inventory surface."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, diagnostics, _ = await _load_runtime_plugins(tenant_id=tenant_id)
-    return RuntimePluginListResponse(
-        items=[RuntimePluginResponse(**record) for record in plugin_records],
-        diagnostics=diagnostics,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.get(
@@ -1164,36 +792,9 @@ async def get_tenant_plugin_config_schema(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PluginConfigSchemaResponse:
-    """Return generic config schema metadata for a tenant runtime plugin."""
+    """Reject the retired V1 generic plugin schema surface."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, _diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=tenant_id
-    )
-    plugin_record = _runtime_plugin_record(plugin_records, plugin_name)
-    if plugin_record is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Plugin not found"),
-        )
-
-    schema_entry = _resolve_runtime_plugin_schema(plugin_name)
-    return PluginConfigSchemaResponse(
-        plugin_name=plugin_name,
-        source=plugin_record.get("source"),
-        package=plugin_record.get("package"),
-        version=plugin_record.get("version"),
-        kind=plugin_record.get("kind"),
-        manifest_id=plugin_record.get("manifest_id"),
-        providers=_as_string_list(plugin_record.get("providers")),
-        skills=_as_string_list(plugin_record.get("skills")),
-        enabled=bool(plugin_record.get("enabled", True)),
-        discovered=bool(plugin_record.get("discovered", True)),
-        schema_supported=schema_entry is not None,
-        config_schema=schema_entry.schema if schema_entry is not None else None,
-        config_ui_hints=schema_entry.config_ui_hints if schema_entry is not None else None,
-        defaults=schema_entry.defaults if schema_entry is not None else None,
-        secret_paths=list(schema_entry.secret_paths) if schema_entry is not None else [],
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.get(
@@ -1206,33 +807,9 @@ async def get_tenant_plugin_config(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PluginConfigResponse:
-    """Return a tenant-scoped runtime plugin config."""
+    """Reject the retired V1 generic plugin config surface."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, _diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=tenant_id
-    )
-    if _runtime_plugin_record(plugin_records, plugin_name) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Plugin not found"),
-        )
-
-    schema_entry = _resolve_runtime_plugin_schema(plugin_name)
-    if schema_entry is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Plugin config schema not found"),
-        )
-
-    repo = PluginConfigRepository(db)
-    config = await repo.get_by_tenant_and_plugin(tenant_id, plugin_name)
-    return _runtime_plugin_config_to_response(
-        tenant_id=tenant_id,
-        plugin_name=plugin_name,
-        config=config,
-        secret_paths=list(schema_entry.secret_paths),
-        schema=schema_entry.schema,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.put(
@@ -1246,65 +823,9 @@ async def update_tenant_plugin_config(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PluginConfigResponse:
-    """Validate and save a tenant-scoped runtime plugin config."""
+    """Reject the retired V1 generic plugin config mutation surface."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    plugin_records, _diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=tenant_id
-    )
-    if _runtime_plugin_record(plugin_records, plugin_name) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Plugin not found"),
-        )
-
-    schema_entry = _resolve_runtime_plugin_schema(plugin_name)
-    if schema_entry is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=_("Plugin config schema not found"),
-        )
-
-    repo = PluginConfigRepository(db)
-    existing = await repo.get_by_tenant_and_plugin(tenant_id, plugin_name)
-    secret_paths = list(schema_entry.secret_paths)
-    existing_config = (
-        _decrypt_secret_values(existing.config, secret_paths)
-        if existing is not None and isinstance(existing.config, dict)
-        else {}
-    )
-    settings_payload: dict[str, Any] = {}
-    settings_payload.update(_runtime_plugin_schema_entry_defaults(schema_entry))
-    settings_payload.update(existing_config)
-    settings_payload.update(data.config)
-    settings_payload = _apply_secret_sentinel(
-        settings=settings_payload,
-        secret_paths=secret_paths,
-        existing_settings=existing_config,
-    )
-    settings_payload = _adapt_runtime_plugin_config_to_schema(
-        config=settings_payload,
-        schema=schema_entry.schema,
-    )
-    _validate_runtime_plugin_config_schema(
-        plugin_name=plugin_name,
-        schema=schema_entry.schema,
-        config=settings_payload,
-    )
-    encrypted_config = _encrypt_secret_values(settings_payload, secret_paths)
-    saved = await repo.upsert(
-        tenant_id=tenant_id,
-        plugin_name=plugin_name,
-        config=encrypted_config,
-    )
-    response = _runtime_plugin_config_to_response(
-        tenant_id=tenant_id,
-        plugin_name=plugin_name,
-        config=saved,
-        secret_paths=secret_paths,
-        schema=schema_entry.schema,
-    )
-    await db.commit()
-    return response
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.get(
@@ -1318,12 +839,7 @@ async def list_tenant_channel_plugin_catalog(
 ) -> ChannelPluginCatalogResponse:
     """List channel plugin catalog for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=tenant_id
-    )
-    return ChannelPluginCatalogResponse(
-        items=_build_channel_catalog_items(plugin_records=plugin_records)
-    )
+    return ChannelPluginCatalogResponse(items=_build_channel_catalog_items())
 
 
 @router.get(
@@ -1338,34 +854,7 @@ async def get_tenant_channel_plugin_schema(
 ) -> ChannelPluginConfigSchemaResponse:
     """Return plugin channel schema metadata for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=tenant_id
-    )
-    plugin_by_name = {record["name"]: record for record in plugin_records}
-    metadata = get_plugin_registry().list_channel_type_metadata().get(channel_type)
-    if metadata is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Channel type not found in plugin catalog"),
-        )
-
-    plugin_record = plugin_by_name.get(metadata.plugin_name, {})
-    return ChannelPluginConfigSchemaResponse(
-        channel_type=metadata.channel_type,
-        plugin_name=metadata.plugin_name,
-        source=str(plugin_record.get("source", "entrypoint")),
-        package=plugin_record.get("package"),
-        version=plugin_record.get("version"),
-        kind=plugin_record.get("kind"),
-        manifest_id=plugin_record.get("manifest_id"),
-        providers=_as_string_list(plugin_record.get("providers")),
-        skills=_as_string_list(plugin_record.get("skills")),
-        schema_supported=bool(metadata.config_schema),
-        config_schema=metadata.config_schema,
-        config_ui_hints=metadata.config_ui_hints,
-        defaults=metadata.defaults,
-        secret_paths=list(metadata.secret_paths),
-    )
+    return _build_channel_schema_response(channel_type)
 
 
 @router.post(
@@ -1380,17 +869,7 @@ async def install_tenant_plugin(
 ) -> PluginActionResponse:
     """Install plugin package from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.install_plugin(data.requirement)
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=_("Plugin install failed")
-        )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1405,17 +884,7 @@ async def enable_tenant_plugin(
 ) -> PluginActionResponse:
     """Enable plugin from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.set_plugin_enabled(
-        plugin_name,
-        enabled=True,
-        tenant_id=tenant_id,
-    )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1430,17 +899,7 @@ async def disable_tenant_plugin(
 ) -> PluginActionResponse:
     """Disable plugin from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.set_plugin_enabled(
-        plugin_name,
-        enabled=False,
-        tenant_id=tenant_id,
-    )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1455,18 +914,7 @@ async def uninstall_tenant_plugin(
 ) -> PluginActionResponse:
     """Uninstall plugin package from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.uninstall_plugin(plugin_name)
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Plugin uninstall failed"),
-        )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1480,13 +928,7 @@ async def reload_tenant_plugins(
 ) -> PluginActionResponse:
     """Reload plugins from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.reload_plugins()
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.get(
@@ -1500,13 +942,7 @@ async def list_project_channel_plugin_catalog(
 ) -> ChannelPluginCatalogResponse:
     """List channel types currently provided by loaded plugins."""
     await verify_project_access(project_id, current_user, db)
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=project_tenant_id
-    )
-    return ChannelPluginCatalogResponse(
-        items=_build_channel_catalog_items(plugin_records=plugin_records)
-    )
+    return ChannelPluginCatalogResponse(items=_build_channel_catalog_items())
 
 
 @router.get(
@@ -1521,36 +957,7 @@ async def get_project_channel_plugin_schema(
 ) -> ChannelPluginConfigSchemaResponse:
     """Return config schema metadata for a plugin-provided channel type."""
     await verify_project_access(project_id, current_user, db)
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=project_tenant_id
-    )
-    plugin_by_name = {record["name"]: record for record in plugin_records}
-    metadata = get_plugin_registry().list_channel_type_metadata().get(channel_type)
-
-    if metadata is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Channel type not found in plugin catalog"),
-        )
-
-    plugin_record = plugin_by_name.get(metadata.plugin_name, {})
-    return ChannelPluginConfigSchemaResponse(
-        channel_type=metadata.channel_type,
-        plugin_name=metadata.plugin_name,
-        source=str(plugin_record.get("source", "entrypoint")),
-        package=plugin_record.get("package"),
-        version=plugin_record.get("version"),
-        kind=plugin_record.get("kind"),
-        manifest_id=plugin_record.get("manifest_id"),
-        providers=_as_string_list(plugin_record.get("providers")),
-        skills=_as_string_list(plugin_record.get("skills")),
-        schema_supported=bool(metadata.config_schema),
-        config_schema=metadata.config_schema,
-        config_ui_hints=metadata.config_ui_hints,
-        defaults=metadata.defaults,
-        secret_paths=list(metadata.secret_paths),
-    )
+    return _build_channel_schema_response(channel_type)
 
 
 @router.post(
@@ -1565,17 +972,7 @@ async def install_project_plugin(
 ) -> PluginActionResponse:
     """Install a plugin package and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.install_plugin(data.requirement)
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=_("Plugin install failed")
-        )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1590,18 +987,7 @@ async def enable_project_plugin(
 ) -> PluginActionResponse:
     """Enable plugin and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.set_plugin_enabled(
-        plugin_name,
-        enabled=True,
-        tenant_id=project_tenant_id,
-    )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1616,18 +1002,7 @@ async def disable_project_plugin(
 ) -> PluginActionResponse:
     """Disable plugin and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.set_plugin_enabled(
-        plugin_name,
-        enabled=False,
-        tenant_id=project_tenant_id,
-    )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1642,18 +1017,7 @@ async def uninstall_project_plugin(
 ) -> PluginActionResponse:
     """Uninstall plugin package and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.uninstall_plugin(plugin_name)
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Plugin uninstall failed"),
-        )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1667,13 +1031,7 @@ async def reload_project_plugins(
 ) -> PluginActionResponse:
     """Reload runtime plugin discovery and registrations."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.reload_plugins()
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_retired()
 
 
 @router.post(
@@ -1702,7 +1060,7 @@ async def create_config(
     model_settings: dict[str, Any] = {}
     normalized_extra_settings = data.extra_settings
 
-    if metadata and isinstance(getattr(metadata, "config_schema", None), dict):
+    if metadata and isinstance(getattr(metadata, "config_schema", None), Mapping):
         secret_paths = _resolve_secret_paths(metadata)
         settings_payload = _build_plugin_settings_payload(
             payload=payload,
@@ -1760,21 +1118,19 @@ async def create_config(
 
     # Auto-connect if enabled
     if created.enabled:
-        channel_manager = get_channel_manager()
-        if channel_manager:
-            try:
-                await channel_manager.add_connection(created)
-                logger.info(
-                    "[Channels] Auto-connected channel: has_channel_config_id=%s",
-                    bool(created.id),
-                )
-            except Exception as e:
-                logger.warning(
-                    "[Channels] Failed to auto-connect channel: "
-                    "has_channel_config_id=%s error_type=%s",
-                    bool(created.id),
-                    type(e).__name__,
-                )
+        try:
+            channel_runtime = current_channel_runtime_v2()
+            await channel_runtime.add_connection(created)
+            logger.info(
+                "[Channels] Auto-connected channel: has_channel_config_id=%s",
+                bool(created.id),
+            )
+        except Exception as e:
+            logger.warning(
+                "[Channels] Failed to auto-connect channel: has_channel_config_id=%s error_type=%s",
+                bool(created.id),
+                type(e).__name__,
+            )
 
     return to_response(created)
 
@@ -1855,7 +1211,7 @@ async def update_config(
 
     update_data = data.model_dump(exclude_unset=True)
     metadata = _resolve_channel_metadata(config.channel_type)
-    if metadata and isinstance(getattr(metadata, "config_schema", None), dict):
+    if metadata and isinstance(getattr(metadata, "config_schema", None), Mapping):
         secret_paths = _resolve_secret_paths(metadata)
         existing_settings = _collect_settings_from_config(config, secret_paths=secret_paths)
         settings_payload = _build_plugin_settings_payload(
@@ -1907,21 +1263,19 @@ async def update_config(
     await db.commit()
 
     # Restart connection if manager is available
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        try:
-            await channel_manager.restart_connection(config_id)
-            logger.info(
-                "[Channels] Restarted connection: has_channel_config_id=%s",
-                bool(config_id),
-            )
-        except Exception as e:
-            logger.warning(
-                "[Channels] Failed to restart connection: "
-                "has_channel_config_id=%s error_type=%s",
-                bool(config_id),
-                type(e).__name__,
-            )
+    try:
+        channel_runtime = current_channel_runtime_v2()
+        await channel_runtime.restart_connection(config_id)
+        logger.info(
+            "[Channels] Restarted connection: has_channel_config_id=%s",
+            bool(config_id),
+        )
+    except Exception as e:
+        logger.warning(
+            "[Channels] Failed to restart connection: has_channel_config_id=%s error_type=%s",
+            bool(config_id),
+            type(e).__name__,
+        )
 
     return to_response(updated)
 
@@ -1945,21 +1299,19 @@ async def delete_config(
     await verify_project_access(config.project_id, current_user, db, ["owner", "admin"])
 
     # Disconnect channel if connected
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        try:
-            await channel_manager.remove_connection(config_id)
-            logger.info(
-                "[Channels] Disconnected channel: has_channel_config_id=%s",
-                bool(config_id),
-            )
-        except Exception as e:
-            logger.warning(
-                "[Channels] Failed to disconnect channel: "
-                "has_channel_config_id=%s error_type=%s",
-                bool(config_id),
-                type(e).__name__,
-            )
+    try:
+        channel_runtime = current_channel_runtime_v2()
+        await channel_runtime.remove_connection(config_id)
+        logger.info(
+            "[Channels] Disconnected channel: has_channel_config_id=%s",
+            bool(config_id),
+        )
+    except Exception as e:
+        logger.warning(
+            "[Channels] Failed to disconnect channel: has_channel_config_id=%s error_type=%s",
+            bool(config_id),
+            type(e).__name__,
+        )
 
     deleted = await repo.delete(config_id)
     await db.commit()
@@ -2020,10 +1372,7 @@ async def test_config(
 
 async def _build_channel_adapter_for_test(config: ChannelConfigModel) -> object:
     """Build a plugin channel adapter without starting the long-lived runtime loop."""
-    from src.infrastructure.channels.connection_manager import ChannelConnectionManager
-
-    manager = ChannelConnectionManager()
-    return await manager._create_adapter(config)
+    return await current_channel_runtime_v2().build_adapter(config)
 
 
 async def _run_channel_adapter_health_check(adapter: object) -> bool:
@@ -2180,12 +1529,11 @@ async def get_project_channel_observability_summary(
 
     active_connections = 0
     connected_config_ids: list[str] = []
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        for connection in channel_manager.connections.values():
-            if connection.project_id == project_id and connection.status == "connected":
-                active_connections += 1
-                connected_config_ids.append(connection.config_id)
+    channel_runtime = current_channel_runtime_v2()
+    for connection in channel_runtime.connections.values():
+        if connection.project_id == project_id and connection.status == "connected":
+            active_connections += 1
+            connected_config_ids.append(connection.config_id)
 
     return ChannelObservabilitySummaryResponse(
         project_id=project_id,
@@ -2335,20 +1683,19 @@ async def get_connection_status(
     await verify_project_access(config.project_id, current_user, db)
 
     # Get real-time status from connection manager
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        status_data = channel_manager.get_status(config_id)
-        if status_data:
-            return ChannelStatusResponse(
-                config_id=status_data["config_id"],
-                project_id=status_data["project_id"],
-                channel_type=status_data["channel_type"],
-                status=status_data["status"],
-                connected=status_data["connected"],
-                last_heartbeat=status_data.get("last_heartbeat"),
-                last_error=status_data.get("last_error"),
-                reconnect_attempts=status_data.get("reconnect_attempts", 0),
-            )
+    channel_runtime = current_channel_runtime_v2()
+    status_data = channel_runtime.get_status(config_id)
+    if status_data:
+        return ChannelStatusResponse(
+            config_id=status_data["config_id"],
+            project_id=status_data["project_id"],
+            channel_type=status_data["channel_type"],
+            status=status_data["status"],
+            connected=status_data["connected"],
+            last_heartbeat=status_data.get("last_heartbeat"),
+            last_error=status_data.get("last_error"),
+            reconnect_attempts=status_data.get("reconnect_attempts", 0),
+        )
 
     # Fall back to database status if not in connection manager
     return ChannelStatusResponse(
@@ -2396,24 +1743,20 @@ async def list_all_connection_status(
             detail=_("Admin role required"),
         )
 
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        statuses = channel_manager.get_all_status()
-        return [
-            ChannelStatusResponse(
-                config_id=s["config_id"],
-                project_id=s["project_id"],
-                channel_type=s["channel_type"],
-                status=s["status"],
-                connected=s["connected"],
-                last_heartbeat=s.get("last_heartbeat"),
-                last_error=s.get("last_error"),
-                reconnect_attempts=s.get("reconnect_attempts", 0),
-            )
-            for s in statuses
-        ]
-
-    return []
+    statuses = current_channel_runtime_v2().get_all_status()
+    return [
+        ChannelStatusResponse(
+            config_id=s["config_id"],
+            project_id=s["project_id"],
+            channel_type=s["channel_type"],
+            status=s["status"],
+            connected=s["connected"],
+            last_heartbeat=s.get("last_heartbeat"),
+            last_error=s.get("last_error"),
+            reconnect_attempts=s.get("reconnect_attempts", 0),
+        )
+        for s in statuses
+    ]
 
 
 # ------------------------------------------------------------------

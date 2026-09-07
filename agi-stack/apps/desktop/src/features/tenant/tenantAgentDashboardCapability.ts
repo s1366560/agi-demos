@@ -5,7 +5,7 @@ import type {
   DesktopCapabilityScope,
 } from '../runtime/capabilitySnapshot';
 import type { TenantAgentDashboardAction } from './tenantAgentDashboardClient';
-import { createTenantAgentDashboardHttpClient } from './tenantAgentDashboardHttpClient';
+import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 
 const ACTION_ORDER = Object.freeze<TenantAgentDashboardAction[]>([
   'view-config',
@@ -21,6 +21,10 @@ const ACTION_ORDER = Object.freeze<TenantAgentDashboardAction[]>([
 
 export async function loadTenantAgentDashboardCapability(
   config: DesktopRuntimeConfig,
+  tenantAgentDashboardOperationsV2: Pick<
+    DesktopTenantAgentDashboardOperationsV2,
+    'loadTenantAgentDashboard'
+  >,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
   const tenantId = scopeIdentifier(config.tenantId);
@@ -28,14 +32,12 @@ export async function loadTenantAgentDashboardCapability(
   if (!tenantId) {
     return unavailable('tenant_agent_dashboard_scope_unavailable', scope);
   }
-  if (config.mode === 'local') {
-    return unavailable('local_agent_dashboard_authority_unavailable', scope, '0.1.0');
-  }
   try {
-    const snapshot = await createTenantAgentDashboardHttpClient(config).load(
-      { authority: 'cloud', tenantId },
-      signal,
-    );
+    const snapshot = await tenantAgentDashboardOperationsV2.loadTenantAgentDashboard({
+      config,
+      scope: { authority: config.mode, tenantId },
+      ...(signal === undefined ? {} : { signal }),
+    });
     if (!isOrderedActionSubset(snapshot.allowedActions)) {
       return unavailable('tenant_agent_dashboard_contract_invalid', scope);
     }

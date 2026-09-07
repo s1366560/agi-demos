@@ -7,6 +7,7 @@ and send messages within the same project scope.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from src.domain.model.agent import (
@@ -24,6 +25,13 @@ from src.domain.ports.repositories.agent_repository import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SESSION_HISTORY_EVENT_TYPES = {
+    "assistant_message",
+    "turn_admitted",
+    "user_message",
+}
+_EVENT_TIME_UPPER_BOUND = (1 << 63) - 1
 
 
 class SessionCommService:
@@ -131,11 +139,14 @@ class SessionCommService:
             target_conversation_id,
             limit=fetch_count,
         )
+        projected_event_messages = [
+            projected
+            for event in event_messages
+            if (projected := self._history_message_from_event(event)) is not None
+        ]
 
-        if event_messages:
-            history_messages = [
-                self._history_message_from_event(event) for event in event_messages
-            ]
+        if projected_event_messages:
+            history_messages = projected_event_messages
             history_messages.extend(
                 self._history_message_from_message(message)
                 for message in db_messages
@@ -164,9 +175,11 @@ class SessionCommService:
         """Read canonical user/assistant history from the event store when available."""
         if self._agent_execution_event_repo is None:
             return []
-        return await self._agent_execution_event_repo.get_message_events(
+        return await self._agent_execution_event_repo.get_events(
             conversation_id=target_conversation_id,
             limit=limit,
+            event_types=_SESSION_HISTORY_EVENT_TYPES,
+            before_time_us=_EVENT_TIME_UPPER_BOUND,
         )
 
     @staticmethod
@@ -181,13 +194,35 @@ class SessionCommService:
         }
 
     @staticmethod
-    def _history_message_from_event(event: AgentExecutionEvent) -> dict[str, str]:
+    def _history_message_from_event(
+        event: AgentExecutionEvent,
+    ) -> dict[str, str] | None:
         """Serialize a persisted message event into sessions_history output shape."""
-        data = event.event_data
+        data = event.event_data if isinstance(event.event_data, Mapping) else {}
+        event_type = getattr(event.event_type, "value", event.event_type)
+        if event_type == "turn_admitted":
+            raw_model_message = data.get("model_message")
+            if not isinstance(raw_model_message, Mapping):
+                return None
+            if raw_model_message.get("role") != MessageRole.USER.value:
+                return None
+            content = raw_model_message.get("content")
+            if not isinstance(content, str):
+                return None
+            return {
+                "id": event.message_id,
+                "role": MessageRole.USER.value,
+                "content": content,
+                "message_type": MessageType.TEXT.value,
+                "created_at": event.created_at.isoformat(),
+            }
+
         role = str(
             data.get(
                 "role",
-                MessageRole.ASSISTANT.value if str(event.event_type) == "assistant_message" else MessageRole.USER.value,
+                MessageRole.ASSISTANT.value
+                if event_type == "assistant_message"
+                else MessageRole.USER.value,
             )
         )
         message_id = str(data.get("message_id") or event.message_id or event.id)

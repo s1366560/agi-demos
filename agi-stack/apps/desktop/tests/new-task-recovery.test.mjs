@@ -172,7 +172,7 @@ test('only a structured task-session conflict offers an explicit key rotation', 
 test('create-workspace tombstones require an explicit authoritative existing-workspace choice', () => {
   assert.match(
     generatePlanSource,
-    /targetWorkspaceSelection === NEW_WORKSPACE_VALUE[\s\S]*new DesktopApiClient\(config\)\.listWorkspaces\(\)[\s\S]*resolveTaskSessionConflictWorkspace\([\s\S]*definition\.title/,
+    /targetWorkspaceSelection === NEW_WORKSPACE_VALUE[\s\S]*newTaskFlowClientV2\.bindOperation\(config\)\.listWorkspaces\(\)[\s\S]*resolveTaskSessionConflictWorkspace\([\s\S]*definition\.title/,
   );
   assert.match(
     generatePlanSource,
@@ -206,8 +206,8 @@ test('create-workspace tombstones require an explicit authoritative existing-wor
 });
 
 test('actor changes invalidate in-flight work and close the actor-bound modal', () => {
-  assert.match(appSource, /actorId=\{auth\.user\?\.user_id\}/);
-  assert.doesNotMatch(appSource, /actorId=\{[^}]*apiKey/);
+  assert.match(appSource, /actorId:\s*auth\.user\?\.user_id/);
+  assert.doesNotMatch(appSource, /actorId:\s*[^,\n]*apiKey/);
   assert.match(taskFlowSource, /activeActorIdRef\.current = normalizedActorId/);
   assert.notEqual(actorChangeEffectSource, '');
   assert.match(
@@ -296,7 +296,7 @@ test('Plan capability network failures expose connection recovery before any wri
 });
 
 test('App passes structured workspace authority and stale selection cannot silently create', () => {
-  assert.match(appSource, /workspaceAuthority=\{newTaskWorkspaceAuthority\}/);
+  assert.match(appSource, /workspaceAuthority:\s*newTaskWorkspaceAuthority/);
   assert.match(appSource, /resolveNewTaskWorkspaceAuthority\(/);
   assert.match(taskFlowSource, /canUseNewTaskWorkspaceSelection\(/);
   assert.doesNotMatch(generatePlanSource, /selectedWorkspace \?\?[\s\S]*createWorkspaceForProject/);
@@ -352,7 +352,7 @@ test('opening and cancelling New Task preserves the active conversation until ac
   assert.doesNotMatch(appSource, /setChatInput\(/);
   assert.match(
     appSource,
-    /composerResetKey=\{selectedConversation\?\.id \?\? config\.workspaceId\}/,
+    /composerResetKey:\s*selectedConversation\?\.id \?\? config\.workspaceId/,
   );
 });
 

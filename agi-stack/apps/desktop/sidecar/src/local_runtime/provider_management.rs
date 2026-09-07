@@ -664,10 +664,7 @@ fn mutate_llm_provider(
     // selection exists yet: the first configured provider must be usable
     // immediately. An explicit selection always wins, so this only fills the
     // empty slot and never overrides an operator's choice.
-    if creating
-        && next_binding.is_some()
-        && runtime.selections.get(tenant_id).is_none()
-    {
+    if creating && next_binding.is_some() && runtime.selections.get(tenant_id).is_none() {
         let credential_ready = next_binding
             .as_ref()
             .is_some_and(|binding| binding.auth_method == "none")
@@ -684,7 +681,9 @@ fn mutate_llm_provider(
                 Utc::now().timestamp_millis(),
             ) {
                 Ok(_) => {
-                    runtime.selections.insert(tenant_id.clone(), provider_id.clone());
+                    runtime
+                        .selections
+                        .insert(tenant_id.clone(), provider_id.clone());
                 }
                 Err(error) => {
                     eprintln!("failed to auto-select provider runtime default: {error:?}");

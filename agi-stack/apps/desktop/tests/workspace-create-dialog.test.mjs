@@ -15,6 +15,10 @@ const dockSource = readFileSync(
   'utf8',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const shellSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const qaSource = readFileSync(new URL('../src/qa/WorkspaceCreateQa.tsx', import.meta.url), 'utf8');
 
 test('workspace create dialog exposes explicit fields, accessible radios, and discard protection', () => {
@@ -44,7 +48,12 @@ test('workspace creation is reachable from the workspace header and empty projec
 });
 
 test('App binds creation to the submitted scope and activates only the verified workspace', () => {
-  assert.match(appSource, /<WorkspaceCreateDialog/);
+  assert.match(
+    shellSurfaceSource,
+    /<DesktopRendererWorkspaceCreateV2 input=\{surfaces\.workspaceCreate\} \/>/u,
+  );
+  assert.match(appSource, /workspaceCreate:\s*\{/u);
+  assert.match(appSource, /onCreate:\s*createWorkspaceFromDialog/u);
   assert.match(appSource, /createWorkspaceFromDialog/);
   assert.match(appSource, /workspaceCreateScopeIsCurrent/);
   assert.match(appSource, /configScopeEpochRef\.current/);

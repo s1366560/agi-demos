@@ -5,21 +5,29 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const featureRoot = '/tmp/agistack-desktop-test-dist/src/features/tenant-admin';
 const { DesktopApiError } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
-const { createTenantGovernanceClient } = require(`${featureRoot}/tenantGovernanceClient.js`);
-const { createTenantBillingClient } = require(`${featureRoot}/tenantBillingClient.js`);
-const { createTenantAuditClient } = require(`${featureRoot}/tenantAuditClient.js`);
-const { createTenantTrustClient } = require(`${featureRoot}/tenantTrustClient.js`);
+const {
+  createDesktopTenantGovernanceHttpProjectionV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantGovernanceHttpProjectionV2.js');
+const {
+  createDesktopTenantBillingHttpProjectionV2: createTenantBillingClient,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantBillingHttpProjectionV2.js');
+const {
+  createDesktopTenantAuditHttpProjectionV2: createTenantAuditClient,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAuditHttpProjectionV2.js');
+const {
+  createDesktopTenantTrustHttpProjectionV2: createTenantTrustClient,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTrustHttpProjectionV2.js');
 const { createTenantGovernanceController } = require(
-  `${featureRoot}/tenantGovernanceController.js`,
+  `${featureRoot}/tenantGovernanceController.js`
 );
 const { createTenantBillingController } = require(`${featureRoot}/tenantBillingController.js`);
 const { createTenantAuditController } = require(`${featureRoot}/tenantAuditController.js`);
 const { createTenantTrustController } = require(`${featureRoot}/tenantTrustController.js`);
 const { createTenantGovernanceRouteModuleLoader } = require(
-  `${featureRoot}/tenantGovernanceRouteModule.js`,
+  `${featureRoot}/tenantGovernanceRouteModule.js`
 );
 const { createTenantBillingRouteModuleLoader } = require(
-  `${featureRoot}/tenantBillingRouteModule.js`,
+  `${featureRoot}/tenantBillingRouteModule.js`
 );
 const { createTenantAuditRouteModuleLoader } = require(`${featureRoot}/tenantAuditRouteModule.js`);
 const { createTenantTrustRouteModuleLoader } = require(`${featureRoot}/tenantTrustRouteModule.js`);
@@ -85,7 +93,7 @@ test('four tenant admin routes publish lazy native cloud-only modules', async ()
         availability: 'available',
         reasonCode: null,
         Surface: 'function',
-      },
+      }
     );
   }
 });
@@ -116,7 +124,7 @@ test('governance client observes owner permissions and uses trusted-session auth
       throw new Error(`unexpected request ${init.method ?? 'GET'} ${path}`);
     },
     async () => {
-      const client = createTenantGovernanceClient(cloudConfig);
+      const client = createDesktopTenantGovernanceHttpProjectionV2(cloudConfig);
       const observed = await client.load(scope);
       assert.equal(observed.availability, 'available');
       assert.equal(observed.membershipRole, 'owner');
@@ -137,7 +145,7 @@ test('governance client observes owner permissions and uses trusted-session auth
       });
       await client.changeRole(scope, 'user-1', 'admin');
       await client.removeMember(scope, 'user-1');
-    },
+    }
   );
   assert.equal(requests.length, 9);
   for (const request of requests) {
@@ -175,11 +183,11 @@ test('billing client closes permissions and remains degraded until invoice file 
       ]);
       assert.equal(observed.allowedActions.includes('download-invoice'), false);
       await client.upgradePlan(scope, 'pro');
-    },
+    }
   );
   assert.deepEqual(
     requests.map(({ init }) => init.method ?? 'GET'),
-    ['GET', 'GET', 'GET', 'GET', 'POST'],
+    ['GET', 'GET', 'GET', 'GET', 'POST']
   );
 });
 
@@ -232,10 +240,10 @@ test('audit client observes filter, runtime-summary, and bounded native export a
       assert.equal(observed.entries[0].action, 'workspace.updated');
       assert.equal(observed.runtimeSummary.total, 1);
       assert.equal(observed.authorityRevision, 7);
-    },
+    }
   );
   const filtered = new URL(
-    requests.find(({ url }) => new URL(url).pathname.endsWith('/filter')).url,
+    requests.find(({ url }) => new URL(url).pathname.endsWith('/filter')).url
   );
   assert.equal(filtered.pathname.endsWith('/filter'), true);
   assert.equal(filtered.searchParams.get('resource_type'), 'workspace');
@@ -262,25 +270,21 @@ test('audit client exports the active filters through a bounded binary request',
       });
     },
     async () => {
-      const result = await createTenantAuditClient(cloudConfig).exportLogs(
-        scope,
-        'csv',
-        {
-          action: 'workspace.updated',
-          resourceType: 'workspace',
-          actor: 'user-1',
-        },
-      );
+      const result = await createTenantAuditClient(cloudConfig).exportLogs(scope, 'csv', {
+        action: 'workspace.updated',
+        resourceType: 'workspace',
+        actor: 'user-1',
+      });
       assert.equal(result.suggestedName, 'audit-logs.csv');
       assert.equal(result.mimeType, 'text/csv');
       assert.equal(await result.blob.text(), 'id,action\naudit-1,workspace.updated\n');
-    },
+    }
   );
   assert.equal(requests.length, 1);
   assert.equal(new Headers(requests[0].init.headers).get('Accept'), 'text/csv');
   assert.equal(
     new Headers(requests[0].init.headers).get('Authorization'),
-    'Bearer trusted-session',
+    'Bearer trusted-session'
   );
 });
 
@@ -299,14 +303,14 @@ test('audit client cancels an unknown-length direct response at the native file 
             cancelled = true;
           },
         }),
-        { headers: { 'Content-Type': 'text/csv' } },
+        { headers: { 'Content-Type': 'text/csv' } }
       ),
     async () => {
       await assert.rejects(
         createTenantAuditClient(cloudConfig).exportLogs(scope, 'csv'),
-        (error) => reasonCode(error) === 'tenant_audit_export_too_large',
+        (error) => reasonCode(error) === 'tenant_audit_export_too_large'
       );
-    },
+    }
   );
   assert.equal(cancelled, true);
 });
@@ -338,7 +342,7 @@ test('audit client reuses an unfiltered page total as authority revision', async
       });
       assert.equal(observed.total, 11);
       assert.equal(observed.authorityRevision, 11);
-    },
+    }
   );
   assert.deepEqual(auditCalls, ['?limit=5&offset=5']);
 });
@@ -357,9 +361,9 @@ test('governance accepts nullable backend member names without weakening the mem
       throw new Error(`unexpected request ${init.method ?? 'GET'} ${path}`);
     },
     async () => {
-      const observed = await createTenantGovernanceClient(cloudConfig).load(scope);
+      const observed = await createDesktopTenantGovernanceHttpProjectionV2(cloudConfig).load(scope);
       assert.equal(observed.members[0].name, null);
-    },
+    }
   );
 });
 
@@ -392,9 +396,9 @@ test('trust client requires a real workspace scope and closes admin mutations', 
       await client.revoke(trustScope, 'policy-1');
       await assert.rejects(
         client.load({ ...trustScope, workspaceId: 'default' }),
-        (error) => reasonCode(error) === 'tenant_trust_workspace_scope_invalid',
+        (error) => reasonCode(error) === 'tenant_trust_workspace_scope_invalid'
       );
-    },
+    }
   );
   assert.equal(requests.length, 6);
 });
@@ -409,7 +413,7 @@ test('all four Local clients fail closed with catalog reason codes before networ
     async () => {
       const cases = [
         [
-          () => createTenantGovernanceClient(localConfig).load(localScope),
+          () => createDesktopTenantGovernanceHttpProjectionV2(localConfig).load(localScope),
           'cloud_tenant_membership_not_applicable',
         ],
         [
@@ -433,7 +437,7 @@ test('all four Local clients fail closed with catalog reason codes before networ
           return true;
         });
       }
-    },
+    }
   );
   assert.equal(fetchCalls, 0);
 });

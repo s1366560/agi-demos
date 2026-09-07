@@ -1,9 +1,18 @@
+import { createBrowserBridgeManagementClientQaV2 } from './browserBridgeManagementClientQaV2';
+import { createDesktopBrowserIntegrationQaOperationsV2 } from './desktopBrowserIntegrationAuthorityQaV2';
+import { createDesktopProjectMcpServersQaOperationsV2 } from './desktopProjectMcpServersAuthorityQaV2';
+import { createDesktopTenantProvidersQaOperationsV2 } from './desktopTenantProvidersAuthorityQaV2';
+import { createDesktopTenantSkillDefinitionsQaOperationsV2 } from './desktopTenantSkillDefinitionsAuthorityQaV2';
+import { createDesktopTenantSkillPackagesQaOperationsV2 } from './desktopTenantSkillPackagesAuthorityQaV2';
+import { createDesktopTenantSkillEvolutionQaOperationsV2 } from './desktopTenantSkillEvolutionAuthorityQaV2';
 import '@radix-ui/themes/styles.css';
 import React, { useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { SettingsWindow, type SettingsSection } from '../features/settings/SettingsWindow';
+import { managedPluginFromMarketplaceEntry } from '../api/pluginMarketplaceModel';
 import { I18nProvider } from '../i18n';
+import type { DesktopPluginMarketplaceOperationsV2 } from '../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type {
   AuthState,
   AgentWsEvent,
@@ -16,20 +25,21 @@ import type {
   ManagedChannelPluginCatalogItem,
   ManagedChannelPluginConfigSchema,
   ManagedLlmProvider,
-  ManagedPlugin,
   ManagedSkill,
   ManagedSkillEvolutionDetail,
   ManagedSkillEvolutionJob,
   ManagedSkillVersion,
   ManagedSubAgent,
   ManagedSubAgentTemplate,
-  PluginConfigRecord,
-  PluginConfigSchema,
+  MarketplacePluginCatalogEntry,
 } from '../types';
 import { DEFAULT_CONFIG } from '../types';
+import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
+import { createDesktopTenantEvolutionQaOperationsV2 } from './desktopTenantEvolutionAuthorityQaV2';
+import { createDesktopTenantAgentDefinitionsQaOperationsV2 } from './desktopTenantAgentDefinitionsAuthorityQaV2';
+import { createDesktopTenantSubAgentDefinitionsQaOperationsV2 } from './desktopTenantSubAgentDefinitionsAuthorityQaV2';
+import { createDesktopProjectChannelsQaOperationsV2 } from './desktopProjectChannelsAuthorityQaV2';
 import '../styles/global.css';
-
-type QaPlugin = Omit<ManagedPlugin, 'id'> & { id?: string };
 
 declare global {
   var __providerSettingsQaRoot: Root | undefined;
@@ -40,6 +50,20 @@ const QA_TENANT_ID = 'tenant-northstar';
 const QA_PROJECT_ID = 'project-desktop-client';
 const QA_WORKSPACE_ID = 'workspace-desktop-client';
 const NOW = '2026-07-14T09:40:00.000Z';
+const browserIntegrationOperationsV2 = createDesktopBrowserIntegrationQaOperationsV2();
+const browserBridgeManagementClientV2 = createBrowserBridgeManagementClientQaV2();
+const projectMcpServersOperationsV2 = createDesktopProjectMcpServersQaOperationsV2();
+const tenantProvidersOperationsV2 = createDesktopTenantProvidersQaOperationsV2();
+const tenantSkillDefinitionsOperationsV2 = createDesktopTenantSkillDefinitionsQaOperationsV2();
+const tenantSkillPackagesOperationsV2 = createDesktopTenantSkillPackagesQaOperationsV2();
+const tenantSkillEvolutionOperationsV2 = createDesktopTenantSkillEvolutionQaOperationsV2();
+const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2();
+const tenantEvolutionOperationsV2 = createDesktopTenantEvolutionQaOperationsV2();
+const projectChannelsOperationsV2 = createDesktopProjectChannelsQaOperationsV2();
+const tenantAgentDefinitionsOperationsV2 =
+  createDesktopTenantAgentDefinitionsQaOperationsV2();
+const tenantSubAgentDefinitionsOperationsV2 =
+  createDesktopTenantSubAgentDefinitionsQaOperationsV2();
 const QA_ENVIRONMENT_SECRETS = new Set(['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
 
 const qaProviderTypes = [
@@ -277,199 +301,92 @@ let skillEvolutionJobs: ManagedSkillEvolutionJob[] = [
   },
 ];
 
-let plugins: QaPlugin[] = [
+let plugins: MarketplacePluginCatalogEntry[] = [
   {
-    name: 'github',
-    source: 'entrypoint',
-    package: '@memstack/github',
+    plugin_id: 'github',
     version: '2.4.1',
-    kind: 'mcp',
-    enabled: true,
-    discovered: true,
-    providers: ['github'],
-    skills: ['pull-request-review'],
-    channel_types: ['issues', 'pull_requests'],
-    tool_definitions: [
-      { name: 'list_pull_requests' },
-      { name: 'review_pull_request' },
-      { name: 'read_issue' },
-    ],
-    schema_supported: true,
-    updated_at: NOW,
+    publisher: 'MemStack Labs',
+    artifact_digest: 'sha256:github-artifact',
+    artifact_registry: 'registry.qa.memstack.invalid',
+    artifact_repository: 'plugins/github',
+    oci_manifest_digest: 'sha256:github-manifest',
+    install_status: 'installed',
+    manifest: { targets: ['python', 'desktop-renderer'] },
+    signature: { algorithm: 'Ed25519' },
+    provenance: { builder_id: 'qa-builder-v2' },
+    security_scan_status: 'passed',
+    revoked: false,
+    revocation_reason: null,
   },
   {
-    name: 'slack',
-    source: 'entrypoint',
-    package: '@memstack/slack',
+    plugin_id: 'slack',
     version: '3.2.0',
-    kind: 'channel',
-    enabled: true,
-    discovered: true,
-    providers: ['slack'],
-    skills: ['incident-triage'],
-    channel_types: ['messages', 'threads'],
-    tool_definitions: [{ name: 'search_messages' }, { name: 'post_message' }],
-    schema_supported: true,
-    updated_at: NOW,
+    publisher: 'MemStack Labs',
+    artifact_digest: 'sha256:slack-artifact',
+    artifact_registry: 'registry.qa.memstack.invalid',
+    artifact_repository: 'plugins/slack',
+    oci_manifest_digest: 'sha256:slack-manifest',
+    install_status: 'installed',
+    manifest: { targets: ['python', 'desktop-renderer', 'desktop-sidecar'] },
+    signature: { algorithm: 'Ed25519' },
+    provenance: { builder_id: 'qa-builder-v2' },
+    security_scan_status: 'passed',
+    revoked: false,
+    revocation_reason: null,
   },
   {
-    name: 'google-drive',
-    source: 'entrypoint',
-    package: '@memstack/google-drive',
+    plugin_id: 'google-drive',
     version: '1.8.0',
-    kind: 'channel',
-    enabled: false,
-    discovered: false,
-    providers: ['google'],
-    skills: [],
-    channel_types: ['documents'],
-    tool_definitions: [],
-    schema_supported: false,
-    updated_at: '2026-07-09T04:10:00.000Z',
+    publisher: 'MemStack Labs',
+    artifact_digest: 'sha256:google-drive-artifact',
+    artifact_registry: 'registry.qa.memstack.invalid',
+    artifact_repository: 'plugins/google-drive',
+    oci_manifest_digest: 'sha256:google-drive-manifest',
+    install_status: 'uninstalled',
+    manifest: { targets: ['python'] },
+    signature: { algorithm: 'Ed25519' },
+    provenance: { builder_id: 'qa-builder-v2' },
+    security_scan_status: 'passed',
+    revoked: false,
+    revocation_reason: null,
   },
 ];
-
-const pluginDiagnostics = [
-  {
-    plugin_name: 'google-drive',
-    code: 'plugin_not_discovered',
-    message: 'The package is installed but has not registered runtime capabilities.',
-    level: 'warning',
+const qaPluginMarketplaceOperationsV2 = Object.freeze<DesktopPluginMarketplaceOperationsV2>({
+  listMarketplacePlugins: async (config, signal) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    return plugins.map(managedPluginFromMarketplaceEntry);
   },
-];
-let pluginActionSerial = 0;
-
-function pluginActionResponse(action: string, message: string, pluginName?: string) {
-  pluginActionSerial += 1;
-  return {
-    success: true,
-    message,
-    details: {
-      diagnostics: pluginDiagnostics,
-      control_plane_trace: {
-        trace_id: `qa-plugin-${action}-${pluginActionSerial}`,
-        action,
-        plugin_name: pluginName ?? null,
-        tenant_id: QA_TENANT_ID,
-        timestamp: NOW,
-        capability_counts: {
-          channel_types: 5,
-          tool_factories: 4,
-          registered_tool_factories: 4,
-          hooks: 2,
-          commands: 3,
-          services: 2,
-          providers: 3,
-        },
-      },
-      channel_reload_plan: { reused: 2, restarted: 1 },
-    },
-  };
-}
-
-const pluginSchemas: Record<string, PluginConfigSchema> = {
-  github: {
-    plugin_name: 'github',
-    source: 'entrypoint',
-    package: '@memstack/github',
-    version: '2.4.1',
-    kind: 'mcp',
-    providers: ['github'],
-    skills: ['pull-request-review'],
-    enabled: true,
-    discovered: true,
-    schema_supported: true,
-    config_schema: {
-      type: 'object',
-      required: ['repository', 'access_token'],
-      properties: {
-        repository: {
-          type: 'string',
-          title: 'Repository',
-          description: 'owner/repository',
-        },
-        access_token: { type: 'string' },
-        sync_interval: { type: 'integer', minimum: 1, maximum: 60 },
-        include_drafts: {
-          type: 'boolean',
-          title: 'Include draft pull requests',
-        },
-        review_mode: {
-          type: 'string',
-          enum: ['safe', 'fast'],
-          title: 'Review mode',
-        },
-      },
-    },
-    config_ui_hints: {
-      access_token: { label: 'Access token', sensitive: true },
-      sync_interval: { label: 'Sync interval (minutes)' },
-    },
-    defaults: { sync_interval: 10, include_drafts: false, review_mode: 'safe' },
-    secret_paths: ['access_token'],
+  projectMarketplacePlugins: async (config, signal, project) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    return project(plugins.map(managedPluginFromMarketplaceEntry));
   },
-  slack: {
-    plugin_name: 'slack',
-    providers: ['slack'],
-    skills: ['incident-triage'],
-    enabled: true,
-    discovered: true,
-    schema_supported: true,
-    config_schema: {
-      type: 'object',
-      properties: { workspace: { type: 'string' } },
-    },
-    secret_paths: [],
+  uninstallMarketplacePlugin: async (config, pluginId, version, signal) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    const current = plugins.find(
+      (plugin) => plugin.plugin_id === pluginId && plugin.version === version,
+    );
+    if (!current) throw new Error('qa_plugin_marketplace_version_not_found');
+    plugins = plugins.map((plugin) =>
+      plugin === current ? { ...plugin, install_status: 'uninstalled' } : plugin,
+    );
+    return {
+      plugin_id: pluginId,
+      version,
+      status: 'uninstalled',
+      desired_removed: true,
+      revoked_permissions: 0,
+    };
   },
-  'release-notifier': {
-    plugin_name: 'release-notifier',
-    providers: ['webhook'],
-    skills: ['release-notification'],
-    enabled: true,
-    discovered: true,
-    schema_supported: true,
-    config_schema: {
-      type: 'object',
-      required: ['endpoint', 'token'],
-      properties: {
-        endpoint: { type: 'string', title: 'Webhook endpoint' },
-        token: { type: 'string' },
-        retries: { type: 'integer', minimum: 0, maximum: 10 },
-        enabled: { type: 'boolean', title: 'Send release notifications' },
-        mode: {
-          type: 'string',
-          enum: ['safe', 'fast'],
-          title: 'Delivery mode',
-        },
-      },
-    },
-    config_ui_hints: { token: { label: 'Access token', sensitive: true } },
-    defaults: { retries: 3, enabled: true, mode: 'safe' },
-    secret_paths: ['token'],
-  },
-};
-
-let pluginConfigs: Record<string, PluginConfigRecord> = {
-  github: {
-    tenant_id: QA_TENANT_ID,
-    plugin_name: 'github',
-    config: {
-      repository: 'memstack/agi-stack',
-      access_token: '__MEMSTACK_SECRET_UNCHANGED__',
-      sync_interval: 10,
-      include_drafts: false,
-      review_mode: 'safe',
-    },
-    updated_at: NOW,
-  },
-  slack: {
-    tenant_id: QA_TENANT_ID,
-    plugin_name: 'slack',
-    config: { workspace: 'northstar' },
-    updated_at: NOW,
-  },
-};
-
+});
 const channelCatalog: ManagedChannelPluginCatalogItem[] = [
   {
     channel_type: 'slack',
@@ -1224,88 +1141,35 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       201
     );
   }
-  if (method === 'GET' && path.endsWith('/plugins')) {
-    return jsonResponse({ items: plugins, diagnostics: pluginDiagnostics });
+if (method === 'GET' && path === '/api/v1/plugin-marketplace/packages') {
+    return jsonResponse(plugins);
   }
 
-  if (method === 'POST' && path.endsWith('/plugins/install')) {
-    const requirement = stringValue(readJsonBody(body).requirement).trim();
-    if (!requirement) return jsonResponse({ detail: 'Package requirement is required.' }, 422);
-    if (!plugins.some((plugin) => plugin.name === 'release-notifier')) {
-      plugins = [
-        {
-          name: 'release-notifier',
-          source: 'entrypoint',
-          package: requirement,
-          version: '2.0.0',
-          kind: 'service',
-          enabled: true,
-          discovered: true,
-          providers: ['webhook'],
-          skills: ['release-notification'],
-          channel_types: ['release_events'],
-          tool_definitions: [{ name: 'notify_release' }],
-          schema_supported: true,
-          updated_at: NOW,
-        },
-        ...plugins,
-      ];
-    }
-    pluginConfigs['release-notifier'] ??= {
-      tenant_id: QA_TENANT_ID,
-      plugin_name: 'release-notifier',
-      config: { retries: 3, enabled: true, mode: 'safe' },
-      updated_at: NOW,
-    };
-    return jsonResponse(pluginActionResponse('install', 'Plugin installed.', 'release-notifier'));
-  }
-
-  if (method === 'POST' && path.endsWith('/plugins/reload')) {
-    return jsonResponse(pluginActionResponse('reload', 'Plugin runtime reloaded.'));
-  }
-
-  const pluginConfigSchemaMatch = path.match(
-    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/config-schema$/
+  const marketplaceUninstallMatch = path.match(
+    /^\/api\/v1\/plugin-marketplace\/packages\/([^/]+)\/uninstall$/
   );
-  if (method === 'GET' && pluginConfigSchemaMatch) {
-    const pluginName = decodeURIComponent(pluginConfigSchemaMatch[1]);
-    const schema = pluginSchemas[pluginName];
-    return schema
-      ? jsonResponse(schema)
-      : jsonResponse({ detail: 'Plugin config schema not found.' }, 404);
-  }
-
-  const pluginConfigMatch = path.match(
-    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/config$/
-  );
-  if (pluginConfigMatch) {
-    const pluginName = decodeURIComponent(pluginConfigMatch[1]);
-    const current = pluginConfigs[pluginName] ?? {
-      tenant_id: QA_TENANT_ID,
-      plugin_name: pluginName,
-      config: {},
-    };
-    if (method === 'GET') return jsonResponse(current);
-    if (method === 'PUT') {
-      const nextConfig = readJsonBody(body).config;
-      if (!nextConfig || typeof nextConfig !== 'object' || Array.isArray(nextConfig)) {
-        return jsonResponse({ detail: 'Plugin config is invalid.' }, 422);
-      }
-      pluginConfigs = {
-        ...pluginConfigs,
-        [pluginName]: {
-          ...current,
-          config: {
-            ...current.config,
-            ...(nextConfig as Record<string, unknown>),
-          },
-          updated_at: NOW,
-        },
-      };
-      return jsonResponse(pluginConfigs[pluginName]);
+  if (method === 'POST' && marketplaceUninstallMatch) {
+    const pluginId = decodeURIComponent(marketplaceUninstallMatch[1]);
+    const payload = readJsonBody(body);
+    const version = stringValue(payload.version);
+    if (stringValue(payload.tenant_id) !== QA_TENANT_ID) {
+      return jsonResponse({ detail: 'Tenant mismatch.' }, 403);
     }
+    const current = plugins.find(
+      (plugin) => plugin.plugin_id === pluginId && plugin.version === version
+    );
+    if (!current) return jsonResponse({ detail: 'Plugin version not found.' }, 404);
+    plugins = plugins.map((plugin) =>
+      plugin === current ? { ...plugin, install_status: 'uninstalled' } : plugin
+    );
+    return jsonResponse({
+      plugin_id: pluginId,
+      version,
+      status: 'uninstalled',
+      desired_removed: true,
+      revoked_permissions: 0,
+    });
   }
-
   if (
     method === 'GET' &&
     path === `/api/v1/channels/tenants/${QA_TENANT_ID}/plugins/channel-catalog`
@@ -1388,16 +1252,6 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     }
   }
 
-  const pluginUninstallMatch = path.match(
-    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/uninstall$/
-  );
-  if (method === 'POST' && pluginUninstallMatch) {
-    const pluginName = decodeURIComponent(pluginUninstallMatch[1]);
-    plugins = plugins.filter((plugin) => plugin.name !== pluginName);
-    const { [pluginName]: _removed, ...remainingConfigs } = pluginConfigs;
-    pluginConfigs = remainingConfigs;
-    return jsonResponse(pluginActionResponse('uninstall', 'Plugin uninstalled.', pluginName));
-  }
   if (
     method === 'GET' &&
     /^\/api\/v1\/acp\/tenants\/[^/]+\/external-agents$/.test(path)
@@ -1805,20 +1659,6 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     }
   }
 
-  const pluginStatusMatch = path.match(
-    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/(enable|disable)$/
-  );
-  if (method === 'POST' && pluginStatusMatch) {
-    const pluginName = decodeURIComponent(pluginStatusMatch[1]);
-    const enabled = pluginStatusMatch[2] === 'enable';
-    plugins = plugins.map((plugin) =>
-      plugin.name === pluginName ? { ...plugin, enabled } : plugin
-    );
-    return jsonResponse(
-      pluginActionResponse(enabled ? 'enable' : 'disable', 'Plugin status updated.', pluginName)
-    );
-  }
-
   const agentStatusMatch = path.match(/^\/api\/v1\/agent\/definitions\/([^/]+)\/enabled$/);
   if (method === 'PATCH' && agentStatusMatch) {
     const agentId = decodeURIComponent(agentStatusMatch[1]);
@@ -2009,6 +1849,19 @@ function ProviderSettingsQa() {
       wsError={null}
       runtimeDisabledReason={null}
       agentDefinitionEvent={agentDefinitionEvent}
+      pluginMarketplaceOperationsV2={qaPluginMarketplaceOperationsV2}
+      tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
+      tenantEvolutionOperationsV2={tenantEvolutionOperationsV2}
+          browserIntegrationOperationsV2={browserIntegrationOperationsV2}
+          browserBridgeManagementClientV2={browserBridgeManagementClientV2}
+          projectMcpServersOperationsV2={projectMcpServersOperationsV2}
+          tenantProvidersOperationsV2={tenantProvidersOperationsV2}
+          tenantSkillDefinitionsOperationsV2={tenantSkillDefinitionsOperationsV2}
+          tenantSkillPackagesOperationsV2={tenantSkillPackagesOperationsV2}
+          tenantSkillEvolutionOperationsV2={tenantSkillEvolutionOperationsV2}
+      projectChannelsOperationsV2={projectChannelsOperationsV2}
+      tenantAgentDefinitionsOperationsV2={tenantAgentDefinitionsOperationsV2}
+      tenantSubAgentDefinitionsOperationsV2={tenantSubAgentDefinitionsOperationsV2}
       onClose={() => undefined}
       onConfigChange={setConfig}
       onRuntimeStatusRefresh={async () => undefined}

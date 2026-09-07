@@ -15,7 +15,7 @@ from src.infrastructure.agent.tools.web_search import (
     _generate_ws_cache_key,
     _get_ws_cached_results,
     _parse_ws_tavily_response,
-    configure_web_search,
+    make_web_search_tool,
     web_search_tool,
 )
 
@@ -28,13 +28,6 @@ def _make_ctx() -> ToolContext:
         agent_name="test-agent",
         conversation_id="test-conv",
     )
-
-
-@pytest.fixture(autouse=True)
-def _reset_web_search_state():
-    configure_web_search()
-    yield
-    configure_web_search()
 
 
 class TestSearchResultModel:
@@ -273,10 +266,10 @@ class TestWebSearchToolExecute:
             "timestamp": "2024-01-15T10:00:00",
         }
         mock_redis_client.get.return_value = json.dumps(cached_data)
-        configure_web_search(redis_client=mock_redis_client)
+        bound_tool = make_web_search_tool(redis_client=mock_redis_client)
 
         ctx = _make_ctx()
-        result = await web_search_tool.execute(ctx, query="AI news")
+        result = await bound_tool.execute(ctx, query="AI news")
 
         assert isinstance(result, ToolResult)
         assert "Found 1 result(s)" in result.output
@@ -286,7 +279,7 @@ class TestWebSearchToolExecute:
     async def test_execute_returns_formatted_results(self, mock_redis_client):
         """Test execute returns formatted search results from Tavily API."""
         mock_redis_client.get.return_value = None
-        configure_web_search(redis_client=mock_redis_client)
+        bound_tool = make_web_search_tool(redis_client=mock_redis_client)
 
         mock_response = Mock()
         mock_response.status_code = 200
@@ -313,7 +306,7 @@ class TestWebSearchToolExecute:
             return_value=mock_client_instance,
         ):
             ctx = _make_ctx()
-            result = await web_search_tool.execute(ctx, query="AI news")
+            result = await bound_tool.execute(ctx, query="AI news")
 
         assert isinstance(result, ToolResult)
         assert "Found 1 result(s)" in result.output
@@ -336,10 +329,10 @@ class TestWebSearchToolErrorHandling:
                 tavily_exclude_domains=None,
             )
             mock_redis_client.get.return_value = None
-            configure_web_search(redis_client=mock_redis_client)
+            bound_tool = make_web_search_tool(redis_client=mock_redis_client)
 
             ctx = _make_ctx()
-            result = await web_search_tool.execute(ctx, query="test")
+            result = await bound_tool.execute(ctx, query="test")
 
         assert isinstance(result, ToolResult)
         assert result.is_error is True
@@ -357,10 +350,10 @@ class TestWebSearchToolErrorHandling:
                 tavily_exclude_domains=None,
             )
             mock_redis_client.get.return_value = None
-            configure_web_search(redis_client=mock_redis_client)
+            bound_tool = make_web_search_tool(redis_client=mock_redis_client)
 
             ctx = _make_ctx()
-            result = await web_search_tool.execute(ctx, query="test")
+            result = await bound_tool.execute(ctx, query="test")
 
         assert isinstance(result, ToolResult)
         assert result.is_error is True
@@ -380,7 +373,7 @@ class TestWebSearchToolErrorHandling:
                 tavily_exclude_domains=None,
             )
             mock_redis_client.get.return_value = None
-            configure_web_search(redis_client=mock_redis_client)
+            bound_tool = make_web_search_tool(redis_client=mock_redis_client)
 
             mock_client_instance = AsyncMock()
             mock_client_instance.post.side_effect = httpx.HTTPError("Connection failed")
@@ -392,11 +385,17 @@ class TestWebSearchToolErrorHandling:
                 return_value=mock_client_instance,
             ):
                 ctx = _make_ctx()
-                result = await web_search_tool.execute(ctx, query="test query")
+                result = await bound_tool.execute(ctx, query="test query")
 
         assert isinstance(result, ToolResult)
         assert result.is_error is True
         assert "Error" in result.output
+
+
+def test_web_search_module_has_no_legacy_configure_seam() -> None:
+    from src.infrastructure.agent.tools import web_search as web_search_module
+
+    assert not hasattr(web_search_module, "configure_web_search")
 
 
 class TestWebSearchToolResultParsing:

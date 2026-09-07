@@ -1,0 +1,280 @@
+"""Generation-owned SubAgent run-registry service and production cutover tests."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, cast
+
+import pytest
+
+from src.configuration.containers.agent_container import AgentContainer
+from src.configuration.di_container import DIContainer
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+from src.infrastructure.plugins.v2.boundary import pin_generation_v2, pin_operation_context_v2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.subagent_run_registry_projection import (
+    current_subagent_run_registry_v2,
+)
+from src.infrastructure.plugins.v2.subagent_run_registry_service import (
+    SUBAGENT_RUN_REGISTRY_SERVICE_V2,
+)
+
+pytestmark = pytest.mark.unit
+
+_ROOT = Path(__file__).resolve().parents[6]
+_PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
+_MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+
+
+async def test_profile_provides_the_factory_registry_to_the_pinned_generation() -> None:
+    registry = SubAgentRunRegistry()
+    seen_config: dict[str, Any] = {}
+
+    def factory(config: dict[str, Any]) -> SubAgentRunRegistry:
+        seen_config.update(config)
+        return registry
+
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(subagent_run_registry_factory=factory)
+    )
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=181,
+        version=181,
+    )
+    assert publication.accepted is True
+    try:
+        async with pin_generation_v2(host) as generation:
+            projected = current_subagent_run_registry_v2()
+            direct = generation.resolve(
+                SUBAGENT_RUN_REGISTRY_SERVICE_V2,
+                ScopeV2(kind=ScopeKindV2.ROOT),
+            )
+
+            assert projected is registry
+            assert projected is direct
+            assert seen_config == {"strategy": "settings-shared"}
+    finally:
+        await host.close()
+        registry.close()
+
+
+def test_projection_fails_closed_without_a_pinned_generation() -> None:
+    with pytest.raises(RuntimeV2Error) as error:
+        current_subagent_run_registry_v2()
+
+    assert error.value.code == "generation_not_pinned"
+
+
+async def test_invalid_factory_result_rejects_the_candidate_generation() -> None:
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            subagent_run_registry_factory=lambda _config: cast(SubAgentRunRegistry, object())
+        )
+    )
+
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=182,
+        version=182,
+    )
+
+    assert publication.accepted is False
+    assert publication.receipt.error_code == "staging_failed"
+    assert publication.receipt.error_message is not None
+    assert "returned an invalid service" in publication.receipt.error_message
+    await host.close()
+
+
+async def test_failed_registry_candidate_preserves_the_last_good_generation() -> None:
+    registry = SubAgentRunRegistry()
+    calls = 0
+
+    def factory(_config: dict[str, Any]) -> SubAgentRunRegistry:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return registry
+        return cast(SubAgentRunRegistry, object())
+
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(subagent_run_registry_factory=factory)
+    )
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=183,
+        version=183,
+    )
+    second = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=184,
+        version=184,
+    )
+
+    assert first.accepted is True
+    assert second.accepted is False
+    async with pin_generation_v2(host):
+        assert current_subagent_run_registry_v2() is registry
+
+    await host.close()
+    registry.close()
+
+
+async def test_agent_container_coordination_factories_use_the_pinned_registry() -> None:
+    registry = SubAgentRunRegistry()
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            subagent_run_registry_factory=lambda _config: registry,
+        )
+    )
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=185,
+        version=185,
+    )
+    assert publication.accepted is True
+
+    try:
+        container = AgentContainer()
+        async with pin_generation_v2(host):
+            spawn_manager = container.spawn_manager()
+            spawn_validator = container.spawn_validator()
+
+        assert spawn_manager._run_registry is registry
+        assert spawn_validator._registry is registry
+        with pytest.raises(RuntimeV2Error) as manager_error:
+            container.spawn_manager()
+        with pytest.raises(RuntimeV2Error) as validator_error:
+            container.spawn_validator()
+        assert manager_error.value.code == "generation_not_pinned"
+        assert validator_error.value.code == "generation_not_pinned"
+    finally:
+        await host.close()
+        registry.close()
+
+
+async def test_agent_container_rebuilds_coordination_for_a_new_registry_generation() -> None:
+    first_registry = SubAgentRunRegistry()
+    second_registry = SubAgentRunRegistry()
+    registries = iter((first_registry, second_registry))
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            subagent_run_registry_factory=lambda _config: next(registries),
+        )
+    )
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=186,
+        version=186,
+    )
+    assert first.accepted is True
+
+    try:
+        container = AgentContainer()
+        async with pin_generation_v2(host):
+            first_manager = container.spawn_manager()
+            first_validator = container.spawn_validator()
+
+        second = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=187,
+            version=187,
+        )
+        assert second.accepted is True
+        async with pin_generation_v2(host):
+            second_manager = container.spawn_manager()
+            second_validator = container.spawn_validator()
+
+        assert first_manager._run_registry is first_registry
+        assert first_validator._registry is first_registry
+        assert second_manager._run_registry is second_registry
+        assert second_validator._registry is second_registry
+        assert second_manager is not first_manager
+        assert second_validator is not first_validator
+    finally:
+        await host.close()
+        first_registry.close()
+        second_registry.close()
+
+
+async def test_react_agent_registry_resolver_tracks_generation_reload() -> None:
+    first_registry = SubAgentRunRegistry()
+    second_registry = SubAgentRunRegistry()
+    registries = iter((first_registry, second_registry))
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            subagent_run_registry_factory=lambda _config: next(registries),
+        )
+    )
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=188,
+        version=188,
+    )
+    assert first.accepted is True
+
+    from src.infrastructure.agent.core.react_agent import ReActAgent
+
+    agent = ReActAgent(model="test-model", provider_id="test-provider", tools={})
+    resolver = agent._session_runner.deps.subagent_run_registry_resolver
+
+    try:
+        async with pin_operation_context_v2(
+            host,
+            operation_id="subagent-registry-generation-188",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            assert agent._session_runner.deps.subagent_run_registry is first_registry
+            assert agent._tool_builder.deps.subagent_run_registry is first_registry
+
+        second = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=189,
+            version=189,
+        )
+        assert second.accepted is True
+
+        async with pin_operation_context_v2(
+            host,
+            operation_id="subagent-registry-generation-189",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            assert agent._session_runner.deps.subagent_run_registry is second_registry
+            assert agent._tool_builder.deps.subagent_run_registry is second_registry
+
+        assert agent._session_runner.deps.subagent_run_registry_resolver is resolver
+        assert agent._tool_builder.deps.subagent_run_registry_resolver is resolver
+    finally:
+        await host.close()
+        second_registry.close()
+        first_registry.close()
+
+
+def test_trace_production_path_and_top_level_di_have_no_static_registry_authority() -> None:
+    source = (
+        _ROOT / "src/infrastructure/adapters/primary/web/routers/agent/trace_router.py"
+    ).read_text(encoding="utf-8")
+
+    assert "current_subagent_run_registry_v2" in source
+    assert "get_container_with_db" not in source
+    assert ".subagent_run_registry()" not in source
+    assert "subagent_run_registry" not in vars(DIContainer)
+    assert "subagent_run_registry" not in vars(AgentContainer)
+
+    container_source = (_ROOT / "src/configuration/containers/agent_container.py").read_text(
+        encoding="utf-8"
+    )
+    assert "get_shared_subagent_run_registry" not in container_source
+    assert "_subagent_run_registry_instance" not in container_source

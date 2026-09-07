@@ -16,14 +16,14 @@ import { useShallow } from 'zustand/react/shallow';
 
 import i18n from '../i18n/config';
 import { authAPI } from '../services/api';
-import { httpClient } from '../services/client/httpClient';
+import { kernelHttpClient } from '../services/client/kernelHttpClient';
 import { setFeatures } from '../utils/featureCheck';
 import { registerAuthStateClearer } from '../utils/tokenResolver';
 
 import { useProjectStore } from './project';
 import { useTenantStore } from './tenant';
 
-import type { User } from '../types/memory';
+import type { User, TenantListResponse } from '../types/memory';
 
 function syncLanguageFromUser(user: User | null | undefined) {
   const pref = user?.preferred_language;
@@ -189,23 +189,37 @@ export const useAuthStore = create<AuthState>()(
         },
 
         async _loadPostAuthData() {
+          const principal = get().user?.id;
+          const token = get().token;
+          const current = () =>
+            get().user?.id === principal && get().token === token && get().isAuthenticated;
+          if (!current()) return;
           try {
             const featuresResp =
-              await httpClient.get<Array<{ id: string; enabled: boolean }>>('/system/features');
+              await kernelHttpClient.get<Array<{ id: string; enabled: boolean }>>(
+                '/system/features'
+              );
+            if (!current()) return;
             setFeatures(featuresResp);
           } catch (e) {
             console.error('Failed to load feature flags', e);
           }
 
           try {
-            await useTenantStore.getState().listTenants();
+            if (!current()) return;
+            // Authentication bootstrap establishes the tenant used by the first generation.
+            // Ordinary tenant list/CRUD continues through the business client.
+            const tenantResp = await kernelHttpClient.get<TenantListResponse>('/tenants/');
+            if (!current()) return;
+            useTenantStore.setState({
+              tenants: tenantResp.tenants,
+              total: tenantResp.total,
+              page: tenantResp.page,
+              pageSize: tenantResp.page_size,
+              isLoading: false,
+              error: null,
+            });
             const tenantState = useTenantStore.getState();
-            const tenantResp = {
-              tenants: tenantState.tenants,
-              total: tenantState.total,
-              page: tenantState.page,
-              page_size: tenantState.pageSize,
-            };
             const firstTenant = tenantResp.tenants[0];
 
             if (firstTenant) {

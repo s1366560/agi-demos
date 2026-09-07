@@ -1,54 +1,87 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { createTenantWorkspacesHttpClient } =
-  await import('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantWorkspacesHttpClient.js');
+const { createTenantWorkspacesV2Client } = await import(
+  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantWorkspacesV2Client.js'
+);
 
-const originalFetch = globalThis.fetch;
-
-test.afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
-
-test('Cloud Tenant Workspaces binds list and create to the selected project', async () => {
-  const requests = [];
-  globalThis.fetch = async (url, init) => {
-    requests.push({ url: String(url), init });
-    if ((init?.method ?? 'GET') === 'POST') {
-      return jsonResponse(workspace({ id: 'workspace-created', name: 'Created' }), 201);
-    }
-    return jsonResponse([workspace()]);
+function operationsFixture(received, overrides = {}) {
+  return {
+    catalogOperations: {
+      async listWorkspacesForProject(input) {
+        received.push({ kind: 'list', input });
+        return overrides.workspaces ?? [workspace()];
+      },
+    },
+    lifecycleOperations: {
+      async createWorkspace(input) {
+        received.push({ kind: 'create', input });
+        return overrides.created ?? workspace({ id: 'workspace-created', name: input.input.name });
+      },
+    },
   };
+}
 
-  const client = createTenantWorkspacesHttpClient(runtimeConfig());
-  const catalog = await client.list(scope());
-  const created = await client.create(scope(), {
-    name: 'Created',
-    description: 'Native workspace',
-  });
+test('Cloud Tenant Workspaces binds list and create to V2 project authorities', async () => {
+  const received = [];
+  const controller = new AbortController();
+  const config = runtimeConfig();
+  const client = createTenantWorkspacesV2Client(config, operationsFixture(received));
+  const catalogPending = client.list(scope(), { signal: controller.signal });
+  const createdPending = client.create(
+    scope(),
+    { name: '  Created  ', description: '  Native workspace  ' },
+    { signal: controller.signal },
+  );
+  config.projectId = 'mutated-project';
 
+  const [catalog, created] = await Promise.all([catalogPending, createdPending]);
   assert.equal(catalog.availability, 'degraded');
   assert.equal(catalog.reasonCode, 'desktop_tenant_workspaces_advanced_management_partial');
   assert.deepEqual(catalog.allowedActions, ['view', 'list', 'create']);
   assert.equal(catalog.workspaces[0].projectId, 'project-1');
   assert.equal(created.id, 'workspace-created');
-  assert.deepEqual(
-    requests.map(({ url, init }) => [new URL(url).pathname, init?.method ?? 'GET']),
-    [
-      ['/api/v1/tenants/tenant-1/projects/project-1/workspaces', 'GET'],
-      ['/api/v1/tenants/tenant-1/projects/project-1/workspaces', 'POST'],
-    ],
-  );
-  assert.equal(JSON.parse(requests[1].init.body).collaboration_mode, 'multi_agent_shared');
+  assert.equal(received.length, 2);
+  assert.deepEqual(received[0], {
+    kind: 'list',
+    input: {
+      config: runtimeConfig(),
+      signal: controller.signal,
+    },
+  });
+  assert.equal(Object.isFrozen(received[0].input.config), true);
+  assert.deepEqual(received[1], {
+    kind: 'create',
+    input: {
+      config: runtimeConfig(),
+      input: {
+        name: 'Created',
+        description: 'Native workspace',
+        useCase: 'conversation',
+        collaborationMode: 'multi_agent_shared',
+        metadata: {
+          source: 'desktop',
+          workspace_use_case: 'conversation',
+          workspace_type: 'general',
+          collaboration_mode: 'multi_agent_shared',
+          agent_conversation_mode: 'multi_agent_shared',
+          autonomy_profile: { workspace_type: 'general' },
+        },
+      },
+      signal: controller.signal,
+    },
+  });
+  assert.equal(Object.isFrozen(received[1].input.input), true);
+  assert.equal(Object.isFrozen(received[1].input.input.metadata), true);
 });
 
 test('Local Tenant Workspaces retains the stable degraded lifecycle contract', async () => {
-  globalThis.fetch = async () => jsonResponse([workspace()]);
-  const client = createTenantWorkspacesHttpClient(
+  const client = createTenantWorkspacesV2Client(
     runtimeConfig({
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:4777',
     }),
+    operationsFixture([]),
   );
 
   const catalog = await client.list({ ...scope(), authority: 'local' });
@@ -59,19 +92,27 @@ test('Local Tenant Workspaces retains the stable degraded lifecycle contract', a
   assert.deepEqual(catalog.allowedActions, ['view', 'list', 'create']);
 });
 
-test('Tenant Workspaces fails closed before fetch when runtime scope drifts', async () => {
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    return jsonResponse([]);
-  };
-  const client = createTenantWorkspacesHttpClient(runtimeConfig());
+test('Tenant Workspaces fails closed before V2 authority calls when runtime scope drifts', async () => {
+  const received = [];
+  const client = createTenantWorkspacesV2Client(runtimeConfig(), operationsFixture(received));
 
   await assert.rejects(
     client.list({ ...scope(), projectId: 'other-project' }),
     /tenant_workspaces_runtime_scope_mismatch/u,
   );
-  assert.equal(calls, 0);
+  assert.equal(received.length, 0);
+});
+
+test('Tenant Workspaces rejects V2 records outside the selected scope', async () => {
+  const client = createTenantWorkspacesV2Client(
+    runtimeConfig(),
+    operationsFixture([], { workspaces: [workspace({ project_id: 'other-project' })] }),
+  );
+
+  await assert.rejects(
+    client.list(scope()),
+    /cloud_tenant_workspaces_contract_invalid/u,
+  );
 });
 
 function runtimeConfig(overrides = {}) {
@@ -111,11 +152,4 @@ function workspace(overrides = {}) {
     metadata: {},
     ...overrides,
   };
-}
-
-function jsonResponse(value, status = 200) {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }

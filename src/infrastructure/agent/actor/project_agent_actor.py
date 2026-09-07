@@ -5,16 +5,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
 import ray
 
-from src.configuration.config import get_settings
-from src.configuration.factories import create_native_graph_adapter
-from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-    MCPSandboxAdapter,
-)
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.agent.actor.execution import (
     continue_project_chat,
     execute_project_chat,
@@ -28,14 +28,31 @@ from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
 )
-from src.infrastructure.agent.state.agent_worker_state import (
-    set_agent_graph_service,
-    set_mcp_sandbox_adapter,
-    sync_mcp_sandbox_adapter_from_docker,
-)
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    agent_worker_graph_runtime_factory_v2,
+    agent_worker_redis_runtime_factory_v2,
+    agent_worker_sandbox_runtime_factory_v2,
+    agent_worker_workspace_core_runtime_factory_v2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+)
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_host import DataPlaneGenerationAdmissionV2
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class _AgentRuntimeEntryV2:
+    """One immutable ProjectReActAgent runtime owned by an exact generation."""
+
+    descriptor: PluginGenerationDescriptorV2
+    agent: ProjectReActAgent
+    active_leases: int = 0
 
 
 @ray.remote(max_restarts=5, max_task_retries=3, max_concurrency=10)  # type: ignore[call-overload]
@@ -50,6 +67,21 @@ class ProjectAgentActor:
         self._bootstrapped = False
         self._bootstrap_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
+        self._lifecycle_lock = asyncio.Lock()
+        self._shutting_down = False
+        self._shutdown_task: asyncio.Task[None] | None = None
+        self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
+            builtin_runtime_definitions_v2(
+                graph_runtime_factory=self._create_graph_runtime_v2,
+                redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
+                sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
+                workspace_core_runtime_factory=agent_worker_workspace_core_runtime_factory_v2,
+            )
+        )
+        self._agent_generation_descriptor_v2: PluginGenerationDescriptorV2 | None = None
+        self._agent_runtime_entries_v2: dict[
+            PluginGenerationDescriptorV2, _AgentRuntimeEntryV2
+        ] = {}
         self._tasks: dict[str, asyncio.Task[Any]] = {}
         self._task_conversations: dict[str, str] = {}
         self._abort_signals: dict[str, asyncio.Event] = {}
@@ -65,6 +97,17 @@ class ProjectAgentActor:
         self, config: ProjectAgentActorConfig, force_refresh: bool = False
     ) -> dict[str, Any]:
         """Initialize the ProjectReActAgent instance."""
+        async with self._lifecycle_lock:
+            self._require_task_registration_open()
+            return await self._initialize_locked(config, force_refresh=force_refresh)
+
+    async def _initialize_locked(
+        self,
+        config: ProjectAgentActorConfig,
+        *,
+        force_refresh: bool = False,
+    ) -> dict[str, Any]:
+        """Initialize while the actor lifecycle registration gate is held."""
         async with self._init_lock:
             await self._bootstrap_runtime()
             self._config = config
@@ -73,66 +116,222 @@ class ProjectAgentActor:
                 return {"status": "initialized", "cached": True}
 
             if self._agent and force_refresh:
-                await self._agent.stop()
+                if any(
+                    entry.active_leases > 0 for entry in self._agent_runtime_entries_v2.values()
+                ):
+                    raise RuntimeV2Error(
+                        "agent_runtime_refresh_in_use",
+                        "project agent runtime cannot be refreshed while generation leases are active",
+                    )
+                runtime_agents = {
+                    id(entry.agent): entry.agent
+                    for entry in self._agent_runtime_entries_v2.values()
+                }
+                runtime_agents[id(self._agent)] = self._agent
+                for runtime_agent in runtime_agents.values():
+                    await runtime_agent.stop()
+                self._agent_runtime_entries_v2.clear()
                 self._agent = None
+                self._agent_generation_descriptor_v2 = None
 
-            agent_config = ProjectAgentConfig(
-                tenant_id=config.tenant_id,
-                project_id=config.project_id,
-                agent_mode=config.agent_mode,
-                model=config.model,
-                api_key=config.api_key,
-                base_url=config.base_url,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
-                max_steps=config.max_steps,
-                persistent=config.persistent,
-                idle_timeout_seconds=config.idle_timeout_seconds,
-                max_concurrent_chats=config.max_concurrent_chats,
-                mcp_tools_ttl_seconds=config.mcp_tools_ttl_seconds,
-                enable_skills=config.enable_skills,
-                enable_subagents=config.enable_subagents,
+            self._agent = self._build_agent_runtime_v2(config)
+            self._agent_generation_descriptor_v2 = None
+
+            return {"status": "initialized", "cached": False}
+
+    @staticmethod
+    def _build_agent_runtime_v2(config: ProjectAgentActorConfig) -> ProjectReActAgent:
+        """Construct one unbound runtime that will be pinned on its first lease."""
+        agent_config = ProjectAgentConfig(
+            tenant_id=config.tenant_id,
+            project_id=config.project_id,
+            agent_mode=config.agent_mode,
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            max_steps=config.max_steps,
+            persistent=config.persistent,
+            idle_timeout_seconds=config.idle_timeout_seconds,
+            max_concurrent_chats=config.max_concurrent_chats,
+            mcp_tools_ttl_seconds=config.mcp_tools_ttl_seconds,
+            enable_skills=config.enable_skills,
+            enable_subagents=config.enable_subagents,
+        )
+        agent = ProjectReActAgent(agent_config)
+
+        # Inject plan repository for Plan Mode awareness
+        try:
+            from src.infrastructure.adapters.primary.web.startup.container import (
+                get_app_container,
             )
 
-            self._agent = ProjectReActAgent(agent_config)
-            success = await self._agent.initialize(force_refresh=force_refresh)
+            container = get_app_container()
+            if container is not None:
+                agent_container = getattr(container, "_agent", None)
+                plan_repository_factory = getattr(agent_container, "plan_repository", None)
+                if callable(plan_repository_factory):
+                    agent._plan_repo = plan_repository_factory()
+        except Exception:
+            pass  # Plan Mode awareness is optional
 
-            # Inject plan repository for Plan Mode awareness
-            try:
-                from src.infrastructure.adapters.primary.web.startup.container import (
-                    get_app_container,
+        return agent
+
+    def _require_task_registration_open(self) -> None:
+        if self._shutting_down:
+            raise RuntimeV2Error(
+                "project_agent_actor_shutting_down",
+                "project agent actor is shutting down and no longer accepts work",
+            )
+
+    async def _ensure_agent_initialized_v2(
+        self,
+        operation: OperationContextV2,
+        *,
+        agent: ProjectReActAgent | None = None,
+    ) -> ProjectReActAgent:
+        """Resolve one immutable runtime for the exact admitted generation."""
+        async with self._init_lock:
+            entry = await self._ensure_agent_runtime_entry_v2_locked(
+                operation,
+                preferred_agent=agent,
+            )
+            retired = self._take_retired_agent_runtimes_v2_locked()
+            await self._dispose_agent_runtimes_v2(retired)
+        return entry.agent
+
+    async def _ensure_agent_runtime_entry_v2_locked(
+        self,
+        operation: OperationContextV2,
+        *,
+        preferred_agent: ProjectReActAgent | None = None,
+    ) -> _AgentRuntimeEntryV2:
+        """Resolve or create a generation runtime while ``_init_lock`` is held."""
+        descriptor = operation.descriptor
+        cached = self._agent_runtime_entries_v2.get(descriptor)
+        if cached is not None:
+            return cached
+
+        target = preferred_agent
+        if target is None and not self._agent_runtime_entries_v2:
+            target = self._agent
+        if target is None:
+            if self._config is None:
+                raise RuntimeV2Error(
+                    "agent_runtime_unavailable",
+                    "agent runtime is not configured for the admitted operation",
                 )
+            target = self._build_agent_runtime_v2(self._config)
 
-                container = get_app_container()
-                if container is not None:
-                    agent_container = getattr(container, "_agent", None)
-                    plan_repository_factory = getattr(agent_container, "plan_repository", None)
-                    if callable(plan_repository_factory):
-                        self._agent._plan_repo = plan_repository_factory()
-            except Exception:
-                pass  # Plan Mode awareness is optional
+        if any(entry.agent is target for entry in self._agent_runtime_entries_v2.values()):
+            raise RuntimeV2Error(
+                "agent_runtime_generation_conflict",
+                "one agent runtime cannot be rebound to another plugin generation",
+            )
 
-            status = "initialized" if success else "error"
+        success = await target.initialize(force_refresh=False)
+        if not success:
+            await target.stop(
+                generation_descriptor=descriptor,
+                notify_lifecycle=False,
+            )
+            raise RuntimeV2Error(
+                "agent_initialization_failed",
+                "agent initialization failed for the admitted plugin generation",
+            )
 
-            return {"status": status, "cached": False}
+        entry = _AgentRuntimeEntryV2(descriptor=descriptor, agent=target)
+        self._agent_runtime_entries_v2[descriptor] = entry
+        if self._should_promote_agent_runtime_v2(descriptor):
+            self._agent = target
+            self._agent_generation_descriptor_v2 = descriptor
+        return entry
+
+    def _should_promote_agent_runtime_v2(
+        self,
+        descriptor: PluginGenerationDescriptorV2,
+    ) -> bool:
+        """Prefer the data-plane current descriptor, with a bootstrap fallback."""
+        host = getattr(self._plugin_admission_v2, "host", None)
+        manager = getattr(host, "manager", None)
+        current_generation = getattr(manager, "current", None)
+        published_descriptor = getattr(current_generation, "descriptor", None)
+        if published_descriptor is not None:
+            return bool(descriptor == published_descriptor)
+
+        current = self._agent_generation_descriptor_v2
+        return (
+            current is None or descriptor == current or descriptor.generation > current.generation
+        )
+
+    def _take_retired_agent_runtimes_v2_locked(self) -> tuple[_AgentRuntimeEntryV2, ...]:
+        """Detach inactive runtimes that no longer represent the current generation."""
+        current = self._agent_generation_descriptor_v2
+        retired = tuple(
+            entry
+            for descriptor, entry in self._agent_runtime_entries_v2.items()
+            if descriptor != current and entry.active_leases == 0
+        )
+        for entry in retired:
+            self._agent_runtime_entries_v2.pop(entry.descriptor, None)
+        return retired
+
+    @staticmethod
+    async def _dispose_agent_runtimes_v2(
+        entries: tuple[_AgentRuntimeEntryV2, ...],
+    ) -> None:
+        """Stop retired runtimes without invalidating another generation's cache."""
+        for entry in entries:
+            await entry.agent.stop(
+                generation_descriptor=entry.descriptor,
+                notify_lifecycle=False,
+            )
+
+    @asynccontextmanager
+    async def _lease_agent_runtime_v2(
+        self,
+        operation: OperationContextV2,
+        *,
+        preferred_agent: ProjectReActAgent | None = None,
+    ) -> AsyncIterator[ProjectReActAgent]:
+        """Keep one generation-owned runtime immutable for an operation."""
+        async with self._init_lock:
+            entry = await self._ensure_agent_runtime_entry_v2_locked(
+                operation,
+                preferred_agent=preferred_agent,
+            )
+            entry.active_leases += 1
+            retired = self._take_retired_agent_runtimes_v2_locked()
+            await self._dispose_agent_runtimes_v2(retired)
+
+        try:
+            yield entry.agent
+        finally:
+            async with self._init_lock:
+                entry.active_leases -= 1
+                retired = self._take_retired_agent_runtimes_v2_locked()
+                await self._dispose_agent_runtimes_v2(retired)
 
     async def chat(self, request: ProjectChatRequest) -> dict[str, Any]:
         """Start a chat execution in the background."""
-        if not self._agent:
-            if not self._config:
-                raise RuntimeError("Actor config not set")
-            await self.initialize(self._config)
+        async with self._lifecycle_lock:
+            self._require_task_registration_open()
+            if not self._agent:
+                if not self._config:
+                    raise RuntimeError("Actor config not set")
+                await self._initialize_locked(self._config)
 
-        abort_signal = asyncio.Event()
-        task = asyncio.create_task(self._run_chat(request, abort_signal))
-        self._tasks[request.message_id] = task
-        self._task_conversations[request.message_id] = request.conversation_id
-        self._abort_signals[request.message_id] = abort_signal
+            abort_signal = asyncio.Event()
+            task = asyncio.create_task(self._run_chat(request, abort_signal))
+            self._tasks[request.message_id] = task
+            self._task_conversations[request.message_id] = request.conversation_id
+            self._abort_signals[request.message_id] = abort_signal
 
-        # Add cleanup callback
-        task.add_done_callback(lambda t: self._cleanup_task(request.message_id))
+            # Add cleanup callback
+            task.add_done_callback(lambda _task: self._cleanup_task(request.message_id))
 
-        return {"status": "started", "message_id": request.message_id}
+            return {"status": "started", "message_id": request.message_id}
 
     async def continue_chat(
         self,
@@ -142,17 +341,19 @@ class ProjectAgentActor:
         message_id: str | None = None,
     ) -> dict[str, Any]:
         """Continue a paused chat after HITL response."""
-        if not self._agent:
-            if not self._config:
-                raise RuntimeError("Actor config not set")
-            await self.initialize(self._config)
+        async with self._lifecycle_lock:
+            self._require_task_registration_open()
+            if not self._agent:
+                if not self._config:
+                    raise RuntimeError("Actor config not set")
+                await self._initialize_locked(self._config)
 
-        task = asyncio.create_task(
-            self._run_continue(request_id, response_data, conversation_id, message_id)
-        )
-        self._tasks[request_id] = task
-        if conversation_id:
-            self._task_conversations[request_id] = conversation_id
+            task = asyncio.create_task(
+                self._run_continue(request_id, response_data, conversation_id, message_id)
+            )
+            self._tasks[request_id] = task
+            if conversation_id:
+                self._task_conversations[request_id] = conversation_id
 
         try:
             return await task
@@ -231,19 +432,85 @@ class ProjectAgentActor:
 
     async def shutdown(self) -> bool:
         """Stop the actor and cleanup resources."""
-        for task in self._tasks.values():
-            if not task.done():
-                task.cancel()
-        for abort_signal in self._abort_signals.values():
+        async with self._lifecycle_lock:
+            if self._shutdown_task is None:
+                self._shutting_down = True
+                tasks = tuple(self._tasks.values())
+                abort_signals = tuple(self._abort_signals.values())
+                self._shutdown_task = asyncio.create_task(
+                    self._shutdown_registered_tasks(tasks, abort_signals),
+                    name="project-agent-actor-shutdown",
+                )
+            shutdown_task = self._shutdown_task
+        await asyncio.shield(shutdown_task)
+        return True
+
+    async def _shutdown_registered_tasks(
+        self,
+        tasks: tuple[asyncio.Task[Any], ...],
+        abort_signals: tuple[asyncio.Event, ...],
+    ) -> None:
+        """Cancel the closed registration snapshot and then dispose actor resources."""
+        for abort_signal in abort_signals:
             abort_signal.set()
+        for task in tasks:
+            if not task.done():
+                _ = task.cancel()
+        if tasks:
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
         self._task_conversations.clear()
         self._abort_signals.clear()
 
-        if self._agent:
-            await self._agent.stop()
-            self._agent = None
-        return True
+        runtime_agents = {
+            id(entry.agent): entry.agent for entry in self._agent_runtime_entries_v2.values()
+        }
+        if self._agent is not None:
+            runtime_agents[id(self._agent)] = self._agent
+        for runtime_agent in runtime_agents.values():
+            await runtime_agent.stop()
+        self._agent_runtime_entries_v2.clear()
+        self._agent = None
+        self._agent_generation_descriptor_v2 = None
+        await self._plugin_admission_v2.close()
+
+    def _admit_plugin_turn(
+        self,
+        request: ProjectChatRequest,
+    ) -> AbstractAsyncContextManager[OperationContextV2]:
+        """Build the exact generation admission context for one actor turn."""
+        from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+
+        if self._config is None:
+            raise RuntimeV2Error(
+                "operation_scope_unavailable",
+                "actor configuration is required to scope a plugin turn",
+            )
+        scope = ScopeV2(
+            kind=ScopeKindV2.SESSION,
+            tenant_id=self._config.tenant_id,
+            project_id=self._config.project_id,
+            session_id=request.conversation_id,
+        )
+        services = {
+            OPERATION_IDENTITY_SERVICE_V2: {
+                "tenant_id": self._config.tenant_id,
+                "project_id": self._config.project_id,
+                "user_id": request.user_id,
+            },
+            OPERATION_METADATA_SERVICE_V2: {
+                "kind": "ray-agent-turn",
+                "conversation_id": request.conversation_id,
+                "message_id": request.message_id,
+            },
+        }
+        return self._plugin_admission_v2.admit(
+            descriptor_payload=request.plugin_generation,
+            distribution_payload=request.plugin_distribution,
+            operation_id=f"ray-turn:{request.message_id}",
+            scope=scope,
+            services=services,
+        )
 
     async def _run_chat(
         self,
@@ -259,7 +526,20 @@ class ProjectAgentActor:
                 if not self._agent:
                     return
 
-                result = await execute_project_chat(self._agent, request, abort_signal=abort_signal)
+                async with self._admit_plugin_turn(request) as operation:
+                    await self._ensure_agent_orchestrator_v2()
+                    async with self._lease_agent_runtime_v2(operation) as agent:
+                        distribution = self._plugin_admission_v2.host.distribution_for_generation(
+                            operation.generation
+                        )
+                        result = await execute_project_chat(
+                            agent,
+                            replace(
+                                request,
+                                plugin_distribution=distribution.to_payload(),
+                            ),
+                            abort_signal=abort_signal,
+                        )
                 if result.hitl_pending:
                     logger.info(
                         "[ProjectAgentActor] HITL pending: request_id=%s",
@@ -285,8 +565,6 @@ class ProjectAgentActor:
     ) -> dict[str, Any]:
         if not self._agent:
             return {"status": "unavailable", "request_id": request_id, "ack": False}
-        agent = self._agent
-
         from src.infrastructure.agent.hitl.coordinator import (
             ResolveResult,
             resolve_by_request_id,
@@ -328,7 +606,6 @@ class ProjectAgentActor:
             }
 
         return await self._resume_continue_request(
-            agent=agent,
             request_id=request_id,
             response_data=response_data,
             conversation_id=conversation_id,
@@ -383,16 +660,60 @@ class ProjectAgentActor:
                 request_id,
                 lease_owner=self._lease_owner(),
             ):
-                result = await continue_project_chat(
-                    resume_agent,
-                    request_id,
-                    response_data,
-                    lease_owner=self._lease_owner(),
-                    tenant_id=self._config.tenant_id if self._config else None,
-                    project_id=self._config.project_id if self._config else None,
-                    conversation_id=conversation_id,
-                    message_id=message_id,
+                from src.infrastructure.agent.actor.execution import (
+                    load_hitl_state_for_resume,
                 )
+
+                state = await load_hitl_state_for_resume(
+                    request_id,
+                    generation_host=self._plugin_admission_v2.host,
+                )
+                if state is None:
+                    raise RuntimeV2Error(
+                        "generation_descriptor_missing",
+                        "persisted HITL state does not identify the plugin generation to resume",
+                    )
+
+                from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+
+                async with self._plugin_admission_v2.admit(
+                    descriptor_payload=state.plugin_generation,
+                    distribution_payload=state.plugin_distribution,
+                    operation_id=f"hitl-resume:{request_id}",
+                    scope=ScopeV2(
+                        kind=ScopeKindV2.SESSION,
+                        tenant_id=state.tenant_id,
+                        project_id=state.project_id,
+                        session_id=state.conversation_id,
+                    ),
+                    services={
+                        OPERATION_IDENTITY_SERVICE_V2: {
+                            "tenant_id": state.tenant_id,
+                            "project_id": state.project_id,
+                            "user_id": state.user_id,
+                        },
+                        OPERATION_METADATA_SERVICE_V2: {
+                            "kind": "hitl-resume",
+                            "request_id": request_id,
+                            "message_id": state.message_id,
+                        },
+                    },
+                ) as operation:
+                    await self._ensure_agent_orchestrator_v2()
+                    async with self._lease_agent_runtime_v2(
+                        operation,
+                        preferred_agent=agent,
+                    ) as resume_agent:
+                        result = await continue_project_chat(
+                            resume_agent,
+                            request_id,
+                            response_data,
+                            lease_owner=self._lease_owner(),
+                            tenant_id=state.tenant_id,
+                            project_id=state.project_id,
+                            conversation_id=state.conversation_id,
+                            message_id=state.message_id,
+                        )
         except Exception:
             await self._revert_continue_claim(request_id)
             raise
@@ -478,6 +799,134 @@ class ProjectAgentActor:
             + f":{self._lease_owner_suffix}"
         )
 
+    async def _ensure_agent_orchestrator_v2(self) -> None:
+        """Build the actor orchestrator from the exact admitted V2 registry."""
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            bind_current_agent_orchestrator_v2,
+        )
+
+        try:
+            async with self._bootstrap_lock:
+                from src.application.services.agent.runtime_bootstrapper import (
+                    AgentRuntimeBootstrapper,
+                )
+                from src.infrastructure.agent.orchestration.orchestrator import (
+                    SessionTurnExecutionRequest,
+                    SpawnExecutionRequest,
+                )
+                from src.infrastructure.plugins.v2.boundary import (
+                    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+                    current_operation_context_v2,
+                )
+
+                def _pinned_distribution() -> tuple[
+                    dict[str, str | int],
+                    dict[str, Any],
+                ]:
+                    operation = current_operation_context_v2()
+                    descriptor = operation.descriptor.to_payload()
+                    value = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+                    if not isinstance(value, dict):
+                        raise RuntimeV2Error(
+                            "invalid_plugin_distribution",
+                            "plugin operation distribution must be an object",
+                        )
+                    distribution = dict(value)
+                    if distribution.get("descriptor") != descriptor:
+                        raise RuntimeV2Error(
+                            "plugin_distribution_mismatch",
+                            "plugin operation distribution does not match the pinned generation",
+                        )
+                    return descriptor, distribution
+
+                async def _spawn_executor(request: SpawnExecutionRequest) -> None:
+                    generation, distribution = _pinned_distribution()
+                    conversation = await AgentRuntimeBootstrapper.ensure_spawned_agent_conversation(
+                        child_session_id=request.child_session_id,
+                        parent_session_id=request.parent_session_id,
+                        project_id=request.project_id,
+                        tenant_id=request.tenant_id,
+                        user_id=request.user_id,
+                        parent_agent_id=request.parent_agent_id,
+                        child_agent_id=request.child_agent_id,
+                        child_agent_name=request.child_agent_name,
+                        mode=request.mode.value,
+                    )
+                    tenant_agent_config = await AgentRuntimeBootstrapper._load_tenant_agent_config(
+                        conversation.tenant_id
+                    )
+                    await self.chat(
+                        ProjectChatRequest(
+                            conversation_id=conversation.id,
+                            message_id=str(uuid.uuid4()),
+                            user_message=request.message,
+                            user_id=conversation.user_id,
+                            conversation_context=[],
+                            plan_mode=conversation.is_in_plan_mode,
+                            agent_id=request.child_agent_id,
+                            tenant_agent_config=tenant_agent_config.to_dict(),
+                            parent_session_id=request.parent_session_id,
+                            plugin_generation=generation,
+                            plugin_distribution=distribution,
+                        )
+                    )
+
+                async def _session_turn_executor(
+                    request: SessionTurnExecutionRequest,
+                ) -> None:
+                    generation, distribution = _pinned_distribution()
+                    conversation = await AgentRuntimeBootstrapper.load_spawned_agent_conversation(
+                        child_session_id=request.child_session_id,
+                        project_id=request.project_id,
+                        tenant_id=request.tenant_id,
+                    )
+                    tenant_agent_config = await AgentRuntimeBootstrapper._load_tenant_agent_config(
+                        conversation.tenant_id
+                    )
+                    await self.chat(
+                        ProjectChatRequest(
+                            conversation_id=conversation.id,
+                            message_id=str(uuid.uuid4()),
+                            user_message=request.message,
+                            user_id=conversation.user_id,
+                            conversation_context=[],
+                            plan_mode=conversation.is_in_plan_mode,
+                            agent_id=request.child_agent_id,
+                            tenant_agent_config=tenant_agent_config.to_dict(),
+                            parent_session_id=conversation.parent_conversation_id,
+                            plugin_generation=generation,
+                            plugin_distribution=distribution,
+                        )
+                    )
+
+                orchestrator = await bind_current_agent_orchestrator_v2(
+                    owner=self,
+                    spawn_executor=_spawn_executor,
+                    session_turn_executor=_session_turn_executor,
+                )
+                self._agent_orchestrator_v2 = orchestrator
+                logger.info(
+                    "[ProjectAgentActor] AgentOrchestrator bootstrapped for multi-agent tools"
+                )
+        except RuntimeV2Error:
+            raise
+        except Exception as e:
+            logger.warning(
+                "[ProjectAgentActor] AgentOrchestrator init failed "
+                "(multi-agent tools disabled): %s",
+                e,
+            )
+
+    async def _create_graph_runtime_v2(self) -> GraphStorePort:
+        """Create this actor tenant's graph resource for one candidate generation."""
+        if self._config is None:
+            raise RuntimeV2Error(
+                "agent_actor_config_unavailable",
+                "actor configuration is required before graph runtime activation",
+            )
+        factory = agent_worker_graph_runtime_factory_v2(self._config.tenant_id)
+        return await factory()
+
     async def _bootstrap_runtime(self) -> None:
         if self._bootstrapped:
             return
@@ -486,175 +935,9 @@ class ProjectAgentActor:
             if self._bootstrapped:
                 return  # type: ignore[unreachable]
 
-            settings = get_settings()
-
             try:
                 await initialize_default_llm_providers()
             except Exception as e:
                 logger.warning(f"[ProjectAgentActor] LLM provider init failed: {e}")
-
-            try:
-                graph_service = await create_native_graph_adapter()
-                set_agent_graph_service(graph_service)
-            except Exception as e:
-                logger.error(f"[ProjectAgentActor] Graph service init failed: {e}")
-                raise
-
-            try:
-                mcp_sandbox_adapter = MCPSandboxAdapter(
-                    mcp_image=settings.sandbox_default_image,
-                    default_timeout=settings.sandbox_timeout_seconds,
-                    default_memory_limit=settings.sandbox_memory_limit,
-                    default_cpu_limit=settings.sandbox_cpu_limit,
-                )
-                set_mcp_sandbox_adapter(mcp_sandbox_adapter)
-                await sync_mcp_sandbox_adapter_from_docker()
-            except Exception as e:
-                logger.warning(f"[ProjectAgentActor] MCP Sandbox adapter disabled: {e}")
-
-            from src.infrastructure.agent.state.agent_worker_state import (
-                get_agent_orchestrator,
-                set_agent_orchestrator,
-            )
-
-            if not get_agent_orchestrator() and settings.multi_agent_enabled:
-                try:
-                    from src.application.services.agent.runtime_bootstrapper import (
-                        AgentRuntimeBootstrapper,
-                    )
-                    from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
-                        RedisAgentMessageBusAdapter,
-                    )
-                    from src.infrastructure.adapters.secondary.persistence.database import (
-                        async_session_factory,
-                    )
-                    from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
-                        SqlAgentRegistryRepository,
-                    )
-                    from src.infrastructure.agent.orchestration.orchestrator import (
-                        AgentOrchestrator,
-                        SessionTurnExecutionRequest,
-                        SpawnExecutionRequest,
-                    )
-                    from src.infrastructure.agent.orchestration.session_registry import (
-                        AgentSessionRegistry,
-                    )
-                    from src.infrastructure.agent.orchestration.spawn_manager import (
-                        SpawnManager,
-                    )
-                    from src.infrastructure.agent.state.agent_worker_state import (
-                        get_redis_client,
-                    )
-                    from src.infrastructure.agent.subagent.run_registry import (
-                        get_shared_subagent_run_registry,
-                    )
-
-                    _db_session = async_session_factory()
-                    _redis = await get_redis_client()
-                    _session_registry = AgentSessionRegistry()
-                    _run_registry = get_shared_subagent_run_registry(
-                        persistence_path=getattr(
-                            settings, "agent_subagent_run_registry_path", None
-                        ),
-                        postgres_persistence_dsn=getattr(
-                            settings, "agent_subagent_run_postgres_dsn", None
-                        ),
-                        sqlite_persistence_path=getattr(
-                            settings, "agent_subagent_run_sqlite_path", None
-                        ),
-                        redis_cache_url=getattr(
-                            settings, "agent_subagent_run_redis_cache_url", None
-                        ),
-                        redis_cache_ttl_seconds=(
-                            getattr(settings, "agent_subagent_run_redis_cache_ttl_seconds", 60)
-                        ),
-                        terminal_retention_seconds=(
-                            settings.agent_subagent_terminal_retention_seconds
-                        ),
-                    )
-
-                    async def _spawn_executor(request: SpawnExecutionRequest) -> None:
-                        conversation = (
-                            await AgentRuntimeBootstrapper.ensure_spawned_agent_conversation(
-                                child_session_id=request.child_session_id,
-                                parent_session_id=request.parent_session_id,
-                                project_id=request.project_id,
-                                tenant_id=request.tenant_id,
-                                user_id=request.user_id,
-                                parent_agent_id=request.parent_agent_id,
-                                child_agent_id=request.child_agent_id,
-                                child_agent_name=request.child_agent_name,
-                                mode=request.mode.value,
-                            )
-                        )
-                        tenant_agent_config = (
-                            await AgentRuntimeBootstrapper._load_tenant_agent_config(
-                                conversation.tenant_id
-                            )
-                        )
-                        await self.chat(
-                            ProjectChatRequest(
-                                conversation_id=conversation.id,
-                                message_id=str(uuid.uuid4()),
-                                user_message=request.message,
-                                user_id=conversation.user_id,
-                                conversation_context=[],
-                                plan_mode=conversation.is_in_plan_mode,
-                                agent_id=request.child_agent_id,
-                                tenant_agent_config=tenant_agent_config.to_dict(),
-                                parent_session_id=request.parent_session_id,
-                            )
-                        )
-
-                    async def _session_turn_executor(
-                        request: SessionTurnExecutionRequest,
-                    ) -> None:
-                        conversation = (
-                            await AgentRuntimeBootstrapper.load_spawned_agent_conversation(
-                                child_session_id=request.child_session_id,
-                                project_id=request.project_id,
-                                tenant_id=request.tenant_id,
-                            )
-                        )
-                        tenant_agent_config = (
-                            await AgentRuntimeBootstrapper._load_tenant_agent_config(
-                                conversation.tenant_id
-                            )
-                        )
-                        await self.chat(
-                            ProjectChatRequest(
-                                conversation_id=conversation.id,
-                                message_id=str(uuid.uuid4()),
-                                user_message=request.message,
-                                user_id=conversation.user_id,
-                                conversation_context=[],
-                                plan_mode=conversation.is_in_plan_mode,
-                                agent_id=request.child_agent_id,
-                                tenant_agent_config=tenant_agent_config.to_dict(),
-                                parent_session_id=conversation.parent_conversation_id,
-                            )
-                        )
-
-                    _orchestrator = AgentOrchestrator(
-                        agent_registry=SqlAgentRegistryRepository(_db_session),
-                        session_registry=_session_registry,
-                        spawn_manager=SpawnManager(
-                            session_registry=_session_registry,
-                            run_registry=_run_registry,
-                        ),
-                        message_bus=RedisAgentMessageBusAdapter(_redis),
-                        db_session=_db_session,
-                        spawn_executor=_spawn_executor,
-                        session_turn_executor=_session_turn_executor,
-                    )
-                    set_agent_orchestrator(_orchestrator)
-                    logger.info(
-                        "[ProjectAgentActor] AgentOrchestrator bootstrapped for multi-agent tools"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[ProjectAgentActor] AgentOrchestrator init failed "
-                        f"(multi-agent tools disabled): {e}"
-                    )
 
             self._bootstrapped = True

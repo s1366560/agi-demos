@@ -1,0 +1,93 @@
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { test } from 'node:test';
+
+function source(relativePath) {
+  const url = new URL(`../${relativePath}`, import.meta.url);
+  return existsSync(url) ? readFileSync(url, 'utf8') : '';
+}
+
+const app = source('src/App.tsx');
+const authenticationRouter = source('src/plugins/DesktopRendererAuthenticationRouterV2.tsx');
+const composition = source('src/plugins/desktopRendererAppCompositionV2.tsx');
+const compositionPort = source('src/plugins/desktopRendererCompositionPortV2.ts');
+const productionRouter = source('src/plugins/DesktopRendererProductionRouterV2.tsx');
+const surface = source('src/plugins/DesktopWorkbenchSurfaceV2.tsx');
+const shellSurface = source('src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx');
+const artifactCatalog = source('src/plugins/desktopRendererArtifactCatalogV2.ts');
+const profile = readFileSync(
+  new URL(
+    '../../../../config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
+    import.meta.url,
+  ),
+  'utf8',
+);
+
+test('the production workbench boundary accepts only a typed view model', () => {
+  assert.match(productionRouter, /readonly viewModel:\s*DesktopWorkbenchSurfaceViewModelV2/u);
+  assert.match(productionRouter, /<Surface viewModel=\{viewModel\}\s*\/>/u);
+  assert.doesNotMatch(productionRouter, /childrenAuthority|ReactNode|readonly children/u);
+  assert.match(compositionPort, /readonly viewModel:\s*DesktopWorkbenchSurfaceViewModelV2/u);
+  assert.doesNotMatch(
+    compositionPort.match(
+      /export interface DesktopRendererWorkbenchSurfacePropsV2[\s\S]*?\n\}/u,
+    )?.[0] ?? '',
+    /ReactNode|render[A-Z]|children/u,
+  );
+});
+
+test('authentication keeps its React child seam outside the business workbench router', () => {
+  assert.match(authenticationRouter, /export function DesktopRendererAuthenticationRouterV2/u);
+  assert.match(authenticationRouter, /readonly children:\s*ReactNode/u);
+  assert.doesNotMatch(authenticationRouter, /projectDesktopWorkbenchCompositionV2|viewModel/u);
+  assert.match(
+    app,
+    /<DesktopRendererAuthenticationRouterV2[\s\S]*<LoginScreen[\s\S]*<\/DesktopRendererAuthenticationRouterV2>/u,
+  );
+  assert.doesNotMatch(app, /childrenAuthority/u);
+});
+
+test('the V2 modules own every workbench business surface and App passes data only', () => {
+  assert.match(composition, /import \{ DesktopWorkbenchSurfaceV2 \}/u);
+  assert.match(
+    composition,
+    /validWorkbenchDefinitionV2\(definition\) \? DesktopWorkbenchSurfaceV2/u,
+  );
+  assert.match(surface, /<WorkspaceOverview\b/u);
+  assert.doesNotMatch(app, /<WorkspaceOverview\b/u);
+  assert.match(surface, /type DesktopWorkbenchViewV2\s*=/u);
+  assert.match(surface, /kind:\s*'workspace'/u);
+  assert.match(surface, /kind:\s*'chat'/u);
+  assert.match(surface, /kind:\s*'board'/u);
+  assert.match(surface, /kind:\s*'activity'/u);
+  assert.match(surface, /kind:\s*'home'/u);
+  assert.match(surface, /<DesktopRendererActivityInboxV2/u);
+  assert.match(surface, /<DesktopRendererConversationV2/u);
+  assert.match(surface, /<DesktopRendererMyWorkQueueV2/u);
+  assert.match(surface, /<DesktopRendererNewThreadComposerV2/u);
+  assert.match(surface, /<DesktopRendererSessionWorkspaceV2/u);
+  assert.match(surface, /<DesktopRendererWorkspaceCollaborationV2/u);
+  assert.doesNotMatch(
+    surface,
+    /<ActivityInbox\b|ComponentProps<typeof ActivityInbox>|view\.inbox|<ChatPanel\b|ComponentProps<typeof ChatPanel>|<PlatformPluginConversationSlots\b|<MyWorkQueue\b|ComponentProps<typeof MyWorkQueue>|view\.queue|<NewThreadComposer\b|ComponentProps<typeof NewThreadComposer>|view\.composer|<SessionWorkspace\b|ComponentProps<typeof SessionWorkspace>|<WorkspaceCollaborationCanvas\b|ComponentProps<typeof WorkspaceCollaborationCanvas>/u,
+  );
+  assert.doesNotMatch(surface, /viewModel[^;{]*ReactNode|render[A-Z][A-Za-z]+\??:/u);
+  assert.match(app, /router:\s*\{[\s\S]*viewModel:\s*desktopWorkbenchSurfaceViewModelV2/u);
+  assert.match(shellSurface, /<DesktopRendererProductionRouterV2 \{\.\.\.surfaces\.router\} \/>/u);
+  assert.doesNotMatch(
+    app,
+    /<DesktopRendererProductionRouterV2[\s\S]*?<\/DesktopRendererProductionRouterV2>/u,
+  );
+});
+
+test('the workbench artifact revision identifies the de-passthrough contract', () => {
+  assert.match(
+    artifactCatalog,
+    /DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2\s*=\s*'desktop\.ui-slots\.workbench-surface\.v2'/u,
+  );
+  const workbenchEntry = profile.slice(
+    profile.indexOf('entry_id: builtin-desktop-workbench-surface'),
+  );
+  assert.match(workbenchEntry, /desktop\.ui-slots\.workbench-surface\.v2/u);
+  assert.doesNotMatch(workbenchEntry.split('\n    - entry_id:', 1)[0], /workbench-surface\.v1/u);
+});

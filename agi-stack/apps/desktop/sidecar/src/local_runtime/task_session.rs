@@ -10,6 +10,7 @@ use super::{
     auth_context::AuthenticatedContext,
     composer_context::{validate_composer_context_items, ComposerContextItem},
     invalid_composer_context, local_store_error, now_iso,
+    platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
     session_store::{DesktopTaskSessionError, ProjectTaskSessionInput, ReplayTaskSessionInput},
     tool_authority::canonical_json_digest,
     workspace_core_bridge::{self, WorkspaceCoreTaskSessionRequest},
@@ -100,6 +101,7 @@ struct TaskSessionInitialMessageBody {
 pub(super) async fn create_task_session(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path((tenant_id, project_id)): Path<(String, String)>,
     Json(body): Json<CreateTaskSessionBody>,
 ) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
@@ -177,11 +179,14 @@ pub(super) async fn create_task_session(
         .and_then(Value::as_str)
         .ok_or_else(|| workspace_core_bridge::bad_request("Workspace is invalid"))?
         .to_string();
-    super::validate_composer_context_authority(
+    let _plugin_generation_lease = super::validate_composer_context_authority(
         &state,
         &authenticated,
         &workspace_id,
         &body.initial_message.context_items,
+        plugin_generation
+            .as_ref()
+            .map(|Extension(generation)| generation.as_ref()),
     )?;
     let core_response = workspace_core_bridge::create_task_session(
         &state,

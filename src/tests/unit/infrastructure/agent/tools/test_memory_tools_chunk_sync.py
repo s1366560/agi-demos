@@ -15,8 +15,6 @@ from src.infrastructure.agent.tools.memory_tools import (
     _execute_memory_get,
     _execute_memory_update,
     _mark_created_memory_processing_status,
-    memory_get_tool,
-    memory_search_tool,
 )
 
 
@@ -61,12 +59,16 @@ class TestMemoryToolsChunkSync:
         secret_query = "find private token sigma-9911"
         exception_detail = "chunk search leaked query token sigma-9911"
         chunk_search = SimpleNamespace(search=AsyncMock(side_effect=RuntimeError(exception_detail)))
-        monkeypatch.setattr(memory_tools_module, "_memory_chunk_search", chunk_search)
-        monkeypatch.setattr(memory_tools_module, "_memory_graph_service", None)
-        monkeypatch.setattr(memory_tools_module, "_memory_project_id", "proj-1")
         caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+        bound_tool = memory_tools_module.make_memory_tools(
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            graph_service=None,
+            chunk_search=chunk_search,
+            session_factory=None,
+        )["memory_search"]
 
-        result = await memory_search_tool.execute(
+        result = await bound_tool.execute(
             SimpleNamespace(),
             query=secret_query,
             max_results=5,
@@ -90,11 +92,16 @@ class TestMemoryToolsChunkSync:
         exception_detail = "memory get leaked source id mem-get-secret"
         session.execute = AsyncMock(side_effect=RuntimeError(exception_detail))
         session_factory = MagicMock(return_value=session)
-        monkeypatch.setattr(memory_tools_module, "_memget_session_factory", session_factory)
-        monkeypatch.setattr(memory_tools_module, "_memget_project_id", "proj-1")
         caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+        bound_tool = memory_tools_module.make_memory_tools(
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            graph_service=None,
+            chunk_search=None,
+            session_factory=session_factory,
+        )["memory_get"]
 
-        result = await memory_get_tool.execute(SimpleNamespace(), source_id=secret_source_id)
+        result = await bound_tool.execute(SimpleNamespace(), source_id=secret_source_id)
 
         payload = json.loads(result.output)
         assert "error" in payload

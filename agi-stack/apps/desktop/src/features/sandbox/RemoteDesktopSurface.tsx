@@ -27,6 +27,7 @@ type RemoteDesktopSurfaceProps = {
   onResolutionChange: (resolution: RemoteDesktopResolution) => void;
   onStart: (resolution?: RemoteDesktopResolution) => Promise<void>;
   onReconnect: (resolution?: RemoteDesktopResolution) => Promise<void>;
+  onStop: () => Promise<void>;
 };
 
 const RESOLUTIONS: readonly RemoteDesktopResolution[] = [
@@ -47,8 +48,12 @@ export function RemoteDesktopSurface({
   onResolutionChange,
   onStart,
   onReconnect,
+  onStop,
 }: RemoteDesktopSurfaceProps) {
   const { t } = useI18n();
+  useEffect(() => () => {
+    void onStop();
+  }, [onStop]);
   const containerRef = useRef<HTMLDivElement>(null);
   const retryAttemptRef = useRef(0);
   const [frameStatus, setFrameStatus] =
@@ -241,7 +246,8 @@ export function RemoteDesktopSurface({
             </Text>
           ) : null}
           <iframe
-            key={`${session.frame_url}:${sessionRevision}`}
+            key={`${session.frame_name ?? 'web'}:${session.frame_url}:${sessionRevision}`}
+            name={session.frame_name}
             src={session.frame_url}
             title={t('sandbox.desktopFrameTitle')}
             sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock"

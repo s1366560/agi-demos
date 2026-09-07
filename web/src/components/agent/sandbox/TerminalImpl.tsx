@@ -5,7 +5,7 @@
  * until the terminal is actually needed.
  */
 
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -15,40 +15,10 @@ import { Terminal } from '@xterm/xterm';
 
 import { useThemeColors } from '../../../hooks/useThemeColor';
 import {
-  createWebSocketAuthProtocols,
-  createWebSocketUrl,
-} from '../../../services/client/urlUtils';
-import { getAuthToken } from '../../../utils/tokenResolver';
-
-interface TerminalMessage {
-  type: 'input' | 'output' | 'resize' | 'error' | 'connected' | 'pong';
-  data?: string | undefined;
-  message?: string | undefined;
-  session_id?: string | undefined;
-  cols?: number | undefined;
-  rows?: number | undefined;
-}
-
-const TERMINAL_MESSAGE_TYPES = new Set<TerminalMessage['type']>([
-  'input',
-  'output',
-  'resize',
-  'error',
-  'connected',
-  'pong',
-]);
-
-const MAX_RECONNECT_ATTEMPTS = 5;
-const BASE_RECONNECT_DELAY_MS = 3000;
-const MAX_RECONNECT_DELAY_MS = 30000;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const isTerminalMessage = (value: unknown): value is TerminalMessage => {
-  if (!isRecord(value) || typeof value.type !== 'string') return false;
-  return TERMINAL_MESSAGE_TYPES.has(value.type as TerminalMessage['type']);
-};
+  WebOperationCleanupErrorV2,
+  type WebOperationContextV2,
+} from '../../../plugins/webOperationAdmissionV2';
+import { TerminalRetainedSessionV2 } from '../../../services/terminalRetainedSessionV2';
 
 interface TerminalImplProps {
   sandboxId: string;
@@ -122,272 +92,183 @@ export function TerminalImpl({
 }: TerminalImplProps) {
   const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
-  const terminalInstance = useRef<Terminal | null>(null);
-  const fitAddon = useRef<FitAddon | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-
-  // Ref to hold connect function for use in onclose callback
-  const connectRef = useRef<() => void>(() => undefined);
-
+  const viewRef = useRef<{
+    terminal: Terminal;
+    fit: FitAddon;
+    session: TerminalRetainedSessionV2;
+    operation: WebOperationContextV2;
+  } | null>(null);
   const resolvedColors = useThemeColors(TERMINAL_TOKEN_MAP);
-
   const terminalTheme = useMemo(() => {
     const theme: Record<string, string> = {};
-    for (const key of Object.keys(TERMINAL_TOKEN_MAP) as Array<keyof typeof TERMINAL_TOKEN_MAP>) {
+    for (const key of Object.keys(TERMINAL_TOKEN_MAP) as Array<keyof typeof TERMINAL_TOKEN_MAP>)
       theme[key] = resolvedColors[key] || TERMINAL_FALLBACKS[key] || '';
-    }
     return theme;
   }, [resolvedColors]);
-
-  const terminalThemeRef = useRef(terminalTheme);
-  useEffect(() => {
-    terminalThemeRef.current = terminalTheme;
-  });
-
-  // Get WebSocket URL using centralized utility
-  // Use project-scoped WebSocket proxy endpoint if projectId is available
-  const getWsUrl = useCallback(() => {
-    const params: Record<string, string> = {};
-    if (sessionId) {
-      params.session_id = sessionId;
-    }
-
-    if (projectId) {
-      // New project-scoped terminal WebSocket proxy
-      return createWebSocketUrl(
-        `/projects/${projectId}/sandbox/terminal/proxy/ws`,
-        Object.keys(params).length > 0 ? params : undefined
-      );
-    }
-    // Fallback to legacy sandbox endpoint
-    return createWebSocketUrl(
-      `/terminal/${sandboxId}/ws`,
-      Object.keys(params).length > 0 ? params : undefined
-    );
-  }, [projectId, sandboxId, sessionId]);
-
-  // Initialize terminal
-  const initTerminal = useCallback(() => {
-    if (!terminalRef.current || terminalInstance.current) return;
-
-    const terminal = new Terminal({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: terminalThemeRef.current,
-      allowProposedApi: true,
-    });
-
-    const fit = new FitAddon();
-    const webLinks = new WebLinksAddon();
-
-    terminal.loadAddon(fit);
-    terminal.loadAddon(webLinks);
-
-    terminal.open(terminalRef.current);
-    fit.fit();
-
-    terminalInstance.current = terminal;
-    fitAddon.current = fit;
-
-    // Handle resize
-    const resizeObserver = new ResizeObserver(() => {
-      if (fitAddon.current) {
-        fitAddon.current.fit();
-        // Send resize to server
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(
-            JSON.stringify({
-              type: 'resize',
-              cols: terminal.cols,
-              rows: terminal.rows,
-            })
-          );
-        }
-      }
-    });
-    resizeObserver.observe(terminalRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-      terminal.dispose();
-      terminalInstance.current = null;
-      fitAddon.current = null;
-    };
-  }, []);
-
-  // Connect WebSocket
-  const connect = useCallback(() => {
-    // Check if WebSocket is available (not in test environment) and already open
-    if (typeof WebSocket === 'undefined') return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-
-    const token = getAuthToken();
-    const ws = token
-      ? new WebSocket(getWsUrl(), createWebSocketAuthProtocols(token))
-      : new WebSocket(getWsUrl());
-
-    ws.onopen = () => {};
-
-    ws.onmessage = (event) => {
-      try {
-        if (typeof event.data !== 'string') return;
-        const parsed: unknown = JSON.parse(event.data);
-        if (!isTerminalMessage(parsed)) return;
-        const msg = parsed;
-
-        switch (msg.type) {
-          case 'connected':
-            if (msg.session_id) {
-              onConnect(msg.session_id);
-            }
-            reconnectAttemptsRef.current = 0;
-            // Write welcome message
-            terminalInstance.current?.writeln(
-              `\x1b[32m${t('components.sandboxTerminal.connectedWelcome', { defaultValue: '✓ Connected to sandbox terminal' })}\x1b[0m`
-            );
-            terminalInstance.current?.writeln('');
-            break;
-
-          case 'output':
-            if (msg.data) {
-              terminalInstance.current?.write(msg.data);
-            }
-            break;
-
-          case 'error':
-            onError(
-              msg.message ||
-                t('components.sandboxTerminal.unknownError', { defaultValue: 'Unknown error' })
-            );
-            break;
-
-          case 'pong':
-            // Heartbeat response
-            break;
-        }
-      } catch (e) {
-        console.error('[Terminal] Failed to parse message:', e);
-      }
-    };
-
-    ws.onerror = (event) => {
-      console.error('[Terminal] WebSocket error:', event);
-      onError(
-        t('components.sandboxTerminal.connectionError', { defaultValue: 'Connection error' })
-      );
-    };
-
-    ws.onclose = (event) => {
-      onDisconnect();
-
-      // Auto-reconnect on abnormal close with capped exponential backoff
-      if (event.code !== 1000 && event.code !== 1001) {
-        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-          onError(
-            t('components.sandboxTerminal.maxRetriesReached', {
-              defaultValue: 'Unable to reconnect after several attempts. Please retry manually.',
-            })
-          );
-          return;
-        }
-        const delay = Math.min(
-          BASE_RECONNECT_DELAY_MS * 2 ** reconnectAttemptsRef.current,
-          MAX_RECONNECT_DELAY_MS
-        );
-        reconnectAttemptsRef.current += 1;
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connectRef.current();
-        }, delay);
-      }
-    };
-
-    wsRef.current = ws;
-
-    // Setup terminal input handler
-    if (terminalInstance.current) {
-      terminalInstance.current.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', data }));
-        }
-      });
-    }
-  }, [getWsUrl, onConnect, onDisconnect, onError, t]);
-
-  // Keep connectRef updated
-  useEffect(() => {
-    connectRef.current = connect;
-  }, [connect]);
-
-  // Disconnect
-  const disconnect = useCallback(() => {
-    reconnectAttemptsRef.current = 0;
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    if (wsRef.current) {
-      wsRef.current.close(1000, 'User disconnect');
-      wsRef.current = null;
-    }
-  }, []);
-
-  // Initialize
-  useEffect(() => {
-    const cleanup = initTerminal();
-    return () => {
-      cleanup?.();
-      disconnect();
-    };
-  }, [initTerminal, disconnect]);
-
-  // Auto-connect when terminal is ready
-  useEffect(() => {
-    if (terminalInstance.current && wsRef.current?.readyState === undefined) {
-      // Use requestAnimationFrame to defer state update and avoid cascading renders
-      const rafId = requestAnimationFrame(() => {
-        connect();
-      });
-      return () => {
-        cancelAnimationFrame(rafId);
-      };
-    }
-    return undefined;
-  }, [connect]);
-
-  // Handle fullscreen resize
-  useEffect(() => {
-    if (fitAddon.current) {
-      // Fit terminal after state change
-      setTimeout(() => {
-        fitAddon.current?.fit();
-      }, 100);
-    }
-  }, [isFullscreen]);
-
-  useEffect(() => {
-    if (terminalInstance.current) {
-      terminalInstance.current.options.theme = terminalTheme;
-    }
+  const themeRef = useRef(terminalTheme);
+  useLayoutEffect(() => {
+    themeRef.current = terminalTheme;
   }, [terminalTheme]);
-
-  // Heartbeat
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, 30000);
-
+  // Server-issued session IDs and parent callbacks may change after connection. They must
+  // not replace an already-admitted UI lifetime or redirect its callbacks to a new owner.
+  const callbacks = useRef({ onConnect, onDisconnect, onError, t, sessionId });
+  useLayoutEffect(() => {
+    callbacks.current = { onConnect, onDisconnect, onError, t, sessionId };
+  });
+  useLayoutEffect(() => {
+    const target = terminalRef.current;
+    if (!target) return;
+    let active = true;
+    const isActive = () => active;
+    const captured = callbacks.current;
+    let terminal: Terminal | undefined;
+    const session = new TerminalRetainedSessionV2({
+      sandboxId,
+      ...(projectId ? { projectId } : {}),
+      ...(captured.sessionId ? { sessionId: captured.sessionId } : {}),
+      onAdmitted(operation) {
+        operation.check();
+        if (!active) throw new DOMException('Terminal unmounted', 'AbortError');
+        terminal = new Terminal({
+          cursorBlink: true,
+          fontSize: 14,
+          fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+          theme: themeRef.current,
+          allowProposedApi: true,
+        });
+        const ownTerminal = terminal;
+        let input: { dispose(): void } | undefined;
+        let observer: ResizeObserver | undefined;
+        const cleanup = () => {
+          active = false;
+          const failures: unknown[] = [];
+          for (const dispose of [
+            () => observer?.disconnect(),
+            () => input?.dispose(),
+            () => {
+              ownTerminal.dispose();
+            },
+          ]) {
+            try {
+              dispose();
+            } catch (error) {
+              failures.push(error);
+            }
+          }
+          if (viewRef.current?.session === session) viewRef.current = null;
+          if (failures.length)
+            throw new WebOperationCleanupErrorV2(failures, 'Terminal UI cleanup failed');
+        };
+        try {
+          const fit = new FitAddon();
+          ownTerminal.loadAddon(fit);
+          ownTerminal.loadAddon(new WebLinksAddon());
+          ownTerminal.open(target);
+          fit.fit();
+          viewRef.current = { terminal: ownTerminal, fit, session, operation };
+          input = ownTerminal.onData((data) => {
+            if (!active) return;
+            try {
+              operation.check();
+            } catch {
+              return;
+            }
+            session.sendInput(data);
+          });
+          observer = new ResizeObserver(() => {
+            if (!active) return;
+            try {
+              operation.check();
+            } catch {
+              return;
+            }
+            fit.fit();
+            session.resize(ownTerminal.cols, ownTerminal.rows);
+          });
+          observer.observe(target);
+          return cleanup;
+        } catch (error) {
+          cleanup();
+          throw error;
+        }
+      },
+      onConnect(id) {
+        if (!active) return;
+        const operation = session.getOperationContext();
+        if (!operation) return;
+        operation.check();
+        captured.onConnect(id);
+        // A parent callback can synchronously retire this owner.
+        if (!isActive()) return;
+        operation.check();
+        const view = viewRef.current;
+        if (!view || view.session !== session || view.operation !== operation) return;
+        view.fit.fit();
+        operation.check();
+        session.resize(view.terminal.cols, view.terminal.rows);
+        terminal?.writeln(
+          `\x1b[32m${captured.t('components.sandboxTerminal.connectedWelcome', { defaultValue: 'Connected to sandbox terminal' })}\x1b[0m`
+        );
+        terminal?.writeln('');
+      },
+      onOutput(data) {
+        if (active) terminal?.write(data);
+      },
+      onDisconnect() {
+        if (active) captured.onDisconnect();
+      },
+      onError(error) {
+        if (active) captured.onError(error.message);
+      },
+    });
+    void session.connect().catch((error: unknown) => {
+      if (active && !(error instanceof DOMException && error.name === 'AbortError'))
+        captured.onError(
+          captured.t('components.sandboxTerminal.connectionError', {
+            defaultValue: 'Connection error',
+          })
+        );
+    });
     return () => {
-      clearInterval(interval);
+      active = false;
+      void session.disconnect().catch(() => {
+        console.warn('Terminal cleanup failed');
+      });
     };
-  }, []);
+  }, [sandboxId, projectId]);
 
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const timer = setTimeout(() => {
+      if (viewRef.current !== view) return;
+      try {
+        view.operation.check();
+      } catch {
+        return;
+      }
+      view.fit.fit();
+      view.session.resize(view.terminal.cols, view.terminal.rows);
+    }, 100);
+    const cancel = () => {
+      clearTimeout(timer);
+    };
+    view.operation.signal.addEventListener('abort', cancel, { once: true });
+    return () => {
+      cancel();
+      view.operation.signal.removeEventListener('abort', cancel);
+    };
+  }, [isFullscreen]);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    try {
+      view.operation.check();
+    } catch {
+      return;
+    }
+    view.terminal.options.theme = terminalTheme;
+  }, [terminalTheme]);
   return <div ref={terminalRef} className="h-full w-full" style={{ padding: '4px' }} />;
 }
-
 export default TerminalImpl;

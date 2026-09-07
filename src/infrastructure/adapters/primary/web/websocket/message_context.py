@@ -24,9 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.configuration.di_container import DIContainer
 
 if TYPE_CHECKING:
+    from src.infrastructure.adapters.primary.web.startup.scoped_profile_runtime_v2 import (
+        ScopedProfileRuntimeV2,
+    )
     from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
         ConnectionManager,
     )
+    from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +50,8 @@ class MessageContext:
     db: AsyncSession
     container: DIContainer
     session_factory: async_sessionmaker[AsyncSession] | None = None
+    plugin_runtime_host_v2: PlatformPluginRuntimeHostV2 | None = None
+    scoped_profile_runtime_v2: ScopedProfileRuntimeV2 | None = None
     api_key: str | None = field(default=None, repr=False)
 
     # Lazy-loaded connection manager (to avoid circular imports)
@@ -117,6 +123,8 @@ class MessageContext:
             db=db,
             container=self.container,
             session_factory=self.session_factory,
+            plugin_runtime_host_v2=self.plugin_runtime_host_v2,
+            scoped_profile_runtime_v2=self.scoped_profile_runtime_v2,
             api_key=self.api_key,
             _connection_manager=self._connection_manager,
         )

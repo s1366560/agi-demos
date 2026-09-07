@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any, Protocol, cast
 
 from src.domain.model.agent.subagent import SubAgent
 
 from .subagent_runner import SubAgentSessionRunner
+from .subagent_tool_set_v2 import InheritedToolSetV2
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class SubAgentRunnerMixin:
     async def _execute_subagent(
         self: _RunnerAgent,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -42,10 +44,12 @@ class SubAgentRunnerMixin:
         delegation_depth: int = 0,
         model_override: str | None = None,
         thinking_override: str | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute a SubAgent in an independent ReAct loop."""
         async for evt in self._session_runner.execute_subagent(
             subagent=subagent,
+            available_subagents=available_subagents,
             user_message=user_message,
             conversation_context=conversation_context,
             project_id=project_id,
@@ -55,12 +59,14 @@ class SubAgentRunnerMixin:
             delegation_depth=delegation_depth,
             model_override=model_override,
             thinking_override=thinking_override,
+            inherited_tool_set=inherited_tool_set,
         ):
             yield evt
 
     async def _execute_parallel(
         self: _RunnerAgent,
         subtasks: list[Any],
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -68,10 +74,12 @@ class SubAgentRunnerMixin:
         conversation_id: str | None = None,
         route_id: str | None = None,
         abort_signal: asyncio.Event | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute multiple SubAgents in parallel."""
         async for evt in self._session_runner.execute_parallel(
             subtasks=subtasks,
+            available_subagents=available_subagents,
             user_message=user_message,
             conversation_context=conversation_context,
             project_id=project_id,
@@ -79,12 +87,14 @@ class SubAgentRunnerMixin:
             conversation_id=conversation_id,
             route_id=route_id,
             abort_signal=abort_signal,
+            inherited_tool_set=inherited_tool_set,
         ):
             yield evt
 
     async def _execute_chain(
         self: _RunnerAgent,
         subtasks: list[Any],
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -92,10 +102,12 @@ class SubAgentRunnerMixin:
         conversation_id: str | None = None,
         route_id: str | None = None,
         abort_signal: asyncio.Event | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute SubAgents as a sequential chain."""
         async for evt in self._session_runner.execute_chain(
             subtasks=subtasks,
+            available_subagents=available_subagents,
             user_message=user_message,
             conversation_context=conversation_context,
             project_id=project_id,
@@ -103,6 +115,7 @@ class SubAgentRunnerMixin:
             conversation_id=conversation_id,
             route_id=route_id,
             abort_signal=abort_signal,
+            inherited_tool_set=inherited_tool_set,
         ):
             yield evt
 
@@ -114,6 +127,7 @@ class SubAgentRunnerMixin:
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Launch a SubAgent for background execution."""
         async for evt in self._session_runner.execute_background(
@@ -123,6 +137,7 @@ class SubAgentRunnerMixin:
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,
+            inherited_tool_set=inherited_tool_set,
         ):
             yield evt
 
@@ -148,15 +163,18 @@ class SubAgentRunnerMixin:
         normalized_cleanup: str,
     ) -> tuple[str | None, str | None, float]:
         """Resolve model/thinking overrides."""
-        return cast(tuple[str | None, str | None, float], self._session_runner.runner_resolve_overrides(
-            conversation_id=conversation_id,
-            run_id=run_id,
-            requested_model=requested_model,
-            requested_thinking=requested_thinking,
-            normalized_spawn_mode=normalized_spawn_mode,
-            thread_requested=thread_requested,
-            normalized_cleanup=normalized_cleanup,
-        ))
+        return cast(
+            tuple[str | None, str | None, float],
+            self._session_runner.runner_resolve_overrides(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                requested_model=requested_model,
+                requested_thinking=requested_thinking,
+                normalized_spawn_mode=normalized_spawn_mode,
+                thread_requested=thread_requested,
+                normalized_cleanup=normalized_cleanup,
+            ),
+        )
 
     def _runner_mark_completion(
         self: _RunnerAgent,
@@ -303,6 +321,7 @@ class SubAgentRunnerMixin:
         self: _RunnerAgent,
         *,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -311,10 +330,12 @@ class SubAgentRunnerMixin:
         abort_signal: asyncio.Event | None,
         model_override: str | None,
         thinking_override: str | None,
+        inherited_tool_set: InheritedToolSetV2,
     ) -> tuple[str, int | None, int | None, bool, str | None]:
         """Consume subagent events and extract completion results."""
         result = await self._session_runner.runner_consume_and_extract(
             subagent=subagent,
+            available_subagents=available_subagents,
             user_message=user_message,
             conversation_context=conversation_context,
             project_id=project_id,
@@ -323,6 +344,7 @@ class SubAgentRunnerMixin:
             abort_signal=abort_signal,
             model_override=model_override,
             thinking_override=thinking_override,
+            inherited_tool_set=inherited_tool_set,
         )
         return cast(tuple[str, int | None, int | None, bool, str | None], result)
 
@@ -330,6 +352,7 @@ class SubAgentRunnerMixin:
         self: _RunnerAgent,
         run_id: str,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_id: str,
         conversation_context: list[dict[str, str]],
@@ -342,11 +365,13 @@ class SubAgentRunnerMixin:
         thread_requested: bool = False,
         cleanup: str = "keep",
         run_metadata: dict[str, str] | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> None:
         """Launch a detached SubAgent session tied to a run_id."""
         await self._session_runner.launch_subagent_session(
             run_id=run_id,
             subagent=subagent,
+            available_subagents=available_subagents,
             user_message=user_message,
             conversation_id=conversation_id,
             conversation_context=conversation_context,
@@ -359,6 +384,7 @@ class SubAgentRunnerMixin:
             thread_requested=thread_requested,
             cleanup=cleanup,
             run_metadata=run_metadata,
+            inherited_tool_set=inherited_tool_set,
         )
 
     @staticmethod
@@ -377,11 +403,14 @@ class SubAgentRunnerMixin:
         event: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], int]:
         """Append announce event while enforcing bounded history size."""
-        return cast(tuple[list[dict[str, Any]], int], self._session_runner.append_capped_announce_event(
-            events,
-            dropped_count,
-            event,
-        ))
+        return cast(
+            tuple[list[dict[str, Any]], int],
+            self._session_runner.append_capped_announce_event(
+                events,
+                dropped_count,
+                event,
+            ),
+        )
 
     @classmethod
     def _build_subagent_completion_payload(

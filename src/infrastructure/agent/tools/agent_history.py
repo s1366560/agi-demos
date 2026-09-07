@@ -17,15 +17,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
 
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
 
-def configure_agent_history(
-    orchestrator: AgentOrchestrator,
-) -> None:
-    """Inject orchestrator at agent startup."""
-    global _orchestrator
-    _orchestrator = orchestrator
+    return current_agent_orchestrator_v2()
 
 
 @tool_define(
@@ -59,13 +58,9 @@ async def agent_history_tool(
     limit: int = 50,
 ) -> ToolResult:
     """Read agent session message history."""
-    if _orchestrator is None:
-        return ToolResult(
-            output=json.dumps({"error": "Multi-agent not configured"}),
-            is_error=True,
-        )
+    orchestrator = _current_agent_orchestrator_v2()
     try:
-        messages = await _orchestrator.get_agent_history(
+        messages = await orchestrator.get_agent_history(
             session_id=session_id,
             limit=limit,
             project_id=ctx.project_id or None,

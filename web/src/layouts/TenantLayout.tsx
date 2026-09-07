@@ -37,7 +37,9 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { agentService } from '@/services/agentService';
 import { unifiedEventService } from '@/services/unifiedEventService';
+import { logger } from '@/utils/logger';
 
+import { useCommandPaletteOpen } from '@/hooks/useCommandPaletteOpen';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 import { getTenantContentSections } from '@/config/navigation';
@@ -47,7 +49,7 @@ import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 import { BackgroundSubAgentPanel } from '@/components/agent/BackgroundSubAgentPanel';
 // eslint-disable-next-line no-restricted-imports
 import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
-import { CommandPalette, useCommandPaletteOpen } from '@/components/common/CommandPalette';
+import { CommandPalette } from '@/components/common/CommandPalette';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 import TenantHeader from '@/components/layout/TenantHeader';
@@ -76,7 +78,7 @@ function isBareTenantEntryPath(pathname: string): boolean {
   return pathname === '/tenant' || pathname === '/tenant/';
 }
 
-function resetTenantScopedRuntimeState(): void {
+function resetTenantScopedRuntimeState(): Promise<void> {
   useAgentV3Store.setState((state) => ({
     conversations: [],
     activeConversationId: null,
@@ -104,8 +106,13 @@ function resetTenantScopedRuntimeState(): void {
   const sandboxStore = useSandboxStore.getState();
   sandboxStore.unsubscribeSSE();
   sandboxStore.reset();
-  agentService.disconnect();
-  unifiedEventService.disconnect();
+  return Promise.allSettled([
+    agentService.disconnect(),
+    unifiedEventService.disconnect(),
+  ]).then((results) => {
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  });
 }
 
 /**
@@ -311,7 +318,9 @@ export const TenantLayout: React.FC = memo(() => {
     ) {
       projectSyncRequestRef.current += 1;
       clearProjects();
-      resetTenantScopedRuntimeState();
+      void resetTenantScopedRuntimeState().catch((error: unknown) => {
+        logger.error('Failed to drain retired tenant event connections', error);
+      });
     }
   }, [tenantProjectScope, clearProjects]);
 

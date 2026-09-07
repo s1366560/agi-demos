@@ -139,7 +139,7 @@ test('turn collapse storage tolerates malformed data and persists bounded IDs on
 });
 
 test('desktop timeline exposes a Web-parity accessible whole-turn collapse contract', () => {
-  assert.match(appSource, /turnCollapseRuntime=\{\{[\s\S]*?mode: config\.mode[\s\S]*?apiBaseUrl/);
+  assert.match(appSource, /turnCollapseRuntime:\s*\{[\s\S]*?mode: config\.mode[\s\S]*?apiBaseUrl/);
   assert.match(chatPanelSource, /computeTimelineTurns\(timelineDisplayItems\)/);
   assert.match(chatPanelSource, /useTimelineTurnCollapse/);
   assert.match(chatTimelineSource, /aria-expanded=\{!collapsed\}/);

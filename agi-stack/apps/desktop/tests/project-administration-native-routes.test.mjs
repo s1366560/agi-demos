@@ -14,11 +14,6 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require(`${distRoot}/src/i18n.js`);
 const { DesktopApiError } = require(`${distRoot}/src/api/client.js`);
-const { createProjectSchemaClient } = require(`${compiled}/projectSchemaClient.js`);
-const {
-  createProjectMaintenanceClient,
-} = require(`${compiled}/projectMaintenanceClient.js`);
-const { createProjectSettingsClient } = require(`${compiled}/projectSettingsClient.js`);
 const {
   createProjectSchemaController,
 } = require(`${compiled}/projectSchemaController.js`);
@@ -77,121 +72,14 @@ const cloudScope = Object.freeze({
 });
 const localScope = Object.freeze({ ...cloudScope, authority: 'local' });
 
-test('three project administration clients use trusted-session authority and role-scoped actions', async () => {
-  const requests = [];
-  await withFetch(
-    async (url, init = {}) => {
-      requests.push({ url: String(url), init });
-      return authorityResponse(String(url), init);
-    },
-    async () => {
-      const [schema, maintenance, settings] = await Promise.all([
-        createProjectSchemaClient(cloudConfig).load(cloudScope),
-        createProjectMaintenanceClient(cloudConfig).load(cloudScope),
-        createProjectSettingsClient(cloudConfig).load(cloudScope),
-      ]);
-      assert.equal(schema.scopeRevision, 11);
-      assert.equal(schema.membershipRole, 'owner');
-      assert.equal(schema.availability, 'degraded');
-      assert.equal(schema.reasonCode, 'project_schema_export_file_ipc_unavailable');
-      assert.equal(schema.allowedActions.includes('create-entity-type'), true);
-      assert.equal(schema.allowedActions.includes('export'), false);
-      assert.equal(schema.entityTypes[0].name, 'Person');
-      assert.equal(schema.edgeTypes[0].name, 'KNOWS');
-      assert.equal(schema.mappings[0].sourceType, 'Person');
-
-      assert.equal(maintenance.scopeRevision, 11);
-      assert.equal(maintenance.availability, 'degraded');
-      assert.equal(
-        maintenance.reasonCode,
-        'project_maintenance_export_file_ipc_unavailable',
-      );
-      assert.equal(maintenance.allowedActions.includes('deduplicate'), true);
-      assert.equal(maintenance.allowedActions.includes('export'), false);
-      assert.equal(maintenance.stats.entityCount, 3);
-      assert.equal(maintenance.embeddingStatus.currentDimension, 1536);
-
-      assert.equal(settings.scopeRevision, 11);
-      assert.equal(settings.availability, 'available');
-      assert.equal(settings.reasonCode, null);
-      assert.equal(settings.allowedActions.includes('delete'), true);
-      assert.equal(settings.project.name, 'Project One');
-      assert.equal(settings.sandbox?.status, 'running');
-      assert.equal(settings.sandboxStats?.memoryUsage, 128);
-      assert.equal(JSON.stringify(settings).includes('/private/secret-workspace'), false);
-    },
-  );
-
-  assert.equal(requests.length > 0, true);
-  for (const request of requests) {
-    const headers = new Headers(request.init.headers);
-    assert.equal(headers.get('Authorization'), 'Bearer trusted-session');
-    assert.equal(headers.has('X-Agistack-Launch'), false);
-    assert.equal(request.init.credentials, 'omit');
-  }
-});
-
-test('project administration rejects the legacy id-only auth identity contract', async () => {
-  await withFetch(
-    async (url, init = {}) => {
-      if (new URL(String(url)).pathname === '/api/v1/auth/me') {
-        return json({ id: 'user-1', email: 'owner@example.test', name: 'Owner' });
-      }
-      return authorityResponse(String(url), init);
-    },
-    async () => {
-      for (const client of [
-        createProjectSchemaClient(cloudConfig),
-        createProjectMaintenanceClient(cloudConfig),
-        createProjectSettingsClient(cloudConfig),
-      ]) {
-        await assert.rejects(client.load(cloudScope), (error) => {
-          assert.equal(error instanceof DesktopApiError, true);
-          assert.equal(reasonCode(error), 'project_administration_scope_contract_invalid');
-          return true;
-        });
-      }
-    },
-  );
-});
-
-test('three Local project administration clients fail closed before network access', async () => {
-  let fetchCalls = 0;
-  await withFetch(
-    async () => {
-      fetchCalls += 1;
-      throw new Error('Local authority must fail before Cloud fetch');
-    },
-    async () => {
-      const cases = [
-        [
-          createProjectSchemaClient(localConfig),
-          'local_project_schema_authority_unavailable',
-        ],
-        [
-          createProjectMaintenanceClient(localConfig),
-          'local_project_maintenance_authority_unavailable',
-        ],
-        [
-          createProjectSettingsClient(localConfig),
-          'local_project_settings_authority_unavailable',
-        ],
-      ];
-      for (const [client, expectedReason] of cases) {
-        await assert.rejects(client.load(localScope), (error) => {
-          assert.equal(error instanceof DesktopApiError, true);
-          assert.equal(error.status, 501);
-          assert.equal(reasonCode(error), expectedReason);
-          return true;
-        });
-      }
-    },
-  );
-  assert.equal(fetchCalls, 0);
-});
-
 test('Project Administration capability authority observes scoped Cloud clients', async () => {
-  const factoryClients = createProjectAdministrationCapabilityClients(cloudConfig);
+  const factoryClients = createProjectAdministrationCapabilityClients(cloudConfig, {
+    load: async () => schemaSnapshot(),
+  }, {
+    load: async () => maintenanceSnapshot(),
+  }, {
+    load: async () => settingsSnapshot(),
+  });
   assert.deepEqual(
     Object.keys(factoryClients).sort(),
     [...PROJECT_ADMINISTRATION_CAPABILITY_IDS].sort(),
@@ -204,7 +92,7 @@ test('Project Administration capability authority observes scoped Cloud clients'
   assert.equal(projection['project-project-schema'].availability, 'degraded');
   assert.equal(
     projection['project-project-schema'].reason_code,
-    'project_schema_export_file_ipc_unavailable',
+    'desktop_project_schema_actions_and_export_unwired',
   );
   assert.equal(projection['project-project-maintenance'].availability, 'degraded');
   assert.equal(projection['project-project-settings'].availability, 'available');
@@ -279,14 +167,6 @@ test('project administration controllers preserve stale data and classify forbid
         if (schemaCalls === 1) return schemaSnapshot();
         return schemaDeferred.promise;
       },
-      createEntityType: async () => {},
-      updateEntityType: async () => {},
-      deleteEntityType: async () => {},
-      createEdgeType: async () => {},
-      updateEdgeType: async () => {},
-      deleteEdgeType: async () => {},
-      createMapping: async () => {},
-      deleteMapping: async () => {},
     },
     initialScope: cloudScope,
   });
@@ -595,7 +475,7 @@ function schemaSnapshot(scope = cloudScope) {
   return snapshotBase(data, {
     scope,
     availability: 'degraded',
-    reasonCode: 'project_schema_export_file_ipc_unavailable',
+    reasonCode: 'desktop_project_schema_actions_and_export_unwired',
     allowedActions: ['view', 'list-entity-types'],
   });
 }
@@ -637,8 +517,8 @@ function maintenanceSnapshot(scope = cloudScope) {
   return snapshotBase(data, {
     scope,
     availability: 'degraded',
-    reasonCode: 'project_maintenance_export_file_ipc_unavailable',
-    allowedActions: ['view', 'deduplicate'],
+    reasonCode: 'desktop_project_maintenance_surface_and_endpoints_incomplete',
+    allowedActions: ['view'],
   });
 }
 

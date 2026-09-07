@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../../plugins/webOperationAdmissionV2';
 /**
  * Conversation lifecycle actions extracted from agentV3.ts.
  *
@@ -216,9 +217,11 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
     },
 
     deleteConversation: async (conversationId: string, projectId: string): Promise<void> => {
+      const owner = getWebOperationAvailabilityV2().owner;
       try {
         // Delegate API call + list filtering to conversationsStore
         await useConversationsStore.getState().deleteConversation(conversationId, projectId);
+        if (getWebOperationAvailabilityV2().owner !== owner) return;
 
         agentService.unsubscribe(conversationId);
         clearDeltaBuffers(conversationId);
@@ -250,6 +253,7 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
         deleteConversationState(conversationId).catch(console.error);
         tabSync.broadcastConversationDeleted(conversationId);
       } catch (error) {
+        if (getWebOperationAvailabilityV2().owner !== owner) return;
         console.error('Failed to delete conversation', error);
         useStreamingStore.getState().setAgentError('Failed to delete conversation');
       }

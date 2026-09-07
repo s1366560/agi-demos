@@ -11,12 +11,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.primary.web.sandbox_application_authority_v2 import (
+    sandbox_operation_authority_v2,
+)
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 if TYPE_CHECKING:
     from src.application.services.project_sandbox_lifecycle_service import SandboxInfo
@@ -445,13 +450,25 @@ class RestartAgentHandler(WebSocketMessageHandler):
 async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> SandboxInfo | None:
     """Ensure sandbox exists for the project before starting agent."""
     try:
-        lifecycle_service = context.get_scoped_container().project_sandbox_lifecycle_service()
-
-        # Ensure sandbox exists (will create if not exists, or verify/repair if exists)
-        sandbox_info = await lifecycle_service.get_or_create_sandbox(
-            project_id=project_id,
-            tenant_id=context.tenant_id,
-        )
+        async with sandbox_operation_authority_v2(
+            db=context.db,
+            operation_id=f"websocket-lifecycle:ensure:{context.session_id}:{project_id}",
+            scope=ScopeV2(
+                kind=ScopeKindV2.PROJECT,
+                tenant_id=context.tenant_id,
+                project_id=project_id,
+            ),
+            identity={
+                "tenant_id": context.tenant_id,
+                "project_id": project_id,
+                "user_id": context.user_id,
+            },
+            metadata={"kind": "websocket-lifecycle", "action": "ensure-sandbox"},
+        ) as authority:
+            sandbox_info = await authority.services.lifecycle_service.get_or_create_sandbox(
+                project_id=project_id,
+                tenant_id=context.tenant_id,
+            )
         logger.info(
             f"[WS] Sandbox ensured for project {project_id}: "
             f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
@@ -473,8 +490,10 @@ async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Sa
                 "is_healthy": sandbox_info.is_healthy,
             },
         )
-        return cast("SandboxInfo", sandbox_info)
+        return sandbox_info
 
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(
             f"[WS] Failed to ensure sandbox for project {project_id}: {e}. "
@@ -486,28 +505,40 @@ async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Sa
 async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> SandboxInfo | None:
     """Sync and repair sandbox on agent restart."""
     try:
-        lifecycle_service = context.get_scoped_container().project_sandbox_lifecycle_service()
-
-        # Sync and repair sandbox on restart (handles container recreation if needed)
-        sandbox_info = await lifecycle_service.sync_and_repair_sandbox(
-            project_id=project_id,
-            tenant_id=context.tenant_id,
-        )
-        if sandbox_info:
-            logger.info(
-                f"[WS] Sandbox synced for agent restart: project={project_id}, "
-                f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
-            )
-        else:
-            # If no existing sandbox, ensure one is created
-            sandbox_info = await lifecycle_service.get_or_create_sandbox(
+        async with sandbox_operation_authority_v2(
+            db=context.db,
+            operation_id=f"websocket-lifecycle:repair:{context.session_id}:{project_id}",
+            scope=ScopeV2(
+                kind=ScopeKindV2.PROJECT,
+                tenant_id=context.tenant_id,
+                project_id=project_id,
+            ),
+            identity={
+                "tenant_id": context.tenant_id,
+                "project_id": project_id,
+                "user_id": context.user_id,
+            },
+            metadata={"kind": "websocket-lifecycle", "action": "repair-sandbox"},
+        ) as authority:
+            lifecycle_service = authority.services.lifecycle_service
+            sandbox_info = await lifecycle_service.sync_and_repair_sandbox(
                 project_id=project_id,
                 tenant_id=context.tenant_id,
             )
-            logger.info(
-                f"[WS] Sandbox ensured for agent restart: project={project_id}, "
-                f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
-            )
+            if sandbox_info:
+                logger.info(
+                    f"[WS] Sandbox synced for agent restart: project={project_id}, "
+                    f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
+                )
+            else:
+                sandbox_info = await lifecycle_service.get_or_create_sandbox(
+                    project_id=project_id,
+                    tenant_id=context.tenant_id,
+                )
+                logger.info(
+                    f"[WS] Sandbox ensured for agent restart: project={project_id}, "
+                    f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
+                )
 
         # Broadcast sandbox state to frontend via WebSocket
         if sandbox_info:
@@ -526,8 +557,10 @@ async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> 
                     "is_healthy": sandbox_info.is_healthy,
                 },
             )
-        return cast("SandboxInfo", sandbox_info)
+        return sandbox_info
 
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(
             f"[WS] Failed to ensure sandbox for project {project_id}: {e}. "

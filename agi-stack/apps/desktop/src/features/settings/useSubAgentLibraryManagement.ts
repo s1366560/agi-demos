@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
+import type { DesktopTenantSubAgentDefinitionsClientV2 } from '../../plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
+import type { DesktopTenantTemplatesOperationsV2 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import type {
   DesktopRuntimeConfig,
   ManagedSubAgent,
@@ -16,14 +17,18 @@ export type SubAgentLibraryDialogState = {
 export function useSubAgentLibraryManagement({
   active,
   config,
+  client,
   contextKey,
   canManage,
+  tenantTemplatesOperationsV2,
   onReload,
 }: {
   active: boolean;
   config: DesktopRuntimeConfig;
+  client: DesktopTenantSubAgentDefinitionsClientV2;
   contextKey: string;
   canManage: boolean;
+  tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   onReload: (preferredSelectionId?: string) => Promise<void>;
 }) {
   const [dialog, setDialog] = useState<SubAgentLibraryDialogState | null>(null);
@@ -46,15 +51,21 @@ export function useSubAgentLibraryManagement({
     setError(null);
     setDialog({ key: crypto.randomUUID(), templates: [], loading: true });
     try {
-      const result = await new ManagedResourcesClient(config).listManagedSubAgentTemplates();
+      const result = await tenantTemplatesOperationsV2.loadTenantTemplates({
+        config,
+        scope: Object.freeze({ authority: config.mode, tenantId: config.tenantId }),
+        query: Object.freeze({ page: 1, pageSize: 100 }),
+      });
       if (contextKeyRef.current !== requestContextKey) return;
-      setDialog((current) => (current ? { ...current, templates: result.templates, loading: false } : null));
+      setDialog((current) =>
+        current ? { ...current, templates: [...result.templates], loading: false } : null,
+      );
     } catch (caught) {
       if (contextKeyRef.current !== requestContextKey) return;
       setDialog((current) => (current ? { ...current, loading: false } : null));
       setError(errorMessage(caught));
     }
-  }, [canManage, config, contextKey]);
+  }, [canManage, config, contextKey, tenantTemplatesOperationsV2]);
 
   const close = useCallback(() => {
     if (!busyId) setDialog(null);
@@ -67,9 +78,11 @@ export function useSubAgentLibraryManagement({
       setBusyId(template.id);
       setError(null);
       try {
-        const created = await new ManagedResourcesClient(config).installManagedSubAgentTemplate(
-          template.id,
-        );
+        const created = await tenantTemplatesOperationsV2.installTenantTemplate({
+          config,
+          scope: Object.freeze({ authority: config.mode, tenantId: config.tenantId }),
+          templateId: template.id,
+        });
         if (contextKeyRef.current !== requestContextKey) return;
         setDialog(null);
         await onReload(created.id);
@@ -79,7 +92,7 @@ export function useSubAgentLibraryManagement({
         if (contextKeyRef.current === requestContextKey) setBusyId(null);
       }
     },
-    [busyId, canManage, config, contextKey, onReload],
+    [busyId, canManage, config, contextKey, onReload, tenantTemplatesOperationsV2],
   );
 
   const importFilesystem = useCallback(
@@ -89,7 +102,7 @@ export function useSubAgentLibraryManagement({
       setImportBusyId(subagent.id);
       setError(null);
       try {
-        const created = await new ManagedResourcesClient(config).importManagedFilesystemSubAgent(
+        const created = await client.importManagedFilesystemSubAgent(
           subagent.name,
           config.projectId || undefined,
         );
@@ -101,7 +114,7 @@ export function useSubAgentLibraryManagement({
         if (contextKeyRef.current === requestContextKey) setImportBusyId(null);
       }
     },
-    [canManage, config, contextKey, importBusyId, onReload],
+    [canManage, client, config, contextKey, importBusyId, onReload],
   );
 
   return { dialog, busyId, importBusyId, error, open, close, install, importFilesystem };

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
+import type { DesktopTenantAgentDefinitionsClientV2 } from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import type {
-  DesktopRuntimeConfig,
   ManagedAgentDefinition,
   ManagedAgentDefinitionMutation,
   ManagedExternalAcpAgent,
@@ -10,7 +9,7 @@ import type {
 
 export function useAgentDefinitionManagement({
   active,
-  config,
+  client,
   contextKey,
   canManage,
   onReload,
@@ -18,7 +17,7 @@ export function useAgentDefinitionManagement({
   onDeleted,
 }: {
   active: boolean;
-  config: DesktopRuntimeConfig;
+  client: DesktopTenantAgentDefinitionsClientV2;
   contextKey: string;
   canManage: boolean;
   onReload: () => Promise<void>;
@@ -50,7 +49,7 @@ export function useAgentDefinitionManagement({
     const controller = new AbortController();
     setExternalAcpAgentsLoading(true);
     setExternalAcpAgentsError(null);
-    void new ManagedResourcesClient(config)
+    void client
       .listManagedExternalAcpAgents(controller.signal)
       .then((agents) => {
         if (contextKeyRef.current === requestContextKey) setExternalAcpAgents(agents);
@@ -67,7 +66,7 @@ export function useAgentDefinitionManagement({
         }
       });
     return () => controller.abort();
-  }, [config, contextKey, definition]);
+  }, [client, contextKey, definition]);
 
   const open = useCallback(
     (next: ManagedAgentDefinition | null) => {
@@ -90,7 +89,6 @@ export function useAgentDefinitionManagement({
       setBusy(true);
       setError(null);
       try {
-        const client = new ManagedResourcesClient(config);
         const saved = definition
           ? await client.updateManagedAgentDefinition(
               definition.id,
@@ -108,7 +106,7 @@ export function useAgentDefinitionManagement({
         if (contextKeyRef.current === requestContextKey) setBusy(false);
       }
     },
-    [canManage, config, contextKey, definition, onReload, onSaved]
+    [canManage, client, contextKey, definition, onReload, onSaved]
   );
 
   const remove = useCallback(async () => {
@@ -117,7 +115,7 @@ export function useAgentDefinitionManagement({
     setBusy(true);
     setError(null);
     try {
-      await new ManagedResourcesClient(config).deleteManagedAgentDefinition(
+      await client.deleteManagedAgentDefinition(
         definition.id,
         definition.revision,
       );
@@ -130,7 +128,7 @@ export function useAgentDefinitionManagement({
     } finally {
       if (contextKeyRef.current === requestContextKey) setBusy(false);
     }
-  }, [canManage, config, contextKey, definition, onDeleted, onReload]);
+  }, [canManage, client, contextKey, definition, onDeleted, onReload]);
 
   return {
     dialog: definition === undefined ? null : { key: dialogKey, definition },

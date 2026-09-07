@@ -1,11 +1,12 @@
 """Unit tests for data_export, maintenance, and tasks routers."""
 
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import FastAPI, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.routers.data_export import (
@@ -25,6 +26,10 @@ from src.infrastructure.adapters.primary.web.routers.maintenance import (
     invalidate_stale_edges,
     migrate_embeddings,
 )
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     User,
@@ -37,9 +42,36 @@ def _neo4j_result(records: list[dict]) -> Mock:
     return Mock(records=records)
 
 
+def _graph_application(db: object, graph_store: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        services=SimpleNamespace(graph_store=graph_store),
+    )
+
+
 @pytest.mark.unit
 class TestDataExportRouter:
     """Test cases for data_export router endpoints."""
+
+    @pytest.fixture(autouse=True)
+    async def initialize_data_export_route_generation(
+        self,
+        test_app: FastAPI,
+        mock_graphiti_client: object,
+    ) -> AsyncIterator[None]:
+        """Run HTTP cases through the production V2 generation dispatcher."""
+
+        async def graph_runtime_factory() -> object:
+            return mock_graphiti_client
+
+        await initialize_plugin_runtime_v2(
+            test_app,
+            graph_runtime_factory=graph_runtime_factory,
+        )
+        try:
+            yield
+        finally:
+            await shutdown_plugin_runtime_v2(test_app)
 
     @pytest.mark.asyncio
     async def test_resolve_tenant_scope_defaults_to_user_tenant(
@@ -203,8 +235,7 @@ class TestDataExportRouter:
             include_relationships=True,
             include_communities=True,
             current_user=test_user,
-            db=test_db,
-            graph_store=graph_store,
+            graph_application=_graph_application(test_db, graph_store),
         )
 
         assert data["project_id"] == test_project_db.id
@@ -238,8 +269,7 @@ class TestDataExportRouter:
             tenant_id=test_project_db.tenant_id,
             project_id=None,
             current_user=test_user,
-            db=test_db,
-            graph_store=graph_store,
+            graph_application=_graph_application(test_db, graph_store),
         )
 
         assert captured["tenant_id"] == test_project_db.tenant_id
@@ -272,8 +302,7 @@ class TestDataExportRouter:
             tenant_id=None,
             project_id=test_project_db.id,
             current_user=test_user,
-            db=test_db,
-            graph_store=graph_store,
+            graph_application=_graph_application(test_db, graph_store),
         )
 
         assert captured["project_id"] == test_project_db.id
@@ -376,8 +405,7 @@ class TestDataExportRouter:
             project_id=test_project_db.id,
             body=None,
             current_user=test_user,
-            db=test_db,
-            graph_store=graph_store,
+            graph_application=_graph_application(test_db, graph_store),
         )
 
         assert captured["project_id"] == test_project_db.id
@@ -409,8 +437,7 @@ class TestDataExportRouter:
             project_id=test_project_db.id,
             body=None,
             current_user=test_user,
-            db=test_db,
-            graph_store=graph_store,
+            graph_application=_graph_application(test_db, graph_store),
         )
 
         assert captured["project_id"] == test_project_db.id
@@ -436,8 +463,7 @@ class TestDataExportRouter:
                 project_id=None,
                 body={"older_than_days": 0},
                 current_user=test_user,
-                db=test_db,
-                graph_store=graph_store,
+                graph_application=_graph_application(test_db, graph_store),
             )
 
         assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -462,8 +488,7 @@ class TestDataExportRouter:
                 project_id=None,
                 body={"dry_run": "maybe"},
                 current_user=test_user,
-                db=test_db,
-                graph_store=graph_store,
+                graph_application=_graph_application(test_db, graph_store),
             )
 
         assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -518,6 +543,7 @@ class TestMaintenanceRouter:
         # mock_graphiti_client (aliased to mock_graph_service) is wired by the
         # client fixture; override find_duplicate_entities on it.
         from src.infrastructure.adapters.primary.web.dependencies import get_graph_store
+
         client.app.dependency_overrides[get_graph_store].side_effect = None
         store = self._store()
         store.find_duplicate_entities = AsyncMock(
@@ -758,9 +784,7 @@ class TestMaintenanceRouter:
 
         assert response["existing_dimension"] == 1536
         assert response["missing_embeddings"] == 3
-        assert store.get_existing_embedding_dimension.await_args.args[2] == [
-            test_project_db.id
-        ]
+        assert store.get_existing_embedding_dimension.await_args.args[2] == [test_project_db.id]
 
     @pytest.mark.asyncio
     async def test_check_embedding_dimensions_uses_store_detector(
@@ -813,9 +837,7 @@ class TestMaintenanceRouter:
 
         store = self._store()
         store.get_vector_index_dimension = AsyncMock(return_value=1536)
-        store.get_embedding_dimension_distribution = AsyncMock(
-            return_value=({"1536": 4}, 4)
-        )
+        store.get_embedding_dimension_distribution = AsyncMock(return_value=({"1536": 4}, 4))
 
         response = await get_native_embedding_status(
             project_id=None,
@@ -824,9 +846,7 @@ class TestMaintenanceRouter:
             graph_store=store,
         )
 
-        assert store.get_embedding_dimension_distribution.await_args.args[2] == [
-            test_project_db.id
-        ]
+        assert store.get_embedding_dimension_distribution.await_args.args[2] == [test_project_db.id]
         assert response["total_embeddings"] == 4
 
     @pytest.mark.asyncio
@@ -849,9 +869,7 @@ class TestMaintenanceRouter:
             graph_store=store,
         )
 
-        assert store.get_embedding_dimension_distribution.await_args.args[2] == [
-            test_project_db.id
-        ]
+        assert store.get_embedding_dimension_distribution.await_args.args[2] == [test_project_db.id]
         assert response["dry_run"] is True
         assert response["total_embeddings"] == 0
         store.clear_entity_embeddings.assert_not_awaited()

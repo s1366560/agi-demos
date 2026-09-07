@@ -5,14 +5,93 @@ execution based on TaskDecomposer results.
 """
 
 import asyncio
-from types import SimpleNamespace
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent.core.processor import ToolDefinition
+from src.infrastructure.agent.core.subagent_tool_set_v2 import InheritedToolSetV2
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.subagent.task_decomposer import SubTask
+from src.infrastructure.plugins.v2.runtime import FiberPhaseV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+
+
+class _FakeForkedOperationV2:
+    descriptor = PluginGenerationDescriptorV2(
+        profile_id="unit-test",
+        generation=1,
+        digest="0" * 64,
+    )
+
+    def __init__(self, *, admission_error: BaseException | None = None) -> None:
+        self.admission_error = admission_error
+        self.admitted = False
+        self.exited = False
+        self.released = False
+
+    @asynccontextmanager
+    async def admit(self, **_kwargs) -> AsyncIterator[SimpleNamespace]:
+        self.admitted = True
+        try:
+            if self.admission_error is not None:
+                raise self.admission_error
+            yield SimpleNamespace(descriptor=self.descriptor)
+        finally:
+            self.exited = True
+            await self.release()
+
+    async def release(self) -> None:
+        self.released = True
+
+
+class _TestOperationV2:
+    operation_id = "unit-parent-turn"
+    descriptor = _FakeForkedOperationV2.descriptor
+    phase = FiberPhaseV2.ACTIVE
+
+    async def effect(self, setup, *, label: str) -> None:
+        assert label
+        result = setup()
+        if hasattr(result, "__await__"):
+            result = await result
+
+
+_SUBAGENT_REBINDABLE_TOOL_NAMES = (
+    "delegate_to_subagent",
+    "parallel_delegate_subagents",
+    "sessions_spawn",
+    "sessions_list",
+    "sessions_history",
+    "sessions_timeline",
+    "sessions_overview",
+    "sessions_wait",
+    "sessions_ack",
+    "sessions_send",
+    "subagents",
+)
+
+
+def _inherited_tool_set() -> InheritedToolSetV2:
+    names = ("test_tool", *_SUBAGENT_REBINDABLE_TOOL_NAMES)
+    tools = {name: SimpleNamespace(description=name) for name in names}
+    return InheritedToolSetV2(
+        tool_set=ToolSetV2(
+            tools=MappingProxyType(tools),
+            definitions=tuple(
+                ToolDefinition(name, name, {}, lambda **_kwargs: None) for name in names
+            ),
+        ),
+        generation_descriptor=_FakeForkedOperationV2.descriptor,
+        owner_operation_id=_TestOperationV2.operation_id,
+        rebindable_tool_names=frozenset(_SUBAGENT_REBINDABLE_TOOL_NAMES),
+    )
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -35,7 +114,27 @@ def _make_react_agent(**kwargs):
         "enable_subagent_as_tool": False,  # Test legacy pre-routing behavior
     }
     defaults.update(kwargs)
-    return ReActAgent(**defaults)
+    agent = ReActAgent(**defaults)
+    registry = SubAgentRunRegistry()
+
+    def resolver() -> SubAgentRunRegistry:
+        return registry
+
+    async def reserve_operation() -> _FakeForkedOperationV2:
+        return _FakeForkedOperationV2()
+
+    agent._session_runner.deps.subagent_run_registry_resolver = resolver
+    agent._session_runner.deps.operation_reserver = reserve_operation
+    inherited_tool_set = _inherited_tool_set()
+    operation = _TestOperationV2()
+    agent._session_runner.deps.inherited_tool_set_fn = lambda: inherited_tool_set
+    agent._session_runner.deps.operation_context_fn = lambda: operation
+    agent._tool_builder.deps.subagent_run_registry_resolver = resolver
+    return agent
+
+
+def _run_registry(agent):
+    return agent._session_runner.deps.subagent_run_registry
 
 
 def _make_result(name: str = "agent", success: bool = True) -> SubAgentResult:
@@ -128,13 +227,14 @@ class TestSessionizedRuntime:
         sa = _make_subagent("researcher")
         agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
 
-        run = agent._subagent_run_registry.create_run(
+        registry = _run_registry(agent)
+        run = registry.create_run(
             conversation_id="c1",
             subagent_name=sa.name,
             task="Do work",
             run_id="run-announce-retry",
         )
-        agent._subagent_run_registry.mark_running("c1", run.run_id)
+        registry.mark_running("c1", run.run_id)
 
         async def _mock_execute_subagent(*args, **kwargs):
             yield {
@@ -151,7 +251,7 @@ class TestSessionizedRuntime:
                 "timestamp": "t",
             }
 
-        original_attach = agent._subagent_run_registry.attach_metadata
+        original_attach = registry.attach_metadata
         announce_attach_calls = {"count": 0}
 
         def _flaky_attach(*args, **kwargs):
@@ -165,14 +265,17 @@ class TestSessionizedRuntime:
             return original_attach(*args, **kwargs)
 
         with (
-            patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent),
             patch.object(
-                agent._subagent_run_registry, "attach_metadata", side_effect=_flaky_attach
+                agent._session_runner,
+                "execute_subagent",
+                side_effect=_mock_execute_subagent,
             ),
+            patch.object(registry, "attach_metadata", side_effect=_flaky_attach),
         ):
             await agent._launch_subagent_session(
                 run_id=run.run_id,
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_id="c1",
                 conversation_context=[],
@@ -181,7 +284,7 @@ class TestSessionizedRuntime:
             )
             await self._wait_session_finish(agent, run.run_id)
 
-        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        final = registry.get_run("c1", run.run_id)
         assert final is not None
         assert final.metadata.get("announce_status") == "delivered"
         assert final.metadata.get("announce_attempt_count") == 2
@@ -204,13 +307,14 @@ class TestSessionizedRuntime:
             subagent_lifecycle_hook=_hook,
         )
 
-        run = agent._subagent_run_registry.create_run(
+        registry = _run_registry(agent)
+        run = registry.create_run(
             conversation_id="c1",
             subagent_name=sa.name,
             task="Hooked task",
             run_id="run-hook",
         )
-        agent._subagent_run_registry.mark_running("c1", run.run_id)
+        registry.mark_running("c1", run.run_id)
 
         async def _mock_execute_subagent(*args, **kwargs):
             yield {
@@ -227,10 +331,15 @@ class TestSessionizedRuntime:
                 "timestamp": "t",
             }
 
-        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+        with patch.object(
+            agent._session_runner,
+            "execute_subagent",
+            side_effect=_mock_execute_subagent,
+        ):
             await agent._launch_subagent_session(
                 run_id=run.run_id,
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Hooked task",
                 conversation_id="c1",
                 conversation_context=[],
@@ -261,13 +370,14 @@ class TestSessionizedRuntime:
             subagent_lifecycle_hook=_failing_hook,
         )
 
-        run = agent._subagent_run_registry.create_run(
+        registry = _run_registry(agent)
+        run = registry.create_run(
             conversation_id="c1",
             subagent_name=sa.name,
             task="Task",
             run_id="run-hook-fail",
         )
-        agent._subagent_run_registry.mark_running("c1", run.run_id)
+        registry.mark_running("c1", run.run_id)
 
         async def _mock_execute_subagent(*args, **kwargs):
             yield {
@@ -284,10 +394,15 @@ class TestSessionizedRuntime:
                 "timestamp": "t",
             }
 
-        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+        with patch.object(
+            agent._session_runner,
+            "execute_subagent",
+            side_effect=_mock_execute_subagent,
+        ):
             await agent._launch_subagent_session(
                 run_id=run.run_id,
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Task",
                 conversation_id="c1",
                 conversation_context=[],
@@ -296,9 +411,237 @@ class TestSessionizedRuntime:
             )
             await self._wait_session_finish(agent, run.run_id)
 
-        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        final = registry.get_run("c1", run.run_id)
         assert final is not None
         assert final.status.value == "completed"
+
+    async def test_launch_session_releases_reservation_when_admission_fails(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-admission-fail",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2(
+            admission_error=RuntimeV2Error("admission_failed", "admission failed")
+        )
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+
+        with pytest.raises(RuntimeV2Error) as error:
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                available_subagents=agent.subagents,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+
+        assert error.value.code == "admission_failed"
+        assert reservation.admitted is True
+        assert reservation.exited is True
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        failed = registry.get_run("c1", run.run_id)
+        assert failed is not None
+        assert failed.status.value == "failed"
+
+    async def test_launch_session_cancels_admitted_task_when_launch_hook_fails(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-launch-hook-fail",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2()
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        async def fail_launch_hooks(**_kwargs) -> None:
+            raise RuntimeError("launch hook failed")
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+        agent._session_runner.launch_emit_lifecycle_hooks = fail_launch_hooks
+
+        with pytest.raises(RuntimeError, match="launch hook failed"):
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                available_subagents=agent.subagents,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+
+        assert reservation.admitted is True
+        assert reservation.exited is True
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        failed = registry.get_run("c1", run.run_id)
+        assert failed is not None
+        assert failed.status.value == "failed"
+
+    async def test_launch_session_releases_reservation_when_supervisor_is_closed(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-supervisor-closed",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2()
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+        await agent._detached_subagent_task_supervisor.shutdown()
+
+        with pytest.raises(RuntimeV2Error) as error:
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                available_subagents=agent.subagents,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+
+        assert error.value.code == "detached_subagent_supervisor_closed"
+        assert reservation.admitted is False
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        failed = registry.get_run("c1", run.run_id)
+        assert failed is not None
+        assert failed.status.value == "failed"
+
+    async def test_launch_session_cancelled_before_first_step_settles_admission(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-pre-start-cancel",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2()
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        supervisor = agent._detached_subagent_task_supervisor
+        create_task = supervisor.create_task
+
+        def create_cancelled_task(**kwargs):
+            task = create_task(**kwargs)
+            task.cancel()
+            return task
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+
+        with (
+            patch.object(supervisor, "create_task", side_effect=create_cancelled_task),
+            pytest.raises(RuntimeV2Error) as error,
+        ):
+            await asyncio.wait_for(
+                agent._launch_subagent_session(
+                    run_id=run.run_id,
+                    subagent=sa,
+                    available_subagents=agent.subagents,
+                    user_message="Task",
+                    conversation_id="c1",
+                    conversation_context=[],
+                    project_id="p1",
+                    tenant_id="t1",
+                ),
+                timeout=1,
+            )
+
+        assert error.value.code == "detached_subagent_launch_cancelled"
+        assert reservation.admitted is False
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        cancelled = registry.get_run("c1", run.run_id)
+        assert cancelled is not None
+        assert cancelled.status.value == "cancelled"
+
+    async def test_launch_session_reports_shutdown_during_launch_hook(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-launch-hook-shutdown",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2()
+        hook_started = asyncio.Event()
+        release_hook = asyncio.Event()
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        async def block_launch_hooks(**_kwargs) -> None:
+            hook_started.set()
+            await release_hook.wait()
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+        agent._session_runner.launch_emit_lifecycle_hooks = block_launch_hooks
+
+        launch = asyncio.create_task(
+            agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                available_subagents=agent.subagents,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+        )
+        await asyncio.wait_for(hook_started.wait(), timeout=1)
+
+        await asyncio.wait_for(agent._detached_subagent_task_supervisor.shutdown(), timeout=1)
+        release_hook.set()
+
+        with pytest.raises(RuntimeV2Error) as error:
+            await asyncio.wait_for(launch, timeout=1)
+
+        assert error.value.code == "detached_subagent_launch_cancelled"
+        assert reservation.admitted is True
+        assert reservation.exited is True
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        cancelled = registry.get_run("c1", run.run_id)
+        assert cancelled is not None
+        assert cancelled.status.value == "cancelled"
 
 
 @pytest.mark.unit
@@ -332,6 +675,7 @@ class TestNestedSessionToolInjection:
             events = []
             async for event in agent._execute_subagent(
                 subagent=researcher,
+                available_subagents=[researcher, coder],
                 user_message="delegate and monitor",
                 conversation_context=[],
                 project_id="p1",
@@ -381,6 +725,7 @@ class TestNestedSessionToolInjection:
             events = []
             async for event in agent._execute_subagent(
                 subagent=researcher,
+                available_subagents=[researcher, coder],
                 user_message="depth limited",
                 conversation_context=[],
                 project_id="p1",
@@ -394,6 +739,44 @@ class TestNestedSessionToolInjection:
         assert "subagents" not in captured_tool_names
         assert "sessions_list" not in captured_tool_names
         assert events[-1]["type"] == "complete"
+
+    async def test_nested_tools_do_not_fallback_to_static_subagents(self):
+        researcher = _make_subagent("researcher")
+        static_coder = _make_subagent("static-coder")
+        agent = _make_react_agent(
+            subagents=[researcher, static_coder],
+            enable_subagent_as_tool=True,
+            max_subagent_delegation_depth=2,
+        )
+        captured_tool_names: list[str] = []
+
+        class FakeSubAgentProcess:
+            def __init__(self, *args, **kwargs) -> None:
+                nonlocal captured_tool_names
+                captured_tool_names = [tool.name for tool in kwargs["tools"]]
+                self.result = _make_result(kwargs["subagent"].name)
+
+            async def execute(self):
+                if False:
+                    yield {}
+
+        with patch(
+            "src.infrastructure.agent.subagent.process.SubAgentProcess", FakeSubAgentProcess
+        ):
+            async for _event in agent._execute_subagent(
+                subagent=researcher,
+                available_subagents=[researcher],
+                user_message="no nested capability",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+                conversation_id="c1",
+                delegation_depth=1,
+            ):
+                pass
+
+        assert "delegate_to_subagent" not in captured_tool_names
+        assert "subagents" not in captured_tool_names
 
 
 # === _execute_parallel Tests ===
@@ -434,6 +817,7 @@ class TestExecuteParallel:
             events = []
             async for event in agent._execute_parallel(
                 subtasks=subtasks,
+                available_subagents=agents,
                 user_message="Do both",
                 conversation_context=[],
                 project_id="p1",
@@ -492,6 +876,7 @@ class TestExecuteChain:
             events = []
             async for event in agent._execute_chain(
                 subtasks=subtasks,
+                available_subagents=agents,
                 user_message="Research then write",
                 conversation_context=[],
                 project_id="p1",

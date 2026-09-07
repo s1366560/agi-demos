@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from src.infrastructure.agent.tools.define import (
     _TOOL_REGISTRY,
     ToolInfo,
     clear_registry,
+    tool_define,
 )
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 
@@ -79,6 +81,20 @@ def helper_function():
 SYNTAX_ERROR_CONTENT = '''"""File with syntax error."""
 def broken_function(
     return "missing colon"
+'''
+
+PARTIAL_IMPORT_FAILURE_CONTENT = '''"""File that fails after defining a tool."""
+from src.infrastructure.agent.tools.define import tool_define
+
+@tool_define(
+    name="partial_tool",
+    description="Must never leak",
+    parameters={"type": "object"},
+)
+async def partial_tool(ctx):
+    return "partial"
+
+raise RuntimeError("import failed after registration")
 '''
 
 
@@ -201,6 +217,7 @@ class TestCustomToolLoader:
         assert isinstance(tools["test_custom_tool"], ToolInfo)
         assert tools["test_custom_tool"].description == "A test custom tool"
         assert tools["test_custom_tool"].permission == "read"
+        assert "custom" in tools["test_custom_tool"].tags
 
         # Check diagnostics
         info_diags = [d for d in diagnostics if d.level == "info"]
@@ -307,6 +324,45 @@ class TestCustomToolLoader:
         # Assert
         assert "test_custom_tool" in tools
         assert "test_custom_tool" not in _TOOL_REGISTRY
+
+    def test_load_all_preserves_existing_global_tool_with_same_name(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        @tool_define(
+            name="test_custom_tool",
+            description="builtin authority",
+            parameters={"type": "object"},
+        )
+        async def builtin_tool(ctx: object) -> str:
+            return "builtin"
+
+        tools_dir = tmp_path / ".memstack" / "tools"
+        tools_dir.mkdir(parents=True)
+        (tools_dir / "tool.py").write_text(VALID_TOOL_CONTENT)
+
+        tools, _diagnostics = CustomToolLoader(base_path=tmp_path).load_all()
+
+        assert tools["test_custom_tool"] is not builtin_tool
+        assert _TOOL_REGISTRY["test_custom_tool"] is builtin_tool
+
+    def test_import_failure_discards_partially_captured_tools(self, tmp_path: Path) -> None:
+        tools_dir = tmp_path / ".memstack" / "tools"
+        tools_dir.mkdir(parents=True)
+        (tools_dir / "partial.py").write_text(PARTIAL_IMPORT_FAILURE_CONTENT)
+
+        tools, diagnostics = CustomToolLoader(base_path=tmp_path).load_all()
+
+        assert tools == {}
+        assert "partial_tool" not in _TOOL_REGISTRY
+        assert [diagnostic.code for diagnostic in diagnostics] == ["import_failed"]
+
+    def test_load_file_does_not_consult_or_mutate_global_registry(self) -> None:
+        source = inspect.getsource(CustomToolLoader._load_file)
+
+        assert "get_registered_tools" not in source
+        assert "pop_registered_tool" not in source
+        assert "capture_tool_definitions" in source
 
     def test_load_all_empty_directory(self, tmp_path: Path) -> None:
         """Empty tools directory returns empty results."""

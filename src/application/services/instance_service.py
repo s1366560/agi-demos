@@ -18,9 +18,6 @@ from src.domain.model.instance.enums import (
     ServiceType,
 )
 from src.domain.model.instance.instance import Instance, InstanceMember
-from src.domain.ports.repositories.cluster_repository import (
-    ClusterRepository,
-)
 from src.domain.ports.repositories.deploy_record_repository import (
     DeployRecordRepository,
 )
@@ -42,12 +39,10 @@ class InstanceService:
         instance_repo: InstanceRepository,
         instance_member_repo: InstanceMemberRepository,
         deploy_record_repo: DeployRecordRepository,
-        cluster_repo: ClusterRepository,
     ) -> None:
         self._instance_repo = instance_repo
         self._instance_member_repo = instance_member_repo
         self._deploy_record_repo = deploy_record_repo
-        self._cluster_repo = cluster_repo
 
     # ------------------------------------------------------------------
     # Instance CRUD

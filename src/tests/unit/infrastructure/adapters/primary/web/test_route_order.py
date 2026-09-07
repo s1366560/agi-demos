@@ -2,6 +2,9 @@ import pytest
 from fastapi.routing import APIRoute
 
 from src.infrastructure.adapters.primary.web.main import create_app
+from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
+    ApplicationGenerationRouteDispatcherV2,
+)
 
 
 def _routes() -> list[APIRoute]:
@@ -17,6 +20,27 @@ def _route_index(path: str, method: str) -> int:
 
 def _path_parts(path: str) -> list[str]:
     return [part for part in path.strip("/").split("/") if part]
+
+
+def test_generation_dispatcher_precedes_non_kernel_builtin_routes() -> None:
+    routes = create_app().routes
+    dispatcher_index = next(
+        index
+        for index, route in enumerate(routes)
+        if isinstance(route, ApplicationGenerationRouteDispatcherV2)
+    )
+    auth_index = next(
+        index
+        for index, route in enumerate(routes)
+        if isinstance(route, APIRoute) and route.path == "/api/v1/auth/token"
+    )
+    project_index = next(
+        index
+        for index, route in enumerate(routes)
+        if isinstance(route, APIRoute) and route.path == "/api/v1/projects/"
+    )
+
+    assert auth_index < dispatcher_index < project_index
 
 
 def _is_dynamic_segment(segment: str) -> bool:

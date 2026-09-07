@@ -6,18 +6,15 @@
  * outlet renders nothing, so mount points are zero-cost by default.
  */
 
-import { createElement, useEffect, useState } from 'react';
+import { createElement } from 'react';
 
 import { getBuiltinRenderer } from '@/services/pluginRendererRegistry';
-import {
-  getPluginSlots,
-  refreshPluginSlots,
-  subscribePluginSlots,
-} from '@/services/pluginSlotService';
+
+import { useWebUiSlotsV2 } from '@/routes/v2/webUiSlotAuthorityStateV2';
 
 import { PluginSlotHost } from './PluginSlotHost';
 
-import type { UiSlotDefinition, UiSlotKind } from '@/types/pluginSlots';
+import type { UiSlotKind } from '@/types/pluginSlots';
 
 export interface PluginSlotOutletProps {
   kind: UiSlotKind;
@@ -36,19 +33,7 @@ export function PluginSlotOutlet({
   onAction,
   onError,
 }: PluginSlotOutletProps) {
-  const [slots, setSlots] = useState<UiSlotDefinition[]>(() => getPluginSlots());
-
-  useEffect(() => {
-    const unsubscribe = subscribePluginSlots(setSlots);
-    if (getPluginSlots().length === 0) {
-      void refreshPluginSlots().catch(() => undefined);
-    }
-    return unsubscribe;
-  }, []);
-
-  const visible = slots.filter(
-    (slot) => slot.slot === kind && (contractId === undefined || slot.contract === contractId)
-  );
+  const visible = useWebUiSlotsV2(kind, contractId);
   if (visible.length === 0) return null;
 
   return (

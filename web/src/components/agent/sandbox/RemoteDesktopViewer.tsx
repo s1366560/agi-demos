@@ -19,7 +19,7 @@ export interface RemoteDesktopViewerProps {
   /** Sandbox container ID */
   sandboxId: string;
   /** Project ID for proxy URL construction */
-  projectId?: string | undefined;
+  projectId: string;
   /** Desktop status information */
   desktopStatus: DesktopStatus | null;
   /** Called when viewer is ready */
@@ -37,6 +37,7 @@ export interface RemoteDesktopViewerProps {
 }
 
 export function RemoteDesktopViewer({
+  sandboxId,
   projectId,
   desktopStatus,
   onReady,
@@ -70,6 +71,8 @@ export function RemoteDesktopViewer({
 
   return (
     <KasmVNCViewer
+      projectId={projectId}
+      sandboxId={sandboxId}
       wsUrl={wsUrl}
       resolution="auto"
       audioEnabled={desktopStatus?.audioEnabled}

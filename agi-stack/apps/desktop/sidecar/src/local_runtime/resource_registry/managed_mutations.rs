@@ -470,7 +470,6 @@ pub(super) fn ensure_managed_resource_mutable(
             value.get("is_system_skill").and_then(Value::as_bool) == Some(true)
                 || field_is("scope", "system")
         }
-        ManagedResourceKind::Plugin => field_is("source", "builtin"),
         ManagedResourceKind::Agent => field_is("source", "builtin") || id.starts_with("builtin:"),
         ManagedResourceKind::SubAgent | ManagedResourceKind::PromptTemplate => {
             field_is("source", "builtin")

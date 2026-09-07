@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -11,8 +12,6 @@ const {
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/settings/channelConnectionModel.js'
 );
-const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
-const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const schema = {
   channel_type: 'slack',
@@ -183,45 +182,17 @@ test('channel validation requires create secrets but permits unchanged edit secr
   });
 });
 
-test('desktop channel API uses tenant catalog and project config contracts', async () => {
-  const originalFetch = globalThis.fetch;
-  const calls = [];
-  globalThis.fetch = async (input, init) => {
-    calls.push([String(input), init?.method, init?.body]);
-    const url = String(input);
-    if (url.endsWith('/channel-catalog')) return Response.json({ items: [] });
-    if (url.endsWith('/schema')) return Response.json(schema);
-    if (url.endsWith('/configs')) return Response.json({ items: [], total: 0 });
-    if (init?.method === 'DELETE') return new Response(null, { status: 204 });
-    return Response.json({ success: true, message: 'ok' });
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      mode: 'cloud',
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      tenantId: 'tenant 1',
-      projectId: 'project 1',
-    });
-    await client.listManagedChannelCatalog();
-    await client.getManagedChannelSchema('slack/events');
-    await client.listManagedChannelConfigs();
-    await client.createManagedChannelConfig({ channel_type: 'slack', name: 'Alerts' });
-    await client.updateManagedChannelConfig('channel/1', { enabled: false });
-    await client.testManagedChannelConfig('channel/1');
-    await client.deleteManagedChannelConfig('channel/1');
-
-    assert.deepEqual(calls, [
-      ['http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/channel-catalog', 'GET', undefined],
-      ['http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/channel-catalog/slack%2Fevents/schema', 'GET', undefined],
-      ['http://127.0.0.1:8088/api/v1/channels/projects/project%201/configs', 'GET', undefined],
-      ['http://127.0.0.1:8088/api/v1/channels/projects/project%201/configs', 'POST', JSON.stringify({ channel_type: 'slack', name: 'Alerts' })],
-      ['http://127.0.0.1:8088/api/v1/channels/configs/channel%2F1', 'PUT', JSON.stringify({ enabled: false })],
-      ['http://127.0.0.1:8088/api/v1/channels/configs/channel%2F1/test', 'POST', undefined],
-      ['http://127.0.0.1:8088/api/v1/channels/configs/channel%2F1', 'DELETE', undefined],
-    ]);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('settings channel management has one mandatory V2 authority and no guessed schema fallback', () => {
+  const source = readFileSync(
+    new URL('../src/features/settings/useChannelConnectionManagement.ts', import.meta.url),
+    'utf8',
+  );
+  const model = readFileSync(
+    new URL('../src/features/settings/channelConnectionModel.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /projectChannelsOperationsV2/u);
+  assert.match(source, /createDesktopProjectChannelsClientV2/u);
+  assert.doesNotMatch(source, /DesktopApiClient|legacyChannelConfigSchema/u);
+  assert.doesNotMatch(model, /legacyChannelConfigSchema/u);
 });

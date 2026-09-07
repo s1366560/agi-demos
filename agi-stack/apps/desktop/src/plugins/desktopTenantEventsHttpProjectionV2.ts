@@ -1,0 +1,119 @@
+import type { DesktopRuntimeConfig } from '../types';
+import {
+  requireIdentifier,
+  requireNonnegativeInteger,
+  requireText,
+  tenantAdminError,
+} from '../features/tenant-admin/tenantAdminHttp';
+import {
+  authorityFor,
+  isRecord,
+  requestNativeEquivalentJson,
+  requireRecord,
+  requireStringArray,
+  requireTenantManagementScope,
+  withStableTenantManagementAuthority,
+  type TenantManagementScope,
+} from '../features/tenant-admin/tenantManagementHttp';
+import {
+  TENANT_EVENTS_LOCAL_REASON,
+  type TenantEvent,
+  type TenantEventFilters,
+  type TenantEventsClient,
+} from '../features/tenant-admin/tenantEventsClient';
+
+const ACTIONS = Object.freeze(['view', 'list', 'filter', 'paginate']);
+
+export function createDesktopTenantEventsHttpProjectionV2(
+  config: DesktopRuntimeConfig
+): TenantEventsClient {
+  const runtimeConfig = Object.freeze({ ...config });
+  return Object.freeze({
+    async load(scope, options) {
+      const currentScope = requireTenantManagementScope(
+        runtimeConfig,
+        scope,
+        'native_equivalent',
+        TENANT_EVENTS_LOCAL_REASON
+      );
+      const params = eventParams(currentScope, options?.filters);
+      const observation = await withStableTenantManagementAuthority(
+        runtimeConfig,
+        currentScope,
+        options,
+        () =>
+          Promise.all([
+            requestNativeEquivalentJson(
+              runtimeConfig,
+              `/api/v1/events?${params.toString()}`,
+              options ?? {},
+              TENANT_EVENTS_LOCAL_REASON
+            ),
+            requestNativeEquivalentJson(
+              runtimeConfig,
+              `/api/v1/events/types?${new URLSearchParams({ tenant_id: currentScope.tenantId })}`,
+              options ?? {},
+              TENANT_EVENTS_LOCAL_REASON
+            ),
+          ])
+      );
+      const [eventPayload, eventTypesPayload] = observation.value;
+      const page = parseEvents(eventPayload, currentScope);
+      const data = Object.freeze({
+        membershipRole: observation.membershipRole,
+        ...page,
+        eventTypes: requireStringArray(eventTypesPayload, 'tenant_events_types_contract_invalid'),
+      });
+      return Object.freeze({
+        scope: currentScope,
+        scopeRevision: observation.scopeRevision,
+        authority: authorityFor(runtimeConfig),
+        availability: 'available' as const,
+        reasonCode: null,
+        contractVersion: '4.0.0',
+        allowedActions: ACTIONS,
+        data,
+        ...data,
+      });
+    },
+  });
+}
+
+function eventParams(scope: TenantManagementScope, filters?: TenantEventFilters): URLSearchParams {
+  const params = new URLSearchParams({
+    tenant_id: scope.tenantId,
+    page: String(filters?.page ?? 1),
+    page_size: String(filters?.pageSize ?? 20),
+  });
+  if (filters?.eventType) params.set('event_type', filters.eventType);
+  if (filters?.dateFrom) params.set('date_from', filters.dateFrom);
+  if (filters?.dateTo) params.set('date_to', filters.dateTo);
+  return params;
+}
+
+function parseEvents(payload: unknown, scope: TenantManagementScope) {
+  if (!isRecord(payload) || !Array.isArray(payload.items)) {
+    throw tenantAdminError('tenant_events_list_contract_invalid');
+  }
+  return Object.freeze({
+    events: Object.freeze(payload.items.map((item) => parseEvent(item, scope))),
+    total: requireNonnegativeInteger(payload.total, 'tenant_events_list_contract_invalid'),
+    page: requireNonnegativeInteger(payload.page, 'tenant_events_list_contract_invalid'),
+    pageSize: requireNonnegativeInteger(payload.page_size, 'tenant_events_list_contract_invalid'),
+  });
+}
+
+function parseEvent(value: unknown, scope: TenantManagementScope): TenantEvent {
+  if (!isRecord(value)) throw tenantAdminError('tenant_events_event_contract_invalid');
+  const tenantId = requireIdentifier(value.tenant_id, 'tenant_events_event_contract_invalid');
+  if (tenantId !== scope.tenantId) throw tenantAdminError('tenant_events_scope_mismatch', 409);
+  return Object.freeze({
+    id: requireIdentifier(value.id, 'tenant_events_event_contract_invalid'),
+    tenantId,
+    eventType: requireText(value.event_type, 'tenant_events_event_contract_invalid'),
+    message: requireText(value.message, 'tenant_events_event_contract_invalid'),
+    source: requireText(value.source, 'tenant_events_event_contract_invalid'),
+    metadata: requireRecord(value.metadata, 'tenant_events_event_contract_invalid'),
+    createdAt: requireText(value.created_at, 'tenant_events_event_contract_invalid'),
+  });
+}

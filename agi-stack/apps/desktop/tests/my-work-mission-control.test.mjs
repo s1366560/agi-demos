@@ -204,10 +204,15 @@ test("My Work search owns Command-K while the global palette remains the fallbac
   );
 });
 
-test("Cloud My Work production loading uses the narrow scoped authority client", () => {
-  assert.match(appSource, /activityAuthorityAdapter\.client\.listMyWork/);
-  assert.match(appSource, /activityAuthorityScope/);
-  assert.match(appSource, /signal: controller\.signal/);
+test("My Work production loading resolves through the V2 authority operation port", () => {
+  assert.match(appSource, /createDesktopMyWorkOperationsV2/);
+  assert.match(appSource, /desktopMyWorkOperationsV2\.listMyWork\(\{/);
+  assert.match(appSource, /principalId: authRef\.current\.user\?\.user_id/);
+  assert.match(appSource, /listMyWorkForConfig\(requestConfig, controller\.signal\)/);
+  assert.doesNotMatch(
+    appSource,
+    /desktopAgentAuthorityV2\.bindOperation|operation\.adapter\.client\.listMyWork|desktopMyWorkClientV2\.bindOperation|api\.listMyWork|scopedClient\.listMyWork/,
+  );
 });
 
 test("My Work routes unbound Agent Workspace items through the unbound conversation catalog", () => {
@@ -217,6 +222,11 @@ test("My Work routes unbound Agent Workspace items through the unbound conversat
 
   assert.ok(callback);
   assert.match(callback, /workspaceId \|\| UNBOUND_CONVERSATIONS_KEY/u);
-  assert.match(callback, /\{ workspaceId: null, unboundOnly: true \}/u);
+  assert.match(
+    callback,
+    /desktopWorkspaceConversationCatalogOperationsV2\.listConversations\(\{/u,
+  );
+  assert.match(callback, /workspaceId: workspaceId \|\| null/u);
+  assert.match(callback, /unboundOnly: !workspaceId/u);
   assert.doesNotMatch(callback, /if \(!workspaceId \|\|/u);
 });

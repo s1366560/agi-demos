@@ -14,16 +14,11 @@ from fastapi import (
     Request,
     status,
 )
-from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.workspace_collaboration_capabilities import (
     WorkspaceCollaborationSurface,
-)
-from src.application.schemas.workspace_cyber_schemas import (
-    CyberObjectiveCreate,
-    CyberObjectiveUpdate,
 )
 from src.application.services.workspace_collaboration_authority import (
     WORKSPACE_COLLABORATION_CONTRACT_VERSION,
@@ -44,7 +39,6 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.primary.web.routers import (
     blackboard,
-    cyber_objectives,
     workspace_tasks,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_access import (
@@ -380,15 +374,6 @@ async def _dispatch_mutation(
             current_user=current_user,
             db=db,
         )
-    elif command.surface == "goals":
-        await _dispatch_goal(
-            actor=actor,
-            action=command.action,
-            payload=command.payload,
-            request=request,
-            current_user=current_user,
-            db=db,
-        )
     elif command.surface == "discussion":
         await _dispatch_discussion(
             actor=actor,
@@ -409,60 +394,6 @@ async def _dispatch_mutation(
         pass
     else:
         raise ValueError("surface action is unavailable")
-
-
-async def _dispatch_goal(
-    *,
-    actor: WorkspaceCollaborationActor,
-    action: str,
-    payload: Mapping[str, object],
-    request: Request,
-    current_user: User,
-    db: AsyncSession,
-) -> None:
-    common: _ScopedRouteArguments = {
-        "tenant_id": actor.tenant_id,
-        "project_id": actor.project_id,
-        "workspace_id": actor.workspace_id,
-        "request": request,
-        "current_user": current_user,
-        "db": db,
-    }
-    if action == "create_objective":
-        await cyber_objectives.create_objective(
-            payload=_payload_model(
-                CyberObjectiveCreate,
-                payload,
-            ),
-            **common,
-        )
-    elif action == "update_objective":
-        await cyber_objectives.update_objective(
-            objective_id=_payload_id(payload, "objective_id"),
-            payload=_payload_model(
-                CyberObjectiveUpdate,
-                payload,
-                excluded=("objective_id",),
-            ),
-            **common,
-        )
-    elif action == "delete_objective":
-        objective_id = _payload_id(payload, "objective_id")
-        _require_payload_keys(payload, {"objective_id"})
-        await cyber_objectives.delete_objective(objective_id=objective_id, **common)
-    elif action == "project_objective_to_task":
-        await cyber_objectives.project_objective_to_task(
-            objective_id=_payload_id(payload, "objective_id"),
-            response=Response(),
-            body=_payload_model(
-                cyber_objectives.ProjectObjectiveToTaskRequest,
-                payload,
-                excluded=("objective_id",),
-            ),
-            **common,
-        )
-    else:
-        raise ValueError("goal action is unavailable")
 
 
 async def _dispatch_task(

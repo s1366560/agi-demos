@@ -45,23 +45,24 @@ function requestCanvasViewMode() {
 }
 
 function getCategoryIcon(category: string) {
+  const props = { size: 17, className: 'text-emerald-600 dark:text-emerald-400' };
   switch (category) {
     case 'image':
-      return ImageIcon;
+      return <ImageIcon {...props} />;
     case 'video':
-      return Film;
+      return <Film {...props} />;
     case 'audio':
-      return AudioLines;
+      return <AudioLines {...props} />;
     case 'document':
-      return FileText;
+      return <FileText {...props} />;
     case 'code':
-      return CodeIcon;
+      return <CodeIcon {...props} />;
     case 'data':
-      return TableIcon;
+      return <TableIcon {...props} />;
     case 'archive':
-      return FileArchive;
+      return <FileArchive {...props} />;
     default:
-      return Paperclip;
+      return <Paperclip {...props} />;
   }
 }
 
@@ -205,67 +206,69 @@ export const ArtifactCreatedItem = memo(
       }
 
       try {
-        const response = await fetchArtifactResource(url);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
-        }
-        const responseType = response.headers.get('content-type')?.toLowerCase() || '';
-        if (responseType.includes('application/pdf')) {
-          useCanvasStore.getState().openTab({
-            id: event.artifactId,
-            title: event.filename,
-            type: 'preview',
-            content: url,
-            mimeType: 'application/pdf',
-            pdfVerified: true,
-            artifactId: event.artifactId,
-            artifactUrl: url,
-          });
+        await fetchArtifactResource(url, async (response, operation) => {
+          if (!response.ok) {
+            throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
+          }
+          const responseType = response.headers.get('content-type')?.toLowerCase() || '';
+          if (responseType.includes('application/pdf')) {
+            useCanvasStore.getState().openTab({
+              id: event.artifactId,
+              title: event.filename,
+              type: 'preview',
+              content: url,
+              mimeType: 'application/pdf',
+              pdfVerified: true,
+              artifactId: event.artifactId,
+              artifactUrl: url,
+            });
+            const currentMode = useLayoutModeStore.getState().mode;
+            if (currentMode !== 'canvas') {
+              useLayoutModeStore.getState().setMode('canvas');
+            }
+            requestCanvasViewMode();
+            return;
+          }
+          const content = await response.text();
+          operation.check();
+
+          const isHtmlFile =
+            event.filename.toLowerCase().endsWith('.html') || event.mimeType === 'text/html';
+
+          if (isHtmlFile) {
+            useCanvasStore.getState().openTab({
+              id: event.artifactId,
+              title: event.filename,
+              type: 'preview',
+              content,
+              artifactId: event.artifactId,
+              artifactUrl: url,
+            });
+          } else {
+            const contentType = getCanvasContentTypeForArtifact(
+              event.filename,
+              responseType || mime,
+              event.category
+            );
+            const ext = event.filename.split('.').pop()?.toLowerCase();
+
+            useCanvasStore.getState().openTab({
+              id: event.artifactId,
+              title: event.filename,
+              type: contentType,
+              content,
+              language: ext ? EXTENSION_LANG_MAP[ext] : undefined,
+              artifactId: event.artifactId,
+              artifactUrl: url,
+            });
+          }
+
           const currentMode = useLayoutModeStore.getState().mode;
           if (currentMode !== 'canvas') {
             useLayoutModeStore.getState().setMode('canvas');
           }
           requestCanvasViewMode();
-          return;
-        }
-        const content = await response.text();
-
-        const isHtmlFile =
-          event.filename.toLowerCase().endsWith('.html') || event.mimeType === 'text/html';
-
-        if (isHtmlFile) {
-          useCanvasStore.getState().openTab({
-            id: event.artifactId,
-            title: event.filename,
-            type: 'preview',
-            content,
-            artifactId: event.artifactId,
-            artifactUrl: url,
-          });
-        } else {
-          const contentType = getCanvasContentTypeForArtifact(
-            event.filename,
-            responseType || mime,
-            event.category
-          );
-          const ext = event.filename.split('.').pop()?.toLowerCase();
-
-          useCanvasStore.getState().openTab({
-            id: event.artifactId,
-            title: event.filename,
-            type: contentType,
-            content,
-            language: ext ? EXTENSION_LANG_MAP[ext] : undefined,
-            artifactId: event.artifactId,
-            artifactUrl: url,
-          });
-        }
-
-        const currentMode = useLayoutModeStore.getState().mode;
-        if (currentMode !== 'canvas') {
-          useLayoutModeStore.getState().setMode('canvas');
-        }
-        requestCanvasViewMode();
+        });
       } catch {
         message.error(t('agent.artifact.openInCanvasFailed', 'Failed to open in Canvas'));
       }
@@ -287,18 +290,12 @@ export const ArtifactCreatedItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 dark:border-emerald-800/55 dark:bg-emerald-950/35">
-            {(() => {
-              const Icon = getCategoryIcon(event.category);
-              return <Icon size={17} className="text-emerald-600 dark:text-emerald-400" />;
-            })()}
+            {getCategoryIcon(event.category)}
           </div>
           <div className="flex-1 min-w-0">
             <div className="rounded-md bg-white p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.08),0_8px_20px_-16px_rgba(15,23,42,0.28)] dark:bg-slate-950 dark:shadow-[0_0_0_1px_rgba(148,163,184,0.18)]">
               <div className="mb-3 flex min-w-0 items-center gap-2">
-                {(() => {
-                  const Icon = getCategoryIcon(event.category);
-                  return <Icon size={17} className="text-emerald-600 dark:text-emerald-400" />;
-                })()}
+                {getCategoryIcon(event.category)}
                 <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                   {t('agent.artifact.fileGenerated', 'File generated')}
                 </span>

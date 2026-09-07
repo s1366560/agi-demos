@@ -1,3 +1,13 @@
+const ownerFixture = vi.hoisted(() => {
+  const owner = {};
+  return {
+    availability: { owner, available: true },
+    operation: { owner, signal: new AbortController().signal, check: () => {} },
+  };
+});
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => ownerFixture.availability,
+}));
 /**
  * Tests for agentV3 store - loadMessages timeline merging during streaming
  *
@@ -20,6 +30,8 @@ import type { TimelineEvent } from '../../types/agent';
 // Mock the services
 vi.mock('../../services/agentService', () => ({
   agentService: {
+    connectSession: vi.fn(async () => ownerFixture.operation),
+    assertSession: vi.fn(),
     getConversations: vi.fn(() => Promise.resolve([])),
     getConversationMessages: vi.fn(() =>
       Promise.resolve({
@@ -328,7 +340,8 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
       expect(agentService.subscribe).toHaveBeenCalledWith(
         'conv-123',
         expect.any(Object),
-        expect.any(Object)
+        expect.any(Object),
+        ownerFixture.operation
       );
     });
 
@@ -377,7 +390,8 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
         expect.any(Object),
         {
           message_id: 'msg-running',
-        }
+        },
+        ownerFixture.operation
       );
     });
   });

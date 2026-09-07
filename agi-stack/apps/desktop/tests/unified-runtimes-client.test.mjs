@@ -131,6 +131,7 @@ test('Cloud Unified Runtimes binds every inventory response to the tenant and pr
 
 test('Cloud Unified Runtimes rejects cross-tenant sandbox rows before projection', async () => {
   const client = createUnifiedRuntimesClient(runtimeConfig('cloud'), {
+    poolClient: unusedPoolClient(),
     fetch: async () =>
       response({
         sandboxes: [
@@ -163,6 +164,7 @@ test('Local Unified Runtimes reads only redacted sidecar status and sandbox capa
   let fetchCalls = 0;
   let statusCalls = 0;
   const client = createUnifiedRuntimesClient(runtimeConfig('local'), {
+    poolClient: unusedPoolClient(),
     fetch: async (url) => {
       fetchCalls += 1;
       assert.match(String(url), /\/projects\/project-1\/sandbox\/capabilities$/u);
@@ -234,3 +236,10 @@ test('Local Unified Runtimes reads only redacted sidecar status and sandbox capa
       error.reasonCode === 'local_pool_not_applicable_sidecar_projection',
   );
 });
+
+function unusedPoolClient() {
+  return {
+    getStatus: async () => assert.fail('pool status is not used by this test'),
+    listInstances: async () => assert.fail('pool instances are not used by this test'),
+  };
+}

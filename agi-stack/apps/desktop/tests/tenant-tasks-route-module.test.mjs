@@ -84,7 +84,7 @@ function scope() {
   return {
     authority: 'cloud',
     tenantId: 'tenant-1',
-    projectId: 'project-1',
+    projectId: null,
   };
 }
 

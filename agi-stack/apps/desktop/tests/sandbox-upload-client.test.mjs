@@ -1,9 +1,10 @@
+import { createProjectSandboxUploadHttpClientV2Fixture } from './projectSandboxUploadOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { DesktopApiClient, DesktopApiError } = require(
+const { DesktopApiError } = require(
   '/tmp/agistack-desktop-test-dist/src/api/client.js',
 );
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
@@ -12,7 +13,8 @@ test('desktop sandbox upload imports bytes into the selected project', async () 
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (input, init) => {
-    calls.push({ url: new URL(String(input)), init, body: JSON.parse(String(init?.body)) });
+    calls.push({ url: new URL(String(input)), init, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (new URL(String(input)).pathname === '/api/v1/projects/project-1') return Response.json({id:'project-1',tenant_id:'tenant-1'});
     return new Response(
       JSON.stringify({
         success: true,
@@ -33,11 +35,12 @@ test('desktop sandbox upload imports bytes into the selected project', async () 
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createProjectSandboxUploadHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',
       apiKey: 'cloud-session',
+      tenantId: 'tenant-1',
       projectId: 'project-1',
     });
     const result = await client.uploadSandboxFile({
@@ -53,11 +56,13 @@ test('desktop sandbox upload imports bytes into the selected project', async () 
       mime_type: 'text/plain',
       size_bytes: 4,
     });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].url.pathname, '/api/v1/projects/project-1/sandbox/execute');
-    assert.equal(calls[0].init.method, 'POST');
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].url.pathname, '/api/v1/projects/project-1');
+    assert.equal(calls[0].url.searchParams.get('tenant_id'), 'tenant-1');
+    assert.equal(calls[1].url.pathname, '/api/v1/projects/project-1/sandbox/execute');
+    assert.equal(calls[1].init.method, 'POST');
     assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer cloud-session');
-    assert.deepEqual(calls[0].body, {
+    assert.deepEqual(calls[1].body, {
       tool_name: 'import_file',
       arguments: {
         filename: 'evidence.txt',
@@ -74,17 +79,20 @@ test('desktop sandbox upload imports bytes into the selected project', async () 
 
 test('desktop sandbox upload fails closed when the tool response has no authoritative path', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () =>
-    new Response(
+  globalThis.fetch = async (input) =>
+    new URL(String(input)).pathname === '/api/v1/projects/project-1'
+    ? Response.json({id:'project-1',tenant_id:'tenant-1'}) : new Response(
       JSON.stringify({ success: true, is_error: false, content: [{ type: 'text', text: '{}' }] }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
 
   try {
-    const client = new DesktopApiClient({
+    const client = createProjectSandboxUploadHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
+      mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',
       apiKey: 'cloud-session',
+      tenantId: 'tenant-1',
       projectId: 'project-1',
     });
     await assert.rejects(

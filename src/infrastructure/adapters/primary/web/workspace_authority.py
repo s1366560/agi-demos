@@ -11,6 +11,9 @@ from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityScope,
     WorkspaceAuthorityUnavailableError,
 )
+from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
+    workspace_core_runtime_service_v2_from_request,
+)
 from src.infrastructure.i18n import gettext as _
 
 
@@ -32,10 +35,11 @@ def workspace_core_unavailable_error() -> HTTPException:
 
 
 def get_workspace_authority(request: Request) -> WorkspaceAuthorityPort:
-    authority = getattr(request.app.state, "workspace_authority", None)
-    if authority is None:
-        raise workspace_core_unavailable_error()
-    return authority
+    try:
+        runtime = workspace_core_runtime_service_v2_from_request(request)
+    except (RuntimeError, TypeError) as exc:
+        raise workspace_core_unavailable_error() from exc
+    return runtime.authority
 
 
 async def require_workspace_scope(

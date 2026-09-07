@@ -8,6 +8,7 @@
 //! server, `wasm-bindgen-futures` in the browser, `block_on` across FFI). No
 //! port names a concrete runtime.
 
+pub use crate::tool_definition::ToolDefinition;
 use async_trait::async_trait;
 
 use crate::agent::types::{AgentAction, SessionState, TranscriptEntry};
@@ -111,6 +112,22 @@ pub trait LlmPort: Send + Sync {
         transcript: &[TranscriptEntry],
         available_tools: &[String],
     ) -> CoreResult<AgentAction>;
+
+    /// Decide with the exact contracts authorized for this round.
+    async fn decide_with_tools(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        tools: &[ToolDefinition],
+    ) -> CoreResult<AgentAction> {
+        let goal = crate::tool_definition::prompt_with_tool_definitions(goal, tools)?;
+        let names = tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect::<Vec<_>>();
+        self.decide(&goal, round, transcript, &names).await
+    }
 }
 
 /// Text → dense vector.
@@ -175,6 +192,26 @@ pub trait VectorIndexPort: Send + Sync {
 pub trait ToolHost: Send + Sync {
     /// The tool names advertised to the model for new decisions.
     fn list_tools(&self) -> Vec<String>;
+
+    /// Static metadata for an exact identity; does not grant dispatch permission.
+    fn tool_definition(&self, _name: &str) -> Option<ToolDefinition> {
+        None
+    }
+
+    /// Advertise contracts only for the currently authorized name roster.
+    fn tool_definitions(&self) -> CoreResult<Vec<ToolDefinition>> {
+        self.list_tools()
+            .into_iter()
+            .map(|name| match self.tool_definition(&name) {
+                None => Ok(ToolDefinition::name_only(name)),
+                Some(definition) if definition.name == name => Ok(definition),
+                Some(_) => Err(CoreError::Tool(format!(
+                    "tool_definition_identity_mismatch: {name}"
+                ))),
+            })
+            .collect()
+    }
+
     /// Whether this host can route an exact tool identity.
     ///
     /// Hosts may override this for non-advertised compatibility aliases. This

@@ -4,33 +4,58 @@ Verifies that _notify_plugin_hook fires at each lifecycle point
 with the correct hook name and payload keys.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.infrastructure.agent.core.message import ToolPart, ToolState
-from src.infrastructure.agent.plugins.registry import AgentPluginRegistry, HookDispatchResult
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.plugins.v2.agent_loop import (
+    AgentLoopRunContextV2,
+    BuiltinAgentLoopResolverV2,
+)
+from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+    AgentRuntimeDispatchResultV2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.system_prompt import (
+    SYSTEM_PROMPT_SECTIONS_SERVICE_V2,
+    SystemPromptSectionsV2,
+)
 
 
-def _make_registry(hook_side_effect=None):
-    """Create a mock plugin registry with an async apply_hook."""
-    registry = MagicMock()
+class _NativeLoop:
+    @staticmethod
+    def run(context: AgentLoopRunContextV2):
+        return context.run_native()
+
+
+def _builtin_loop_resolver() -> BuiltinAgentLoopResolverV2:
+    return BuiltinAgentLoopResolverV2(
+        loop_id="builtin-react",
+        plugin_id="memstack-kernel",
+        implementation=_NativeLoop(),
+        lifecycle_notifier=MagicMock(),
+    )
+
+
+def _make_dispatcher(hook_side_effect=None):
+    """Create a mock generation-owned dispatcher."""
+    dispatcher = MagicMock()
     if hook_side_effect is None:
-        registry.apply_hook = AsyncMock(
-            side_effect=lambda _hook_name, *, payload, runtime_overrides=None: HookDispatchResult(
-                payload=dict(payload),
-                diagnostics=[],
+        dispatcher.dispatch = AsyncMock(
+            side_effect=lambda _hook_name, payload=None, **_kwargs: AgentRuntimeDispatchResultV2(
+                payload=dict(payload or {}),
             )
         )
     else:
-        registry.apply_hook = AsyncMock(side_effect=hook_side_effect)
-    return registry
+        dispatcher.dispatch = AsyncMock(side_effect=hook_side_effect)
+    return dispatcher
 
 
 def _make_tool(name="test_tool", output="ok"):
@@ -47,11 +72,13 @@ def _make_tool(name="test_tool", output="ok"):
     )
 
 
-def _make_processor(*, registry=None, tools=None):
-    """Build a minimal SessionProcessor with optional plugin registry."""
+def _make_processor(*, dispatcher=None, tools=None):
+    """Build a minimal SessionProcessor with an optional V2 dispatcher."""
     config = ProcessorConfig(
         model="test-model",
-        plugin_registry=registry,
+        provider_id="test-provider",
+        loop_resolver=_builtin_loop_resolver(),
+        plugin_event_dispatcher=dispatcher,
         runtime_context={"tenant_id": "tenant-1", "project_id": "project-1"},
     )
     return SessionProcessor(config=config, tools=tools or [])
@@ -66,70 +93,40 @@ def _make_processor(*, registry=None, tools=None):
 class TestNotifyPluginHookHelper:
     """Tests for the _notify_plugin_hook helper method."""
 
-    async def test_no_registry_no_error(self):
-        """When plugin_registry is None, _notify_plugin_hook is a no-op."""
-        proc = _make_processor(registry=None)
+    async def test_no_dispatcher_no_error(self):
+        """Direct unit construction without a dispatcher remains a no-op."""
+        proc = _make_processor(dispatcher=None)
         # Should not raise
         await proc._notify_plugin_hook("on_session_start", {"x": 1})
 
-    async def test_hook_called_with_correct_args(self):
-        """apply_hook receives hook_name and payload."""
-        registry = _make_registry()
-        proc = _make_processor(registry=registry)
+    async def test_v2_dispatcher_called_with_correct_args(self):
+        """The generation-owned dispatcher receives hook name and payload."""
+        dispatcher = _make_dispatcher()
+        proc = _make_processor(dispatcher=dispatcher)
         payload = {"session_id": "s1"}
         await proc._notify_plugin_hook("on_session_start", payload)
 
-        registry.apply_hook.assert_awaited_once_with(
+        dispatcher.dispatch.assert_awaited_once_with(
             "on_session_start",
             payload=payload,
-            runtime_overrides=[],
         )
 
-    async def test_hook_error_does_not_propagate(self):
-        """Errors inside apply_hook are caught and logged, not raised."""
-        registry = _make_registry(hook_side_effect=RuntimeError("boom"))
-        proc = _make_processor(registry=registry)
-        # Must not raise
-        await proc._notify_plugin_hook("on_error", {"err": "x"})
-        registry.apply_hook.assert_awaited_once()
+    async def test_dispatcher_error_propagates_without_fallback(self):
+        """A generation-owned dispatcher failure is not hidden by a V1 fallback."""
+        dispatcher = _make_dispatcher(hook_side_effect=RuntimeError("boom"))
+        proc = _make_processor(dispatcher=dispatcher)
+        with pytest.raises(RuntimeError, match="boom"):
+            await proc._notify_plugin_hook("on_error", {"err": "x"})
+        dispatcher.dispatch.assert_awaited_once()
 
-    async def test_custom_runtime_override_merges_response_instructions(self):
-        """Custom script hook overrides should feed runtime guidance into the processor."""
-        registry = AgentPluginRegistry()
-        config = ProcessorConfig(
-            model="test-model",
-            plugin_registry=registry,
-            runtime_hook_overrides=[
-                {
-                    "plugin_name": "__custom__",
-                    "hook_name": "before_response",
-                    "hook_family": "mutating",
-                    "executor_kind": "script",
-                    "source_ref": "src/infrastructure/agent/hooks/scripts/demo_runtime_hook.py",
-                    "entrypoint": "append_demo_response_instruction",
-                    "enabled": True,
-                    "priority": 15,
-                    "settings": {},
-                }
-            ],
-        )
-        proc = SessionProcessor(config=config, tools=[])
-
-        await proc._notify_plugin_hook(
-            "before_response",
-            {
-                "response_instructions": list(proc._response_instructions),
-                "session_instructions": list(proc._session_instructions),
-            },
-        )
-
-        assert "Demo runtime hook executed from custom script." in proc._response_instructions
+    def test_processor_config_exposes_no_v1_runtime_hook_override_surface(self):
+        """Persisted V1 compatibility rows cannot be injected into a processor."""
+        assert "runtime_hook_overrides" not in ProcessorConfig.__dataclass_fields__
 
     def test_runtime_hook_context_exposes_workspace_fields(self):
         """Workspace runtime plugins need structured runtime context, not prompt parsing."""
         config = ProcessorConfig(
             model="test-model",
-            plugin_registry=None,
             runtime_context={
                 "tenant_id": "tenant-1",
                 "project_id": "project-1",
@@ -148,7 +145,7 @@ class TestNotifyPluginHookHelper:
 
     def test_runtime_hook_context_exposes_conversation_id(self):
         """Tool hooks need a stable turn key shared with after_turn_complete."""
-        proc = _make_processor(registry=None)
+        proc = _make_processor()
         proc._langfuse_context = {"conversation_id": "conv-1"}
 
         fields = proc._runtime_hook_context_fields()
@@ -164,14 +161,14 @@ class TestNotifyPluginHookHelper:
                 metadata={"name": "dynamic-skill", "skill_id": "skill-1"},
             )
 
-        registry = _make_registry()
+        dispatcher = _make_dispatcher()
         tool = ToolDefinition(
             name="skill_loader",
             description="Load a skill",
             parameters={"type": "object", "properties": {}, "required": []},
             execute=execute,
         )
-        proc = _make_processor(registry=registry, tools=[tool])
+        proc = _make_processor(dispatcher=dispatcher, tools=[tool])
         proc._langfuse_context = {"conversation_id": "conv-1"}
         proc._pending_tool_calls["call-1"] = ToolPart(
             call_id="call-1",
@@ -190,7 +187,7 @@ class TestNotifyPluginHookHelper:
 
         after_tool_call = next(
             call
-            for call in registry.apply_hook.call_args_list
+            for call in dispatcher.dispatch.call_args_list
             if call.args[0] == "after_tool_execution"
         )
         payload = after_tool_call.kwargs["payload"]
@@ -207,8 +204,16 @@ class TestRuntimeGuidanceMessage:
         proc = _make_processor()
         proc._session_instructions = ["line one\nline two"]
         proc._response_instructions = ["respond carefully"]
+        operation = MagicMock()
+        operation.require.return_value = SystemPromptSectionsV2(
+            sections=("Use native tools; never print [TOOL_CALL]...[/TOOL_CALL] markup.",)
+        )
 
-        message = proc._build_runtime_guidance_message()
+        with patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ):
+            message = proc._build_runtime_guidance_message()
 
         assert message is not None
         assert message["role"] == "system"
@@ -218,6 +223,27 @@ class TestRuntimeGuidanceMessage:
         assert "line one\nline two" in content
         assert "[TOOL_CALL]...[/TOOL_CALL]" in content
         assert "- line one" not in content
+        operation.require.assert_called_once_with(SYSTEM_PROMPT_SECTIONS_SERVICE_V2)
+
+    def test_runtime_guidance_fails_closed_without_generation_owned_sections(self):
+        proc = _make_processor()
+        proc._session_instructions = ["line one"]
+        operation = MagicMock()
+        operation.require.side_effect = RuntimeV2Error(
+            "service_not_found",
+            "runtime prompt sections are unavailable",
+        )
+
+        with (
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=operation,
+            ),
+            pytest.raises(RuntimeV2Error) as error,
+        ):
+            proc._build_runtime_guidance_message()
+
+        assert error.value.code == "service_not_found"
 
 
 # ---------------------------------------------------------------------------
@@ -256,8 +282,8 @@ class TestProcessLifecycleHooks:
 
     async def test_on_session_start_fires(self):
         """on_session_start should fire after AgentStartEvent."""
-        registry = _make_registry()
-        proc = _make_processor(registry=registry)
+        dispatcher = _make_dispatcher()
+        proc = _make_processor(dispatcher=dispatcher)
 
         # Stub _process_step so the loop exits quickly
         proc._process_step = _llm_text_response("Done")
@@ -267,7 +293,7 @@ class TestProcessLifecycleHooks:
         async for ev in proc.process("sess-1", [{"role": "user", "content": "hi"}]):
             events.append(ev)
 
-        calls = registry.apply_hook.call_args_list
+        calls = dispatcher.dispatch.call_args_list
         hook_names = [c.args[0] for c in calls]
         assert "on_session_start" in hook_names
 
@@ -281,8 +307,8 @@ class TestProcessLifecycleHooks:
 
     async def test_on_session_end_fires(self):
         """on_session_end should fire after completion events."""
-        registry = _make_registry()
-        proc = _make_processor(registry=registry)
+        dispatcher = _make_dispatcher()
+        proc = _make_processor(dispatcher=dispatcher)
         proc._process_step = _llm_text_response("Done")
         proc._evaluate_goal_progress = _stop_after_first_step()
 
@@ -290,7 +316,7 @@ class TestProcessLifecycleHooks:
         async for ev in proc.process("sess-2", [{"role": "user", "content": "hi"}]):
             events.append(ev)
 
-        calls = registry.apply_hook.call_args_list
+        calls = dispatcher.dispatch.call_args_list
         hook_names = [c.args[0] for c in calls]
         assert "on_session_end" in hook_names
 
@@ -302,8 +328,8 @@ class TestProcessLifecycleHooks:
 
     async def test_on_error_fires(self):
         """on_error should fire when process() catches an exception."""
-        registry = _make_registry()
-        proc = _make_processor(registry=registry)
+        dispatcher = _make_dispatcher()
+        proc = _make_processor(dispatcher=dispatcher)
 
         # Make _process_step raise
         async def exploding_step(session_id, messages):
@@ -316,7 +342,7 @@ class TestProcessLifecycleHooks:
         async for ev in proc.process("sess-3", [{"role": "user", "content": "hi"}]):
             events.append(ev)
 
-        calls = registry.apply_hook.call_args_list
+        calls = dispatcher.dispatch.call_args_list
         hook_names = [c.args[0] for c in calls]
         assert "on_error" in hook_names
 
@@ -341,9 +367,9 @@ class TestExecuteToolHooks:
         """Both before_ and after_tool_execution should fire for a normal tool call."""
         from src.infrastructure.agent.core.message import ToolPart, ToolState
 
-        registry = _make_registry()
+        dispatcher = _make_dispatcher()
         tool = _make_tool(name="my_tool", output="result")
-        proc = _make_processor(registry=registry, tools=[tool])
+        proc = _make_processor(dispatcher=dispatcher, tools=[tool])
 
         # _resolve_tool_lookup expects a pending tool call entry
         tp = ToolPart(call_id="call-1", tool="my_tool", status=ToolState.PENDING)
@@ -358,7 +384,7 @@ class TestExecuteToolHooks:
         ):
             events.append(ev)
 
-        calls = registry.apply_hook.call_args_list
+        calls = dispatcher.dispatch.call_args_list
         hook_names = [c.args[0] for c in calls]
         assert "before_tool_execution" in hook_names
         assert "after_tool_execution" in hook_names

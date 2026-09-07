@@ -48,9 +48,23 @@ def _shutdown_local_worker_telemetry() -> None:
 
 async def _run(request_file: Path) -> int:
     from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+    from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
     from src.infrastructure.agent.actor.execution import execute_project_chat
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
     from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        agent_worker_graph_runtime_factory_v2,
+        agent_worker_redis_runtime_factory_v2,
+        agent_worker_sandbox_runtime_factory_v2,
+        agent_worker_workspace_core_runtime_factory_v2,
+    )
+    from src.infrastructure.plugins.v2.boundary import (
+        OPERATION_IDENTITY_SERVICE_V2,
+        OPERATION_METADATA_SERVICE_V2,
+    )
+    from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+    from src.infrastructure.plugins.v2.runtime_host import DataPlaneGenerationAdmissionV2
 
     _initialize_local_worker_telemetry()
 
@@ -65,11 +79,50 @@ async def _run(request_file: Path) -> int:
 
     try:
         bootstrapper = AgentRuntimeBootstrapper()
-        await bootstrapper._ensure_local_runtime_bootstrapped()
         agent = ProjectReActAgent(_agent_config_from_actor_config(config))
-        await agent.initialize()
         _attach_plan_repository(agent)
-        result = await execute_project_chat(agent, request, abort_signal=None)
+        admission = DataPlaneGenerationAdmissionV2(
+            builtin_runtime_definitions_v2(
+                graph_runtime_factory=agent_worker_graph_runtime_factory_v2(config.tenant_id),
+                redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
+                sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
+                workspace_core_runtime_factory=agent_worker_workspace_core_runtime_factory_v2,
+            )
+        )
+        try:
+            async with admission.admit(
+                descriptor_payload=request.plugin_generation,
+                distribution_payload=request.plugin_distribution,
+                operation_id=f"local-subprocess-turn:{request.message_id}",
+                scope=ScopeV2(
+                    kind=ScopeKindV2.SESSION,
+                    tenant_id=config.tenant_id,
+                    project_id=config.project_id,
+                    session_id=request.conversation_id,
+                ),
+                services={
+                    OPERATION_IDENTITY_SERVICE_V2: {
+                        "tenant_id": config.tenant_id,
+                        "project_id": config.project_id,
+                        "user_id": request.user_id,
+                    },
+                    OPERATION_METADATA_SERVICE_V2: {
+                        "kind": "local-subprocess-agent-turn",
+                        "conversation_id": request.conversation_id,
+                        "message_id": request.message_id,
+                    },
+                },
+            ):
+                await bootstrapper._ensure_local_runtime_bootstrapped()
+                initialized = await agent.initialize()
+                if not initialized:
+                    raise RuntimeV2Error(
+                        "agent_initialization_failed",
+                        "agent initialization failed for the admitted plugin generation",
+                    )
+                result = await execute_project_chat(agent, request, abort_signal=None)
+        finally:
+            await admission.close()
         if result.is_error:
             logger.warning(
                 "Local chat subprocess completed with error: conversation=%s error=%s",

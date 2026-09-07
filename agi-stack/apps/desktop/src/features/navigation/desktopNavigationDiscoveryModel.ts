@@ -1,9 +1,8 @@
 import {
-  CANONICAL_DESKTOP_NAVIGATION_GROUPS,
-  CANONICAL_DESKTOP_NAVIGATION_METADATA,
+  DESKTOP_NAVIGATION_GROUPS,
+  DESKTOP_NAVIGATION_METADATA,
   type DesktopNavigationIconKey,
 } from './desktopCanonicalNavigationCatalog';
-import type { CanonicalDesktopRouteId } from './desktopCanonicalRouteCatalog';
 import {
   buildDesktopRoutePath,
   type DesktopRouteContext,
@@ -27,7 +26,7 @@ export type DesktopNavigationDisabledReason = Readonly<{
 }>;
 
 export type DesktopNavigationDiscoveryEntry<TModule = unknown> = Readonly<{
-  routeId: CanonicalDesktopRouteId;
+  routeId: string;
   definition: DesktopRouteDefinition<TModule>;
   destinationPath: string | null;
   groupId: string;
@@ -63,26 +62,26 @@ export function deriveDesktopNavigationDiscoveryEntries<TModule>({
   context: DesktopRouteContext;
   translate: DesktopNavigationTranslator;
 }>): readonly DesktopNavigationDiscoveryEntry<TModule>[] {
-  const groups = new Map<string, (typeof CANONICAL_DESKTOP_NAVIGATION_GROUPS)[number]>(
-    CANONICAL_DESKTOP_NAVIGATION_GROUPS.map((group) => [group.id, group]),
+  const groups = new Map<string, (typeof DESKTOP_NAVIGATION_GROUPS)[number]>(
+    DESKTOP_NAVIGATION_GROUPS.map((group) => [group.id, group]),
   );
-  if (
-    CANONICAL_DESKTOP_NAVIGATION_METADATA.length !== registry.definitions.length ||
-    new Set(CANONICAL_DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId)).size !==
-      CANONICAL_DESKTOP_NAVIGATION_METADATA.length
-  ) {
+  const metadataByRouteId = new Map(
+    DESKTOP_NAVIGATION_METADATA.map((metadata) => [metadata.routeId, metadata]),
+  );
+  if (metadataByRouteId.size !== DESKTOP_NAVIGATION_METADATA.length) {
     throw new Error('desktop_navigation_discovery_catalog_invalid');
   }
 
   return Object.freeze(
-    CANONICAL_DESKTOP_NAVIGATION_METADATA.map((metadata) => {
-      const definition = registry.byId.get(metadata.routeId);
-      if (!definition) {
-        throw new Error(`desktop_navigation_discovery_route_missing:${metadata.routeId}`);
+    registry.definitions.map((definition) => {
+      const metadata = metadataByRouteId.get(definition.id);
+      if (metadata === undefined) {
+        throw new Error(`desktop_navigation_discovery_metadata_missing:${definition.id}`);
       }
-      const group = groups.get(definition.navGroup);
+      const groupId = metadata.groupId ?? definition.navGroup;
+      const group = groups.get(groupId);
       if (!group) {
-        throw new Error(`desktop_navigation_discovery_group_missing:${definition.navGroup}`);
+        throw new Error(`desktop_navigation_discovery_group_missing:${groupId}`);
       }
       const disabledReason = resolveDesktopNavigationDisabledReason(
         definition,
@@ -91,7 +90,10 @@ export function deriveDesktopNavigationDiscoveryEntries<TModule>({
       );
       const label = translate(metadata.labelKey);
       const groupLabel = translate(group.labelKey);
-      const description = translate(metadata.descriptionKey, { label });
+      const description =
+        metadata.descriptionKey === 'featureDirectory.routeDescription'
+          ? translate(metadata.descriptionKey, { label })
+          : translate(metadata.descriptionKey);
       const searchText = [
         label,
         description,
@@ -101,10 +103,10 @@ export function deriveDesktopNavigationDiscoveryEntries<TModule>({
         ...metadata.aliases,
       ].join(' ');
       return Object.freeze({
-        routeId: metadata.routeId,
+        routeId: definition.id,
         definition,
         destinationPath: disabledReason ? null : buildDesktopRoutePath(definition, context),
-        groupId: definition.navGroup,
+        groupId,
         groupLabelKey: group.labelKey,
         groupLabel,
         labelKey: metadata.labelKey,
@@ -125,7 +127,7 @@ export function deriveDesktopNavigationDiscoveryGroups<TModule>(
   entries: readonly DesktopNavigationDiscoveryEntry<TModule>[],
 ): readonly DesktopNavigationDiscoveryGroup<TModule>[] {
   return Object.freeze(
-    CANONICAL_DESKTOP_NAVIGATION_GROUPS.flatMap((group) => {
+    DESKTOP_NAVIGATION_GROUPS.flatMap((group) => {
       const groupEntries = entries.filter(({ groupId }) => groupId === group.id);
       if (groupEntries.length === 0) return [];
       return [

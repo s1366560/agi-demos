@@ -60,6 +60,34 @@ class TestTenantScopedRouterAuthorization:
         await require_trust_tenant_access(test_db, another_user, test_project_db.tenant_id)
 
     @pytest.mark.asyncio
+    async def test_tenant_member_cannot_use_smtp_admin_routes(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        another_user: User,
+    ) -> None:
+        test_db.add(
+            UserTenant(
+                id=str(uuid4()),
+                user_id=another_user.id,
+                tenant_id=test_project_db.tenant_id,
+                role="member",
+                permissions={"read": True},
+            )
+        )
+        await test_db.commit()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await require_smtp_tenant_access(
+                test_db,
+                another_user,
+                test_project_db.tenant_id,
+                require_admin=True,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
     async def test_tenant_member_cannot_use_trust_admin_routes(
         self,
         test_db: AsyncSession,

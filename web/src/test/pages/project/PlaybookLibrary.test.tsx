@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const operationAvailability = vi.hoisted(() => ({
+  snapshot: { owner: {}, available: true },
+  listeners: new Set<() => void>(),
+}));
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => operationAvailability.snapshot,
+  subscribeWebOperationAvailabilityV2: (listener: () => void) => {
+    operationAvailability.listeners.add(listener);
+    return () => operationAvailability.listeners.delete(listener);
+  },
+}));
+
 import { PlaybookLibrary } from '../../../pages/project/PlaybookLibrary';
 import type { Playbook, ReflectionVerdict } from '../../../services/playbookService';
 import { act, render, screen, waitFor } from '../../utils';
@@ -172,4 +184,34 @@ describe('PlaybookLibrary', () => {
       );
     });
   });
+});
+
+it('registers the same project again when operation ownership changes', async () => {
+  routeState.projectId = 'project-a';
+  serviceMocks.subscribeProject.mockReset();
+  serviceMocks.listPlaybooks.mockResolvedValue([]);
+  serviceMocks.listReflectionVerdicts.mockResolvedValue([]);
+  const unsubscribe = vi.fn();
+  serviceMocks.subscribeProject.mockReturnValue(unsubscribe);
+  operationAvailability.snapshot = { owner: {}, available: true };
+  const { unmount } = render(<PlaybookLibrary />);
+  await waitFor(() => expect(serviceMocks.subscribeProject).toHaveBeenCalledOnce());
+  const oldCallback = serviceMocks.subscribeProject.mock.calls[0]![1] as (event: unknown) => void;
+  await act(async () => {
+    operationAvailability.snapshot = { owner: {}, available: true };
+    operationAvailability.listeners.forEach((listener) => listener());
+  });
+  expect(unsubscribe).toHaveBeenCalledOnce();
+  expect(serviceMocks.subscribeProject).toHaveBeenCalledTimes(2);
+  const calls = serviceMocks.listPlaybooks.mock.calls.length;
+  oldCallback({ type: 'reflection_complete', sequence_id: 'old-owner-sequence' });
+  expect(serviceMocks.listPlaybooks).toHaveBeenCalledTimes(calls);
+  await act(async () => {
+    operationAvailability.snapshot = { owner: {}, available: false };
+    operationAvailability.listeners.forEach((listener) => listener());
+  });
+  expect(unsubscribe).toHaveBeenCalledTimes(2);
+  expect(serviceMocks.subscribeProject).toHaveBeenCalledTimes(2);
+  unmount();
+  operationAvailability.snapshot = { owner: {}, available: true };
 });

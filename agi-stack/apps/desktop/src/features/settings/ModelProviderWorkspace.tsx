@@ -1,3 +1,4 @@
+import type { DesktopTenantProvidersClientV2 } from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRightIcon,
@@ -11,7 +12,7 @@ import {
   TrashIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient, DesktopApiError } from '../../api/client';
+import { DesktopApiError } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
   DesktopRuntimeConfig,
@@ -59,6 +60,7 @@ type ProviderDeleteRequest = Readonly<{
 
 type ModelProviderWorkspaceProps = {
   config: DesktopRuntimeConfig;
+  client: DesktopTenantProvidersClientV2;
   canManage: boolean;
   onRuntimeStatusRefresh: () => Promise<void>;
   onCountChange?: (count: number | null) => void;
@@ -101,12 +103,12 @@ function endpointLabel(provider: ManagedLlmProvider, fallback: string): string {
 
 export function ModelProviderWorkspace({
   config,
+  client,
   canManage,
   onRuntimeStatusRefresh,
   onCountChange,
 }: ModelProviderWorkspaceProps) {
   const { locale, t } = useI18n();
-  const client = useMemo(() => new DesktopApiClient(config), [config]);
   const routingScope = useMemo(
     () => activeRoutingScope(config),
     [config.projectId, config.tenantId, config.workspaceId],
@@ -294,7 +296,7 @@ export function ModelProviderWorkspace({
   }, []);
 
   const refreshRuntimeProjection = useCallback(
-    async (requestScope: string, requestClient: DesktopApiClient): Promise<void> => {
+    async (requestScope: string, requestClient: DesktopTenantProvidersClientV2): Promise<void> => {
       if (
         !mountedRef.current ||
         clientRef.current !== requestClient ||

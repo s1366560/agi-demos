@@ -56,6 +56,11 @@ class TestWebScrapeToolInit:
         assert "article" in _WS_CONTENT_SELECTORS
         assert "main" in _WS_CONTENT_SELECTORS
 
+    def test_module_has_no_legacy_configure_seam(self) -> None:
+        from src.infrastructure.agent.tools import web_scrape as web_scrape_module
+
+        assert not hasattr(web_scrape_module, "configure_web_scrape")
+
 
 class TestWebScrapeToolValidation:
     """Test URL validation via _WS_URL_PATTERN."""

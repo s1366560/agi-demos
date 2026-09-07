@@ -16,6 +16,7 @@ from src.infrastructure.adapters.primary.web.routers.terminal import (
     get_event_publisher,
     get_project_id_from_sandbox,
 )
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 
 class _FakeWebSocket:
@@ -369,7 +370,6 @@ async def test_get_project_id_from_sandbox_error_log_omits_sandbox_id_and_error_
 
 @pytest.mark.unit
 def test_get_event_publisher_error_log_omits_container_exception_text(
-    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     class FailingContainer:
@@ -379,18 +379,16 @@ def test_get_event_publisher_error_log_omits_container_exception_text(
     request = SimpleNamespace(
         app=SimpleNamespace(state=SimpleNamespace(container=FailingContainer()))
     )
-    monkeypatch.setattr(terminal_router, "_event_publisher", None)
     caplog.set_level(
         logging.WARNING,
         logger="src.infrastructure.adapters.primary.web.routers.terminal",
     )
 
-    result = get_event_publisher(request)
+    with pytest.raises(RuntimeV2Error) as error:
+        get_event_publisher(request)
 
-    assert result is None
-    assert terminal_router._event_publisher is None
-    assert "Could not create event publisher" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
+    assert error.value.code == "generation_not_pinned"
+    assert "Could not create event publisher" not in caplog.text
     assert "event publisher secret" not in caplog.text
 
 

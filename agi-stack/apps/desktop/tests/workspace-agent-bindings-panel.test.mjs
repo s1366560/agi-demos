@@ -16,10 +16,10 @@ test('workspace settings owns a separate authoritative Agent-binding panel', () 
   assert.match(dialogSource, /<WorkspaceAgentBindingsPanel/);
   assert.match(dialogSource, /agents=\{agents\}/);
   assert.match(dialogSource, /members=\{members\}/);
-  assert.match(appSource, /agents=\{dataset\.workspaceAgents\}/);
-  assert.match(appSource, /onLoadAgentDefinitions=\{loadWorkspaceAgentDefinitionsFromDialog\}/);
-  assert.match(appSource, /onBindAgent=\{bindWorkspaceAgentFromDialog\}/);
-  assert.match(appSource, /onUnbindAgent=\{unbindWorkspaceAgentFromDialog\}/);
+  assert.match(appSource, /agents:\s*dataset\.workspaceAgents/);
+  assert.match(appSource, /onLoadAgentDefinitions:\s*loadWorkspaceAgentDefinitionsFromDialog/);
+  assert.match(appSource, /onBindAgent:\s*bindWorkspaceAgentFromDialog/);
+  assert.match(appSource, /onUnbindAgent:\s*unbindWorkspaceAgentFromDialog/);
 });
 
 test('workspace Agent controls preserve authority, binding identity, confirmation, and feedback', () => {

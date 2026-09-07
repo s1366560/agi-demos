@@ -14,7 +14,9 @@
         "agi-stack/apps/desktop/electron/main/index.ts",
         "agi-stack/apps/desktop/electron/preload/index.ts",
         "agi-stack/apps/desktop/electron/main/rendererProtocol.ts",
-        "agi-stack/apps/desktop/electron/main/mediaPermissionPolicy.ts"
+        "agi-stack/apps/desktop/electron/main/mediaPermissionPolicy.ts",
+        "agi-stack/apps/desktop/electron/main/rendererDeliveryAdmissionV2.ts",
+        "web/src/test/plugins/desktopRendererDeliveryAdmissionV2.test.ts"
       ],
       "api_method": "IPC",
       "api_path": "agistack:desktop-command",
@@ -113,7 +115,16 @@
         "agi-stack/apps/desktop/electron/main/index.ts",
         "agi-stack/apps/desktop/electron/main/sidecarSupervisor.ts",
         "agi-stack/apps/desktop/sidecar/src/control.rs",
-        "agi-stack/apps/desktop/electron/preload/index.ts"
+        "agi-stack/apps/desktop/electron/preload/index.ts",
+        "agi-stack/packages/plugin-runtime/src/desktopRendererDelivery.ts",
+        "agi-stack/apps/desktop/sidecar/src/renderer_receipt_service_v2.rs",
+        "agi-stack/apps/desktop/sidecar/src/renderer_receipt_service_v2_tests.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/platform_plugin_sync_v2.rs",
+        "web/src/test/plugins/desktopRendererDeliveryV2.test.ts",
+        "agi-stack/apps/desktop/tests/desktop-plugin-generation-v2-wiring.test.mjs",
+        "agi-stack/apps/desktop/electron/main/rendererDeliveryAdmissionV2.ts",
+        "web/src/test/plugins/desktopRendererDeliveryAdmissionV2.test.ts",
+        "agi-stack/apps/desktop/tests/sidecar-command-surface.test.mjs"
       ],
       "api_method": "IPC",
       "api_path": "ipc:private-inherited-stdio-jsonl-control-v1",
@@ -206,7 +217,11 @@
         "agi-stack/apps/desktop/sidecar/src/oauth_pending_attempt.rs",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs",
         "agi-stack/apps/desktop/sidecar/src/data_migration.rs",
-        "agi-stack/apps/desktop/sidecar/src/control.rs"
+        "agi-stack/apps/desktop/sidecar/src/control.rs",
+        "agi-stack/apps/desktop/sidecar/src/plugin_data_plane_credential_v2.rs",
+        "agi-stack/apps/desktop/electron/main/platformPluginDataPlaneCredentialPolicy.ts",
+        "agi-stack/apps/desktop/tests/platform-plugin-renderer-credential-policy.test.mjs",
+        "agi-stack/apps/desktop/tests/platform-plugin-data-plane-credential-policy.test.mjs"
       ],
       "api_method": "IPC",
       "api_path": "ipc:application-encrypted-vault",

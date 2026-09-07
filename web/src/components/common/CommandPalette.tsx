@@ -27,7 +27,7 @@ import { MessageSquarePlus, Moon, Sun, Languages, ArrowRight, type LucideIcon } 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useThemeStore } from '@/stores/theme';
 
-import { deriveTopNavigationItems } from '@/config/navigation';
+import { useWebTopNavigationItemsV2 } from '@/routes/v2/webNavigationAuthorityStateV2';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDateOnly } from '@/utils/date';
 
@@ -77,6 +77,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const conversations = useConversationsStore((s) => s.conversations);
   const computedTheme = useThemeStore((s) => s.computedTheme);
   const setTheme = useThemeStore((s) => s.setTheme);
+  const navigationItems = useWebTopNavigationItemsV2('tenant', { tenantId, projectId });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -133,7 +134,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         icon: MessageSquarePlus,
         group: t('commandPalette.groups.actions', { defaultValue: 'Actions' }),
         action: () => {
-          navigate(buildAgentWorkspacePath({ tenantId, projectId }));
+          void navigate(buildAgentWorkspacePath({ tenantId, projectId }));
           close();
         },
       },
@@ -175,8 +176,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     items.push(...actions);
 
     // Navigation group
-    const navItems = deriveTopNavigationItems('tenant', { tenantId, projectId });
-    for (const nav of navItems) {
+    for (const nav of navigationItems) {
       const label = t(nav.label, { defaultValue: nav.label });
       items.push({
         id: `nav-${nav.id}`,
@@ -184,7 +184,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         hint: nav.relativePath,
         group: t('commandPalette.groups.navigation', { defaultValue: 'Navigation' }),
         action: () => {
-          navigate(nav.path);
+          void navigate(nav.path);
           close();
         },
       });
@@ -202,7 +202,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           defaultValue: 'Recent conversations',
         }),
         action: () => {
-          navigate(
+          void navigate(
             buildAgentWorkspacePath({
               tenantId,
               conversationId: conv.id,
@@ -216,7 +216,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     }
 
     return items;
-  }, [t, i18n, navigate, close, tenantId, projectId, conversations, computedTheme, setTheme]);
+  }, [
+    t,
+    i18n,
+    navigate,
+    close,
+    navigationItems,
+    conversations,
+    computedTheme,
+    setTheme,
+    tenantId,
+    projectId,
+  ]);
 
   // Filter + sort items by query.
   const filteredItems = useMemo(() => {
@@ -248,7 +259,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   // Scroll active item into view.
   useEffect(() => {
     if (!open) return;
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-cp-index="${safeActiveIndex}"]`);
+    const el = listRef.current?.querySelector<HTMLElement>(
+      `[data-cp-index="${String(safeActiveIndex)}"]`
+    );
     el?.scrollIntoView({ block: 'nearest' });
   }, [safeActiveIndex, open]);
 
@@ -425,26 +438,3 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     document.body
   );
 };
-
-/**
- * useCommandPaletteOpen — hook that manages Cmd/Ctrl+K global listener + open state.
- * Returns [open, setOpen] for consumers to also trigger the palette from a button.
- */
-export function useCommandPaletteOpen(): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setOpen((prev) => !prev);
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => {
-      document.removeEventListener('keydown', handler);
-    };
-  }, []);
-
-  return [open, setOpen];
-}

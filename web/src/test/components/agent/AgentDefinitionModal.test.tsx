@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   listTools: vi.fn(),
   listSkills: vi.fn(),
   listMcpServers: vi.fn(),
+  listAcpAgents: vi.fn(),
 }));
 
 vi.mock('@/stores/agentDefinitions', () => ({
@@ -35,6 +36,10 @@ vi.mock('@/services/skillService', () => ({
   skillAPI: {
     list: mocks.listSkills,
   },
+}));
+
+vi.mock('@/services/acpService', () => ({
+  acpService: { listAgents: mocks.listAcpAgents },
 }));
 
 vi.mock('@/services/mcpService', () => ({
@@ -97,6 +102,7 @@ describe('AgentDefinitionModal', () => {
     mocks.listTools.mockResolvedValue({ tools: [] });
     mocks.listSkills.mockResolvedValue({ skills: [] });
     mocks.listMcpServers.mockResolvedValue([]);
+    mocks.listAcpAgents.mockResolvedValue([]);
   });
 
   it('sends inherit when an existing explicit model is reset to tenant config', async () => {
@@ -239,7 +245,9 @@ describe('AgentDefinitionModal', () => {
 
     await waitFor(() => {
       expect(mocks.listSkills).toHaveBeenCalledWith({ limit: 100, tenant_id: 'tenant-1' });
+      expect(mocks.listAcpAgents).toHaveBeenCalledWith('tenant-1');
     });
+    expect(await screen.findByDisplayValue('research_agent')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 

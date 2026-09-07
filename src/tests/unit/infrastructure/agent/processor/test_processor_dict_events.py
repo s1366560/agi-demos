@@ -1,6 +1,6 @@
 """Regression tests for dict event passthrough in SessionProcessor."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -10,6 +10,30 @@ from src.infrastructure.agent.processor import (
     ProcessorConfig,
     SessionProcessor,
 )
+from src.infrastructure.plugins.v2.agent_loop import (
+    AgentLoopRunContextV2,
+    BuiltinAgentLoopResolverV2,
+)
+
+
+class _NativeLoop:
+    @staticmethod
+    def run(context: AgentLoopRunContextV2):
+        return context.run_native()
+
+
+def _processor_config() -> ProcessorConfig:
+    return ProcessorConfig(
+        model="test-model",
+        max_steps=3,
+        provider_id="test-provider",
+        loop_resolver=BuiltinAgentLoopResolverV2(
+            loop_id="builtin-react",
+            plugin_id="memstack-kernel",
+            implementation=_NativeLoop(),
+            lifecycle_notifier=MagicMock(),
+        ),
+    )
 
 
 @pytest.mark.unit
@@ -18,9 +42,7 @@ class TestProcessorDictEvents:
 
     @pytest.mark.asyncio
     async def test_process_handles_dict_events_without_attribute_error(self):
-        processor = SessionProcessor(
-            config=ProcessorConfig(model="test-model", max_steps=3), tools=[]
-        )
+        processor = SessionProcessor(config=_processor_config(), tools=[])
 
         async def _mock_process_step(session_id, messages):
             yield {"type": "subagent_started", "data": {"run_id": "run-1"}}
@@ -48,9 +70,7 @@ class TestProcessorDictEvents:
 
     @pytest.mark.asyncio
     async def test_process_stops_on_dict_error_event(self):
-        processor = SessionProcessor(
-            config=ProcessorConfig(model="test-model", max_steps=3), tools=[]
-        )
+        processor = SessionProcessor(config=_processor_config(), tools=[])
 
         async def _mock_process_step(session_id, messages):
             yield {"type": "error", "data": {"message": "tool failed"}}
@@ -72,9 +92,7 @@ class TestProcessorDictEvents:
 
     @pytest.mark.asyncio
     async def test_process_stops_consuming_step_after_terminal_workspace_contract(self):
-        processor = SessionProcessor(
-            config=ProcessorConfig(model="test-model", max_steps=3), tools=[]
-        )
+        processor = SessionProcessor(config=_processor_config(), tools=[])
 
         async def _mock_process_step(session_id, messages):
             yield AgentObserveEvent(
@@ -109,7 +127,6 @@ class TestProcessorDictEvents:
             "complete",
         ]
         assert not any(
-            isinstance(event, AgentErrorEvent)
-            and event.code == "WORKSPACE_CONTRACT_TOOL_REQUIRED"
+            isinstance(event, AgentErrorEvent) and event.code == "WORKSPACE_CONTRACT_TOOL_REQUIRED"
             for event in events
         )

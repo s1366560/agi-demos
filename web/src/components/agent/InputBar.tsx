@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, memo } from 'react';
+import { useState, useRef, useCallback, useEffect, useSyncExternalStore, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -35,6 +35,11 @@ import { useVoiceTranscribe } from '@/hooks/useVoiceTranscribe';
 import { formatFileSize } from '@/utils/format';
 
 import { LazyTooltip } from '@/components/ui/lazyAntd';
+
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '../../plugins/webOperationAdmissionV2';
 
 import { subscribeToComposerRefill } from './chat/composerEvents';
 import { MentionPopover } from './chat/MentionPopover';
@@ -174,13 +179,24 @@ export const InputBar = memo<InputBarProps>(
       return trimmed.length > 0 ? trimmed : null;
     });
 
+    const voiceAvailability = useSyncExternalStore(
+      subscribeWebOperationAvailabilityV2,
+      getWebOperationAvailabilityV2,
+      getWebOperationAvailabilityV2
+    );
+    const voiceCallId = useVoiceCallStore((state) => state.callId);
     const voiceCallStatus = useVoiceCallStore((state) => state.status);
     const isCameraOn = useVoiceCallStore((state) => state.isCameraOn);
 
     const { captureFrame } = useFrameCapture();
     const handleVoiceCall = useCallback(() => {
       if (voiceCallStatus !== 'idle') {
-        void useVoiceCallStore.getState().endCall();
+        void useVoiceCallStore
+          .getState()
+          .endCall(voiceCallId)
+          .catch(() => {
+            console.warn('Voice cleanup failed');
+          });
       } else {
         if (!activeConversationId || !projectId) {
           void message.warning(
@@ -190,15 +206,39 @@ export const InputBar = memo<InputBarProps>(
           );
           return;
         }
-        void useVoiceCallStore.getState().startCall(activeConversationId, projectId);
+        void useVoiceCallStore
+          .getState()
+          .startCall(activeConversationId, projectId)
+          .catch(() => {
+            console.warn('Voice start failed');
+          });
       }
-    }, [voiceCallStatus, activeConversationId, projectId, t]);
+    }, [voiceCallStatus, voiceCallId, activeConversationId, projectId, t]);
 
+    useEffect(() => {
+      const call = useVoiceCallStore.getState();
+      if (
+        call.status !== 'idle' &&
+        (call.conversationId !== activeConversationId ||
+          call.projectId !== projectId ||
+          call.owner !== voiceAvailability.owner ||
+          !voiceAvailability.available)
+      ) {
+        void call.endCall(call.callId).catch(() => {
+          console.warn('Voice cleanup failed');
+        });
+      }
+    }, [activeConversationId, projectId, voiceAvailability]);
     const capabilities = useActiveModelCapabilities(activeModelOverride);
 
     // --- Voice transcription ---
     const voicePrefixRef = useRef('');
-    const { isListening, toggle: rawToggleVoice } = useVoiceTranscribe({
+    const {
+      isListening,
+      toggle: rawToggleVoice,
+      analyser: voiceAnalyser,
+      operation: voiceOperation,
+    } = useVoiceTranscribe({
       projectId,
       conversationId: activeConversationId ?? undefined,
       onInterim: useCallback((text: string) => {
@@ -937,6 +977,8 @@ export const InputBar = memo<InputBarProps>(
             templateLibraryVisible={templateLibraryVisible}
             setTemplateLibraryVisible={setTemplateLibraryVisible}
             isListening={isListening}
+            voiceAnalyser={voiceAnalyser}
+            voiceOperation={voiceOperation}
             toggleVoiceInput={toggleVoiceInput}
             voiceCallStatus={voiceCallStatus}
             handleVoiceCall={handleVoiceCall}
@@ -964,7 +1006,19 @@ export const InputBar = memo<InputBarProps>(
               setTemplateLibraryVisible(false);
             }}
           />
-          {voiceCallStatus !== 'idle' && <VoiceCallPanel onClose={handleVoiceCall} />}
+          {voiceCallStatus !== 'idle' && (
+            <VoiceCallPanel
+              key={voiceCallId}
+              onClose={() => {
+                void useVoiceCallStore
+                  .getState()
+                  .endCall(voiceCallId)
+                  .catch(() => {
+                    console.warn('Voice cleanup failed');
+                  });
+              }}
+            />
+          )}
         </section>
       </div>
     );

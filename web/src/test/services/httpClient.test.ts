@@ -1,3 +1,4 @@
+import { installHttpAdmissionFixtureV2 } from './webHttpAdmissionFixtureV2';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { requestCache } from '../../services/client/requestCache';
@@ -52,7 +53,17 @@ capturedRequestInterceptor = mockAxiosInstance.interceptors.request.use.mock.cal
 capturedResponseInterceptor =
   mockAxiosInstance.interceptors.response.use.mock.calls[0]?.[0] ?? null;
 
+const capturedResponseErrorInterceptor =
+  mockAxiosInstance.interceptors.response.use.mock.calls[0]?.[1];
+
 describe('httpClient', () => {
+  let cleanup: () => Promise<void>;
+  beforeEach(() => {
+    cleanup = installHttpAdmissionFixtureV2();
+  });
+  afterEach(async () => {
+    await cleanup();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -172,7 +183,10 @@ describe('httpClient', () => {
 
       const result = await httpClient.get('/test');
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/test', undefined);
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+        '/test',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
       expect(result).toEqual(testData);
     });
 
@@ -183,7 +197,11 @@ describe('httpClient', () => {
 
       const result = await httpClient.post('/test', postBody);
 
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/test', postBody, undefined);
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/test',
+        postBody,
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
       expect(result).toEqual(testData);
     });
 
@@ -194,7 +212,11 @@ describe('httpClient', () => {
 
       const result = await httpClient.put('/test', putBody);
 
-      expect(mockAxiosInstance.put).toHaveBeenCalledWith('/test', putBody, undefined);
+      expect(mockAxiosInstance.put).toHaveBeenCalledWith(
+        '/test',
+        putBody,
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
       expect(result).toEqual(testData);
     });
 
@@ -205,7 +227,11 @@ describe('httpClient', () => {
 
       const result = await httpClient.patch('/test', patchBody);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/test', patchBody, undefined);
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
+        '/test',
+        patchBody,
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
       expect(result).toEqual(testData);
     });
 
@@ -215,7 +241,10 @@ describe('httpClient', () => {
 
       const result = await httpClient.delete('/test');
 
-      expect(mockAxiosInstance.delete).toHaveBeenCalledWith('/test', undefined);
+      expect(mockAxiosInstance.delete).toHaveBeenCalledWith(
+        '/test',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
       expect(result).toEqual(testData);
     });
   });
@@ -417,6 +446,13 @@ describe('httpClient', () => {
 });
 
 describe('httpClient error handling', () => {
+  let cleanup: () => Promise<void>;
+  beforeEach(() => {
+    cleanup = installHttpAdmissionFixtureV2();
+  });
+  afterEach(async () => {
+    await cleanup();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -447,5 +483,36 @@ describe('httpClient error handling', () => {
     mockAxiosInstance.delete.mockRejectedValueOnce(error);
 
     await expect(httpClient.delete('/test')).rejects.toThrow('Not found');
+  });
+});
+
+describe('explicit kernel HTTP boundary', () => {
+  it('allows bootstrap transport without an installed business generation', async () => {
+    const { kernelHttpClient } = await import('../../services/client/kernelHttpClient');
+    mockAxiosInstance.get.mockResolvedValueOnce({ data: { user_id: 'user-1' } });
+    await expect(kernelHttpClient.get('/auth/me')).resolves.toEqual({ user_id: 'user-1' });
+    await expect(httpClient.get('/projects/')).rejects.toThrow(
+      'web_operation_generation_unavailable'
+    );
+  });
+  it('does not let a late 401 from old credentials clear a new authenticated session', async () => {
+    const { clearAuthState } = await import('@/utils/tokenResolver');
+    vi.mocked(clearAuthState).mockClear();
+    vi.mocked(getAuthToken).mockReturnValue('new-token');
+    const reject = mockAxiosInstance.interceptors.response.use.mock.calls[0]?.[1];
+    // clearAllMocks resets registration call history: use the registration captured at import.
+    const handler = reject ?? capturedResponseErrorInterceptor;
+    const stale = {
+      config: { headers: { Authorization: 'Bearer old-token' } },
+      isAuthError: () => true,
+    };
+    await expect(handler(stale)).rejects.toBe(stale);
+    expect(clearAuthState).not.toHaveBeenCalled();
+    const current = {
+      config: { headers: { Authorization: 'Bearer new-token' } },
+      isAuthError: () => true,
+    };
+    await expect(handler(current)).rejects.toBe(current);
+    expect(clearAuthState).toHaveBeenCalledTimes(1);
   });
 });

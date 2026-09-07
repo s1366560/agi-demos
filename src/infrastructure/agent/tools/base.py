@@ -31,7 +31,7 @@ class AgentTool(AgentToolBase):
 
     .. deprecated::
         Subclass ``AgentTool`` is deprecated. Use the ``@tool_define``
-        decorator to create new tools. See ``skill_tool.py`` for an example.
+        decorator to create new tools. See ``skill_loader.py`` for an example.
 
     Extends AgentToolBase (domain layer) with infrastructure concerns:
     - Output truncation to prevent excessive token usage

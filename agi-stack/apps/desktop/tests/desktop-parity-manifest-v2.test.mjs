@@ -280,6 +280,11 @@ test("reviewed Web production dependencies bind reachable paths and audited SHA-
           "web/src/pages/project/CommunitiesList.tsx",
         source_entry: "web/src/components/tasks/TaskList.tsx",
       },
+      {
+        routed_source_entry:
+          "web/src/pages/project/CommunitiesList.tsx",
+        source_entry: "web/src/services/taskStream.ts",
+      },
     ],
   );
 
@@ -504,27 +509,32 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     "invitation-acceptance",
     "project-support",
     "tenant-creation",
-    "tenant-tenant-clusters",
     "tenant-tenant-dead-letter-queue",
     "tenant-tenant-deploy",
     "tenant-tenant-instance-templates",
     "tenant-tenant-instances",
-    "tenant-tenant-pool",
     "tenant-tenant-runtimes",
-    "tenant-tenant-tasks",
     "tenant-tenant-workspaces",
   ];
 
   for (const capabilityId of declaredCapabilityIds) {
     const capability = byId.get(capabilityId);
     assert.ok(capability, capabilityId);
+    const reasonCode =
+      capabilityId === "tenant-tenant-instances" ||
+      capabilityId === "tenant-tenant-deploy" ||
+      capabilityId === "tenant-tenant-dead-letter-queue" ||
+      capabilityId === "tenant-tenant-instance-templates" ||
+      capabilityId === "tenant-tenant-runtimes"
+        ? "capability_authority_revision_unavailable"
+        : "renderer_capability_authority_unobserved";
     assert.deepEqual(
       capability.surfaces.desktop_cloud,
       {
         disposition: "native_equivalent",
         implementation_status: "partial",
         availability: "unavailable",
-        reason_code: "renderer_capability_authority_unobserved",
+        reason_code: reasonCode,
         authority: "cloud_service",
         allowed_actions: [],
         intentional_deviation: null,
@@ -540,10 +550,71 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     );
   }
 
+  const runtimePool = byId.get("tenant-tenant-pool");
+  assert.ok(runtimePool);
+  assert.deepEqual(runtimePool.surfaces.desktop_cloud, {
+    disposition: "native_equivalent",
+    implementation_status: "partial",
+    availability: "unavailable",
+    reason_code: "capability_authority_revision_unavailable",
+    authority: "cloud_service",
+    allowed_actions: [],
+    intentional_deviation: null,
+  });
+  assert.equal(
+    runtimePool.production_entries.desktop_cloud.some(
+      (entry) =>
+        entry.entry_type === "source" &&
+        entry.path ===
+          "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolAuthorityModuleV2.ts",
+    ),
+    true,
+  );
+  assert.equal(
+    runtimePool.production_entries.desktop_cloud.some(
+      (entry) =>
+        entry.entry_type === "source" &&
+        entry.path ===
+          "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolCapability.ts",
+    ),
+    false,
+  );
+
+  const runtimeClusters = byId.get("tenant-tenant-clusters");
+  assert.ok(runtimeClusters);
+  assert.deepEqual(runtimeClusters.surfaces.desktop_cloud, {
+    disposition: "native_equivalent",
+    implementation_status: "partial",
+    availability: "unavailable",
+    reason_code: "capability_authority_revision_unavailable",
+    authority: "cloud_service",
+    allowed_actions: [],
+    intentional_deviation: null,
+  });
+  assert.equal(
+    runtimeClusters.production_entries.desktop_cloud.some(
+      (entry) =>
+        entry.entry_type === "source" &&
+        entry.path ===
+          "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts",
+    ),
+    true,
+  );
+  for (const retiredPath of [
+    "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersCapability.ts",
+    "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersClient.ts",
+  ]) {
+    assert.equal(
+      runtimeClusters.production_entries.desktop_cloud.some(
+        (entry) => entry.entry_type === "source" && entry.path === retiredPath,
+      ),
+      false,
+    );
+  }
+
   for (const capabilityId of [
     "tenant-tenant-instances",
     "tenant-tenant-runtimes",
-    "tenant-tenant-tasks",
     "tenant-tenant-workspaces",
   ]) {
     const surface = byId.get(capabilityId)?.surfaces.desktop_local;
@@ -552,7 +623,9 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     assert.equal(surface.availability, "unavailable", capabilityId);
     assert.equal(
       surface.reason_code,
-      "renderer_capability_authority_unobserved",
+      capabilityId === "tenant-tenant-instances" || capabilityId === "tenant-tenant-runtimes"
+        ? "capability_authority_revision_unavailable"
+        : "renderer_capability_authority_unobserved",
       capabilityId,
     );
     assert.equal(surface.authority, "sidecar", capabilityId);
@@ -919,13 +992,13 @@ test("project capabilities preserve audited Local authority and per-surface acti
   );
   assert.equal(
     blackboard.surfaces.desktop_local.reason_code,
-    "local_workspace_plan_read_only",
+    "capability_authority_revision_unavailable",
   );
-  assert.deepEqual(blackboard.surfaces.desktop_local.allowed_actions, [
-    "view",
-    "select-workspace",
-    "review-plan",
-  ]);
+  assert.equal(
+    blackboard.surfaces.desktop_local.availability,
+    "unavailable",
+  );
+  assert.deepEqual(blackboard.surfaces.desktop_local.allowed_actions, []);
   assert.deepEqual(search.surfaces.desktop_cloud.allowed_actions, [
     "view",
     "search",

@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const {
-  createTenantAnalyticsHttpClient,
+  applyDesktopTenantAnalyticsAuthorityV2,
+  createDesktopTenantAnalyticsOperationsV2,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantAnalyticsHttpClient.js'
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAnalyticsAuthorityModuleV2.js'
 );
 
 const originalFetch = globalThis.fetch;
@@ -38,7 +39,7 @@ test('cloud analytics client validates the 30-day tenant authority contract', as
     });
   };
 
-  const client = createTenantAnalyticsHttpClient(
+  const client = createTenantAnalyticsClientV2(
     runtimeConfig({ mode: 'cloud', tenantId: 'tenant-1' }),
   );
   const result = await client.load(
@@ -122,7 +123,7 @@ test('local analytics client preserves degraded field authority without fabricat
       },
     });
 
-  const client = createTenantAnalyticsHttpClient(
+  const client = createTenantAnalyticsClientV2(
     runtimeConfig({
       mode: 'local',
       tenantId: 'tenant-local',
@@ -166,7 +167,7 @@ test('analytics client fails closed on scope drift and malformed payloads', asyn
       },
     });
   };
-  const client = createTenantAnalyticsHttpClient(
+  const client = createTenantAnalyticsClientV2(
     runtimeConfig({ mode: 'cloud', tenantId: 'tenant-1' }),
   );
 
@@ -176,7 +177,7 @@ test('analytics client fails closed on scope drift and malformed payloads', asyn
       tenantId: 'tenant-other',
       period: '30d',
     }),
-    /tenant_analytics_runtime_scope_mismatch/u,
+    (error) => error?.code === 'desktop_tenant_analytics_operation_input_invalid',
   );
   assert.equal(calls, 0);
 
@@ -189,6 +190,35 @@ test('analytics client fails closed on scope drift and malformed payloads', asyn
     /cloud_tenant_analytics_contract_invalid/u,
   );
 });
+
+function createTenantAnalyticsClientV2(config) {
+  let service;
+  applyDesktopTenantAnalyticsAuthorityV2(
+    {
+      provide(_key, candidate) {
+        service = candidate;
+      },
+    },
+    { strategy: 'desktop-api-fetch' },
+  );
+  const operations = createDesktopTenantAnalyticsOperationsV2(() => ({
+    acquireServiceOperationLease: async () => ({
+      status: 'accepted',
+      digest: 'tenant-analytics-test-generation',
+      useService: (operation) => operation(service),
+      release: async () => undefined,
+    }),
+  }));
+  return Object.freeze({
+    async load(scope, options) {
+      return operations.loadTenantAnalytics({
+        config,
+        scope,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
+  });
+}
 
 function runtimeConfig(overrides) {
   return {

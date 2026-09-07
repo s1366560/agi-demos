@@ -2,25 +2,21 @@ import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import {
-  createTenantAuditClient,
   TENANT_AUDIT_LOCAL_REASON,
   TENANT_AUDIT_ROUTE_ID,
   type TenantAuditClient,
 } from './tenantAuditClient';
 import {
-  createTenantBillingClient,
   TENANT_BILLING_LOCAL_REASON,
   TENANT_BILLING_ROUTE_ID,
   type TenantBillingClient,
 } from './tenantBillingClient';
 import {
-  createTenantGovernanceClient,
   TENANT_GOVERNANCE_LOCAL_REASON,
   TENANT_GOVERNANCE_ROUTE_ID,
   type TenantGovernanceClient,
 } from './tenantGovernanceClient';
 import {
-  createTenantTrustClient,
   TENANT_TRUST_LOCAL_REASON,
   TENANT_TRUST_ROUTE_ID,
   type TenantTrustClient,
@@ -48,10 +44,10 @@ export type TenantAdminCapabilityClient = Readonly<{
 }>;
 
 export type TenantAdminCapabilityDependencies = Readonly<{
-  governance?: Pick<TenantGovernanceClient, 'load'>;
-  billing?: Pick<TenantBillingClient, 'load'>;
-  audit?: Pick<TenantAuditClient, 'load'>;
-  trust?: Pick<TenantTrustClient, 'load'>;
+  governance: Pick<TenantGovernanceClient, 'load'>;
+  billing: Pick<TenantBillingClient, 'load'>;
+  audit: Pick<TenantAuditClient, 'load'>;
+  trust: Pick<TenantTrustClient, 'load'>;
 }>;
 
 const REASON_PREFIX = Object.freeze({
@@ -99,15 +95,14 @@ const ACTION_CATALOG = Object.freeze({
 
 export function createTenantAdminCapabilityClient(
   config: DesktopRuntimeConfig,
-  dependencies: TenantAdminCapabilityDependencies = {},
+  dependencies: TenantAdminCapabilityDependencies,
 ): TenantAdminCapabilityClient {
   const runtimeConfig = Object.freeze({ ...config });
   const clients = Object.freeze({
-    governance:
-      dependencies.governance ?? createTenantGovernanceClient(runtimeConfig),
-    billing: dependencies.billing ?? createTenantBillingClient(runtimeConfig),
-    audit: dependencies.audit ?? createTenantAuditClient(runtimeConfig),
-    trust: dependencies.trust ?? createTenantTrustClient(runtimeConfig),
+    governance: dependencies.governance,
+    billing: dependencies.billing,
+    audit: dependencies.audit,
+    trust: dependencies.trust,
   });
 
   return Object.freeze({

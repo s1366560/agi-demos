@@ -369,6 +369,7 @@ class TestProcessorFactoryControlChannel:
         channel = _make_control_channel()
         factory = ProcessorFactory(
             base_model="test-model",
+            base_provider_id="test-provider",
             control_channel=channel,
         )
 
@@ -392,7 +393,17 @@ class TestProcessorFactoryControlChannel:
             execute=AsyncMock(),
         )
 
-        processor = factory.create_for_subagent(subagent, [dummy_tool], run_id="run-42")
+        with (
+            patch(
+                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                return_value=object(),
+            ),
+            patch(
+                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                return_value=object(),
+            ),
+        ):
+            processor = factory.create_for_subagent(subagent, [dummy_tool], run_id="run-42")
 
         assert processor.config.control_channel is channel
         assert processor.config.run_id == "run-42"
@@ -401,7 +412,10 @@ class TestProcessorFactoryControlChannel:
         from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
         from src.infrastructure.agent.processor.factory import ProcessorFactory
 
-        factory = ProcessorFactory(base_model="test-model")
+        factory = ProcessorFactory(
+            base_model="test-model",
+            base_provider_id="test-provider",
+        )
         subagent = SubAgent(
             id="sa-2",
             tenant_id="t-1",
@@ -422,7 +436,17 @@ class TestProcessorFactoryControlChannel:
             execute=AsyncMock(),
         )
 
-        processor = factory.create_for_subagent(subagent, [dummy_tool])
+        with (
+            patch(
+                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                return_value=object(),
+            ),
+            patch(
+                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                return_value=object(),
+            ),
+        ):
+            processor = factory.create_for_subagent(subagent, [dummy_tool])
 
         assert processor.config.control_channel is None
         assert processor.config.run_id is None

@@ -11,19 +11,40 @@ import math
 import re
 import time
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from src.application.services.channels._session import with_session
 from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
+from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
+    current_artifact_lifecycle_application_service_v2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    current_process_generation_host_v2,
+    pin_agent_turn_operation_v2,
+    pin_generation_v2,
+    pin_operation_context_v2,
+)
+from src.infrastructure.plugins.v2.sandbox_projection import (
+    current_sandbox_application_services_v2,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from src.application.services.channels.media_import_service import MediaImportService
+    from src.infrastructure.adapters.secondary.persistence.models import Conversation
     from src.infrastructure.agent.channels.channel_router import ChannelRouter
+    from src.infrastructure.plugins.v2.agent_turn_services import AgentTurnStreamProtocolV2
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +128,7 @@ class ChannelMessageRouter:
                 return
 
             logger.info(
-                "[MessageRouter] Routing message from %s: "
-                "has_chat_id=%s has_sender_id=%s",
+                "[MessageRouter] Routing message from %s: has_chat_id=%s has_sender_id=%s",
                 message.channel,
                 bool(message.chat_id),
                 bool(message.sender.id),
@@ -204,37 +224,47 @@ class ChannelMessageRouter:
     async def _do_media_import(self, message: Message, conversation_id: str) -> None:
         """Execute media import into sandbox workspace."""
         try:
-            from src.infrastructure.adapters.primary.web.startup.container import (
-                get_app_container,
-            )
-
             async with with_session() as db_session:
-                app_container = get_app_container()
-                if not app_container:
-                    raise RuntimeError("Application container not initialized")
+                tenant_id = message.raw_data.get("tenant_id", "") if message.raw_data else ""
+                project_id = message.project_id or ""
+                async with pin_operation_context_v2(
+                    current_process_generation_host_v2(),
+                    operation_id=f"channel-media-import:{uuid.uuid4()}",
+                    scope=ScopeV2(
+                        kind=ScopeKindV2.SESSION,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
+                        session_id=conversation_id,
+                    ),
+                    services={
+                        OPERATION_DB_SESSION_SERVICE_V2: db_session,
+                        OPERATION_IDENTITY_SERVICE_V2: {"tenant_id": tenant_id},
+                        OPERATION_METADATA_SERVICE_V2: {
+                            "kind": "channel-media-import",
+                            "conversation_id": conversation_id,
+                        },
+                    },
+                ):
+                    artifact_service = current_artifact_lifecycle_application_service_v2().artifact
+                    mcp_adapter = current_sandbox_application_services_v2().adapter
 
-                mcp_adapter = app_container.sandbox_adapter()
-                await mcp_adapter.sync_from_docker()
+                    logger.info(
+                        "[MessageRouter] Importing media message to workspace: "
+                        "type=%s has_domain_message_id=%s",
+                        message.content.type.value,
+                        bool(message.id),
+                    )
 
-                artifact_service = app_container.artifact_service()
-
-                logger.info(
-                    "[MessageRouter] Importing media message to workspace: "
-                    "type=%s has_domain_message_id=%s",
-                    message.content.type.value,
-                    bool(message.id),
-                )
-
-                assert self._media_import_service is not None
-                sandbox_path = await self._media_import_service.import_media_to_workspace(
-                    message=message,
-                    project_id=message.project_id or "",
-                    tenant_id=message.raw_data.get("tenant_id", "") if message.raw_data else "",
-                    conversation_id=conversation_id,
-                    mcp_adapter=mcp_adapter,
-                    artifact_service=artifact_service,
-                    db_session=db_session,
-                )
+                    assert self._media_import_service is not None
+                    sandbox_path = await self._media_import_service.import_media_to_workspace(
+                        message=message,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        conversation_id=conversation_id,
+                        mcp_adapter=mcp_adapter,
+                        artifact_service=artifact_service,
+                        db_session=db_session,
+                    )
 
                 if sandbox_path:
                     self._apply_sandbox_path(message, sandbox_path)
@@ -283,12 +313,10 @@ class ChannelMessageRouter:
     async def _handle_media_import_failure(self, message: Message) -> None:
         """Handle failed media import by notifying the user."""
         filename = message.content.file_name or _("unknown")
-        error_msg = (
-            _(
-                "Sorry, file import failed. The file may be too large (over 50MB) "
-                "or its format is not supported. Filename: {filename}"
-            ).format(filename=filename)
-        )
+        error_msg = _(
+            "Sorry, file import failed. The file may be too large (over 50MB) "
+            "or its format is not supported. Filename: {filename}"
+        ).format(filename=filename)
         logger.warning(
             f"[MessageRouter] Media import failed - "
             f"type={message.content.type.value}, "
@@ -552,8 +580,7 @@ class ChannelMessageRouter:
             return binding.conversation_id
 
         logger.info(
-            "[MessageRouter] Created new conversation: has_conversation_id=%s "
-            "has_chat_id=%s",
+            "[MessageRouter] Created new conversation: has_conversation_id=%s has_chat_id=%s",
             bool(new_conversation.id),
             bool(message.chat_id),
         )
@@ -755,20 +782,27 @@ class ChannelMessageRouter:
           so the user knows the agent is working, not stuck.
         """
         try:
-            session_ctx = await self._setup_agent_session(message, conversation_id)
-            if session_ctx is None:
-                return
+            async with with_session() as db_session:
+                conversation = await self._setup_agent_session(
+                    message,
+                    conversation_id,
+                    db_session,
+                )
+                if conversation is None:
+                    return
 
-            _session, agent_service, conversation, resolved_agent_id = session_ctx
+                channel_message_id = self._extract_channel_message_id(message)
+                operation_message_id = channel_message_id or message.id or str(uuid.uuid4())
 
-            await self._run_agent_stream(
-                message=message,
-                conversation_id=conversation_id,
-                conversation=conversation,
-                agent_service=agent_service,
-                file_metadata=file_metadata,
-                agent_id=resolved_agent_id,
-            )
+                await self._run_agent_stream(
+                    message=message,
+                    conversation_id=conversation_id,
+                    conversation=conversation,
+                    db_session=db_session,
+                    operation_id=f"channel-turn:{operation_message_id}",
+                    channel_message_id=channel_message_id,
+                    file_metadata=file_metadata,
+                )
 
         except Exception as e:
             logger.error(
@@ -777,21 +811,12 @@ class ChannelMessageRouter:
             )
 
     async def _setup_agent_session(
-        self, message: Message, conversation_id: str
-    ) -> tuple[Any, Any, Any, str | None] | None:
-        """Set up agent session: validate text, load conversation, create service.
-
-        Returns ``(session, agent_service, conversation, agent_id)`` or
-        *None* if setup fails.  ``agent_id`` is resolved via
-        :class:`BindingRouter` when ``MULTI_AGENT_ENABLED`` is true;
-        otherwise it is *None*.
-        """
-        from src.configuration.config import get_settings
-        from src.configuration.factories import create_llm_client
-        from src.infrastructure.adapters.primary.web.startup.container import get_app_container
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
+        self,
+        message: Message,
+        conversation_id: str,
+        db_session: AsyncSession,
+    ) -> Conversation | None:
+        """Set up DB-backed state needed before the scoped agent operation."""
         from src.infrastructure.adapters.secondary.persistence.models import Conversation
 
         text = message.content.generate_display_text()
@@ -799,64 +824,100 @@ class ChannelMessageRouter:
             logger.debug("[MessageRouter] Empty message, skipping agent invocation")
             return None
 
-        session = async_session_factory()
-        db_session = await session.__aenter__()
-
         conversation = await db_session.get(Conversation, conversation_id)
         if not conversation:
             logger.error(
                 "[MessageRouter] Conversation not found: has_conversation_id=%s",
                 bool(conversation_id),
             )
-            await session.__aexit__(None, None, None)
             return None
-
-        app_container = get_app_container()
-        if not app_container:
-            logger.error("[MessageRouter] App container is not initialized")
-            await session.__aexit__(None, None, None)
-            return None
-
-        llm = await create_llm_client(conversation.tenant_id)
-        container = app_container.with_db(db_session)
-        agent_service = container.agent_service(llm)
-
-        resolved_agent_id: str | None = None
-        if get_settings().multi_agent_enabled:
-            try:
-                binding_router = container.binding_router()
-                agent = await binding_router.resolve_agent(
-                    tenant_id=conversation.tenant_id or "",
-                    channel_type=(str(message.channel) if message.channel else None),
-                    channel_id=self._extract_channel_config_id(message),
-                    account_id=(message.sender.id if message.sender else None),
-                    peer_id=(
-                        message.sender.id
-                        if message.sender and message.chat_type == ChatType.P2P
-                        else None
-                    ),
-                )
-                if agent is not None:
-                    resolved_agent_id = str(agent.id)
-            except Exception:
-                logger.warning(
-                    "[MessageRouter] BindingRouter resolution failed, "
-                    "falling back to default agent",
-                    exc_info=True,
-                )
-
-        return db_session, agent_service, conversation, resolved_agent_id
+        return conversation
 
     async def _run_agent_stream(
         self,
         message: Message,
         conversation_id: str,
         conversation: Any,
-        agent_service: Any,
+        db_session: Any,
+        operation_id: str,
+        channel_message_id: str | None,
+        file_metadata: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Resolve routing and consume one channel stream on the same pinned operation."""
+        async with pin_agent_turn_operation_v2(
+            operation_id=operation_id,
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: db_session,
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": conversation.tenant_id,
+                    "user_id": conversation.user_id,
+                    "project_id": conversation.project_id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-turn",
+                    "channel": str(message.channel),
+                    "conversation_id": conversation_id,
+                    "message_id": message.id,
+                    "channel_message_id": channel_message_id,
+                },
+            },
+        ):
+            agent_id = await self._resolve_channel_agent_id_v2(message, conversation)
+            agent_service = await current_agent_turn_service_v2()
+            await self._run_agent_stream_pinned(
+                message=message,
+                conversation_id=conversation_id,
+                conversation=conversation,
+                agent_service=agent_service,
+                file_metadata=file_metadata,
+                agent_id=agent_id,
+            )
+
+    async def _resolve_channel_agent_id_v2(
+        self,
+        message: Message,
+        conversation: Any,
+    ) -> str:
+        """Resolve an explicit agent ID from the current operation generation."""
+        from src.infrastructure.plugins.v2.agent_routing import (
+            AGENT_ROUTE_RESOLVER_SERVICE_V2,
+            AgentRouteResolverProtocolV2,
+        )
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        operation = current_operation_context_v2()
+        resolver = operation.require(AGENT_ROUTE_RESOLVER_SERVICE_V2)
+        if not isinstance(resolver, AgentRouteResolverProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_service_implementation",
+                "agent-route resolver service has an invalid implementation",
+            )
+        resolution = await resolver.resolve(
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            channel_type=(str(message.channel) if message.channel else None),
+            channel_id=self._extract_channel_config_id(message),
+            account_id=(message.sender.id if message.sender else None),
+            peer_id=(
+                message.sender.id if message.sender and message.chat_type == ChatType.P2P else None
+            ),
+        )
+        return resolution.agent_id
+
+    async def _run_agent_stream_pinned(
+        self,
+        message: Message,
+        conversation_id: str,
+        conversation: Any,
+        agent_service: AgentTurnStreamProtocolV2,
         file_metadata: list[dict[str, Any]] | None = None,
         agent_id: str | None = None,
     ) -> None:
-        """Consume agent stream, manage card updates, and send final response."""
+        """Consume a channel stream inside its already-pinned operation."""
 
         text = message.content.generate_display_text()
 
@@ -881,18 +942,22 @@ class ChannelMessageRouter:
             )
 
         # Consume agent stream
+        agent_stream = cast(
+            AsyncGenerator[dict[str, Any], None],
+            agent_service.stream_chat_v2(
+                conversation_id=conversation_id,
+                user_message=text,
+                project_id=conversation.project_id,
+                user_id=conversation.user_id,
+                tenant_id=conversation.tenant_id,
+                file_metadata=file_metadata,
+                app_model_context=self._build_app_model_context(message),
+                agent_id=agent_id,
+            ),
+        )
         try:
-            async with asyncio.timeout(_STREAM_TIMEOUT):
-                async for event in agent_service.stream_chat_v2(
-                    conversation_id=conversation_id,
-                    user_message=text,
-                    project_id=conversation.project_id,
-                    user_id=conversation.user_id,
-                    tenant_id=conversation.tenant_id,
-                    file_metadata=file_metadata,
-                    app_model_context=self._build_app_model_context(message),
-                    agent_id=agent_id,
-                ):
+            async with aclosing(agent_stream) as events, asyncio.timeout(_STREAM_TIMEOUT):
+                async for event in events:
                     event_type = event.get("type")
                     event_data = event.get("data") or {}
 
@@ -1172,8 +1237,7 @@ class ChannelMessageRouter:
             binding = await bridge._lookup_binding(conversation_id)
             if not binding:
                 logger.debug(
-                    "[MessageRouter] No channel binding for push message: "
-                    "has_conversation_id=%s",
+                    "[MessageRouter] No channel binding for push message: has_conversation_id=%s",
                     bool(conversation_id),
                 )
                 return False
@@ -1328,7 +1392,7 @@ class ChannelMessageRouter:
         """
         outbox_id: str | None = None
         try:
-            from src.infrastructure.adapters.primary.web.startup import get_channel_manager
+            from src.infrastructure.plugins.v2.channel_runtime import current_channel_runtime_v2
 
             channel_config_id = self._extract_channel_config_id(message)
             if not channel_config_id:
@@ -1350,14 +1414,9 @@ class ChannelMessageRouter:
                 reply_to=inbound_message_id,
             )
 
-            channel_manager = get_channel_manager()
-            if not channel_manager:
-                if outbox_id:
-                    await self._mark_outbox_failed(outbox_id, "channel manager unavailable")
-                logger.warning("[MessageRouter] No channel manager available")
-                return
+            channel_runtime = current_channel_runtime_v2()
 
-            connection = channel_manager.connections.get(channel_config_id)
+            connection = channel_runtime.connections.get(channel_config_id)
             if not connection:
                 if outbox_id:
                     await self._mark_outbox_failed(outbox_id, "no active connection")
@@ -1377,8 +1436,7 @@ class ChannelMessageRouter:
             if outbox_id:
                 await self._mark_outbox_sent(outbox_id, sent_message_id)
             logger.info(
-                "[MessageRouter] Sent response to channel: "
-                "has_chat_id=%s has_message_id=%s",
+                "[MessageRouter] Sent response to channel: has_chat_id=%s has_message_id=%s",
                 bool(message.chat_id),
                 bool(sent_message_id),
             )
@@ -1434,17 +1492,13 @@ class ChannelMessageRouter:
     def _get_streaming_adapter(self, message: Message) -> ChannelAdapter | None:
         """Return the channel adapter if it supports streaming card updates."""
         try:
-            from src.infrastructure.adapters.primary.web.startup import get_channel_manager
+            from src.infrastructure.plugins.v2.channel_runtime import current_channel_runtime_v2
 
             channel_config_id = self._extract_channel_config_id(message)
             if not channel_config_id:
                 return None
 
-            channel_manager = get_channel_manager()
-            if not channel_manager:
-                return None
-
-            connection = channel_manager.connections.get(channel_config_id)
+            connection = current_channel_runtime_v2().connections.get(channel_config_id)
             if not connection:
                 return None
 
@@ -1543,8 +1597,7 @@ class ChannelMessageRouter:
                     outbound_message_id=streaming_msg_id,
                 )
                 logger.info(
-                    "[MessageRouter] Streaming response recorded: "
-                    "has_chat_id=%s has_message_id=%s",
+                    "[MessageRouter] Streaming response recorded: has_chat_id=%s has_message_id=%s",
                     bool(message.chat_id),
                     bool(streaming_msg_id),
                 )
@@ -1954,15 +2007,12 @@ class ChannelMessageRouter:
             error_message: Error message to send to user
         """
         try:
-            # Get the channel adapter from connection manager
-            from src.infrastructure.adapters.primary.web.startup.channels import (
-                get_channel_manager,
+            # Get the channel adapter from the pinned generation runtime.
+            from src.infrastructure.plugins.v2.channel_runtime import (
+                current_channel_runtime_v2,
             )
 
-            manager = get_channel_manager()
-            if not manager:
-                logger.warning("[MessageRouter] Channel manager not available for error reply")
-                return
+            channel_runtime = current_channel_runtime_v2()
 
             # Find the connection for this message's channel config
             # Extract channel_config_id from message raw_data
@@ -1973,7 +2023,7 @@ class ChannelMessageRouter:
                 )
                 return
 
-            connection = manager.connections.get(channel_config_id)
+            connection = channel_runtime.connections.get(channel_config_id)
             if not connection or not connection.adapter:
                 logger.warning(
                     "[MessageRouter] Connection not found for error reply: "
@@ -2178,5 +2228,6 @@ async def route_channel_message(message: Message) -> None:
     Args:
         message: The incoming channel message.
     """
-    router = get_channel_message_router()
-    await router.route_message(message)
+    async with pin_generation_v2(current_process_generation_host_v2()):
+        router = get_channel_message_router()
+        await router.route_message(message)

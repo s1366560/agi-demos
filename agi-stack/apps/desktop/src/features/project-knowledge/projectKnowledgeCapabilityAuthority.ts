@@ -2,17 +2,17 @@ import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import {
-  createProjectCommunitiesClient,
+  type ProjectCommunitiesClient,
   PROJECT_COMMUNITIES_LOCAL_REASON,
   PROJECT_COMMUNITIES_ROUTE_ID,
 } from './projectCommunitiesClient';
 import {
-  createProjectEntitiesClient,
+  type ProjectEntitiesClient,
   PROJECT_ENTITIES_LOCAL_REASON,
   PROJECT_ENTITIES_ROUTE_ID,
 } from './projectEntitiesClient';
 import {
-  createProjectGraphClient,
+  type ProjectGraphClient,
   PROJECT_GRAPH_LOCAL_REASON,
   PROJECT_GRAPH_ROUTE_ID,
 } from './projectGraphClient';
@@ -22,12 +22,12 @@ import type {
   ProjectKnowledgeSnapshotBase,
 } from './projectKnowledgeClient';
 import {
-  createProjectMemoriesClient,
+  type ProjectMemoriesClient,
   PROJECT_MEMORIES_LOCAL_REASON,
   PROJECT_MEMORIES_ROUTE_ID,
 } from './projectMemoriesClient';
 import {
-  createProjectTeamClient,
+  type ProjectTeamClient,
   PROJECT_TEAM_LOCAL_REASON,
   PROJECT_TEAM_ROUTE_ID,
 } from './projectTeamClient';
@@ -51,7 +51,6 @@ type CapabilityClient = Pick<
 export type ProjectKnowledgeCapabilityClients = Readonly<
   Record<ProjectKnowledgeCapabilityId, CapabilityClient>
 >;
-
 export type ProjectKnowledgeCapabilityProjection = Readonly<
   Record<ProjectKnowledgeCapabilityId, DesktopCapabilityAvailability>
 >;
@@ -78,14 +77,33 @@ const REASON_PREFIXES: Readonly<Record<ProjectKnowledgeCapabilityId, string>> =
   });
 
 export function createProjectKnowledgeCapabilityClients(
-  config: DesktopRuntimeConfig,
+  projectTeamClient: Pick<ProjectTeamClient, 'load'>,
+  projectMemoriesClient: Pick<ProjectMemoriesClient, 'load'>,
+  projectEntitiesClient: Pick<ProjectEntitiesClient, 'load'>,
+  projectCommunitiesClient: Pick<ProjectCommunitiesClient, 'load'>,
+  projectGraphClient: Pick<ProjectGraphClient, 'load'>,
 ): ProjectKnowledgeCapabilityClients {
+  if (typeof projectTeamClient?.load !== 'function') {
+    throw new Error('desktop_project_team_authority_required');
+  }
+  if (typeof projectMemoriesClient?.load !== 'function') {
+    throw new Error('desktop_project_memories_authority_required');
+  }
+  if (typeof projectEntitiesClient?.load !== 'function') {
+    throw new Error('desktop_project_entities_authority_required');
+  }
+  if (typeof projectGraphClient?.load !== 'function') {
+    throw new Error('desktop_project_graph_authority_required');
+  }
+  if (typeof projectCommunitiesClient?.load !== 'function') {
+    throw new Error('desktop_project_communities_authority_required');
+  }
   return Object.freeze({
-    [PROJECT_TEAM_ROUTE_ID]: createProjectTeamClient(config),
-    [PROJECT_MEMORIES_ROUTE_ID]: createProjectMemoriesClient(config),
-    [PROJECT_ENTITIES_ROUTE_ID]: createProjectEntitiesClient(config),
-    [PROJECT_COMMUNITIES_ROUTE_ID]: createProjectCommunitiesClient(config),
-    [PROJECT_GRAPH_ROUTE_ID]: createProjectGraphClient(config),
+    [PROJECT_TEAM_ROUTE_ID]: projectTeamClient,
+    [PROJECT_MEMORIES_ROUTE_ID]: projectMemoriesClient,
+    [PROJECT_ENTITIES_ROUTE_ID]: projectEntitiesClient,
+    [PROJECT_COMMUNITIES_ROUTE_ID]: projectCommunitiesClient,
+    [PROJECT_GRAPH_ROUTE_ID]: projectGraphClient,
   });
 }
 

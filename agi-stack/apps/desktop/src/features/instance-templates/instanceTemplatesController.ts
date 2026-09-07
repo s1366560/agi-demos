@@ -1,5 +1,5 @@
 import { DesktopApiError } from '../../api/client';
-import { INSTANCE_TEMPLATES_CLOUD_ACTIONS } from './instanceTemplatesCapability';
+import { INSTANCE_TEMPLATES_CLOUD_ACTIONS } from './instanceTemplatesTypes';
 import { InstanceTemplatesUnavailableError } from './instanceTemplatesClient';
 import type {
   InstanceTemplateCreateInput,
@@ -19,7 +19,10 @@ import type {
 export type InstanceTemplatesController = Readonly<{
   getSnapshot(): InstanceTemplatesModel;
   subscribe(listener: () => void): () => void;
-  load(scope: InstanceTemplatesScope, query?: InstanceTemplatesQuery): Promise<void>;
+  load(
+    scope: InstanceTemplatesScope,
+    query?: InstanceTemplatesQuery,
+  ): Promise<void>;
   retry(): Promise<void>;
   setQuery(query: InstanceTemplatesQuery): Promise<void>;
   setFilters(query: InstanceTemplatesQuery): void;
@@ -78,10 +81,7 @@ export function createInstanceTemplatesController({
     requestController = controller;
     return Object.freeze({ revision, controller });
   };
-  const isCurrent = (
-    revision: number,
-    controller: AbortController,
-  ): boolean =>
+  const isCurrent = (revision: number, controller: AbortController): boolean =>
     revision === requestRevision &&
     requestController === controller &&
     !controller.signal.aborted;
@@ -170,7 +170,10 @@ export function createInstanceTemplatesController({
     } catch (error) {
       if (!isCurrent(revision, controller)) throw error;
       requestController = null;
-      const classified = classifyError(error, 'instance_templates_detail_failed');
+      const classified = classifyError(
+        error,
+        'instance_templates_detail_failed',
+      );
       emit({
         ...model,
         selectedTemplate: null,
@@ -205,7 +208,10 @@ export function createInstanceTemplatesController({
     } catch (error) {
       if (!isCurrent(revision, controller)) throw error;
       requestController = null;
-      const classified = classifyError(error, 'instance_templates_mutation_failed');
+      const classified = classifyError(
+        error,
+        'instance_templates_mutation_failed',
+      );
       emit({
         ...model,
         mutationState: mutationState(classified.resourceState),
@@ -259,7 +265,9 @@ export function createInstanceTemplatesController({
           activeScope,
           exactIdentifier(templateId),
           exactIdentifier(newName),
-          { signal },
+          {
+            signal,
+          },
         ),
       ),
     cancel,

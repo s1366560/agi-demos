@@ -28,7 +28,7 @@ class AgentToolBase(ABC):
 
     .. deprecated::
         Subclass ``AgentToolBase`` is deprecated. Use the ``@tool_define``
-        decorator to create new tools. See ``skill_tool.py`` for an example.
+        decorator to create new tools. See ``skill_loader.py`` for an example.
 
     All tools used by the ReAct agent must inherit from this class
     and implement the required methods.

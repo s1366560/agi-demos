@@ -890,6 +890,7 @@ function TimelineFixture({
   return (
     <>
       <AgentTimeline
+        imagePreviewClient={null}
         state={visibleState}
         expandedItems={expandedItems}
         onToggleItem={(toggleItem) =>

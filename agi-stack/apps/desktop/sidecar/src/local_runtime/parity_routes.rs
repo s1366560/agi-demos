@@ -38,8 +38,12 @@ mod tenant_overview_tests;
 mod tenant_projects;
 #[cfg(test)]
 mod tenant_projects_tests;
+#[cfg(test)]
+mod v1_retirement_tests;
 
 const LOCAL_ROUTE_CONTRACT_VERSION: &str = "desktop-local-route-parity-v1";
+const PLUGIN_MARKETPLACE_V2_PATH: &str = "/api/v1/plugin-marketplace";
+const PLUGIN_PROTOCOL_V1_RETIRED_CODE: &str = "plugin_protocol_v1_retired";
 
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
@@ -127,12 +131,24 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
             post(managed_mutation_unavailable),
         )
         .route(
+            "/api/v1/channels/tenants/:tenant_id/plugins",
+            get(retired_managed_plugin_v1_read),
+        )
+        .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/install",
-            post(managed_mutation_unavailable),
+            post(retired_managed_plugin_v1_mutation),
         )
         .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/reload",
-            post(managed_mutation_unavailable),
+            post(retired_managed_plugin_v1_mutation),
+        )
+        .route(
+            "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/enable",
+            post(retired_managed_plugin_v1_mutation),
+        )
+        .route(
+            "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/disable",
+            post(retired_managed_plugin_v1_mutation),
         )
         .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/channel-catalog",
@@ -144,15 +160,15 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         )
         .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/uninstall",
-            post(managed_mutation_unavailable),
+            post(retired_managed_plugin_v1_mutation),
         )
         .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/config-schema",
-            get(managed_read_unavailable),
+            get(retired_managed_plugin_v1_read),
         )
         .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/config",
-            get(managed_read_unavailable).put(managed_mutation_unavailable),
+            get(retired_managed_plugin_v1_read).put(retired_managed_plugin_v1_mutation),
         )
         .route(
             "/api/v1/channels/projects/:project_id/configs",
@@ -182,7 +198,71 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
             "/api/v1/subagents/filesystem/:name/import",
             post(managed_mutation_unavailable),
         )
+        .route(
+            "/api/v1/platform-plugins",
+            get(retired_platform_plugin_v1)
+                .post(retired_platform_plugin_v1)
+                .put(retired_platform_plugin_v1)
+                .patch(retired_platform_plugin_v1)
+                .delete(retired_platform_plugin_v1),
+        )
+        .route(
+            "/api/v1/platform-plugins/*legacy_path",
+            get(retired_platform_plugin_v1)
+                .post(retired_platform_plugin_v1)
+                .put(retired_platform_plugin_v1)
+                .patch(retired_platform_plugin_v1)
+                .delete(retired_platform_plugin_v1),
+        )
         .merge(sandbox_files::router())
+}
+
+async fn retired_managed_plugin_v1_read(
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    uri: OriginalUri,
+) -> LocalJsonResult {
+    ensure_uri_scope(&authenticated, &uri)?;
+    retired_plugin_protocol_v1("Plugin protocol V1 is retired; use the V2 plugin marketplace")
+}
+
+async fn retired_managed_plugin_v1_mutation(
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    uri: OriginalUri,
+) -> LocalJsonResult {
+    ensure_uri_scope(&authenticated, &uri)?;
+    ensure_managed_resource_manager(&authenticated)?;
+    retired_plugin_protocol_v1("Plugin protocol V1 is retired; use the V2 plugin marketplace")
+}
+
+async fn retired_platform_plugin_v1(
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+    uri: OriginalUri,
+) -> LocalJsonResult {
+    let legacy_path = uri
+        .path()
+        .strip_prefix("/api/v1/platform-plugins")
+        .unwrap_or_default()
+        .trim_matches('/');
+    if legacy_path == "v2" || legacy_path.starts_with("v2/") {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({ "detail": "Not Found" })),
+        ));
+    }
+    retired_plugin_protocol_v1("Plugin protocol V1 is retired; use the V2 plugin control plane")
+}
+
+fn retired_plugin_protocol_v1(message: &'static str) -> LocalJsonResult {
+    Err((
+        StatusCode::GONE,
+        Json(json!({
+            "detail": {
+                "code": PLUGIN_PROTOCOL_V1_RETIRED_CODE,
+                "message": message,
+                "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
+            },
+        })),
+    ))
 }
 
 pub(super) async fn managed_mutation_unavailable(

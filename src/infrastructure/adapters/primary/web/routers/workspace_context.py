@@ -1,10 +1,10 @@
+# pyright: reportImportCycles=false
 """Authoritative desktop tenant/project context endpoints."""
 
 from datetime import UTC, datetime
 from typing import Never
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.workspace_context import (
     WorkspaceContextResponse,
@@ -19,11 +19,11 @@ from src.domain.model.auth.workspace_context import (
     WorkspaceContextSwitchRequest,
 )
 from src.infrastructure.adapters.primary.web.dependencies import verify_api_key_dependency
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import APIKey
-from src.infrastructure.adapters.secondary.persistence.sql_desktop_workspace_context_repository import (
-    SqlDesktopWorkspaceContextRepository,
+from src.infrastructure.adapters.primary.web.workspace_context_application_authority_v2 import (
+    WorkspaceContextApplicationAuthorityV2,
+    workspace_context_application_authority_dependency_v2,
 )
+from src.infrastructure.adapters.secondary.persistence.models import APIKey
 
 router = APIRouter(prefix="/api/v1/workspace-context", tags=["workspace-context"])
 
@@ -57,15 +57,20 @@ def _raise_workspace_context_http_error(error: WorkspaceContextError) -> Never:
 
 @router.get("", response_model=WorkspaceContextResponse)
 async def get_workspace_context(
+    workspace_context_application: WorkspaceContextApplicationAuthorityV2 = Depends(
+        workspace_context_application_authority_dependency_v2
+    ),
     api_key: APIKey = Depends(verify_api_key_dependency),
-    db: AsyncSession = Depends(get_db),
 ) -> WorkspaceContextResponse:
-    repository = SqlDesktopWorkspaceContextRepository(db)
+    _ = api_key
     try:
-        access = await repository.get_or_initialize(api_key.user_id, datetime.now(UTC))
+        access = await workspace_context_application.services.context.get_or_initialize(
+            user_id=str(workspace_context_application.api_key.user_id),
+            observed_at=datetime.now(UTC),
+        )
     except WorkspaceContextError as error:
         _raise_workspace_context_http_error(error)
-    await db.commit()
+    await workspace_context_application.db.commit()
     return WorkspaceContextResponse(
         context=_snapshot_response(access.context),
         membership_role=access.membership_role,
@@ -75,14 +80,16 @@ async def get_workspace_context(
 @router.post("/switch", response_model=WorkspaceContextSwitchResponse)
 async def switch_workspace_context(
     body: WorkspaceContextSwitchRequestSchema,
+    workspace_context_application: WorkspaceContextApplicationAuthorityV2 = Depends(
+        workspace_context_application_authority_dependency_v2
+    ),
     api_key: APIKey = Depends(verify_api_key_dependency),
-    db: AsyncSession = Depends(get_db),
 ) -> WorkspaceContextSwitchResponse:
-    repository = SqlDesktopWorkspaceContextRepository(db)
+    _ = api_key
     try:
-        outcome = await repository.switch(
-            api_key.user_id,
-            actor_api_key_id=api_key.id,
+        outcome = await workspace_context_application.services.context.switch(
+            user_id=str(workspace_context_application.api_key.user_id),
+            actor_api_key_id=str(workspace_context_application.api_key.id),
             request=WorkspaceContextSwitchRequest(
                 tenant_id=body.tenant_id,
                 project_id=body.project_id,
@@ -93,7 +100,7 @@ async def switch_workspace_context(
         )
     except WorkspaceContextError as error:
         _raise_workspace_context_http_error(error)
-    await db.commit()
+    await workspace_context_application.db.commit()
     return WorkspaceContextSwitchResponse(
         context=_snapshot_response(outcome.context),
         changed=outcome.changed,

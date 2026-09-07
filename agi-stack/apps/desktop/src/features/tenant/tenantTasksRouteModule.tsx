@@ -7,7 +7,10 @@ import type {
 } from '../navigation/desktopRouteModule';
 import type { DesktopRouteContext } from '../navigation/desktopRouteRegistry';
 import type { TenantTasksScope } from './tenantTasksClient';
-import type { TenantTasksController } from './tenantTasksController';
+import type {
+  TenantTasksController,
+  TenantTasksViewModel,
+} from './tenantTasksController';
 
 const ROUTE_ID = 'tenant-tenant-tasks' as const;
 const LOCAL_POLICY = 'native_equivalent' as const;
@@ -42,7 +45,7 @@ export function createTenantTasksRouteModuleLoader({
       if (!tenantId) {
         return (
           <TenantTasksPage
-            model={unavailableModel('cloud', 'unavailable', 'unavailable')}
+            model={unavailableModel('cloud', 'unavailable', null)}
             controller={inertController}
             onRetry={noopRetry}
           />
@@ -88,7 +91,9 @@ function BoundTenantTasksRoute({
   );
   if (
     binding.scope.tenantId !== context.tenantId ||
-    !nonEmpty(binding.scope.projectId)
+    (binding.scope.authority === 'cloud'
+      ? binding.scope.projectId !== null
+      : !nonEmpty(binding.scope.projectId))
   ) {
     return (
       <Page
@@ -110,12 +115,20 @@ function BoundTenantTasksRoute({
 function unavailableModel(
   authority: TenantTasksScope['authority'],
   tenantId: string,
-  projectId: string,
+  projectId: string | null,
   reasonCode = 'tenant_tasks_route_context_unavailable',
-) {
+): TenantTasksViewModel {
+  const scope: TenantTasksScope =
+    authority === 'cloud'
+      ? Object.freeze({ authority: 'cloud', tenantId, projectId: null })
+      : Object.freeze({
+          authority: 'local',
+          tenantId,
+          projectId: projectId ?? 'unavailable',
+        });
   return Object.freeze({
     state: 'unavailable' as const,
-    scope: Object.freeze({ authority, tenantId, projectId }),
+    scope,
     authority,
     reasonCode,
     retryVisible: false,
@@ -142,7 +155,7 @@ function unavailableModel(
 }
 
 const inertController: TenantTasksController = Object.freeze({
-  getSnapshot: () => unavailableModel('cloud', 'unavailable', 'unavailable'),
+  getSnapshot: () => unavailableModel('cloud', 'unavailable', null),
   subscribe: () => () => {},
   load: async () => {},
   retry: async () => {},
@@ -154,6 +167,6 @@ const inertController: TenantTasksController = Object.freeze({
   stop: () => {},
 });
 
-function nonEmpty(value: string | undefined): string | null {
+function nonEmpty(value: string | null | undefined): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }

@@ -1,0 +1,272 @@
+import type { ReactNode } from 'react';
+
+import { createRoutesFromElements, type RouteObject } from 'react-router-dom';
+
+import {
+  RuntimeV2Error,
+  type RegisteredRendererContributionV2,
+  type RendererContributionKindV2,
+} from '@agistack/plugin-runtime';
+
+import { deriveTopNavigationItems } from '../../config/navigation';
+
+import { createDefaultBusinessRouteElementsV2 } from './webDefaultBusinessRouteElementsV2';
+
+import type {
+  DerivedNavigationItem,
+  NavigationRuntimeContext,
+  TopNavigationContext,
+} from '../../config/navigation';
+import type { UiSlotDefinition } from '../../types/pluginSlots';
+
+export const WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'web.routes.default-business.v1';
+export const WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'web.navigation.default.v1';
+export const WEB_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'web.ui-slots.default.v1';
+export const WEB_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2 =
+  'web.ui-slots.authenticated-shell-surface.v1';
+
+const AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'authenticated_shell_surface',
+    id: 'authenticated-shell',
+    contract: 'ui-builtin:web-authenticated-shell-surface',
+    moduleRef: 'builtin:web-authenticated-shell-surface',
+    permission: 'ui.authenticated-shell',
+    sandbox: true,
+  }),
+]);
+
+interface WebRendererArtifactBaseV2 {
+  readonly id: string;
+  readonly kind: RendererContributionKindV2;
+}
+
+export interface WebRouteArtifactV2 extends WebRendererArtifactBaseV2 {
+  readonly createRouteElements: () => ReactNode;
+  readonly kind: 'route';
+  readonly routeKeys: readonly string[];
+}
+
+export interface WebNavigationArtifactV2 extends WebRendererArtifactBaseV2 {
+  readonly createTopNavigationItems: (
+    context: TopNavigationContext,
+    runtimeContext?: NavigationRuntimeContext
+  ) => readonly DerivedNavigationItem[];
+  readonly kind: 'navigation';
+}
+
+export interface WebUiSlotArtifactV2 extends WebRendererArtifactBaseV2 {
+  readonly kind: 'ui-slot';
+  readonly slotDefinitions: readonly UiSlotDefinition[];
+}
+
+export type WebRendererArtifactV2 =
+  | WebRouteArtifactV2
+  | WebNavigationArtifactV2
+  | WebUiSlotArtifactV2;
+
+const WEB_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, WebRendererArtifactV2>([
+  [
+    WEB_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
+    defineWebUiSlotArtifactV2(
+      WEB_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
+      AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2
+    ),
+  ],
+  [
+    WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2,
+    defineWebRouteArtifactV2(
+      WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2,
+      createDefaultBusinessRouteElementsV2
+    ),
+  ],
+  [
+    WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      createTopNavigationItems: deriveTopNavigationItems,
+      id: WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+    }),
+  ],
+  [
+    WEB_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
+    defineWebUiSlotArtifactV2(WEB_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, []),
+  ],
+]);
+
+function defineWebRouteArtifactV2(
+  id: string,
+  createRouteElements: () => ReactNode
+): WebRouteArtifactV2 {
+  const routeKeys = collectRouteKeysV2(createRoutesFromElements(createRouteElements()), '/');
+  return Object.freeze({
+    createRouteElements,
+    id,
+    kind: 'route',
+    routeKeys: Object.freeze(routeKeys),
+  });
+}
+
+export function defineWebUiSlotArtifactV2(
+  id: string,
+  slotDefinitions: readonly UiSlotDefinition[]
+): WebUiSlotArtifactV2 {
+  const owners = new Set<string>();
+  const definitions = slotDefinitions.map((slot) => {
+    const ownerKey = `${slot.pluginId}/${slot.id}`;
+    if (owners.has(ownerKey)) {
+      throw new RuntimeV2Error(
+        'renderer_ui_slot_conflict',
+        `renderer_ui_slot_conflict:${ownerKey}`
+      );
+    }
+    owners.add(ownerKey);
+    if (!slot.moduleRef.startsWith('builtin:')) {
+      throw new RuntimeV2Error(
+        'renderer_ui_slot_module_ref_invalid',
+        `renderer_ui_slot_module_ref_invalid:${ownerKey}`
+      );
+    }
+    if (!slot.permission.startsWith('ui.')) {
+      throw new RuntimeV2Error(
+        'renderer_ui_slot_permission_invalid',
+        `renderer_ui_slot_permission_invalid:${ownerKey}`
+      );
+    }
+    if (!slot.sandbox) {
+      throw new RuntimeV2Error(
+        'renderer_ui_slot_sandbox_required',
+        `renderer_ui_slot_sandbox_required:${ownerKey}`
+      );
+    }
+    return Object.freeze({ ...slot });
+  });
+  return Object.freeze({
+    id,
+    kind: 'ui-slot',
+    slotDefinitions: Object.freeze(definitions),
+  });
+}
+
+function collectRouteKeysV2(routes: readonly RouteObject[], parentPath: string): string[] {
+  const keys: string[] = [];
+  for (const route of routes) {
+    if (route.index) {
+      keys.push(`route:${parentPath}#index`);
+    } else if (route.path !== undefined) {
+      keys.push(`route:${resolveRoutePathV2(parentPath, route.path)}`);
+    }
+    const childParent =
+      route.index || route.path === undefined
+        ? parentPath
+        : resolveRoutePathV2(parentPath, route.path);
+    if (route.children) keys.push(...collectRouteKeysV2(route.children, childParent));
+  }
+  return keys;
+}
+
+function resolveRoutePathV2(parentPath: string, path: string): string {
+  const combined = path.startsWith('/') ? path : `${parentPath}/${path}`;
+  const normalized = combined.replace(/\/{2,}/g, '/').replace(/\/$/, '');
+  return normalized || '/';
+}
+
+export function validateWebRendererContributionsV2(
+  contributions: readonly RegisteredRendererContributionV2[]
+): void {
+  resolveWebRendererArtifactsV2(contributions);
+}
+
+export function resolveWebRendererArtifactsV2(
+  contributions: readonly RegisteredRendererContributionV2[]
+): readonly WebRendererArtifactV2[] {
+  const artifacts: WebRendererArtifactV2[] = [];
+  const routeOwners = new Map<string, string>();
+  const uiSlotArtifactOwners = new Map<string, string>();
+  const ordered = [...contributions].sort(
+    (left, right) =>
+      left.order - right.order ||
+      `${left.kind}:${left.id}`.localeCompare(`${right.kind}:${right.id}`)
+  );
+
+  for (const contribution of ordered) {
+    for (const artifactRef of artifactRefsV2(contribution)) {
+      const artifact = WEB_RENDERER_ARTIFACT_CATALOG_V2.get(artifactRef);
+      if (!artifact) {
+        throw new RuntimeV2Error(
+          'renderer_artifact_unknown',
+          `renderer_artifact_unknown:${artifactRef}`
+        );
+      }
+      if (artifact.kind !== contribution.kind) {
+        throw new RuntimeV2Error(
+          'renderer_artifact_kind_mismatch',
+          `renderer_artifact_kind_mismatch:${artifactRef}:${contribution.kind}`
+        );
+      }
+      if (artifact.kind === 'route') {
+        validateRouteKeysV2(routeOwners, artifact, contribution);
+      } else if (artifact.kind === 'ui-slot') {
+        validateUiSlotArtifactOwnershipV2(uiSlotArtifactOwners, artifact, contribution);
+      }
+      artifacts.push(artifact);
+    }
+  }
+
+  return Object.freeze(artifacts);
+}
+
+function validateUiSlotArtifactOwnershipV2(
+  owners: Map<string, string>,
+  artifact: WebUiSlotArtifactV2,
+  contribution: RegisteredRendererContributionV2
+): void {
+  const existingOwner = owners.get(artifact.id);
+  if (existingOwner !== undefined) {
+    throw new RuntimeV2Error(
+      'renderer_ui_slot_artifact_conflict',
+      `renderer_ui_slot_artifact_conflict:${artifact.id}:${existingOwner}:${contribution.id}`
+    );
+  }
+  owners.set(artifact.id, contribution.id);
+}
+
+function artifactRefsV2(contribution: RegisteredRendererContributionV2): readonly string[] {
+  const payload = contribution.payload;
+  const keys = Object.keys(payload).sort();
+  const artifactRefs = payload.artifact_refs;
+  if (
+    keys.length !== 2 ||
+    keys[0] !== 'artifact_refs' ||
+    keys[1] !== 'schema_version' ||
+    payload.schema_version !== 1 ||
+    !Array.isArray(artifactRefs) ||
+    artifactRefs.length === 0 ||
+    artifactRefs.some((value) => typeof value !== 'string' || value.length === 0) ||
+    new Set(artifactRefs).size !== artifactRefs.length
+  ) {
+    throw new RuntimeV2Error(
+      'renderer_artifact_payload_invalid',
+      `renderer_artifact_payload_invalid:${contribution.id}`
+    );
+  }
+  return artifactRefs as readonly string[];
+}
+
+function validateRouteKeysV2(
+  owners: Map<string, string>,
+  artifact: WebRouteArtifactV2,
+  contribution: RegisteredRendererContributionV2
+): void {
+  for (const routeKey of artifact.routeKeys) {
+    const existingOwner = owners.get(routeKey);
+    if (existingOwner !== undefined) {
+      throw new RuntimeV2Error(
+        'renderer_route_path_conflict',
+        `renderer_route_path_conflict:${routeKey}:${existingOwner}:${contribution.id}`
+      );
+    }
+    owners.set(routeKey, contribution.id);
+  }
+}

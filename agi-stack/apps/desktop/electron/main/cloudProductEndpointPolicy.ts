@@ -1775,8 +1775,25 @@ function authorizeConversationEndpoint(
       optionalIdentifier(target.searchParams.get('workspace_id')),
     );
   }
+  if (action === 'mode') {
+    const body = request.body;
+    if (
+      request.method !== 'PATCH' || request.mutation !== undefined ||
+      !allowedQueryKeys(target.searchParams, new Set(['project_id']), ['project_id']) ||
+      !body ||
+      Object.keys(body).some((key) =>
+        !['conversation_mode', 'workspace_id', 'linked_workspace_task_id'].includes(key))
+    ) return null;
+    if ('conversation_mode' in body && body.conversation_mode !== null &&
+      !['single_agent', 'multi_agent_shared', 'multi_agent_isolated', 'autonomous']
+        .includes(body.conversation_mode as string)) return null;
+    for (const key of ['workspace_id', 'linked_workspace_task_id']) {
+      if (key in body && body[key] !== null) requiredBodyIdentifier(body, key);
+    }
+    return endpoint('project', null, requiredIdentifier(target.searchParams.get('project_id')), null);
+  }
   if (
-    ['mode', 'config', 'title', 'summary'].includes(action ?? '') &&
+    ['config', 'title', 'summary'].includes(action ?? '') &&
     ((action === 'summary' && request.method === 'POST') ||
       (action !== 'summary' && request.method === 'PATCH')) &&
     allowedQueryKeys(target.searchParams, new Set(['project_id']), ['project_id'])
@@ -1812,17 +1829,26 @@ function authorizeAgentResourceAction(
   target: URL,
   segments: readonly string[],
 ): CloudProductEndpoint | null {
-  if (!noQuery(target)) {
-    if (
-      segments.length === 7 &&
-      segments[4] === 'runs' &&
-      segments[6] === 'changes' &&
-      request.method === 'GET' &&
-      allowedQueryKeys(target.searchParams, new Set(['expected_revision']), ['expected_revision'])
-    ) {
-      requiredIdentifier(segments[5]);
-      return endpoint('project', null, null, null);
+  if (segments.length === 7 && segments[4] === 'runs' &&
+    ['summary', 'changes'].includes(segments[6] ?? '')) {
+    requiredIdentifier(segments[5]);
+    if (request.method !== 'GET' || request.body || request.form || request.mutation ||
+      request.response) return null;
+    if (segments[6] === 'summary') {
+      return noQuery(target) ? endpoint('project', null, null, null) : null;
     }
+    const query = target.searchParams;
+    if (!allowedQueryKeys(query, new Set(['scope', 'turn_id', 'expected_revision']),
+      ['scope', 'expected_revision'])) return null;
+    const scope = query.get('scope');
+    const revision = query.get('expected_revision')!;
+    if (!['turn', 'run', 'session'].includes(scope ?? '') ||
+      !/^[1-9][0-9]*$/u.test(revision) || !Number.isSafeInteger(Number(revision))) return null;
+    if (scope === 'turn' ? !query.has('turn_id') : query.has('turn_id')) return null;
+    if (scope === 'turn') requiredIdentifier(query.get('turn_id'));
+    return endpoint('project', null, null, null);
+  }
+  if (!noQuery(target)) {
     return null;
   }
   if (segments[4] === 'runs' && segments.length >= 6 && segments.length <= 7) {
@@ -1968,6 +1994,12 @@ function authorizeProjectCohort(
   if (segments[3] !== 'projects' || segments.length < 6) return null;
   const projectId = requiredIdentifier(segments[4]);
   const resource = segments[5];
+  if (resource === 'activity') {
+    return segments.length === 7 && segments[6] === 'read-state' && noQuery(target) &&
+      authorizeActivityReadStateRequest(request)
+      ? endpoint('project', null, projectId, null)
+      : null;
+  }
   if (resource === 'my-work') {
     return segments.length === 6 && request.method === 'GET' && noQuery(target)
       ? endpoint('project', null, projectId, null)
@@ -1984,6 +2016,30 @@ function authorizeProjectCohort(
       : null;
   }
   return null;
+}
+
+function authorizeActivityReadStateRequest(request: EndpointRequest): boolean {
+  if (request.response || request.form || request.mutation) return false;
+  if (request.method === 'GET') return request.body === undefined;
+  if (request.method !== 'PUT' || !exactBodyKeys(
+    request.body,
+    new Set(['expected_authority_revision', 'entries']),
+  )) return false;
+  const { expected_authority_revision: revision, entries } = request.body;
+  if (!validSearchInteger(revision, 0, Number.MAX_SAFE_INTEGER) ||
+    !Array.isArray(entries) || entries.length > 500) return false;
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry) ||
+      !exactBodyKeys(entry, new Set(['entry_id', 'entry_revision', 'read_at'])) ||
+      !validSearchText(entry.entry_id, 255) || ids.has(entry.entry_id) ||
+      !validSearchInteger(entry.entry_revision, 0, Number.MAX_SAFE_INTEGER) ||
+      typeof entry.read_at !== 'string' || !Number.isFinite(Date.parse(entry.read_at))) {
+      return false;
+    }
+    ids.add(entry.entry_id);
+  }
+  return true;
 }
 
 function authorizeCronEndpoint(

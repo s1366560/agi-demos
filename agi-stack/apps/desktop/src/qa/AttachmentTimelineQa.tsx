@@ -181,6 +181,7 @@ function AttachmentTimelineQa() {
         <div className="message-scroll">
           <div className="message-stack" data-testid="attachment-timeline">
             <AgentTimeline
+              imagePreviewClient={null}
               state={state}
               expandedItems={{}}
               onToggleItem={() => undefined}

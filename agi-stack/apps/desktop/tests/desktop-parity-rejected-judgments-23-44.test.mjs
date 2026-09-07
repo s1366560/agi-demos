@@ -135,7 +135,7 @@ test("Instance Templates limits APIs to production page callers", () => {
   assert.equal(templates.cloud_status, "unavailable");
   assert.equal(
     templates.cloud_reason_code,
-    "renderer_capability_authority_unobserved",
+    "capability_authority_revision_unavailable",
   );
   const cloudContracts = templates.api_contracts.filter(
     (contract) => contract.surface === "desktop_cloud",
@@ -229,6 +229,22 @@ test("Dead Letter Queue does not claim its unused single-message API", () => {
   assert.ok(
     cloudContracts.every((contract) => contract.authority === "cloud_service"),
   );
+  assert.equal(dlq.cloud_status, "unavailable");
+  assert.equal(
+    dlq.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(dlq.cloud_actions, []);
+  for (const entry of [
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueHttpProjectionV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueOperationContractV2.ts",
+    "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+  ]) {
+    assert.ok(dlq.cloud_entries.includes(entry), `missing ${entry}`);
+  }
+  assert.match(dlq.judgment_rationale, /generation lease/iu);
+  assert.match(dlq.judgment_rationale, /zero-network/iu);
 });
 
 test("Decision Records inspects the selected list row without a detail GET", () => {
@@ -464,6 +480,7 @@ test("Project Blackboard Cloud contract covers every production Canvas tab", () 
   ]);
   assert.deepEqual(contractKeys(blackboard, "desktop_cloud"), [
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority",
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/capabilities",
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives",
     "GET /api/v1/workspaces/{workspace_id}/tasks",
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/execution-diagnostics",
@@ -476,6 +493,12 @@ test("Project Blackboard Cloud contract covers every production Canvas tab", () 
     "GET /api/v1/workspaces/{workspace_id}/topology/nodes",
     "GET /api/v1/workspaces/{workspace_id}/topology/edges",
     "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/mutations",
+  ]);
+  assert.deepEqual(contractKeys(blackboard, "desktop_local"), [
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/capabilities",
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority",
+    "GET /api/v1/workspaces/{workspace_id}/tasks",
+    "GET /api/v1/workspaces/{workspace_id}/plan",
   ]);
   assert.deepEqual(
     permissionActions(blackboard, "desktop_cloud", "workspace_member"),

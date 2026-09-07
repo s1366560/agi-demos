@@ -1,3 +1,4 @@
+import { installResourceOperationFixtureV2 } from './webResourceOperationFixtureV2';
 /**
  * Tests for agentService WebSocket token handling
  *
@@ -54,12 +55,15 @@ class MockWebSocket {
 }
 
 describe('agentService - WebSocket Token Handling', () => {
-  beforeEach(() => {
+  let fixture: ReturnType<typeof installResourceOperationFixtureV2>;
+  beforeEach(async () => {
+    await agentService.disconnect().catch(() => undefined);
+    fixture = installResourceOperationFixtureV2();
     // Clear localStorage before each test
     localStorage.clear();
 
     // Disconnect any existing connection
-    agentService.disconnect();
+    void agentService.disconnect().catch(() => undefined);
 
     // Clear stale connectingPromise from previous rejected connections
     // (source bug: doConnect rejects without clearing connectingPromise)
@@ -74,7 +78,9 @@ describe('agentService - WebSocket Token Handling', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await agentService.disconnect().catch(() => undefined);
+    await fixture.close();
     localStorage.clear();
     vi.unstubAllGlobals();
   });
@@ -97,7 +103,7 @@ describe('agentService - WebSocket Token Handling', () => {
       expect(agentService.getStatus()).toBe('connected');
 
       // Cleanup
-      agentService.disconnect();
+      void agentService.disconnect().catch(() => undefined);
     });
 
     it('should reject legacy token storage (only memstack-auth-storage is supported)', async () => {
@@ -111,12 +117,12 @@ describe('agentService - WebSocket Token Handling', () => {
       await expect(agentService.connect()).rejects.toThrow('No authentication token');
 
       // Cleanup
-      agentService.disconnect();
+      void agentService.disconnect().catch(() => undefined);
     });
 
     it('should fail to connect when no token is available', async () => {
       // Ensure no token is stored and disconnect any existing connection
-      agentService.disconnect();
+      void agentService.disconnect().catch(() => undefined);
       expect(getAuthToken()).toBeNull();
 
       // Connect should fail
@@ -153,7 +159,7 @@ describe('agentService - WebSocket Token Handling', () => {
       expect(capturedProtocols).toEqual(['memstack.auth', expectedToken]);
 
       // Cleanup
-      agentService.disconnect();
+      void agentService.disconnect().catch(() => undefined);
     });
 
     it('should prioritize memstack-auth-storage over legacy token in auth protocols', async () => {
@@ -191,7 +197,7 @@ describe('agentService - WebSocket Token Handling', () => {
       expect(capturedWsUrl).not.toContain(`token=${encodeURIComponent(legacyToken)}`);
 
       // Cleanup
-      agentService.disconnect();
+      void agentService.disconnect().catch(() => undefined);
     });
   });
 
@@ -208,7 +214,7 @@ describe('agentService - WebSocket Token Handling', () => {
       expect(agentService.getStatus()).toBe('connected');
 
       // Disconnect
-      agentService.disconnect();
+      void agentService.disconnect().catch(() => undefined);
       expect(agentService.getStatus()).toBe('disconnected');
 
       // Reconnect should succeed with same token
@@ -216,11 +222,18 @@ describe('agentService - WebSocket Token Handling', () => {
       expect(agentService.getStatus()).toBe('connected');
 
       // Cleanup
-      agentService.disconnect();
+      void agentService.disconnect().catch(() => undefined);
     });
   });
 
   describe('chat()', () => {
+    beforeEach(async () => {
+      localStorage.setItem(
+        'memstack-auth-storage',
+        JSON.stringify({ state: { token: 'protocol-fixture-token' } })
+      );
+      await agentService.connectSession();
+    });
     it('should include preferred_language in send_message payload', async () => {
       const isConnectedSpy = vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
       const sendSpy = vi
@@ -262,6 +275,13 @@ describe('agentService - WebSocket Token Handling', () => {
   });
 
   describe('SubAgent control commands', () => {
+    beforeEach(async () => {
+      localStorage.setItem(
+        'memstack-auth-storage',
+        JSON.stringify({ state: { token: 'protocol-fixture-token' } })
+      );
+      await agentService.connectSession();
+    });
     it('resolves kill_run only after the matching structured acknowledgement', async () => {
       const sendSpy = vi
         .spyOn(agentService as any, 'send')

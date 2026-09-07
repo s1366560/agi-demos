@@ -1,3 +1,5 @@
+import type { WebOperationContextV2 } from '../../plugins/webOperationAdmissionV2';
+import type { LifecycleStateData, SandboxStateData } from './config';
 import type {
   CreateConversationRequest,
   CreateConversationResponse,
@@ -57,12 +59,39 @@ export interface AgentService {
     options?: ListConversationsRequestOptions
   ): Promise<PaginatedConversationsResponse>;
   getConversation(conversationId: string, projectId: string): Promise<Conversation | null>;
-  chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void>;
-  subscribe(conversationId: string, handler: AgentStreamHandler, options?: SubscribeOptions): void;
+  chat(
+    request: ChatRequest,
+    handler: AgentStreamHandler,
+    expected?: WebOperationContextV2
+  ): Promise<void>;
+  subscribe(
+    conversationId: string,
+    handler: AgentStreamHandler,
+    options?: SubscribeOptions,
+    expected?: WebOperationContextV2
+  ): () => void;
   unsubscribe(conversationId: string): void;
   stopChat(conversationId: string): boolean;
   connect(): Promise<void>;
-  disconnect(): void;
+  connectSession(): Promise<WebOperationContextV2>;
+  getOperationContext(): WebOperationContextV2 | undefined;
+  assertSession(context: WebOperationContextV2): void;
+  onRetired(listener: (context: WebOperationContextV2) => void): () => void;
+  subscribeLifecycleState(
+    projectId: string,
+    tenantId: string,
+    callback: (state: LifecycleStateData) => void,
+    expected?: WebOperationContextV2
+  ): () => void;
+  unsubscribeLifecycleState(expected?: { projectId: string; tenantId: string }): void;
+  subscribeSandboxState(
+    projectId: string,
+    tenantId: string,
+    callback: (state: SandboxStateData) => void,
+    expected?: WebOperationContextV2
+  ): () => void;
+  unsubscribeSandboxState(expected?: { projectId: string; tenantId: string }): void;
+  disconnect(): Promise<void>;
   isConnected(): boolean;
   deleteConversation(conversationId: string, projectId: string): Promise<void>;
   getConversationMessages(

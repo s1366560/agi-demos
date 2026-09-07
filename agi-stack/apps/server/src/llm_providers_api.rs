@@ -5353,8 +5353,9 @@ mod tests {
     #[test]
     fn model_catalog_embedded_snapshot_loads_in_python_order() {
         let catalog = ModelCatalog::load_embedded();
-        assert_eq!(catalog.models.len(), 859);
-        assert_eq!(catalog.models[0].name, "claude-3-5-haiku-20241022");
+        // Reproduce against the Python authority with scripts/generate_llm_catalog_golden.py.
+        assert_eq!(catalog.models.len(), 865);
+        assert_eq!(catalog.models[0].name, "claude-fable-5");
     }
 
     #[tokio::test]
@@ -5386,7 +5387,12 @@ mod tests {
 
         let value = serde_json::to_value(
             search_catalog_models(Query(CatalogSearchQuery {
-                q: Some("claude-3-5-haiku-20241022".to_string()),
+                q: Some(
+                    golden["query"]
+                        .as_str()
+                        .expect("golden search query")
+                        .to_owned(),
+                ),
                 provider: Some("anthropic".to_string()),
                 limit: Some(1),
             }))
@@ -5396,7 +5402,25 @@ mod tests {
         )
         .expect("response serializes");
 
+        assert_eq!(
+            value["total"], 1,
+            "current model search must remain a positive fixture"
+        );
         agistack_parity::assert_parity(&golden, &value);
+    }
+
+    #[tokio::test]
+    async fn model_catalog_removed_model_search_returns_empty_results() {
+        let response = search_catalog_models(Query(CatalogSearchQuery {
+            q: Some("claude-3-5-haiku-20241022".to_string()),
+            provider: Some("anthropic".to_string()),
+            limit: Some(1),
+        }))
+        .await
+        .expect("query is valid")
+        .0;
+        assert_eq!(response.total, 0);
+        assert!(response.models.is_empty());
     }
 
     #[tokio::test]

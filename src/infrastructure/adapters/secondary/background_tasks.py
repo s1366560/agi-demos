@@ -5,9 +5,12 @@ This module provides a simple in-memory task queue for tracking long-running ope
 like community rebuilding. For production, consider using Redis or a database-backed queue.
 """
 
+# pyright: reportMissingSuperCall=false, reportPrivateUsage=false
+
 import asyncio
 import logging
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
@@ -71,7 +74,7 @@ class BackgroundTask:
     async def cancel(self) -> None:
         """Cancel the task if it's running."""
         if self._task and not self._task.done():
-            self._task.cancel()
+            _ = self._task.cancel()
             self.status = TaskStatus.CANCELLED
             self.completed_at = datetime.now(UTC)
             self.message = "Task cancelled"
@@ -104,11 +107,14 @@ class TaskManager:
     def start_cleanup(self) -> None:
         """Start background cleanup of completed tasks."""
 
+        if self._cleanup_task is not None and not self._cleanup_task.done():
+            return
+
         async def cleanup_old_tasks() -> None:
             while True:
                 await asyncio.sleep(3600)  # Cleanup every hour
                 now = datetime.now(UTC)
-                to_remove = []
+                to_remove: list[str] = []
                 for task_id, task in self.tasks.items():
                     # Remove tasks completed more than 24 hours ago
                     if (
@@ -124,6 +130,30 @@ class TaskManager:
 
         self._cleanup_task = asyncio.create_task(cleanup_old_tasks())
 
+    async def stop_cleanup(self) -> None:
+        """Stop the manager-owned cleanup effect idempotently."""
+        cleanup_task = self._cleanup_task
+        self._cleanup_task = None
+        if cleanup_task is None:
+            return
+        _ = cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
+
+    async def close(self) -> None:
+        """Dispose cleanup and every still-running task owned by this manager."""
+        await self.stop_cleanup()
+        running = [
+            task
+            for tracked in self.tasks.values()
+            if (task := tracked._task) is not None and not task.done()
+        ]
+        for tracked in self.tasks.values():
+            if tracked._task in running:
+                await tracked.cancel()
+        if running:
+            _ = await asyncio.gather(*running, return_exceptions=True)
+
     def create_task(
         self, task_type: str, func: Callable[..., Any], *args: Any, **kwargs: Any
     ) -> BackgroundTask:
@@ -133,7 +163,9 @@ class TaskManager:
         self.tasks[task_id] = task
         return task
 
-    async def submit_task(self, task_type: str, func: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
+    async def submit_task(
+        self, task_type: str, func: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> str:
         """Submit a task for background execution."""
         task = self.create_task(task_type, func, *args, **kwargs)
         task._task = asyncio.create_task(task.run())
@@ -150,7 +182,3 @@ class TaskManager:
             await task.cancel()
             return True
         return False
-
-
-# Global task manager instance
-task_manager = TaskManager()

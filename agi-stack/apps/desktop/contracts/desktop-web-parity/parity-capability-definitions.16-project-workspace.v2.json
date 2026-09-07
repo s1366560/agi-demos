@@ -64,14 +64,13 @@
       ],
       "permission_requirements": [
         {"surface": "web", "actions": ["view", "inspect-stats", "navigate"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null},
-        {"surface": "desktop_cloud", "actions": ["view", "inspect-stats"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null},
         {"surface": "desktop_local", "actions": ["view"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null}
       ],
       "web_status": "partial",
       "web_reason_code": "web_project_overview_structured_state_contract_partial",
-      "cloud_status": "partial",
-      "cloud_reason_code": "desktop_project_overview_navigation_and_state_contract_partial",
-      "cloud_actions": ["view", "inspect-stats"],
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
+      "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/project/projectOverviewRouteModule.tsx",
@@ -93,7 +92,7 @@
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/project_overview.rs"
       ],
-      "judgment_rationale": "The previous planned verdict is stale. Current production code mounts the native Project Overview route with authenticated project scope and separate Cloud and Local authorities. Web remains partial because production 403, 404, conflict and unavailable responses collapse into a generic load error, stale requests have no explicit stale presentation, and complete structured states remain unproven. Cloud Desktop renders native project details, statistics and recent memories and publishes inspect-stats only after both project and statistics authority succeed, but it lacks the Web navigation contract for memories, memory detail and project settings and still lacks complete empty, conflict and explicit stale states. Local Desktop is a sidecar-native degraded equivalent protected by launch capability, session and project scope; it intentionally exposes timeline-backed recent knowledge with view-only authority and never fabricates cloud graph, quota or collaboration values."
+      "judgment_rationale": "Current production code routes Project Overview reads and capability probes through one generation-pinned V2 authority with authenticated project scope. Web remains partial because production 403, 404, conflict and unavailable responses collapse into a generic load error, stale requests have no explicit stale presentation, and complete structured states remain unproven. Cloud Desktop can load project details, statistics and recent memories under one project lease, but its capability response has no authoritative revision and therefore fails closed as unavailable with no allowed actions. Local Desktop remains a sidecar-native degraded equivalent with a scoped authority revision and view-only authority; it intentionally exposes timeline-backed recent knowledge and never fabricates cloud graph, quota or collaboration values."
     },
     {
       "id": "project-project-workspaces",
@@ -317,20 +316,26 @@
       "cloud_status": "partial",
       "cloud_reason_code": "desktop_project_workspace_lifecycle_partial",
       "cloud_entries": [
-        "agi-stack/apps/desktop/src/App.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx"
+        "agi-stack/apps/desktop/src/App.tsx", "agi-stack/apps/desktop/src/api/client.ts", "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts", "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts", "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesClient.ts",
+        "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesController.ts", "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesPresentationModel.ts", "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesRouteModule.tsx", "agi-stack/apps/desktop/src/features/project-workspaces/ProjectWorkspacesPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesV2Client.ts", "agi-stack/apps/desktop/src/features/project-workspaces/useProjectWorkspacesController.ts", "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts", "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx", "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx", "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.ts", "agi-stack/apps/desktop/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.ts", "agi-stack/apps/desktop/src/plugins/desktopWorkspaceLifecycleContractV2.ts", "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts", "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_workspace_lifecycle_partial",
       "local_deviation": "Local Desktop can list and create project-scoped workspaces and open their native Blackboard. Item update/delete, membership and agent assignment remain structurally unavailable until the sidecar publishes those routes.",
       "local_entries": [
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
+        "agi-stack/apps/desktop/src/App.tsx", "agi-stack/apps/desktop/src/api/client.ts", "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts", "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts", "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesClient.ts",
+        "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesController.ts", "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesPresentationModel.ts", "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesRouteModule.tsx", "agi-stack/apps/desktop/src/features/project-workspaces/ProjectWorkspacesPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-workspaces/projectWorkspacesV2Client.ts", "agi-stack/apps/desktop/src/features/project-workspaces/useProjectWorkspacesController.ts", "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts", "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx", "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx", "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.ts", "agi-stack/apps/desktop/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.ts", "agi-stack/apps/desktop/src/plugins/desktopWorkspaceLifecycleContractV2.ts", "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts", "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts", "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/plan_tool_contract.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/llm_tool_contracts.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/authorized_tool_host.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/execution_profile.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/fan_out_tool_host.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/automation_executor.rs", "agi-stack/crates/core/src/tool_definition.rs", "agi-stack/crates/core/src/ports.rs", "agi-stack/crates/core/src/agent/react.rs", "agi-stack/crates/adapters-http-llm/src/openai.rs"
       ],
-      "judgment_rationale": "The two audited Web project-workspace pages expose list, create, navigation into Blackboard, and a per-workspace progress summary loaded from objectives, a plan snapshot, and tasks as the fallback. Settings, membership and Agent-assignment controls belong to the separate Blackboard route tree and are not attributed to these pages. Cloud Desktop wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls. Workspace update and Agent binding require editor-or-owner authority, while member add, role update, and removal remain owner-only. Each mutation captures tenant/project/workspace scope epoch and context revision, forwards an AbortSignal to the nested Cloud API, and rejects a result after a scope change before updating the projection. Cloud delete is not exposed. The Local sidecar implements nested list/create only, so Local remains partial."
+      "judgment_rationale": "The two audited Web project-workspace pages expose list, create, navigation into Blackboard, and a per-workspace progress summary loaded from objectives, a plan snapshot, and tasks as the fallback. Desktop project-workspace list and create now resolve exclusively through the generation-backed Workspace Catalog and Workspace Lifecycle V2 services: the route and workbench receive an explicit adapter, every operation acquires a project generation lease, and the removed static HTTP client is no longer a fallback authority. The adapter freezes runtime scope and input, forwards the AbortSignal, validates the returned collection and records, keeps an in-flight request pinned to its old generation across HMR, and resolves a new request against the current generation. This cutover does not expand the capability surface. Cloud remains partial and separately wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls; those mutations retain their tenant/project/workspace scope epoch and context revision guards. Cloud delete is not exposed. Local remains partial because the sidecar implements nested list/create only. Both list projections still publish no authoritative snapshot revision, so the observed workbench capability correctly fails closed to capability_authority_revision_unavailable with no promoted action rather than fabricating a revision."
     },
     {
       "id": "project-blackboard-dynamic-project-blackboard",
@@ -427,7 +432,7 @@
         "add-member",
         "remove-member"
       ],
-      "local_actions": ["view", "select-workspace", "review-plan"],
+      "local_actions": [],
       "api_contracts": [
         {
           "surface": "web",
@@ -555,12 +560,8 @@
           "path": "/api/v1/workspaces/{workspace_id}/plan/delivery/regenerate-contract",
           "authority": "web_service"
         },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority",
-          "authority": "cloud_service"
-        },
+        { "surface": "desktop_cloud", "method": "GET", "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority", "authority": "cloud_service" },
+        { "surface": "desktop_cloud", "method": "GET", "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/capabilities", "authority": "cloud_service" },
         {
           "surface": "desktop_cloud",
           "method": "GET",
@@ -633,18 +634,11 @@
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/mutations",
           "authority": "cloud_service"
         },
-        {
-          "surface": "desktop_local",
-          "method": "GET",
-          "path": "/api/v1/workspaces/{workspace_id}/plan",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "native_only",
-          "method": "NONE",
-          "path": "not_applicable:no-native-only-api/project-blackboard-dynamic-project-blackboard",
-          "authority": "none"
-        }
+        { "surface": "desktop_local", "method": "GET", "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/capabilities", "authority": "sidecar" },
+        { "surface": "desktop_local", "method": "GET", "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority", "authority": "sidecar" },
+        { "surface": "desktop_local", "method": "GET", "path": "/api/v1/workspaces/{workspace_id}/tasks", "authority": "sidecar" },
+        { "surface": "desktop_local", "method": "GET", "path": "/api/v1/workspaces/{workspace_id}/plan", "authority": "sidecar" },
+        { "surface": "native_only", "method": "NONE", "path": "not_applicable:no-native-only-api/project-blackboard-dynamic-project-blackboard", "authority": "none" }
       ],
       "permission_requirements": [
         {
@@ -752,20 +746,30 @@
       "cloud_status": "partial",
       "cloud_reason_code": "desktop_blackboard_authority_partial",
       "cloud_entries": [
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationSurfacePrimitives.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/httpWorkspaceCollaborationClient.ts",
-        "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationHttpMutations.ts"
+        "agi-stack/apps/desktop/src/App.tsx", "agi-stack/apps/desktop/src/api/client.ts", "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts", "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts", "agi-stack/apps/desktop/src/features/project-blackboard/projectBlackboardClient.ts",
+        "agi-stack/apps/desktop/src/features/project-blackboard/projectBlackboardController.ts", "agi-stack/apps/desktop/src/features/project-blackboard/projectBlackboardPresentationModel.ts", "agi-stack/apps/desktop/src/features/project-blackboard/projectBlackboardRouteModule.tsx", "agi-stack/apps/desktop/src/features/project-blackboard/ProjectBlackboardPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-blackboard/useProjectBlackboardController.ts", "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts", "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx", "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationSurfacePrimitives.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts", "agi-stack/apps/desktop/src/features/workspace/httpWorkspaceCollaborationClient.ts", "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationCapabilityContract.ts",
+        "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationClient.ts", "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationHttpContract.ts", "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationHttpMutations.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectBlackboardAuthorityModuleV2.ts", "agi-stack/apps/desktop/src/plugins/desktopProjectBlackboardOperationContractV2.ts", "agi-stack/apps/desktop/src/plugins/desktopProjectBlackboardTransportV2.ts", "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts", "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "local_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_workspace_plan_read_only",
-      "local_deviation": "Local Desktop provides the native Blackboard and a sidecar-owned plan snapshot. Outbox retry, stale recovery, replan, reopen and iteration mutations remain unavailable with stable structured capability results.",
+      "local_reason_code": "capability_authority_revision_unavailable",
+      "local_deviation": "Local Desktop has a generation-backed, sidecar-only plan-and-tasks projection and no Cloud fallback. It remains read-only, and because the sidecar response supplies no authoritative snapshot revision, the observed capability fails closed with no promoted actions. Blackboard mutations, outbox retry, stale recovery, replan, reopen and iteration controls remain unavailable.",
       "local_entries": [
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
+        "agi-stack/apps/desktop/src/App.tsx", "agi-stack/apps/desktop/src/api/client.ts", "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts", "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts", "agi-stack/apps/desktop/src/features/project-blackboard/projectBlackboardClient.ts",
+        "agi-stack/apps/desktop/src/features/project-blackboard/projectBlackboardController.ts", "agi-stack/apps/desktop/src/features/project-blackboard/projectBlackboardPresentationModel.ts", "agi-stack/apps/desktop/src/features/project-blackboard/projectBlackboardRouteModule.tsx", "agi-stack/apps/desktop/src/features/project-blackboard/ProjectBlackboardPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-blackboard/useProjectBlackboardController.ts", "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts", "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx", "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationSurfacePrimitives.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts", "agi-stack/apps/desktop/src/features/workspace/httpWorkspaceCollaborationClient.ts", "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationCapabilityContract.ts",
+        "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationClient.ts", "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationHttpContract.ts", "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationHttpMutations.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectBlackboardAuthorityModuleV2.ts", "agi-stack/apps/desktop/src/plugins/desktopProjectBlackboardOperationContractV2.ts", "agi-stack/apps/desktop/src/plugins/desktopProjectBlackboardTransportV2.ts", "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts", "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts", "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/plan_tool_contract.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/llm_tool_contracts.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/authorized_tool_host.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/execution_profile.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/fan_out_tool_host.rs", "agi-stack/apps/desktop/sidecar/src/local_runtime/automation_executor.rs", "agi-stack/crates/core/src/tool_definition.rs", "agi-stack/crates/core/src/ports.rs", "agi-stack/crates/core/src/agent/react.rs", "agi-stack/crates/adapters-http-llm/src/openai.rs"
       ],
-      "judgment_rationale": "Blackboard and the workspace-to-Blackboard redirect form one audited project capability. Web provides execution diagnostics, discussion post and reply operations, outbox retry, replan, reopen, iteration pause/resume/trigger-next, human-review acceptance, pipeline requests, and delivery-contract regeneration. Production snapshot reads explicitly set recover_stale_attempts=false and do not call the recover-stale mutation. Cloud Desktop's single production WorkspaceCollaborationCanvas exposes Goals, Discussion, Status, Collaboration, Members, Genes, Files, Notes, Topology and Settings. Its HTTP client reads objectives, tasks, diagnostics, posts, Agent and member rosters, Genes, files, workspace notes/settings and topology, but it has no replies GET or nested reply data, so list-replies is not Cloud authority. Visible Cloud controls still create replies and other collaboration mutations through the versioned mutation endpoint. Reads require workspace membership, ordinary mutations require editor authority and member changes require owner authority. The Local sidecar implements the plan snapshot only, so Local remains read-only partial."
+      "judgment_rationale": "At c1916dfef, App collaboration, the Project Blackboard route, capability negotiation and workbench probing all resolve through service:desktop-renderer.project-blackboard-authority@1.0.0 under project-scoped generation leases. Escaped UI clients are operations-backed facades that reacquire a lease per call, so no leased transport escapes its operation. Cloud retains its existing partial product surface and canonical workspace revision; the migration neither adds reply reads nor expands permissions or actions. Local remains a sidecar-only plan-and-tasks implementation with no Cloud fallback, but its null authority revision requires the final observed capability to fail closed as unavailable with no actions. These source and contract facts establish renderer authority wiring only, not native Electron QA, globally-ready publication, ACK readiness, release readiness, or V1 retirement."
     }
   ],
   "source_ownership": {

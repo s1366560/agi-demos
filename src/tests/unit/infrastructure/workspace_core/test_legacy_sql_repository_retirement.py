@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from src.configuration.containers.project_container import ProjectContainer
+from src.configuration import containers
+from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
     LegacyWorkspaceAgentRepository,
 )
@@ -26,6 +29,8 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_reposi
 from src.infrastructure.workspace_core.legacy_runtime import (
     LegacyWorkspaceRuntimeRetiredError,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[5]
 
 
 @pytest.mark.unit
@@ -52,27 +57,66 @@ def test_legacy_sql_workspace_repositories_fail_closed_without_touching_session(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(
-    "factory_name",
-    [
+def test_retired_project_container_module_and_facades_are_removed() -> None:
+    assert not (REPO_ROOT / "src/configuration/containers/project_container.py").exists()
+    assert "ProjectContainer" not in vars(containers)
+    assert "topology_repository" not in vars(DIContainer)
+
+
+@pytest.mark.unit
+def test_topology_static_service_facades_are_removed_after_workspace_core_cutover() -> None:
+    assert "topology_service" not in vars(DIContainer)
+
+
+@pytest.mark.unit
+def test_workspace_message_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    retired_facades = {
+        "workspace_message_repository",
+        "workspace_message_service",
+    }
+
+    assert retired_facades.isdisjoint(vars(DIContainer))
+
+
+@pytest.mark.unit
+def test_workspace_task_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    retired_facades = {
+        "workspace_task_repository",
+        "workspace_task_session_attempt_repository",
+        "workspace_task_session_attempt_service",
+    }
+
+    assert retired_facades.isdisjoint(vars(DIContainer))
+
+
+@pytest.mark.unit
+def test_workspace_lifecycle_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    retired_facades = {
+        "workspace_repository",
+        "workspace_member_repository",
+        "workspace_agent_repository",
+    }
+
+    assert retired_facades.isdisjoint(vars(DIContainer))
+
+
+@pytest.mark.unit
+def test_cyber_objective_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    assert "cyber_objective_repository" not in vars(DIContainer)
+
+
+@pytest.mark.unit
+def test_cyber_gene_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    assert "cyber_gene_repository" not in vars(DIContainer)
+
+
+@pytest.mark.unit
+def test_blackboard_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    retired_facades = {
         "blackboard_repository",
         "blackboard_service",
         "blackboard_file_repository",
         "blackboard_file_service",
-        "topology_repository",
-        "topology_service",
-        "cyber_objective_repository",
-        "cyber_gene_repository",
-    ],
-)
-def test_project_container_workspace_factories_fail_closed_without_sql(
-    factory_name: str,
-) -> None:
-    class SessionTrap:
-        def __getattribute__(self, name: str) -> object:
-            raise AssertionError(f"legacy container accessed SQL session attribute {name}")
+    }
 
-    container = ProjectContainer(db=SessionTrap())  # type: ignore[arg-type]
-
-    with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
-        getattr(container, factory_name)()
+    assert retired_facades.isdisjoint(vars(DIContainer))

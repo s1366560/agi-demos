@@ -25,7 +25,7 @@
 .PHONY: reranker-build reranker-up reranker-down reranker-restart reranker-logs reranker-status reranker-test
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 .PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
-.PHONY: plugin-template-build plugin-feishu-validate plugin-build-all
+.PHONY: plugin-build-all plugin-v2-contract-gate
 .PHONY: desktop desktop-bundle desktop-bundle-smoke desktop-electron-frontend run-desktop run-desktop-electron
 .PHONY: helm-build-images helm-lint helm-package helm-install-dev helm-test-dev helm-verify-dev helm-uninstall-dev
 
@@ -42,7 +42,7 @@ COMPOSE_RERANKER ?= docker-compose.reranker.yml
 COMPOSE_CMD ?= docker compose -f $(COMPOSE_BASE)
 COMPOSE_ALL ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_ACTOR)
 COMPOSE_RAY_DEV_CMD ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_RAY_DEV)
-COMPOSE_DRONE ?= docker compose -f $(COMPOSE_BASE) -f .memstack/plugins/drone/docker-compose.yml
+COMPOSE_DRONE ?= docker compose -f $(COMPOSE_BASE) -f config/drone/docker-compose.yml
 COMPOSE_RERANKER_CMD ?= COMPOSE_IGNORE_ORPHANS=True docker compose -f $(COMPOSE_RERANKER)
 OBS_SHARED_SERVICES ?= postgres redis minio minio-setup
 OBS_STACK_SERVICES ?= langfuse-db-init langfuse-storage-setup langfuse-clickhouse langfuse-web langfuse-worker prometheus grafana otel-collector jaeger
@@ -104,8 +104,8 @@ help: ## Show this help message
 	@echo "  check     - Run format + lint + test"
 	@echo "  desktop   - Build installable desktop client"
 	@echo "  guard-refresh-select - Check wrapped execute(select(...)) usage"
-	@echo "  plugin-template-build - Build standalone plugin template wheel"
-	@echo "  plugin-feishu-validate - Validate local Feishu plugin discovery"
+	@echo "  plugin-build-all - Validate protocol-v2 plugin artifacts"
+	@echo "  plugin-v2-contract-gate - Verify generated V2 catalogs and contract completeness"
 	@echo ""
 	@echo " Database:"
 	@echo "  db-init   - Initialize database"
@@ -167,8 +167,8 @@ help-full: ## Show all available commands
 	@echo "  test-web         - Web tests"
 	@echo "  test-e2e         - End-to-end tests"
 	@echo "  test-coverage    - Tests with coverage"
-	@echo "  plugin-template-build - Build standalone plugin template wheel"
-	@echo "  plugin-feishu-validate - Validate local Feishu plugin discovery"
+	@echo "  plugin-build-all - Validate protocol-v2 plugin artifacts"
+	@echo "  plugin-v2-contract-gate - Verify generated V2 catalogs and contract completeness"
 	@echo ""
 	@echo " Code Quality:"
 	@echo "  format           - Format all code"
@@ -608,7 +608,7 @@ format-web: ## Format TypeScript code
 lint: lint-backend lint-web ## Lint all code
 	@echo " All code linted"
 
-lint-backend: ## Lint Python code
+lint-backend: plugin-v2-contract-gate ## Lint Python code
 	@echo " Linting Python code..."
 	uv run python scripts/check_refresh_select_execute.py
 	uv run python scripts/check-i18n-gettext.py
@@ -647,6 +647,11 @@ check: format lint test ## Run all quality checks
 # =============================================================================
 # Code Generation
 # =============================================================================
+
+plugin-v2-contract-gate: ## Verify generated V2 catalogs and contract completeness
+	@echo " Verifying protocol-v2 plugin contracts..."
+	uv run python scripts/check_plugin_contract_completeness_v2.py
+	@echo " Protocol-v2 plugin contracts verified"
 
 generate-event-types: ## Generate TypeScript event types from Python
 	@echo " Generating TypeScript event types..."
@@ -1309,21 +1314,8 @@ sdk-build: ## Build SDK package
 	cd sdk/python && python -m build
 	@echo " SDK built"
 
-plugin-template-build: ## Build standalone plugin template wheel
-	@echo "  Building plugin template package..."
-	@mkdir -p .tmp/plugin-template-wheels
-	uv build examples/plugins/memstack-plugin-template --wheel --out-dir .tmp/plugin-template-wheels
-	@ls -1 .tmp/plugin-template-wheels/*.whl
-	@echo " Plugin template wheel build complete"
-
-plugin-feishu-validate: ## Validate local Feishu plugin discovery
-	@echo "  Validating local Feishu plugin directory..."
-	@test -f .memstack/plugins/feishu/plugin.py
-	@uv run python -c "from pathlib import Path; from src.infrastructure.agent.plugins.discovery import discover_plugins; from src.infrastructure.agent.plugins.state_store import PluginStateStore; store=PluginStateStore(base_path=Path.cwd()); discovered, diagnostics = discover_plugins(state_store=store, include_builtins=False, include_entrypoints=False, include_local_paths=True); names=[item.name for item in discovered]; assert 'feishu-channel-plugin' in names, 'feishu-channel-plugin not discovered from local plugins'; assert all(item.code != 'plugin_discovery_failed' for item in diagnostics); print('Local Feishu plugin discovery verified')"
-	@echo " Local Feishu plugin validation complete"
-
-plugin-build-all: plugin-template-build plugin-feishu-validate ## Build/validate plugin artifacts
-	@echo " Plugin build/validation complete"
+plugin-build-all: plugin-v2-contract-gate ## Validate protocol-v2 plugin artifacts
+	@echo " Protocol-v2 plugin artifact validation complete"
 
 # =============================================================================
 # CI/CD Support

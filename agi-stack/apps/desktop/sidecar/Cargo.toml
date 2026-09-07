@@ -21,6 +21,7 @@ croner = "3.0.1"
 futures-util = "0.3"
 getrandom = "0.2"
 hmac = "0.12"
+http-body = "1"
 portable-pty = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rusqlite = { version = "0.32", features = ["backup", "bundled"] }
@@ -33,6 +34,7 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+thiserror.workspace = true
 url = "2"
 uuid = { version = "1", features = ["v4", "v5"] }
 zeroize = "1"
@@ -48,6 +50,7 @@ agistack-adapters-wasmtime = { path = "../../../crates/adapters-wasmtime" }
 agistack-plugin-host = { path = "../../../crates/plugin-host" }
 
 [dev-dependencies]
+serde_jcs = "0.1"
 tokio = { version = "1", features = ["test-util"] }
 tower = { version = "0.5", features = ["util"] }
 
@@ -66,6 +69,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
+    "Win32_System_IO",
     "Win32_System_SystemServices",
     "Win32_System_Threading",
 ] }

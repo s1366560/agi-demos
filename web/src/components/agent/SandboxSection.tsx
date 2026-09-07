@@ -4,12 +4,17 @@
  * Provides Terminal and Remote Desktop functionality in a modern tabbed interface.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useSyncExternalStore, useLayoutEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Terminal, Monitor, Play, Square, RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '@/plugins/webOperationAdmissionV2';
 
 import {
   LazyTabs,
@@ -24,6 +29,7 @@ import { useSandboxStore } from '../../stores/sandbox';
 
 import { RemoteDesktopViewer } from './sandbox/RemoteDesktopViewer';
 import { SandboxTerminal } from './sandbox/SandboxTerminal';
+import { terminalScopeKeyV2 } from './sandbox/terminalScopeV2';
 
 import type { DesktopStatus, TerminalStatus } from '../../types/agent';
 
@@ -35,15 +41,52 @@ interface SandboxSectionProps {
 }
 
 // Terminal Tab Content
-const TerminalTab: React.FC<{
+interface TerminalTabProps {
   sandboxId: string;
   projectId?: string | undefined;
   terminalStatus: TerminalStatus | null;
   onStartTerminal: () => Promise<void>;
   isTerminalLoading: boolean;
-}> = ({ sandboxId, projectId, terminalStatus, onStartTerminal, isTerminalLoading }) => {
+}
+const TerminalTab: React.FC<TerminalTabProps> = (props) => {
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
+  if (!availability.available) return null;
+  return (
+    <TerminalTabSession
+      key={terminalScopeKeyV2(availability.owner, props.projectId, props.sandboxId)}
+      {...props}
+      owner={availability.owner}
+    />
+  );
+};
+const TerminalTabSession: React.FC<TerminalTabProps & { owner: object }> = ({
+  sandboxId,
+  projectId,
+  terminalStatus,
+  onStartTerminal,
+  isTerminalLoading,
+  owner,
+}) => {
   const { t } = useTranslation();
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+  const attempt = useRef(0);
+  const active = useRef(false);
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  const current = () =>
+    active.current &&
+    attempt.current === reconnectNonce &&
+    getWebOperationAvailabilityV2().available &&
+    getWebOperationAvailabilityV2().owner === owner;
   const [isConnected, setIsConnected] = useState(false);
   // Use ref to track auto-start attempt (avoids setState in effect)
   const autoStartAttemptedRef = useRef(false);
@@ -59,7 +102,9 @@ const TerminalTab: React.FC<{
       sandboxId
     ) {
       autoStartAttemptedRef.current = true;
-      void onStartTerminal();
+      void onStartTerminal().catch(() => {
+        /* The scoped store owns the visible start error. */
+      });
     }
   }, [terminalStatus?.running, isTerminalLoading, isConnected, sandboxId, onStartTerminal]);
 
@@ -78,7 +123,9 @@ const TerminalTab: React.FC<{
                 type="primary"
                 icon={<Play size={16} />}
                 onClick={() => {
-                  void onStartTerminal();
+                  void onStartTerminal().catch(() => {
+                    /* The scoped store owns the visible start error. */
+                  });
                 }}
                 loading={isTerminalLoading}
               >
@@ -115,9 +162,14 @@ const TerminalTab: React.FC<{
               aria-label={t('components.sandboxSection.reconnect')}
               className="text-slate-400 hover:text-white"
               onClick={() => {
+                if (!current()) return;
+                attempt.current++;
+                setReconnectNonce(attempt.current);
                 setSessionId(null);
                 setIsConnected(false);
-                void onStartTerminal();
+                void onStartTerminal().catch(() => {
+                  /* The scoped store owns the visible start error. */
+                });
               }}
             />
           </LazyTooltip>
@@ -129,12 +181,14 @@ const TerminalTab: React.FC<{
         <SandboxTerminal
           sandboxId={sandboxId}
           projectId={projectId}
-          sessionId={sessionId || undefined}
+          reconnectNonce={reconnectNonce}
           onConnect={(id) => {
+            if (!current()) return;
             setSessionId(id);
             setIsConnected(true);
           }}
           onDisconnect={() => {
+            if (!current()) return;
             setIsConnected(false);
           }}
           height="100%"
@@ -187,7 +241,7 @@ const DesktopTab: React.FC<{
     };
   }, [isFullscreen]);
 
-  if (!desktopStatus?.running) {
+  if (!desktopStatus?.running || !projectId) {
     return (
       <div className="h-full flex items-center justify-center bg-slate-900">
         <LazyEmpty

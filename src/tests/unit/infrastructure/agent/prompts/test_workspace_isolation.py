@@ -9,6 +9,7 @@ bound to a workspace turn.
 from __future__ import annotations
 
 from pathlib import Path
+from types import MappingProxyType
 from typing import ClassVar
 from unittest.mock import AsyncMock, patch
 
@@ -26,6 +27,7 @@ from src.infrastructure.agent.prompts.manager import (
 from src.infrastructure.agent.workspace.runtime_role_contract import (
     is_workspace_conversation,
 )
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
 
 
 class _Tool:
@@ -37,6 +39,13 @@ class _PromptTool:
     def __init__(self, name: str, description: str) -> None:
         self.name = name
         self.description = description
+
+
+def _turn_tool_set() -> ToolSetV2:
+    return ToolSetV2(
+        tools=MappingProxyType({"read": object()}),
+        definitions=(_PromptTool("read", "read file"),),
+    )
 
 
 class _ProjectWorkspaceManager:
@@ -69,6 +78,15 @@ class _ProjectPromptAgent(PromptMixin):
         selection_context: object | None = None,
     ) -> tuple[dict[str, object], list[_PromptTool]]:
         return {}, [_PromptTool("read", "read file")]
+
+
+async def _build_prompt_through_v2_provider(
+    *,
+    manager: SystemPromptManager,
+    context: PromptContext,
+    subagent: object | None,
+) -> str:
+    return await manager.build_system_prompt(context=context, subagent=subagent)
 
 
 pytestmark = pytest.mark.unit
@@ -203,6 +221,15 @@ class TestSystemPromptIsolation:
 
 
 class TestPromptMixinWorkspaceContextIsolation:
+    @pytest.fixture(autouse=True)
+    def _use_v2_prompt_provider(self):
+        with patch(
+            "src.infrastructure.agent.core.react_agent_prompt_mixin."
+            "_build_system_prompt_from_runtime_v2",
+            new=_build_prompt_through_v2_provider,
+        ):
+            yield
+
     @pytest.mark.asyncio
     async def test_project_chat_with_workspace_manager_omits_dynamic_workspace_context(
         self,
@@ -220,6 +247,7 @@ class TestPromptMixinWorkspaceContextIsolation:
                 project_id="project-1",
                 tenant_id="tenant-1",
                 is_workspace_conversation=False,
+                tool_set=_turn_tool_set(),
             )
 
         build_context.assert_not_awaited()
@@ -241,6 +269,7 @@ class TestPromptMixinWorkspaceContextIsolation:
                 project_id="project-1",
                 tenant_id="tenant-1",
                 is_workspace_conversation=True,
+                tool_set=_turn_tool_set(),
             )
 
         build_context.assert_awaited_once_with("project-1", "tenant-1")

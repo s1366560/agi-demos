@@ -27,6 +27,10 @@ export default defineConfig({
         __dirname,
         '../agi-stack/packages/plugin-slots/src/index.ts'
       ),
+      '@agistack/plugin-runtime': path.resolve(
+        __dirname,
+        '../agi-stack/packages/plugin-runtime/src/index.ts'
+      ),
     },
   },
   server: {

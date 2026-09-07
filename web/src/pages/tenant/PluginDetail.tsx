@@ -1,781 +1,328 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import {
   Alert,
   App,
   Button,
-  Collapse,
+  Descriptions,
   Empty,
-  Form,
-  Modal,
   Popconfirm,
   Space,
+  Table,
   Tag,
   Typography,
 } from 'antd';
-import { ArrowLeft, Package, RefreshCw, Settings } from 'lucide-react';
+import { ArrowLeft, Package, RefreshCw } from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
 
-import { channelService } from '@/services/channelService';
-
-import { SECRET_UNCHANGED_SENTINEL } from '@/utils/channelConfigSanitizers';
+import { pluginMarketplaceService } from '@/services/pluginMarketplaceService';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
-import { LoadingOverlay } from '@/components/common/Spinner';
 
-import { renderSchemaFormFields, sanitizePluginConfigValues } from './pluginSchemaForm';
-
-import type { PluginConfigSchema, PluginDiagnostic, RuntimePlugin } from '@/types/channel';
+import type {
+  MarketplacePackageCatalogEntry,
+  MarketplacePackageDetail,
+} from '@/types/pluginMarketplace';
 
 const { Title, Text } = Typography;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const hasEntries = (value: unknown): boolean =>
-  Array.isArray(value) ? value.length > 0 : isRecord(value) && Object.keys(value).length > 0;
-
-const formatJson = (value: unknown): string => JSON.stringify(value, null, 2);
-
-const getStringField = (value: Record<string, unknown>, field: string): string | null => {
-  const rawValue = value[field];
-  return typeof rawValue === 'string' && rawValue.trim() ? rawValue : null;
-};
-
-const humanizeKey = (value: string): string =>
-  value
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
-
-interface DetailItemProps {
-  label: string;
-  children: React.ReactNode;
-}
-
-const DetailItem: React.FC<DetailItemProps> = ({ label, children }) => (
-  <div className="min-w-0 border-b border-slate-100 py-3 last:border-b-0 dark:border-slate-800">
-    <div className="text-xs font-medium uppercase text-slate-500">{label}</div>
-    <div className="mt-1 min-w-0 text-sm text-slate-900 dark:text-slate-100">{children}</div>
-  </div>
-);
-
-interface JsonBlockProps {
-  value: unknown;
-  maxHeightClassName?: string;
-}
-
-const JsonBlock: React.FC<JsonBlockProps> = ({ value, maxHeightClassName = 'max-h-[320px]' }) => (
-  <pre
-    className={`${maxHeightClassName} overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100`}
-  >
-    {formatJson(value)}
-  </pre>
-);
-
-interface SkillDefinitionListProps {
-  items: Array<Record<string, unknown>> | undefined;
-  emptyLabel: string;
-}
-
-const SkillDefinitionList: React.FC<SkillDefinitionListProps> = ({ items, emptyLabel }) => {
-  if (!items || items.length === 0) {
-    return <Text type="secondary">{emptyLabel}</Text>;
-  }
-
-  return (
-    <div className="space-y-4">
-      {items.map((item, index) => {
-        const name = getStringField(item, 'name') ?? `skill-${index + 1}`;
-        const path = getStringField(item, 'path');
-        const content = getStringField(item, 'content');
-
-        return (
-          <div key={`${name}:${path ?? index}`} className="space-y-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Tag color="blue">{name}</Tag>
-              {path ? (
-                <Text code className="break-all">
-                  {path}
-                </Text>
-              ) : null}
-            </div>
-            {content ? (
-              <pre className="max-h-[520px] overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100">
-                {content}
-              </pre>
-            ) : (
-              <JsonBlock value={item} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-interface DetailSectionProps {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-}
-
-const DetailSection: React.FC<DetailSectionProps> = ({ title, children, className }) => (
-  <section
-    className={`min-w-0 rounded-md border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-surface-dark ${className ?? ''}`}
-  >
-    <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-      <Title level={5} style={{ margin: 0 }} className="text-sm">
-        {title}
-      </Title>
-    </div>
-    <div className="p-4">{children}</div>
-  </section>
-);
-
-interface SummaryItemProps {
-  label: string;
-  children: React.ReactNode;
-}
-
-const SummaryItem: React.FC<SummaryItemProps> = ({ label, children }) => (
-  <div className="min-w-0 bg-white px-4 py-3 dark:bg-surface-dark">
-    <div className="text-xs font-medium uppercase text-slate-500">{label}</div>
-    <div className="mt-1 min-w-0 text-sm font-medium text-slate-900 dark:text-slate-100">
-      {children}
-    </div>
-  </div>
-);
-
-interface SectionPairProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-const SectionPair: React.FC<SectionPairProps> = ({ title, children }) => (
-  <div className="min-w-0">
-    <Text strong className="text-xs uppercase text-slate-500">
-      {title}
-    </Text>
-    <div className="mt-2 min-w-0">{children}</div>
-  </div>
-);
-
-const renderTags = (items: string[] | undefined, emptyLabel: string): React.ReactNode => {
-  if (!items || items.length === 0) {
-    return <Text type="secondary">{emptyLabel}</Text>;
-  }
-
-  return (
-    <Space wrap size={[4, 4]}>
-      {items.map((item) => (
-        <Tag key={item}>{item}</Tag>
-      ))}
-    </Space>
-  );
-};
+const jsonView = (value: Record<string, unknown>) => JSON.stringify(value, null, 2);
 
 export const PluginDetail: React.FC = () => {
-  const { t } = useTranslation();
-  const { message } = App.useApp();
-  const navigate = useNavigate();
-  const { tenantId: urlTenantId, pluginName: encodedPluginName } = useParams<{
+  const { tenantId: urlTenantId, pluginName } = useParams<{
     tenantId?: string | undefined;
     pluginName?: string | undefined;
   }>();
-  const [searchParams] = useSearchParams();
+  const { t } = useTranslation();
+  const { message } = App.useApp();
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const tenantId = urlTenantId || currentTenant?.id || null;
-  const pluginName = encodedPluginName ? decodeURIComponent(encodedPluginName) : null;
-  const projectId = searchParams.get('projectId');
-
-  const [plugin, setPlugin] = useState<RuntimePlugin | null>(null);
-  const [diagnostics, setDiagnostics] = useState<PluginDiagnostic[]>([]);
-  const [schema, setSchema] = useState<PluginConfigSchema | null>(null);
+  const [detail, setDetail] = useState<MarketplacePackageDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [schemaError, setSchemaError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [actionKey, setActionKey] = useState<string | null>(null);
-  const [configModalOpen, setConfigModalOpen] = useState(false);
-  const [configLoading, setConfigLoading] = useState(false);
-  const [configForm] = Form.useForm<Record<string, unknown>>();
+  const requestIdRef = useRef(0);
 
-  const backPath = useMemo(() => {
-    const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
-    return tenantId ? `/tenant/${tenantId}/plugins${query}` : '/tenant/plugins';
-  }, [projectId, tenantId]);
-
-  const loadPlugin = useCallback(async () => {
-    if (!tenantId || !pluginName) return;
+  const loadPackage = useCallback(async () => {
+    const requestedPluginName = pluginName;
+    const requestId = ++requestIdRef.current;
+    if (!requestedPluginName) {
+      setDetail(null);
+      return;
+    }
 
     setLoading(true);
-    setLoadError(null);
-    setSchemaError(null);
     try {
-      const pluginList = await channelService.listTenantPlugins(tenantId);
-      const nextPlugin =
-        pluginList.items.find((item) => item.name === pluginName) ??
-        pluginList.items.find((item) => item.manifest_id === pluginName) ??
-        null;
-
-      setPlugin(nextPlugin);
-      setDiagnostics(
-        pluginList.diagnostics.filter((item) => !nextPlugin || item.plugin_name === nextPlugin.name)
+      const nextDetail = await pluginMarketplaceService.getPackage(requestedPluginName, {
+        includeRevoked: true,
+      });
+      if (requestIdRef.current !== requestId) return;
+      setDetail(nextDetail);
+      setError(null);
+    } catch (loadError) {
+      if (requestIdRef.current !== requestId) return;
+      setDetail(null);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : t('tenant.pluginHub.messages.loadPluginsFailed')
       );
-
-      if (nextPlugin?.schema_supported) {
-        try {
-          const nextSchema = await channelService.getTenantPluginConfigSchema(
-            tenantId,
-            nextPlugin.name
-          );
-          setSchema(nextSchema);
-        } catch (error) {
-          setSchema(null);
-          setSchemaError(
-            error instanceof Error
-              ? error.message
-              : t('tenant.pluginHub.pluginDetail.schemaLoadFailed')
-          );
-        }
-      } else {
-        setSchema(null);
-      }
-    } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : t('tenant.pluginHub.messages.loadPluginsFailed')
-      );
-      setPlugin(null);
-      setDiagnostics([]);
-      setSchema(null);
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === requestId) {
+        setLoading(false);
+      }
     }
-  }, [pluginName, tenantId, t]);
+  }, [pluginName, t]);
 
   useEffect(() => {
-    void loadPlugin();
-  }, [loadPlugin]);
+    void loadPackage();
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, [loadPackage]);
 
-  const handleToggleEnabled = useCallback(async () => {
-    if (!tenantId || !plugin) return;
-    const enabling = !plugin.enabled;
-    setActionKey(enabling ? 'enable' : 'disable');
-    try {
-      if (enabling) {
-        await channelService.enableTenantPlugin(tenantId, plugin.name);
-      } else {
-        await channelService.disableTenantPlugin(tenantId, plugin.name);
+  const handleUninstall = useCallback(
+    async (entry: MarketplacePackageCatalogEntry) => {
+      if (!tenantId) return;
+      const nextActionKey = `${entry.plugin_id}:${entry.version}`;
+      setActionKey(nextActionKey);
+      try {
+        await pluginMarketplaceService.uninstallPackage(entry.plugin_id, {
+          tenant_id: tenantId,
+          version: entry.version,
+        });
+        message.success(
+          t('tenant.pluginHub.messages.pluginUninstalled', {
+            name: entry.plugin_id,
+            version: entry.version,
+          })
+        );
+        await loadPackage();
+      } catch (uninstallError) {
+        message.error(
+          uninstallError instanceof Error
+            ? uninstallError.message
+            : t('tenant.pluginHub.messages.pluginUninstallFailed')
+        );
+      } finally {
+        setActionKey((current) => (current === nextActionKey ? null : current));
       }
-      message.success(
-        enabling
-          ? t('tenant.pluginHub.messages.pluginEnabled', { name: plugin.name })
-          : t('tenant.pluginHub.messages.pluginDisabled', { name: plugin.name })
-      );
-      await loadPlugin();
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t('tenant.pluginHub.messages.pluginActionFailed')
-      );
-    } finally {
-      setActionKey(null);
-    }
-  }, [loadPlugin, message, plugin, t, tenantId]);
-
-  const handleUninstall = useCallback(async () => {
-    if (!tenantId || !plugin) return;
-    setActionKey('uninstall');
-    try {
-      const response = await channelService.uninstallTenantPlugin(tenantId, plugin.name);
-      message.success(response.message);
-      void navigate(backPath);
-    } catch (error) {
-      message.error(
-        error instanceof Error
-          ? error.message
-          : t('tenant.pluginHub.messages.pluginUninstallFailed')
-      );
-    } finally {
-      setActionKey(null);
-    }
-  }, [backPath, message, navigate, plugin, t, tenantId]);
-
-  const handleOpenConfigure = useCallback(async () => {
-    if (!tenantId || !plugin || !plugin.schema_supported) return;
-    setConfigModalOpen(true);
-    setConfigLoading(true);
-    configForm.resetFields();
-    try {
-      const [nextSchema, configRecord] = await Promise.all([
-        schema ?? channelService.getTenantPluginConfigSchema(tenantId, plugin.name),
-        channelService.getTenantPluginConfig(tenantId, plugin.name),
-      ]);
-      if (!schema) {
-        setSchema(nextSchema);
-      }
-      configForm.setFieldsValue({
-        config: {
-          ...(nextSchema.defaults || {}),
-          ...configRecord.config,
-        },
-      });
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t('tenant.pluginHub.messages.loadSchemaFailed')
-      );
-      setConfigModalOpen(false);
-    } finally {
-      setConfigLoading(false);
-    }
-  }, [configForm, message, plugin, schema, t, tenantId]);
-
-  const handleSaveConfig = useCallback(async () => {
-    if (!tenantId || !plugin || !schema?.schema_supported) return;
-    try {
-      const values = await configForm.validateFields();
-      const rawConfig = isRecord(values.config) ? values.config : {};
-      const config = sanitizePluginConfigValues(
-        rawConfig,
-        new Set(schema.secret_paths),
-        new Set(Object.keys(schema.config_schema?.properties || {}))
-      );
-      setActionKey('config');
-      await channelService.updateTenantPluginConfig(tenantId, plugin.name, { config });
-      message.success(t('tenant.pluginHub.configModal.updateSuccess'));
-      setConfigModalOpen(false);
-      configForm.resetFields();
-      await loadPlugin();
-    } catch (error) {
-      if (error instanceof Error) {
-        message.error(error.message);
-      }
-    } finally {
-      setActionKey((current) => (current === 'config' ? null : current));
-    }
-  }, [configForm, loadPlugin, message, plugin, schema, t, tenantId]);
-
-  const configFormFields = useMemo(
-    () =>
-      renderSchemaFormFields({
-        schemaSupported: schema?.schema_supported ?? false,
-        properties: schema?.config_schema?.properties ?? {},
-        requiredFields: schema?.config_schema?.required ?? [],
-        uiHints: schema?.config_ui_hints ?? {},
-        secretPaths: schema?.secret_paths ?? [],
-        resolveFormName: (fieldName) => ['config', fieldName],
-        isRequiredField: (sensitive) => !sensitive,
-        resolveSecretPlaceholder: () =>
-          t('tenant.pluginHub.configModal.leaveUnchanged', {
-            sentinel: SECRET_UNCHANGED_SENTINEL,
-          }),
-        t,
-      }),
-    [schema, t]
+    },
+    [loadPackage, message, tenantId, t]
   );
 
-  const declaredCapabilities = useMemo(
+  const columns = useMemo(
     () => [
       {
-        key: 'channel_types',
-        label: t('tenant.pluginHub.channelsList.channels'),
-        value: plugin?.channel_types,
+        title: t('tenant.pluginHub.pluginDetail.version'),
+        dataIndex: 'version',
+        key: 'version',
       },
       {
-        key: 'providers',
-        label: t('tenant.pluginHub.pluginDetail.providers'),
-        value: plugin?.providers,
+        title: t('tenant.pluginHub.pluginDetail.publisher'),
+        dataIndex: 'publisher',
+        key: 'publisher',
       },
       {
-        key: 'skills',
-        label: t('tenant.pluginHub.pluginsList.capabilitySkills'),
-        value: plugin?.skills,
+        title: t('tenant.pluginHub.pluginDetail.desiredState'),
+        dataIndex: 'install_status',
+        key: 'install_status',
+        render: (status: string) => (
+          <Tag color={status === 'approved' ? 'success' : 'default'}>{status}</Tag>
+        ),
       },
       {
-        key: 'manifest_channels',
-        label: t('tenant.pluginHub.pluginDetail.manifestChannels'),
-        value: plugin?.channels,
+        title: t('tenant.pluginHub.pluginDetail.securityScan'),
+        dataIndex: 'security_scan_status',
+        key: 'security_scan_status',
+        render: (status: string) => (
+          <Tag color={status === 'passed' ? 'success' : 'warning'}>{status}</Tag>
+        ),
+      },
+      {
+        title: t('tenant.pluginHub.channelsList.actions'),
+        key: 'actions',
+        render: (_: unknown, entry: MarketplacePackageCatalogEntry) => (
+          <Popconfirm
+            title={t('tenant.pluginHub.pluginsList.confirmUninstallNamed', {
+              name: entry.plugin_id,
+            })}
+            description={t('tenant.pluginHub.pluginsList.uninstallDescriptionV2')}
+            onConfirm={() => {
+              void handleUninstall(entry);
+            }}
+            okText={t('tenant.pluginHub.pluginsList.uninstall')}
+            okButtonProps={{ danger: true }}
+            disabled={entry.revoked || entry.install_status === 'uninstalled'}
+          >
+            <Button
+              danger
+              size="small"
+              disabled={entry.revoked || entry.install_status === 'uninstalled'}
+              loading={actionKey === `${entry.plugin_id}:${entry.version}`}
+            >
+              {t('tenant.pluginHub.pluginsList.uninstall')}
+            </Button>
+          </Popconfirm>
+        ),
       },
     ],
-    [plugin, t]
+    [actionKey, handleUninstall, t]
   );
 
-  const skillDefinitionCount = plugin?.skill_definitions?.length ?? 0;
-  const toolDefinitionCount = plugin?.tool_definitions?.length ?? 0;
+  const versions = detail?.versions ?? [];
+  const primaryVersion = versions[0];
+  const backPath = tenantId ? `/tenant/${tenantId}/plugins` : '/';
 
-  if (!tenantId || !pluginName) {
-    return <Empty description={t('tenant.pluginHub.missingTenantContext')} />;
+  if (!tenantId) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Empty description={t('tenant.pluginHub.missingTenantContext')} />
+      </div>
+    );
   }
 
   return (
     <div className="mx-auto h-full w-full max-w-full space-y-4 p-4 md:p-6">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-surface-dark">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-surface-dark">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-slate-900">
-              <Package size={20} className="text-slate-700 dark:text-slate-200" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <Package size={20} className="text-primary" />
             </div>
             <div className="min-w-0">
               <Link
                 to={backPath}
-                className="mb-1 inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="mb-1 inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-primary"
               >
-                <ArrowLeft size={16} aria-hidden="true" />
+                <ArrowLeft size={16} />
                 {t('tenant.pluginHub.pluginDetail.back')}
               </Link>
-              <Title level={1} style={{ margin: 0 }} className="break-all">
+              <Title level={3} className="!m-0 break-all">
                 {pluginName}
               </Title>
               <Text type="secondary">{t('tenant.pluginHub.pluginDetail.subtitle')}</Text>
             </div>
           </div>
-          <Space wrap>
-            <Button
-              icon={<RefreshCw size={16} />}
-              loading={loading}
-              onClick={() => {
-                void loadPlugin();
-              }}
-            >
-              {t('tenant.pluginHub.pluginsList.reload')}
-            </Button>
-            {plugin?.schema_supported ? (
-              <Button
-                icon={<Settings size={16} />}
-                loading={configLoading}
-                onClick={() => {
-                  void handleOpenConfigure();
-                }}
-              >
-                {t('tenant.pluginHub.pluginsList.configure', 'Configure')}
-              </Button>
-            ) : null}
-            {plugin ? (
-              plugin.enabled ? (
-                <Button
-                  loading={actionKey === 'disable'}
-                  onClick={() => {
-                    void handleToggleEnabled();
-                  }}
-                >
-                  {t('tenant.pluginHub.pluginsList.disable')}
-                </Button>
-              ) : (
-                <Button
-                  type="primary"
-                  ghost
-                  loading={actionKey === 'enable'}
-                  onClick={() => {
-                    void handleToggleEnabled();
-                  }}
-                >
-                  {t('tenant.pluginHub.pluginsList.enable')}
-                </Button>
-              )
-            ) : null}
-            {plugin?.package ? (
-              <Popconfirm
-                title={t('tenant.pluginHub.pluginsList.confirmUninstallNamed', {
-                  name: plugin.name,
-                })}
-                description={t('tenant.pluginHub.pluginsList.uninstallDescription')}
-                onConfirm={() => {
-                  void handleUninstall();
-                }}
-                okText={t('tenant.pluginHub.pluginsList.uninstall')}
-                okButtonProps={{ danger: true }}
-              >
-                <Button danger loading={actionKey === 'uninstall'}>
-                  {t('tenant.pluginHub.pluginsList.uninstall')}
-                </Button>
-              </Popconfirm>
-            ) : null}
-          </Space>
+          <Button
+            icon={<RefreshCw size={16} />}
+            loading={loading}
+            onClick={() => {
+              void loadPackage();
+            }}
+          >
+            {t('tenant.pluginHub.pluginsList.reload')}
+          </Button>
         </div>
       </section>
 
-      {loading && !plugin ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-surface-dark">
-          <SkeletonLoader type="form" />
+      {error ? (
+        <Alert
+          type="error"
+          showIcon
+          title={t('tenant.pluginHub.messages.loadPluginsFailed')}
+          description={error}
+          action={
+            <Button
+              onClick={() => {
+                void loadPackage();
+              }}
+            >
+              {t('common.retry')}
+            </Button>
+          }
+        />
+      ) : null}
+
+      {loading && !primaryVersion ? <SkeletonLoader type="table" /> : null}
+
+      {!loading && !error && !primaryVersion ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-surface-dark">
+          <Empty description={t('tenant.pluginHub.pluginDetail.notFound')} />
         </section>
-      ) : (
-        <LoadingOverlay spinning={loading}>
-          {!plugin ? (
-            <section className="rounded-lg border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-surface-dark">
-              {loadError && !loading ? (
-                <Alert
-                  type="error"
-                  showIcon
-                  title={t('tenant.pluginHub.messages.loadPluginsFailed')}
-                  description={loadError}
-                  action={
-                    <Button
-                      onClick={() => {
-                        void loadPlugin();
-                      }}
-                    >
-                      {t('common.retry')}
-                    </Button>
-                  }
-                />
-              ) : (
-                !loading && <Empty description={t('tenant.pluginHub.pluginDetail.notFound')} />
-              )}
-            </section>
-          ) : (
-            <div className="space-y-4">
-              <section className="grid overflow-hidden rounded-md border border-slate-200 bg-slate-200 shadow-sm dark:border-slate-800 dark:bg-slate-800 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                <SummaryItem label={t('tenant.pluginHub.pluginsList.source')}>
-                  <Tag>{plugin.source}</Tag>
-                </SummaryItem>
-                <SummaryItem label={t('tenant.pluginHub.channelsList.status')}>
-                  {plugin.enabled ? (
-                    <Tag color="success">{t('common.status.enabled')}</Tag>
-                  ) : (
-                    <Tag>{t('tenant.pluginHub.pluginsList.disabled')}</Tag>
-                  )}
-                </SummaryItem>
-                <SummaryItem label={t('tenant.pluginHub.pluginDetail.version')}>
-                  {plugin.version || t('tenant.pluginHub.pluginDetail.notDeclared')}
-                </SummaryItem>
-                <SummaryItem label={t('tenant.pluginHub.pluginDetail.kind')}>
-                  {plugin.kind || t('tenant.pluginHub.pluginDetail.notDeclared')}
-                </SummaryItem>
-                <SummaryItem label={t('tenant.pluginHub.pluginsList.capabilitySkills')}>
-                  {skillDefinitionCount}
-                </SummaryItem>
-                <SummaryItem label={t('tenant.pluginHub.pluginsList.capabilityTools')}>
-                  {toolDefinitionCount}
-                </SummaryItem>
-              </section>
+      ) : null}
 
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-                <main className="min-w-0 space-y-4">
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <DetailSection title={t('tenant.pluginHub.pluginDetail.overview')}>
-                      <div className="grid gap-x-6 md:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
-                        <DetailItem label={t('tenant.pluginHub.pluginDetail.package')}>
-                          {plugin.package || t('tenant.pluginHub.pluginsList.local')}
-                        </DetailItem>
-                        <DetailItem label={t('tenant.pluginHub.pluginDetail.manifestId')}>
-                          {plugin.manifest_id || t('tenant.pluginHub.pluginDetail.notDeclared')}
-                        </DetailItem>
-                        <DetailItem label={t('tenant.pluginHub.pluginDetail.manifestPath')}>
-                          <Text code className="break-all">
-                            {plugin.manifest_path || t('tenant.pluginHub.pluginDetail.notDeclared')}
-                          </Text>
-                        </DetailItem>
-                        <DetailItem label={t('tenant.pluginHub.schemaSupported')}>
-                          {plugin.schema_supported ? (
-                            <Tag color="success">{t('tenant.pluginHub.schemaSupported')}</Tag>
-                          ) : (
-                            <Tag>{t('tenant.pluginHub.pluginDetail.notSupported')}</Tag>
-                          )}
-                        </DetailItem>
-                      </div>
-                    </DetailSection>
-
-                    <DetailSection title={t('tenant.pluginHub.pluginDetail.declaredCapabilities')}>
-                      <div className="grid gap-x-6 md:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
-                        {declaredCapabilities.map((item) => (
-                          <DetailItem key={item.key} label={item.label}>
-                            {renderTags(item.value, t('tenant.pluginHub.pluginDetail.none'))}
-                          </DetailItem>
-                        ))}
-                      </div>
-                    </DetailSection>
-                  </div>
-
-                  <DetailSection title={t('tenant.pluginHub.pluginDetail.contracts')}>
-                    {hasEntries(plugin.contracts) ? (
-                      <div className="grid gap-x-6 md:grid-cols-2">
-                        {Object.entries(plugin.contracts ?? {}).map(([key, values]) => (
-                          <DetailItem key={key} label={humanizeKey(key)}>
-                            {renderTags(values, t('tenant.pluginHub.pluginDetail.none'))}
-                          </DetailItem>
-                        ))}
-                      </div>
-                    ) : (
-                      <Text type="secondary">
-                        {t('tenant.pluginHub.pluginsList.noCapabilities')}
-                      </Text>
-                    )}
-                  </DetailSection>
-
-                  <DetailSection
-                    title={t('tenant.pluginHub.pluginDetail.builtinSkills')}
-                    className="overflow-hidden"
-                  >
-                    <SkillDefinitionList
-                      items={plugin.skill_definitions}
-                      emptyLabel={t('tenant.pluginHub.pluginDetail.none')}
-                    />
-                  </DetailSection>
-
-                  <DetailSection title={t('tenant.pluginHub.pluginDetail.toolDefinitions')}>
-                    {hasEntries(plugin.tool_definitions) ? (
-                      <JsonBlock
-                        value={plugin.tool_definitions}
-                        maxHeightClassName="max-h-[460px]"
-                      />
-                    ) : (
-                      <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                    )}
-                  </DetailSection>
-
-                  <DetailSection title={t('tenant.pluginHub.pluginDetail.commandsAndHooks')}>
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.commandAliases')}>
-                        {hasEntries(plugin.command_aliases) ? (
-                          <JsonBlock value={plugin.command_aliases} />
-                        ) : (
-                          <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                        )}
-                      </SectionPair>
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.hookMetadata')}>
-                        {hasEntries(plugin.hook_metadata) ? (
-                          <JsonBlock value={plugin.hook_metadata} />
-                        ) : (
-                          <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                        )}
-                      </SectionPair>
-                    </div>
-                  </DetailSection>
-
-                  <Collapse
-                    className="rounded-md border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-surface-dark"
-                    bordered={false}
-                    items={[
-                      {
-                        key: 'raw',
-                        label: (
-                          <Text strong>{t('tenant.pluginHub.pluginDetail.rawRuntimeRecord')}</Text>
-                        ),
-                        children: <JsonBlock value={plugin} maxHeightClassName="max-h-[560px]" />,
-                      },
-                    ]}
-                  />
-                </main>
-
-                <aside className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:self-start">
-                  <DetailSection title={t('tenant.pluginHub.pluginDetail.configuration')}>
-                    {schemaError ? (
-                      <Alert type="warning" showIcon title={schemaError} className="mb-3" />
-                    ) : null}
-                    <div className="space-y-4">
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.secretPaths')}>
-                        {renderTags(schema?.secret_paths, t('tenant.pluginHub.pluginDetail.none'))}
-                      </SectionPair>
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.defaults')}>
-                        {hasEntries(schema?.defaults) ? (
-                          <JsonBlock value={schema?.defaults} maxHeightClassName="max-h-[220px]" />
-                        ) : (
-                          <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                        )}
-                      </SectionPair>
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.configSchema')}>
-                        {hasEntries(schema?.config_schema ?? plugin.config_schema) ? (
-                          <JsonBlock
-                            value={schema?.config_schema ?? plugin.config_schema}
-                            maxHeightClassName="max-h-[260px]"
-                          />
-                        ) : (
-                          <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                        )}
-                      </SectionPair>
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.configUiHints')}>
-                        {hasEntries(schema?.config_ui_hints ?? plugin.config_ui_hints) ? (
-                          <JsonBlock
-                            value={schema?.config_ui_hints ?? plugin.config_ui_hints}
-                            maxHeightClassName="max-h-[220px]"
-                          />
-                        ) : (
-                          <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                        )}
-                      </SectionPair>
-                    </div>
-                  </DetailSection>
-
-                  <DetailSection title={t('tenant.pluginHub.pluginDetail.metadata')}>
-                    <div className="space-y-4">
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.activation')}>
-                        {hasEntries(plugin.activation) ? (
-                          <JsonBlock value={plugin.activation} maxHeightClassName="max-h-[220px]" />
-                        ) : (
-                          <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                        )}
-                      </SectionPair>
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.toolMetadata')}>
-                        {hasEntries(plugin.tool_metadata) ? (
-                          <JsonBlock
-                            value={plugin.tool_metadata}
-                            maxHeightClassName="max-h-[220px]"
-                          />
-                        ) : (
-                          <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                        )}
-                      </SectionPair>
-                      <SectionPair title={t('tenant.pluginHub.pluginDetail.envVars')}>
-                        {hasEntries(plugin.env_vars) ? (
-                          <JsonBlock value={plugin.env_vars} maxHeightClassName="max-h-[260px]" />
-                        ) : (
-                          <Text type="secondary">{t('tenant.pluginHub.pluginDetail.none')}</Text>
-                        )}
-                      </SectionPair>
-                    </div>
-                  </DetailSection>
-
-                  {diagnostics.length > 0 ? (
-                    <DetailSection title={t('tenant.pluginHub.pluginDetail.diagnostics')}>
-                      <div className="space-y-2">
-                        {diagnostics.map((diagnostic) => (
-                          <Alert
-                            key={`${diagnostic.plugin_name}:${diagnostic.code}`}
-                            type={diagnostic.level === 'error' ? 'error' : 'warning'}
-                            showIcon
-                            title={`${diagnostic.code}: ${diagnostic.message}`}
-                          />
-                        ))}
-                      </div>
-                    </DetailSection>
+      {primaryVersion ? (
+        <>
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-surface-dark">
+            <Title level={5} className="!mt-0">
+              {t('tenant.pluginHub.pluginDetail.overview')}
+            </Title>
+            <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
+              <Descriptions.Item label={t('tenant.pluginHub.pluginDetail.version')}>
+                {primaryVersion.version}
+              </Descriptions.Item>
+              <Descriptions.Item label={t('tenant.pluginHub.pluginDetail.publisher')}>
+                {primaryVersion.publisher}
+              </Descriptions.Item>
+              <Descriptions.Item label={t('tenant.pluginHub.pluginDetail.artifactSource')}>
+                {`${primaryVersion.artifact_registry}/${primaryVersion.artifact_repository}`}
+              </Descriptions.Item>
+              <Descriptions.Item label={t('tenant.pluginHub.pluginDetail.artifactDigest')}>
+                <Text code copyable>
+                  {primaryVersion.artifact_digest}
+                </Text>
+              </Descriptions.Item>
+              <Descriptions.Item label={t('tenant.pluginHub.pluginDetail.securityScan')}>
+                <Tag
+                  color={primaryVersion.security_scan_status === 'passed' ? 'success' : 'warning'}
+                >
+                  {primaryVersion.security_scan_status}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label={t('tenant.pluginHub.pluginDetail.desiredState')}>
+                <Space>
+                  <Tag color={primaryVersion.install_status === 'approved' ? 'success' : 'default'}>
+                    {primaryVersion.install_status}
+                  </Tag>
+                  {primaryVersion.revoked ? (
+                    <Tag color="error">{t('tenant.pluginHub.pluginDetail.revoked')}</Tag>
                   ) : null}
-                </aside>
-              </div>
-            </div>
-          )}
-        </LoadingOverlay>
-      )}
+                </Space>
+              </Descriptions.Item>
+            </Descriptions>
+          </section>
 
-      <Modal
-        open={configModalOpen}
-        title={t('tenant.pluginHub.pluginConfigModal.title', {
-          name: plugin?.name ?? pluginName,
-        })}
-        onCancel={() => {
-          setConfigModalOpen(false);
-          configForm.resetFields();
-        }}
-        onOk={() => {
-          void handleSaveConfig();
-        }}
-        confirmLoading={actionKey === 'config'}
-        width={720}
-        destroyOnHidden
-      >
-        <Form form={configForm} layout="vertical">
-          {configLoading ? (
-            <SkeletonLoader type="form" />
-          ) : schema?.schema_supported ? (
-            configFormFields
-          ) : (
-            <Empty description={t('tenant.pluginHub.pluginConfigModal.noConfig')} />
-          )}
-        </Form>
-      </Modal>
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-surface-dark">
+            <Title level={5} className="!mt-0">
+              {t('tenant.pluginHub.pluginDetail.versions')}
+            </Title>
+            <Table
+              dataSource={versions}
+              columns={columns}
+              rowKey={(entry) => `${entry.plugin_id}:${entry.version}`}
+              pagination={false}
+              scroll={{ x: 'max-content' }}
+            />
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-3">
+            {[
+              ['bundleManifest', primaryVersion.manifest],
+              ['provenance', primaryVersion.provenance],
+              ['signature', primaryVersion.signature],
+            ].map(([label, value]) => (
+              <div
+                key={label as string}
+                className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-surface-dark"
+              >
+                <Title level={5} className="!mt-0">
+                  {t(`tenant.pluginHub.pluginDetail.${label as string}`)}
+                </Title>
+                <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-xs text-slate-100">
+                  {jsonView(value as Record<string, unknown>)}
+                </pre>
+              </div>
+            ))}
+          </section>
+        </>
+      ) : null}
     </div>
   );
 };
+
+export default PluginDetail;

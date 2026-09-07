@@ -8,7 +8,6 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,26 +26,27 @@ from src.domain.model.agent.session_policy import SessionPolicy
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 from src.domain.model.auth.user import User
+from src.infrastructure.adapters.primary.web.agent_definition_management_http_application_authority_v2 import (
+    AgentDefinitionManagementHttpApplicationAuthorityV2,
+    agent_definition_management_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     get_current_user_tenant,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
-from src.infrastructure.adapters.secondary.persistence.sql_acp_external_agent_config_repository import (
-    ACPExternalAgentConfigRepository,
-)
 from src.infrastructure.agent.tools._agent_definition_policy import (
     normalize_new_agent_a2a,
     normalize_updated_agent_a2a,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_definition_management_services import (
+    AgentDefinitionManagementServiceProtocolV2,
+)
 
 from .access import require_tenant_access
-from .utils import get_container_with_db
 
 logger = logging.getLogger(__name__)
 
@@ -159,35 +159,27 @@ async def _get_selected_definition_tenant_id(
     return selected_tenant_id
 
 
-async def _ensure_project_definition_access(
-    db: AsyncSession,
+async def _require_project_access_v2(
+    service: AgentDefinitionManagementServiceProtocolV2,
     *,
     current_user: User,
     tenant_id: str,
     project_id: str,
 ) -> None:
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject.id)
-            .join(Project, UserProject.project_id == Project.id)
-            .where(
-                and_(
-                    UserProject.user_id == current_user.id,
-                    UserProject.project_id == project_id,
-                    Project.tenant_id == tenant_id,
-                )
-            )
-        )
+    has_access = await service.has_project_access(
+        user_id=str(current_user.id),
+        tenant_id=tenant_id,
+        project_id=project_id,
     )
-    if result.scalar_one_or_none() is None:
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied"),
         )
 
 
-async def _ensure_existing_definition_access(
-    db: AsyncSession,
+async def _require_existing_definition_access_v2(
+    service: AgentDefinitionManagementServiceProtocolV2,
     *,
     current_user: User,
     tenant_id: str,
@@ -195,16 +187,16 @@ async def _ensure_existing_definition_access(
 ) -> None:
     if agent.project_id is None:
         return
-    await _ensure_project_definition_access(
-        db,
+    await _require_project_access_v2(
+        service,
         current_user=current_user,
         tenant_id=tenant_id,
         project_id=agent.project_id,
     )
 
 
-async def _validate_execution_backend(
-    db: AsyncSession,
+async def _validate_execution_backend_v2(
+    service: AgentDefinitionManagementServiceProtocolV2,
     *,
     tenant_id: str,
     execution_backend: object,
@@ -219,42 +211,21 @@ async def _validate_execution_backend(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Invalid ACP external agent selection"),
         )
-    row = await ACPExternalAgentConfigRepository(db).get_by_tenant_and_key(
-        tenant_id,
-        agent_key,
+    enabled = await service.external_agent_enabled(
+        tenant_id=tenant_id,
+        agent_key=agent_key,
     )
-    if row is None:
+    if enabled is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Invalid ACP external agent selection"),
         )
-    if not row.enabled:
+    if not enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("ACP external agent is disabled"),
         )
     return dict(backend)
-
-
-async def _accessible_definition_project_ids(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    tenant_id: str,
-) -> set[str]:
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject.project_id)
-            .join(Project, UserProject.project_id == Project.id)
-            .where(
-                and_(
-                    UserProject.user_id == current_user.id,
-                    Project.tenant_id == tenant_id,
-                )
-            )
-        )
-    )
-    return {str(project_id) for project_id in result.scalars().all()}
 
 
 def _filter_agents_by_project_access(
@@ -274,19 +245,25 @@ async def create_definition(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_definition_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    definition_authority: AgentDefinitionManagementHttpApplicationAuthorityV2 = Depends(
+        agent_definition_management_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
+        db = definition_authority.db
+        service = definition_authority.service
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
         if body.project_id is not None:
-            await _ensure_project_definition_access(
-                db,
-                current_user=current_user,
+            has_access = await service.has_project_access(
+                user_id=str(current_user.id),
                 tenant_id=tenant_id,
                 project_id=body.project_id,
             )
-        container = get_container_with_db(request, db)
-        orchestrator = container.agent_orchestrator()
+            if not has_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=_("Access denied"),
+                )
 
         ws_config = (
             WorkspaceConfig.from_dict(body.workspace_config) if body.workspace_config else None
@@ -301,8 +278,8 @@ async def create_definition(
         )
         spawn_policy = Agent._spawn_policy_from_dict(body.spawn_policy)
         tool_policy = Agent._tool_policy_from_dict(body.tool_policy)
-        execution_backend = await _validate_execution_backend(
-            db,
+        execution_backend = await _validate_execution_backend_v2(
+            service,
             tenant_id=tenant_id,
             execution_backend=body.execution_backend,
         )
@@ -348,8 +325,8 @@ async def create_definition(
             tool_policy=tool_policy,
         )
 
-        created = await orchestrator.create_agent(agent)
-        return cast(dict[str, Any], created.to_dict())
+        created = await service.create_agent(agent)
+        return created.to_dict()
 
     except ValueError as e:
         status_code = 409 if "already exists" in str(e) else 400
@@ -391,9 +368,13 @@ async def list_definitions(  # noqa: PLR0913
     include_total: bool = False,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_definition_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    definition_authority: AgentDefinitionManagementHttpApplicationAuthorityV2 = Depends(
+        agent_definition_management_http_application_authority_dependency_v2
+    ),
 ) -> list[dict[str, Any]] | DefinitionListResponse:
     try:
+        db = definition_authority.db
+        service = definition_authority.service
         await require_tenant_access(db, current_user, tenant_id)
         if scope not in {None, "all", "tenant"}:
             raise HTTPException(
@@ -409,17 +390,19 @@ async def list_definitions(  # noqa: PLR0913
         safe_limit = max(limit, 0)
         safe_offset = max(offset, 0)
         if project_id:
-            await _ensure_project_definition_access(
-                db,
-                current_user=current_user,
+            has_access = await service.has_project_access(
+                user_id=str(current_user.id),
                 tenant_id=tenant_id,
                 project_id=project_id,
             )
-        container = get_container_with_db(request, db)
-        registry = container.agent_registry()
+            if not has_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=_("Access denied"),
+                )
 
         if project_id:
-            agents = await registry.list_by_project(
+            agents = await service.list_by_project(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 enabled_only=enabled_only,
@@ -430,7 +413,7 @@ async def list_definitions(  # noqa: PLR0913
                 sort=sort,
             )
             total = (
-                await registry.count_by_project(
+                await service.count_by_project(
                     project_id=project_id,
                     tenant_id=tenant_id,
                     enabled_only=enabled_only,
@@ -444,12 +427,11 @@ async def list_definitions(  # noqa: PLR0913
             if scope == "tenant":
                 accessible_project_ids: set[str] = set()
             else:
-                accessible_project_ids = await _accessible_definition_project_ids(
-                    db,
-                    current_user=current_user,
+                accessible_project_ids = await service.accessible_project_ids(
+                    user_id=str(current_user.id),
                     tenant_id=tenant_id,
                 )
-            agents = await registry.list_by_tenant(
+            agents = await service.list_by_tenant(
                 tenant_id=tenant_id,
                 enabled_only=enabled_only,
                 limit=safe_limit,
@@ -461,7 +443,7 @@ async def list_definitions(  # noqa: PLR0913
             )
             agents = _filter_agents_by_project_access(agents, accessible_project_ids)
             total = (
-                await registry.count_by_tenant(
+                await service.count_by_tenant(
                     tenant_id=tenant_id,
                     enabled_only=enabled_only,
                     project_ids=accessible_project_ids,
@@ -502,14 +484,16 @@ async def get_definition(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_definition_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    definition_authority: AgentDefinitionManagementHttpApplicationAuthorityV2 = Depends(
+        agent_definition_management_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
+        db = definition_authority.db
+        service = definition_authority.service
         await require_tenant_access(db, current_user, tenant_id)
-        container = get_container_with_db(request, db)
-        registry = container.agent_registry()
 
-        agent = await registry.get_by_id(definition_id, tenant_id=tenant_id)
+        agent = await service.get_by_id(definition_id, tenant_id=tenant_id)
         if agent is None:
             raise HTTPException(
                 status_code=404,
@@ -518,14 +502,14 @@ async def get_definition(
 
         if agent.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
-        await _ensure_existing_definition_access(
-            db,
+        await _require_existing_definition_access_v2(
+            service,
             current_user=current_user,
             tenant_id=tenant_id,
             agent=agent,
         )
 
-        return cast(dict[str, Any], agent.to_dict())
+        return agent.to_dict()
 
     except HTTPException:
         raise
@@ -548,21 +532,23 @@ async def update_definition(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_definition_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    definition_authority: AgentDefinitionManagementHttpApplicationAuthorityV2 = Depends(
+        agent_definition_management_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
+        db = definition_authority.db
+        service = definition_authority.service
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
         if body.project_id is not None:
-            await _ensure_project_definition_access(
-                db,
+            await _require_project_access_v2(
+                service,
                 current_user=current_user,
                 tenant_id=tenant_id,
                 project_id=body.project_id,
             )
-        container = get_container_with_db(request, db)
-        registry = container.agent_registry()
 
-        existing = await registry.get_by_id(definition_id, tenant_id=tenant_id)
+        existing = await service.get_by_id(definition_id, tenant_id=tenant_id)
         if existing is None:
             raise HTTPException(
                 status_code=404,
@@ -571,8 +557,8 @@ async def update_definition(
 
         if existing.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
-        await _ensure_existing_definition_access(
-            db,
+        await _require_existing_definition_access_v2(
+            service,
             current_user=current_user,
             tenant_id=tenant_id,
             agent=existing,
@@ -580,8 +566,8 @@ async def update_definition(
 
         updates = body.model_dump(exclude_unset=True)
         if "execution_backend" in updates:
-            execution_backend = await _validate_execution_backend(
-                db,
+            execution_backend = await _validate_execution_backend_v2(
+                service,
                 tenant_id=tenant_id,
                 execution_backend=updates.pop("execution_backend"),
             )
@@ -604,9 +590,8 @@ async def update_definition(
         existing.validate()
         existing.updated_at = datetime.now(UTC)
 
-        updated = await registry.update(existing)
-        await db.commit()
-        return cast(dict[str, Any], updated.to_dict())
+        updated = await service.update_agent(existing)
+        return updated.to_dict()
 
     except HTTPException:
         raise
@@ -635,14 +620,16 @@ async def delete_definition(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_definition_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    definition_authority: AgentDefinitionManagementHttpApplicationAuthorityV2 = Depends(
+        agent_definition_management_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
+        db = definition_authority.db
+        service = definition_authority.service
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
-        container = get_container_with_db(request, db)
-        registry = container.agent_registry()
 
-        existing = await registry.get_by_id(definition_id, tenant_id=tenant_id)
+        existing = await service.get_by_id(definition_id, tenant_id=tenant_id)
         if existing is None:
             raise HTTPException(
                 status_code=404,
@@ -651,15 +638,16 @@ async def delete_definition(
 
         if existing.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
-        await _ensure_existing_definition_access(
-            db,
+        await _require_existing_definition_access_v2(
+            service,
             current_user=current_user,
             tenant_id=tenant_id,
             agent=existing,
         )
 
-        await registry.delete(definition_id)
-        await db.commit()
+        deleted = await service.delete_agent(definition_id)
+        if not deleted:
+            logger.warning("Agent definition delete reported no row: id=%s", definition_id)
         return {"deleted": True, "id": definition_id}
 
     except HTTPException:
@@ -683,14 +671,16 @@ async def set_definition_enabled(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_definition_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    definition_authority: AgentDefinitionManagementHttpApplicationAuthorityV2 = Depends(
+        agent_definition_management_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
+        db = definition_authority.db
+        service = definition_authority.service
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
-        container = get_container_with_db(request, db)
-        registry = container.agent_registry()
 
-        existing = await registry.get_by_id(definition_id, tenant_id=tenant_id)
+        existing = await service.get_by_id(definition_id, tenant_id=tenant_id)
         if existing is None:
             raise HTTPException(
                 status_code=404,
@@ -699,16 +689,15 @@ async def set_definition_enabled(
 
         if existing.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
-        await _ensure_existing_definition_access(
-            db,
+        await _require_existing_definition_access_v2(
+            service,
             current_user=current_user,
             tenant_id=tenant_id,
             agent=existing,
         )
 
-        updated = await registry.set_enabled(definition_id, body.enabled)
-        await db.commit()
-        return cast(dict[str, Any], updated.to_dict())
+        updated = await service.set_enabled(definition_id, body.enabled)
+        return updated.to_dict()
 
     except HTTPException:
         raise

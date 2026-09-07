@@ -34,17 +34,31 @@ describe('memoryService', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: memoryId, ...updates }),
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.patch).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            json: async () => ({ id: memoryId, ...updates }),
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       const result = await memoryService.updateMemory(memoryId, updates);
 
-      expect(apiFetch.patch).toHaveBeenCalledWith(`/memories/${memoryId}`, updates);
+      expect(apiFetch.patch).toHaveBeenCalledWith(
+        `/memories/${memoryId}`,
+        updates,
+        expect.any(Function)
+      );
       expect(result).toEqual({ id: memoryId, ...updates });
     });
 
@@ -80,17 +94,31 @@ describe('memoryService', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.post).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.post).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            json: async () => mockResponse,
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       const result = await memoryService.shareMemory(memoryId, shareData);
 
-      expect(apiFetch.post).toHaveBeenCalledWith(`/memories/${memoryId}/shares`, shareData);
+      expect(apiFetch.post).toHaveBeenCalledWith(
+        `/memories/${memoryId}/shares`,
+        shareData,
+        expect.any(Function)
+      );
       expect(result).toEqual(mockResponse);
     });
 
@@ -120,17 +148,30 @@ describe('memoryService', () => {
       const shareId = 'share-1';
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
-        ok: true,
-        status: 204,
-        statusText: 'No Content',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.delete).mockImplementationOnce(async (...args: any[]) =>
+        args[1](
+          {
+            ok: true,
+            status: 204,
+            statusText: 'No Content',
+            json: async () => ({}),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[2]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await memoryService.deleteMemoryShare(memoryId, shareId);
 
-      expect(apiFetch.delete).toHaveBeenCalledWith(`/memories/${memoryId}/shares/${shareId}`);
+      expect(apiFetch.delete).toHaveBeenCalledWith(
+        `/memories/${memoryId}/shares/${shareId}`,
+        expect.any(Function)
+      );
     });
 
     it('should propagate ApiError on failed deletion', async () => {

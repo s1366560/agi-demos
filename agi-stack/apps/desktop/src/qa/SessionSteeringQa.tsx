@@ -1,3 +1,4 @@
+import { unavailableVoiceSessionOperationsQa } from './voiceSessionOperationsQa';
 import '@radix-ui/themes/styles.css';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -80,9 +81,17 @@ const qaApi: ComposerCatalogClient = {
   listWorkspaceAgents: async () => [],
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
-  listManagedPlugins: async () => [],
-  uploadSandboxFile: async (file) => {
+  listManagedSubAgents: async () => [],
+  listMarketplacePlugins: async () => [],
+  listPromptTemplates: async () => [],
+  createPromptTemplate: async () => {
+    throw new Error('qa_prompt_templates_unavailable');
+  },
+  deletePromptTemplate: async () => {},
+  uploadSandboxFile: async (file, signal) => {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     await new Promise((resolve) => window.setTimeout(resolve, 180));
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     return {
       filename: file.name,
       sandbox_path: `/workspace/input/${file.name}`,
@@ -2572,9 +2581,19 @@ function SessionSteeringQa() {
   );
   const mcpAppHostApi = useMemo(
     () => ({
+      listMCPApps: async () => [],
       callMCPAppTool: async (_appId: string, toolName: string) => ({
         content: [{ type: 'text', text: `${toolName} accepted` }],
         is_error: false,
+      }),
+      callMCPAppToolDirect: async (_projectId: string, _serverName: string, toolName: string) => ({
+        content: [{ type: 'text', text: `${toolName} accepted` }],
+        is_error: false,
+      }),
+      callMCPToolByServerId: async (_serverId: string, toolName: string) => ({
+        result: `${toolName} accepted`,
+        is_error: false,
+        execution_time_ms: 0,
       }),
       readMCPAppResource: async (_projectId: string, uri: string) => ({
         contents: [{ uri, mimeType: 'text/plain', text: 'QA resource' }],
@@ -3078,6 +3097,8 @@ function SessionSteeringQa() {
           </header>
           <div className="session-steering-qa-content">
             <ChatPanel
+              voiceSessionOperations={unavailableVoiceSessionOperationsQa}
+              imagePreviewClient={null}
               api={qaApi}
               conversations={qaConversations}
               selectedConversationId={

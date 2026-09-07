@@ -6,36 +6,61 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+from src.infrastructure.plugins.v2.agent_event_query_services import (
+    AGENT_EVENT_QUERY_SERVICE_V2,
+    AgentEventQueryResolverProtocolV2,
+)
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
+from src.infrastructure.plugins.v2.agent_turn_services import AgentTurnStreamProtocolV2
+from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
+    ASYNC_SESSION_FACTORY_SERVICE_V2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
+from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.workspace_contract_actor_services import (
+    WORKSPACE_CONTRACT_ACTOR_RESOLVER_SERVICE_V2,
+    WorkspaceContractActorResolverProtocolV2,
+)
+from src.infrastructure.workspace_core.client import (
+    WorkspaceContractActorPurpose,
+    WorkspaceContractActorResolveRequest,
+    WorkspaceContractActorResolveResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.application.services.agent_service import AgentService
-    from src.domain.llm_providers.llm_types import LLMClient
-
 ContractEventExtractor = Callable[[Mapping[str, Any]], dict[str, Any] | None]
+type WorkspaceContractSessionFactoryV2 = Callable[[], AbstractAsyncContextManager["AsyncSession"]]
 
 
-async def resolve_workspace_actor_user_id(
-    *,
-    workspace_id: str,
-    actor_user_id: str | None = None,
-) -> str | None:
-    """Return the real user id that owns a workspace contract-agent conversation."""
-    if isinstance(actor_user_id, str) and actor_user_id.strip():
-        return actor_user_id.strip()
+@runtime_checkable
+class WorkspaceContractSessionFactoryProviderProtocolV2(Protocol):
+    """Structural contract for the generation-selected persistence session factory."""
 
-    from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
+    @property
+    def factory(self) -> WorkspaceContractSessionFactoryV2: ...
 
-    workspace = legacy_workspace_runtime_retired("contract agent Workspace owner lookup")
-    if workspace is None:
-        return None
-    created_by = getattr(workspace, "created_by", None)
-    return created_by.strip() if isinstance(created_by, str) and created_by.strip() else None
+
+@dataclass(frozen=True, kw_only=True)
+class WorkspaceContractAgentTurnAuthorityV2:
+    """Exact generation and service retained for one workspace contract turn."""
+
+    operation: OperationContextV2
+    actor: WorkspaceContractActorResolveResponse
+    service: AgentTurnStreamProtocolV2
 
 
 def workspace_contract_conversation_id(
@@ -61,6 +86,31 @@ def workspace_contract_conversation_id(
         if item
     )
     return f"workspace-contract:{readable}:{digest}"
+
+
+def workspace_contract_operation_id_v2(
+    *,
+    purpose: WorkspaceContractActorPurpose,
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    conversation_id: str,
+) -> str:
+    """Return the stable idempotency key for one audited contract-agent turn."""
+    raw = json.dumps(
+        {
+            "conversation_id": conversation_id,
+            "project_id": project_id,
+            "purpose": purpose,
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    return f"workspace-contract-turn:{purpose}:{digest}"
 
 
 def workspace_contract_input_fingerprint(*parts: object) -> str:
@@ -121,23 +171,58 @@ def _contract_payload_from_value(
 async def recover_workspace_contract_payload(
     *,
     conversation_id: str,
+    tenant_id: str,
+    project_id: str,
     extract_payload: ContractEventExtractor,
     limit: int = 1000,
+    operation: OperationContextV2 | None = None,
 ) -> dict[str, Any] | None:
-    """Recover a submitted contract payload from persisted agent execution events."""
+    """Recover a submitted contract payload through one leased V2 query authority."""
     try:
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
-            SqlAgentExecutionEventRepository,
-        )
-
-        async with async_session_factory() as db:
-            events = await SqlAgentExecutionEventRepository(db).list_by_conversation(
+        if operation is not None:
+            events = await _workspace_contract_events_v2(
+                operation,
                 conversation_id=conversation_id,
                 limit=limit,
             )
+        else:
+            recovery_digest = hashlib.sha256(conversation_id.encode("utf-8")).hexdigest()[:32]
+            async with pin_agent_turn_operation_v2(
+                operation_id=f"workspace-contract-recovery:{recovery_digest}",
+                tenant_id=tenant_id,
+                project_id=project_id,
+                session_id=conversation_id,
+                services={
+                    OPERATION_IDENTITY_SERVICE_V2: {
+                        "tenant_id": tenant_id,
+                        "project_id": project_id,
+                    },
+                    OPERATION_METADATA_SERVICE_V2: {
+                        "kind": "workspace-contract-event-recovery",
+                        "conversation_id": conversation_id,
+                    },
+                },
+                force_process_host_lease=True,
+            ) as recovery_operation:
+                sessions = recovery_operation.require(ASYNC_SESSION_FACTORY_SERVICE_V2)
+                if not isinstance(sessions, WorkspaceContractSessionFactoryProviderProtocolV2):
+                    raise RuntimeV2Error(
+                        "invalid_workspace_contract_session_factory",
+                        "Workspace contract recovery session Provider is invalid",
+                    )
+                async with sessions.factory() as db:
+                    _ = recovery_operation.provide(
+                        OPERATION_DB_SESSION_SERVICE_V2,
+                        db,
+                        label="workspace-contract-recovery-db-session",
+                    )
+                    events = await _workspace_contract_events_v2(
+                        recovery_operation,
+                        conversation_id=conversation_id,
+                        limit=limit,
+                    )
+    except RuntimeV2Error:
+        raise
     except Exception:
         logger.warning(
             "workspace_contract_runtime.recover_payload_failed",
@@ -154,25 +239,116 @@ async def recover_workspace_contract_payload(
     return None
 
 
-async def create_workspace_contract_agent_service(
+async def _workspace_contract_events_v2(
+    operation: OperationContextV2,
     *,
-    db: AsyncSession,
-    llm: LLMClient,
-) -> AgentService:
-    """Create an AgentService while preserving app-level infra wiring."""
-    from src.infrastructure.adapters.primary.web.startup.container import (
-        get_app_container,
+    conversation_id: str,
+    limit: int,
+) -> list[Any]:
+    resolver = operation.require(AGENT_EVENT_QUERY_SERVICE_V2)
+    if not isinstance(resolver, AgentEventQueryResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_workspace_contract_event_query",
+            "Workspace contract recovery event query Provider is invalid",
+        )
+    return await resolver.resolve(operation).get_events(
+        conversation_id=conversation_id,
+        from_time_us=0,
+        from_counter=0,
+        limit=limit,
     )
 
-    app_container = get_app_container()
-    if app_container is not None:
-        return app_container.with_db(db).agent_service(llm)
 
-    from src.configuration.di_container import DIContainer
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+@asynccontextmanager
+async def workspace_contract_agent_turn_authority_v2(
+    *,
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+    workspace_id: str,
+    agent_id: str,
+    contract_kind: str,
+    actor_purpose: WorkspaceContractActorPurpose,
+) -> AsyncIterator[WorkspaceContractAgentTurnAuthorityV2]:
+    """Resolve actor, persistence, and Agent turn from one leased V2 operation."""
+    operation_id = workspace_contract_operation_id_v2(
+        purpose=actor_purpose,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+    )
+    identity = {
+        "tenant_id": tenant_id,
+        "project_id": project_id,
+    }
+    metadata: dict[str, object] = {
+        "kind": "workspace-contract-agent-turn",
+        "contract_kind": contract_kind,
+        "actor_purpose": actor_purpose,
+        "workspace_id": workspace_id,
+        "conversation_id": conversation_id,
+        "agent_id": agent_id,
+    }
+    async with pin_agent_turn_operation_v2(
+        operation_id=operation_id,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        session_id=conversation_id,
+        services={
+            OPERATION_IDENTITY_SERVICE_V2: identity,
+            OPERATION_METADATA_SERVICE_V2: metadata,
+        },
+        force_process_host_lease=True,
+    ) as operation:
+        resolver = operation.require(WORKSPACE_CONTRACT_ACTOR_RESOLVER_SERVICE_V2)
+        if not isinstance(resolver, WorkspaceContractActorResolverProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_workspace_contract_actor_resolver",
+                "Workspace contract turn actor resolver Provider is invalid",
+            )
+        actor = await resolver.resolve(
+            WorkspaceContractActorResolveRequest(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                purpose=actor_purpose,
+                operation_id=operation_id,
+            )
+        )
+        actor_user_id = actor.actor_user_id.strip()
+        if not actor_user_id:
+            raise RuntimeV2Error(
+                "invalid_workspace_contract_actor",
+                "Workspace contract actor authority returned an empty actor identity",
+            )
+        identity["user_id"] = actor_user_id
+        metadata.update(
+            {
+                "actor_participant_id": actor.participant_actor_id,
+                "actor_authority_revision": actor.authority_revision,
+                "actor_policy_version": actor.policy_version,
+                "actor_resolution_duplicate": actor.duplicate,
+            }
+        )
 
-    redis_client = await get_redis_client()
-    return DIContainer(db=db, redis_client=redis_client).agent_service(llm)
+        sessions = operation.require(ASYNC_SESSION_FACTORY_SERVICE_V2)
+        if not isinstance(sessions, WorkspaceContractSessionFactoryProviderProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_workspace_contract_session_factory",
+                "Workspace contract turn session Provider is invalid",
+            )
+        async with sessions.factory() as db:
+            _ = operation.provide(
+                OPERATION_DB_SESSION_SERVICE_V2,
+                db,
+                label="workspace-contract-turn-db-session",
+            )
+            yield WorkspaceContractAgentTurnAuthorityV2(
+                operation=operation,
+                actor=actor,
+                service=await current_agent_turn_service_v2(),
+            )
 
 
 async def cancel_workspace_contract_chat(conversation_id: str) -> None:
@@ -205,11 +381,12 @@ def _slug(value: str, *, limit: int = 48) -> str:
 
 
 __all__ = [
+    "WorkspaceContractAgentTurnAuthorityV2",
     "cancel_workspace_contract_chat",
     "contract_tool_payload_from_event",
-    "create_workspace_contract_agent_service",
     "recover_workspace_contract_payload",
-    "resolve_workspace_actor_user_id",
+    "workspace_contract_agent_turn_authority_v2",
     "workspace_contract_conversation_id",
     "workspace_contract_input_fingerprint",
+    "workspace_contract_operation_id_v2",
 ]

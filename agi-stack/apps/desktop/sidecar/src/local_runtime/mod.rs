@@ -1,6 +1,9 @@
+mod llm_tool_contracts;
+mod plan_tool_contract;
+#[cfg(test)]
+mod tool_contract_tests;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
-    io::{Read, Write},
     path::{Path as FsPath, PathBuf},
     sync::{
         atomic::{AtomicU64, AtomicU8, Ordering},
@@ -40,14 +43,10 @@ use axum::{
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use futures_util::{SinkExt, StreamExt};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tokio::{
-    net::TcpListener,
-    sync::{broadcast, mpsc},
-};
+use tokio::{net::TcpListener, sync::broadcast};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use url::{Host, Url};
 use uuid::Uuid;
@@ -96,8 +95,15 @@ mod mcp_supervisor;
 #[cfg(test)]
 mod mcp_supervisor_tests;
 mod parity_routes;
-pub(crate) mod platform_plugin_sync;
-pub(crate) use platform_plugin_sync::PlatformPluginControlPlaneReconciler;
+mod platform_plugin_authority_v2;
+mod platform_plugin_marketplace_v2;
+mod platform_plugin_route_admission_v2;
+#[cfg(test)]
+mod platform_plugin_route_admission_v2_tests;
+mod platform_plugin_sync_v2;
+pub(crate) use platform_plugin_sync_v2::{
+    PlatformPluginAuthorityModeV2, PlatformPluginControlPlaneReconcilerV2,
+};
 mod provider_credentials;
 mod provider_management;
 mod provider_probe;
@@ -112,6 +118,9 @@ mod subagent_agent_tool_host;
 mod subagent_runtime;
 mod subagent_scope;
 mod task_session;
+#[cfg(test)]
+mod terminal_generation_v2_tests;
+mod terminal_pty_v2;
 mod timeline_presentation;
 mod tool_authority;
 mod workspace_core_bridge;
@@ -146,6 +155,11 @@ use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesIn
 use composer_context::{validate_composer_context_items, ComposerContextItem, ComposerContextKind};
 use conversation_llm_route::{normalized_conversation_llm_route, workload_role_for_capability};
 use mcp_supervisor::{McpSupervisor, SupervisorLimits};
+use platform_plugin_authority_v2::{
+    ActivePlatformPluginGenerationLeaseV2, PlatformPluginAvailabilityV2Error,
+    PlatformPluginGenerationAcquireV2Error,
+};
+use platform_plugin_route_admission_v2::PlatformPluginRouteAdmissionV2;
 #[cfg(test)]
 use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
@@ -398,14 +412,28 @@ impl LocalRuntimeService {
         }
     }
 
-    pub(crate) fn start_platform_plugin_control_plane(
+    pub(crate) async fn start_platform_plugin_control_plane_v2(
         &self,
         trusted_sessions: crate::trusted_session::TrustedSessionBroker,
-    ) -> platform_plugin_sync::PlatformPluginControlPlaneReconciler {
-        platform_plugin_sync::PlatformPluginControlPlaneReconciler::start(
+        plugin_data_plane_credentials_v2: crate::plugin_data_plane_credential_v2::PluginDataPlaneCredentialBrokerV2,
+    ) -> Result<platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2, String> {
+        self.state
+            .platform_plugin_authority_v2
+            .install_trusted_sessions(trusted_sessions.clone());
+        platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2::start(
             Arc::clone(&self.state),
-            trusted_sessions,
+            plugin_data_plane_credentials_v2,
         )
+        .await
+    }
+
+    pub(crate) async fn renderer_distribution_current_v2(
+        &self,
+    ) -> Option<platform_plugin_authority_v2::PlatformPluginRendererDistributionV2> {
+        self.state
+            .platform_plugin_authority_v2
+            .renderer_distribution_current()
+            .await
     }
 
     pub fn configure(&self, config: LocalRuntimeConfig) -> Result<LocalRuntimeStatus, String> {
@@ -769,32 +797,6 @@ impl PlanModeToolHost {
     }
 }
 
-#[async_trait]
-impl ToolHost for PlanModeToolHost {
-    fn list_tools(&self) -> Vec<String> {
-        let mut tools = self
-            .inner
-            .list_tools()
-            .into_iter()
-            .filter(|tool| Self::is_allowed(tool))
-            .collect::<Vec<_>>();
-        tools.push(SUBMIT_PLAN_TOOL_NAME.to_string());
-        tools
-    }
-
-    async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
-        if !Self::is_allowed(tool) {
-            return Err(CoreError::Tool(format!(
-                "tool '{tool}' is blocked while the conversation is in plan mode"
-            )));
-        }
-        if tool == SUBMIT_PLAN_TOOL_NAME {
-            return self.submit_plan(input_json);
-        }
-        self.inner.call(tool, input_json).await
-    }
-}
-
 struct LocalRuntimeState {
     api_token: String,
     workspace_root: Mutex<PathBuf>,
@@ -812,6 +814,7 @@ struct LocalRuntimeState {
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
     workspace_core_generation: AtomicU64,
     workspace_core_authority: Mutex<Option<Arc<workspace_core_bridge::WorkspaceCoreAuthority>>>,
+    platform_plugin_authority_v2: platform_plugin_authority_v2::PlatformPluginAuthorityV2,
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
@@ -1102,6 +1105,8 @@ impl LocalRuntimeState {
             agent_runs: Mutex::new(HashMap::new()),
             workspace_core_generation: AtomicU64::new(0),
             workspace_core_authority: Mutex::new(None),
+            platform_plugin_authority_v2:
+                platform_plugin_authority_v2::PlatformPluginAuthorityV2::default(),
             automation_worker: Mutex::new(None),
             browser_bridge: Mutex::new(None),
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
@@ -1727,6 +1732,7 @@ impl LocalRuntimeState {
         }
     }
 
+    #[cfg(test)]
     async fn run_agent_message(
         self: Arc<Self>,
         conversation_id: String,
@@ -1748,6 +1754,30 @@ impl LocalRuntimeState {
         .await;
     }
 
+    #[cfg(test)]
+    async fn run_agent_message_on_generation(
+        self: Arc<Self>,
+        conversation_id: String,
+        project_id: String,
+        message: String,
+        message_id: String,
+        authoritative_run_id: Option<String>,
+        claimed_control: Option<Arc<LocalRunControl>>,
+        plugin_generation: Arc<ActivePlatformPluginGenerationLeaseV2>,
+    ) {
+        self.run_agent_message_for_role_with_generation(
+            conversation_id,
+            project_id,
+            message,
+            message_id,
+            None,
+            authoritative_run_id,
+            claimed_control,
+            Some(plugin_generation),
+        )
+        .await;
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn run_agent_message_for_role(
         self: Arc<Self>,
@@ -1759,6 +1789,47 @@ impl LocalRuntimeState {
         authoritative_run_id: Option<String>,
         claimed_control: Option<Arc<LocalRunControl>>,
     ) {
+        let plugin_generation = match self.acquire_agent_operation_generation_v2() {
+            Ok(plugin_generation) => plugin_generation,
+            Err(error) => {
+                self.reject_unpinned_agent_operation(
+                    &conversation_id,
+                    &message_id,
+                    claimed_control.as_ref(),
+                    &error,
+                );
+                return;
+            }
+        };
+        self.run_agent_message_for_role_with_generation(
+            conversation_id,
+            project_id,
+            message,
+            message_id,
+            workload_role,
+            authoritative_run_id,
+            claimed_control,
+            plugin_generation,
+        )
+        .await;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn run_agent_message_for_role_with_generation(
+        self: Arc<Self>,
+        conversation_id: String,
+        project_id: String,
+        message: String,
+        message_id: String,
+        workload_role: Option<LlmWorkloadRole>,
+        authoritative_run_id: Option<String>,
+        claimed_control: Option<Arc<LocalRunControl>>,
+        plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+    ) {
+        let generation_descriptor = plugin_generation
+            .as_ref()
+            .map(|generation| generation.descriptor().clone());
+        let _plugin_generation_lease = plugin_generation;
         let conversation = match self.session_store.conversation(&conversation_id) {
             Ok(Some(conversation)) => conversation,
             Ok(None) => {
@@ -1865,7 +1936,7 @@ impl LocalRuntimeState {
             Some(message_id.clone()),
             Some("user"),
             Some(message.clone()),
-            json!({}),
+            json!({ "plugin_generation": generation_descriptor }),
         );
         self.append_timeline(&conversation_id, user_item);
 
@@ -2014,6 +2085,54 @@ impl LocalRuntimeState {
             }
         }
         self.release_agent_run(&conversation_id);
+    }
+
+    fn acquire_agent_operation_generation_v2(
+        &self,
+    ) -> Result<
+        Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+        PlatformPluginGenerationAcquireV2Error,
+    > {
+        #[cfg(test)]
+        {
+            Ok(None)
+        }
+        #[cfg(not(test))]
+        {
+            self.platform_plugin_authority_v2
+                .acquire_generation()
+                .map(Arc::new)
+                .map(Some)
+        }
+    }
+
+    fn reject_unpinned_agent_operation(
+        &self,
+        conversation_id: &str,
+        message_id: &str,
+        claimed_control: Option<&Arc<LocalRunControl>>,
+        error: &PlatformPluginGenerationAcquireV2Error,
+    ) {
+        let reason = error.reason();
+        let item = self.timeline_item(
+            "error",
+            conversation_id.to_owned(),
+            Some(message_id.to_owned()),
+            None,
+            Some(reason.message().to_owned()),
+            json!({
+                "error": {
+                    "code": reason.code(),
+                    "message": reason.message(),
+                    "target": "desktop-sidecar",
+                    "generation": error.descriptor(),
+                }
+            }),
+        );
+        self.append_timeline(conversation_id, item);
+        if let Some(control) = claimed_control {
+            self.release_agent_run_if_control(conversation_id, control);
+        }
     }
 
     fn worktree_manager(&self) -> WorktreeManager {
@@ -2354,14 +2473,17 @@ impl LocalRuntimeState {
         Ok(Some(request))
     }
 
-    async fn continue_after_hitl(
+    #[allow(clippy::too_many_arguments)]
+    async fn continue_after_hitl_with_generation(
         self: Arc<Self>,
         conversation: LocalConversation,
         message_id: String,
         goal: String,
         authoritative_run: Option<DesktopRun>,
         control: Arc<LocalRunControl>,
+        plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
     ) {
+        let _plugin_generation_lease = plugin_generation;
         let conversation_id = conversation.id.clone();
         let profile = match self.execution_profile(&conversation) {
             Ok(profile) => profile,
@@ -2786,7 +2908,25 @@ fn bounded_identifier(value: &str) -> bool {
 }
 
 fn local_router(state: Arc<LocalRuntimeState>) -> Router {
-    let protected = Router::new()
+    #[cfg(test)]
+    {
+        let admission = PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
+        return local_router_with_generation_admission(state, admission);
+    }
+    #[cfg(not(test))]
+    local_router_with_generation_required(state)
+}
+
+fn local_router_with_generation_required(state: Arc<LocalRuntimeState>) -> Router {
+    let admission = PlatformPluginRouteAdmissionV2::required(Arc::clone(&state));
+    local_router_with_generation_admission(state, admission)
+}
+
+fn local_router_with_generation_admission(
+    state: Arc<LocalRuntimeState>,
+    admission: PlatformPluginRouteAdmissionV2,
+) -> Router {
+    let kernel_protected = Router::new()
         .route("/api/v1/auth/me", get(auth_me))
         .route("/api/v1/tenants", get(list_tenants))
         .route("/api/v1/projects", get(list_projects))
@@ -2795,6 +2935,16 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             "/api/v1/workspace-context/switch",
             post(switch_workspace_context),
         )
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            require_active_scope,
+        ))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            require_user_session,
+        ));
+
+    let protected = Router::new()
         .route(
             "/api/v1/llm-providers/",
             get(list_llm_providers).post(create_llm_provider),
@@ -2870,18 +3020,6 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/llm-providers/:provider_id/usage",
             get(get_llm_provider_usage),
-        )
-        .route(
-            "/api/v1/channels/tenants/:tenant_id/plugins",
-            get(list_managed_plugins),
-        )
-        .route(
-            "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/enable",
-            post(enable_managed_plugin),
-        )
-        .route(
-            "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/disable",
-            post(disable_managed_plugin),
         )
         .route(
             "/api/v1/projects/:project_id/my-work",
@@ -3034,14 +3172,16 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         )
         .route("/mcp/tools/list", get(mcp_tools_list))
         .route("/mcp/tools/call", post(mcp_tools_call))
-        .merge(workspace_core_bridge::platform_plugin_router(Arc::clone(
-            &state,
-        )))
+        .merge(platform_plugin_marketplace_v2::router())
         .merge(parity_routes::router())
         .fallback(workspace_core_bridge::proxy_workspace_fallback)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             workspace_core_bridge::proxy_workspace_if_authoritative,
+        ))
+        .layer(middleware::from_fn_with_state(
+            admission,
+            platform_plugin_route_admission_v2::require_generation_v2,
         ))
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -3059,6 +3199,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             post(resume_local_session),
         )
         .route("/api/v1/auth/signout", post(sign_out))
+        .merge(kernel_protected)
         .merge(protected)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -4777,58 +4918,6 @@ async fn list_managed_skills(
     Ok(Json(json!({ "items": items })))
 }
 
-async fn list_managed_plugins(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(tenant_id): Path<String>,
-) -> LocalJsonResult {
-    ensure_tenant_scope(&authenticated, Some(&tenant_id))?;
-    let items = state
-        .session_store
-        .list_managed_resources(ManagedResourceKind::Plugin, "tenant", &tenant_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({ "items": items })))
-}
-
-async fn enable_managed_plugin(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, plugin_id)): Path<(String, String)>,
-) -> LocalJsonResult {
-    set_plugin_enabled(state, authenticated, tenant_id, plugin_id, true)
-}
-
-async fn disable_managed_plugin(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, plugin_id)): Path<(String, String)>,
-) -> LocalJsonResult {
-    set_plugin_enabled(state, authenticated, tenant_id, plugin_id, false)
-}
-
-fn set_plugin_enabled(
-    state: Arc<LocalRuntimeState>,
-    authenticated: AuthenticatedContext,
-    tenant_id: String,
-    plugin_id: String,
-    enabled: bool,
-) -> LocalJsonResult {
-    ensure_tenant_scope(&authenticated, Some(&tenant_id))?;
-    ensure_managed_resource_manager(&authenticated)?;
-    state
-        .session_store
-        .set_managed_resource_enabled(
-            ManagedResourceKind::Plugin,
-            "tenant",
-            &tenant_id,
-            &plugin_id,
-            enabled,
-            Utc::now().timestamp_millis(),
-        )
-        .map(|plugin| Json(json!({ "item": plugin })))
-        .map_err(resource_registry_error)
-}
-
 async fn list_managed_agents(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -6172,6 +6261,7 @@ fn client_turn_payload_hash(
 async fn run_conversation_message(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(conversation_id): Path<String>,
     Json(body): Json<RunConversationBody>,
 ) -> LocalJsonResult {
@@ -6243,9 +6333,10 @@ async fn run_conversation_message(
         .map_err(local_store_error)?;
     let run_state = Arc::clone(&state);
     let response_message_id = message_id.clone();
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
     tokio::spawn(async move {
         run_state
-            .run_agent_message_for_role(
+            .run_agent_message_for_role_with_generation(
                 conversation_id,
                 project_id,
                 body.message,
@@ -6253,6 +6344,7 @@ async fn run_conversation_message(
                 body.workload_role,
                 None,
                 None,
+                plugin_generation,
             )
             .await;
     });
@@ -6286,6 +6378,7 @@ struct ExecutionEnvironmentBody {
 async fn approve_plan_and_start(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Json(body): Json<ApprovePlanAndStartBody>,
 ) -> LocalJsonResult {
     if body.message.trim().is_empty()
@@ -6398,15 +6491,18 @@ async fn approve_plan_and_start(
         let message = outcome.run.request_message.clone();
         let message_id = outcome.run.message_id.clone();
         let run_id = outcome.run.id.clone();
+        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
         tokio::spawn(async move {
             run_state
-                .run_agent_message(
+                .run_agent_message_for_role_with_generation(
                     conversation_id,
                     project_id,
                     message,
                     message_id,
+                    None,
                     Some(run_id),
                     None,
+                    plugin_generation,
                 )
                 .await;
         });
@@ -6504,11 +6600,29 @@ fn invalid_composer_context(detail: &'static str) -> (StatusCode, Json<Value>) {
     )
 }
 
+fn unavailable_plugin_composer_context(
+    error: PlatformPluginAvailabilityV2Error,
+    generation: Option<&platform_plugin_authority_v2::ActivePlatformPluginGenerationDescriptorV2>,
+) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({
+            "detail": {
+                "code": error.code(),
+                "message": error.message(),
+                "target": "desktop-sidecar",
+                "generation": generation,
+            },
+        })),
+    )
+}
+
 fn validate_composer_context_authority(
     state: &LocalRuntimeState,
     authenticated: &AuthenticatedContext,
     workspace_id: &str,
     items: &[ComposerContextItem],
+    plugin_generation: Option<&ActivePlatformPluginGenerationLeaseV2>,
 ) -> Result<(), (StatusCode, Json<Value>)> {
     for item in items {
         let available = match item.kind {
@@ -6593,19 +6707,24 @@ fn validate_composer_context_authority(
                         resource.get("status").and_then(Value::as_str) == Some("active")
                     })
             }
-            ComposerContextKind::Plugin => state
-                .session_store
-                .managed_resource(
-                    ManagedResourceKind::Plugin,
-                    "tenant",
-                    &authenticated.workspace.tenant_id,
-                    &item.resource_id,
-                )
-                .map_err(local_store_error)?
-                .is_some_and(|resource| {
-                    resource.get("enabled").and_then(Value::as_bool) == Some(true)
-                        && resource.get("discovered").and_then(Value::as_bool) == Some(true)
-                }),
+            ComposerContextKind::Plugin => {
+                let generation = plugin_generation.ok_or_else(|| {
+                    unavailable_plugin_composer_context(
+                        PlatformPluginAvailabilityV2Error::GenerationUnavailable,
+                        None,
+                    )
+                })?;
+                generation
+                    .plugin_availability(
+                        &item.resource_id,
+                        &authenticated.workspace.tenant_id,
+                        &authenticated.workspace.project_id,
+                    )
+                    .map_err(|error| {
+                        unavailable_plugin_composer_context(error, Some(generation.descriptor()))
+                    })?;
+                true
+            }
         };
         if !available {
             return Err(invalid_composer_context(
@@ -6647,6 +6766,7 @@ async fn list_run_inputs(
 async fn create_run_input(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(run_id): Path<String>,
     Json(body): Json<CreateRunInputBody>,
 ) -> LocalJsonResult {
@@ -6682,11 +6802,14 @@ async fn create_run_input(
         .workspace_id
         .as_deref()
         .ok_or_else(|| invalid_composer_context("run conversation has no workspace"))?;
-    validate_composer_context_authority(
+    let _plugin_generation_lease = validate_composer_context_authority(
         &state,
         &authenticated,
         run_workspace_id,
         &body.context_items,
+        plugin_generation
+            .as_ref()
+            .map(|Extension(generation)| generation.as_ref()),
     )?;
     if run.revision != body.expected_run_revision {
         return Err((
@@ -6795,6 +6918,7 @@ struct PromoteRunInputBody {
 async fn promote_run_input_to_plan(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(input_id): Path<String>,
     Json(body): Json<PromoteRunInputBody>,
 ) -> LocalJsonResult {
@@ -6885,15 +7009,18 @@ async fn promote_run_input_to_plan(
         let message = input.steering_content();
         let message_id = format!("promoted-{}", input.id);
         let control = claimed_control.expect("new promotion reserves the conversation");
+        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
         tokio::spawn(async move {
             run_state
-                .run_agent_message(
+                .run_agent_message_for_role_with_generation(
                     conversation_id,
                     project_id,
                     message,
                     message_id,
                     None,
+                    None,
                     Some(control),
+                    plugin_generation,
                 )
                 .await;
         });
@@ -6978,6 +7105,7 @@ struct ReviewArtifactVersionBody {
 async fn review_artifact_version(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(artifact_version_id): Path<String>,
     Json(body): Json<ReviewArtifactVersionBody>,
 ) -> LocalJsonResult {
@@ -7132,14 +7260,16 @@ async fn review_artifact_version(
             let message_id = running.message_id.clone();
             let runtime = Arc::clone(&state);
             let running_for_task = running.clone();
+            let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
             tokio::spawn(async move {
                 runtime
-                    .continue_after_hitl(
+                    .continue_after_hitl_with_generation(
                         conversation,
                         message_id,
                         goal,
                         Some(running_for_task),
                         control,
+                        plugin_generation,
                     )
                     .await;
             });
@@ -7368,6 +7498,7 @@ struct HitlResponseBody {
 async fn respond_to_hitl(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Json(body): Json<HitlResponseBody>,
 ) -> LocalJsonResult {
     let expected_authority_revision = body
@@ -7877,9 +8008,17 @@ async fn respond_to_hitl(
         .map(|run| run.message_id.clone())
         .unwrap_or_else(|| format!("local-resume-{}", request.id));
     let run_state = Arc::clone(&state);
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
     tokio::spawn(async move {
         run_state
-            .continue_after_hitl(conversation, message_id, goal, authoritative_run, control)
+            .continue_after_hitl_with_generation(
+                conversation,
+                message_id,
+                goal,
+                authoritative_run,
+                control,
+                plugin_generation,
+            )
             .await;
     });
     Ok(Json(response))
@@ -8485,10 +8624,13 @@ async fn list_conversation_runs(
 async fn agent_ws(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    ws.protocols(["memstack.auth"])
-        .on_upgrade(move |socket| agent_socket_loop(socket, state, authenticated))
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+    ws.protocols(["memstack.auth"]).on_upgrade(move |socket| {
+        agent_socket_loop(socket, state, authenticated, plugin_generation)
+    })
 }
 
 fn execution_selection_from_agent_message(
@@ -8514,6 +8656,7 @@ async fn agent_socket_loop(
     socket: WebSocket,
     state: Arc<LocalRuntimeState>,
     authenticated: AuthenticatedContext,
+    plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
 ) {
     let (mut sender, mut receiver) = socket.split();
     let mut events = state.events.subscribe();
@@ -8631,15 +8774,20 @@ async fn agent_socket_loop(
                     }
                     let run_state = Arc::clone(&state);
                     let project_id = conversation.project_id;
+                    // The socket owns one lease, and every derived operation clones it so closing
+                    // the socket cannot release the generation while a turn is still running.
+                    let operation_generation = plugin_generation.clone();
                     tokio::spawn(async move {
                         run_state
-                            .run_agent_message(
+                            .run_agent_message_for_role_with_generation(
                                 conversation_id,
                                 project_id,
                                 message,
                                 message_id,
                                 None,
                                 None,
+                                None,
+                                operation_generation,
                             )
                             .await;
                     });
@@ -8838,6 +8986,7 @@ struct TerminalSocketQuery {
 async fn terminal_ws(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(project_id): Path<String>,
     Query(query): Query<TerminalSocketQuery>,
     ws: WebSocketUpgrade,
@@ -8860,6 +9009,7 @@ async fn terminal_ws(
     let authenticated_for_socket = authenticated.clone();
     let project_for_socket = project_id.clone();
     let lease_for_socket = lease.clone();
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
     ws.protocols(["memstack.auth"])
         .on_upgrade(move |socket| {
             terminal_socket_loop(
@@ -8870,6 +9020,7 @@ async fn terminal_ws(
                 authenticated_for_socket,
                 project_for_socket,
                 lease_for_socket,
+                plugin_generation,
             )
         })
         .into_response()
@@ -8964,84 +9115,52 @@ async fn terminal_socket_loop(
     authenticated: AuthenticatedContext,
     project_id: String,
     lease: TerminalSessionLease,
+    plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
 ) {
     let (mut sender, mut receiver) = socket.split();
-    let pty_system = native_pty_system();
-    let pair = match pty_system.openpty(PtySize {
-        rows: 32,
-        cols: 120,
-        pixel_width: 0,
-        pixel_height: 0,
-    }) {
-        Ok(pair) => pair,
+    // The PTY owner retains admission through process and reader drain, including
+    // cancellation of this upgraded WebSocket task.
+    let mut terminal = match terminal_pty_v2::TerminalPtyV2::start(cwd, plugin_generation.clone()) {
+        Ok(terminal) => terminal,
         Err(error) => {
             let _ = sender
                 .send(Message::Text(
-                    json!({ "type": "error", "message": error.to_string() }).to_string(),
+                    json!({ "type": "error", "message": error }).to_string(),
                 ))
                 .await;
             return;
         }
     };
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let mut command = CommandBuilder::new(shell);
-    command.cwd(cwd);
-    let mut child = match pair.slave.spawn_command(command) {
-        Ok(child) => child,
-        Err(error) => {
-            let _ = sender
-                .send(Message::Text(
-                    json!({ "type": "error", "message": error.to_string() }).to_string(),
-                ))
-                .await;
-            return;
+    if let Err(error) = terminal.ready().await {
+        terminal.shutdown();
+        if let Err(cleanup_error) = terminal.drain().await {
+            tracing::error!(%cleanup_error, "terminal initialization cleanup failed");
         }
-    };
-    drop(pair.slave);
-    let mut reader = match pair.master.try_clone_reader() {
-        Ok(reader) => reader,
-        Err(error) => {
-            let _ = sender
-                .send(Message::Text(
-                    json!({ "type": "error", "message": error.to_string() }).to_string(),
-                ))
-                .await;
-            let _ = child.kill();
-            return;
+        let _ = sender
+            .send(Message::Text(
+                json!({ "type": "error", "message": error }).to_string(),
+            ))
+            .await;
+        return;
+    }
+    if !terminal_session_authority_is_current(&state, &authenticated, &project_id, &lease) {
+        terminal.shutdown();
+        if let Err(error) = terminal.drain().await {
+            tracing::error!(%error, "revoked terminal initialization cleanup failed");
         }
-    };
-    let mut writer = match pair.master.take_writer() {
-        Ok(writer) => writer,
-        Err(error) => {
-            let _ = sender
-                .send(Message::Text(
-                    json!({ "type": "error", "message": error.to_string() }).to_string(),
-                ))
-                .await;
-            let _ = child.kill();
-            return;
-        }
-    };
-    let (output_tx, mut output_rx) = mpsc::channel::<String>(32);
-    std::thread::spawn(move || {
-        let mut buffer = [0_u8; 4096];
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(size) => {
-                    let text = String::from_utf8_lossy(&buffer[..size]).to_string();
-                    if output_tx.blocking_send(text).is_err() {
-                        break;
-                    }
-                }
-                Err(error) => {
-                    let _ = output_tx.blocking_send(format!("[terminal read error] {error}\n"));
-                    break;
-                }
-            }
-        }
-    });
-    let _ = sender
+        let _ = sender
+            .send(Message::Text(
+                json!({
+                    "type": "authority_revoked",
+                    "code": "terminal_authority_revoked",
+                    "message": "terminal authority is no longer current",
+                })
+                .to_string(),
+            ))
+            .await;
+        return;
+    }
+    if sender
         .send(Message::Text(
             json!({
                 "type": "connected",
@@ -9055,7 +9174,15 @@ async fn terminal_socket_loop(
             })
             .to_string(),
         ))
-        .await;
+        .await
+        .is_err()
+    {
+        terminal.shutdown();
+        if let Err(error) = terminal.drain().await {
+            tracing::error!(%error, "terminal connection cleanup failed");
+        }
+        return;
+    }
     let mut authority_check = tokio::time::interval(std::time::Duration::from_secs(1));
     loop {
         tokio::select! {
@@ -9087,19 +9214,16 @@ async fn terminal_socket_loop(
                 match value["type"].as_str() {
                     Some("input") => {
                         let data = value["data"].as_str().unwrap_or_default();
-                        if writer.write_all(data.as_bytes()).is_err() || writer.flush().is_err() {
+                        if terminal.try_input(data.as_bytes().to_vec()).is_err() {
                             break;
                         }
                     }
                     Some("resize") => {
                         let cols = value["cols"].as_u64().unwrap_or(120).clamp(1, 400) as u16;
                         let rows = value["rows"].as_u64().unwrap_or(32).clamp(1, 200) as u16;
-                        let _ = pair.master.resize(PtySize {
-                            rows,
-                            cols,
-                            pixel_width: 0,
-                            pixel_height: 0,
-                        });
+                        if terminal.try_resize(cols, rows).is_err() {
+                            break;
+                        }
                     }
                     _ => {}
                 }
@@ -9124,7 +9248,7 @@ async fn terminal_socket_loop(
                     break;
                 }
             }
-            output = output_rx.recv() => {
+            output = terminal.output() => {
                 let Some(output) = output else {
                     break;
                 };
@@ -9138,7 +9262,13 @@ async fn terminal_socket_loop(
             }
         }
     }
-    let _ = child.kill();
+    terminal.shutdown();
+    if let Err(error) = terminal.drain().await {
+        tracing::error!(%error, "terminal PTY cleanup failed");
+    }
+    drop(sender);
+    drop(receiver);
+    drop(plugin_generation);
 }
 
 async fn sandbox_execute(
@@ -9657,45 +9787,6 @@ impl MeteredLlm {
     }
 }
 
-#[async_trait]
-impl LlmPort for MeteredLlm {
-    async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
-        let started_at = std::time::Instant::now();
-        let result = self.inner.extract_memory(episode).await;
-        if result.is_ok() {
-            self.record_success(started_at);
-        }
-        result
-    }
-
-    async fn extract_relationships(&self, memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
-        let started_at = std::time::Instant::now();
-        let result = self.inner.extract_relationships(memory).await;
-        if result.is_ok() {
-            self.record_success(started_at);
-        }
-        result
-    }
-
-    async fn decide(
-        &self,
-        goal: &str,
-        round: u64,
-        transcript: &[TranscriptEntry],
-        available_tools: &[String],
-    ) -> CoreResult<AgentAction> {
-        let started_at = std::time::Instant::now();
-        let result = self
-            .inner
-            .decide(goal, round, transcript, available_tools)
-            .await;
-        if result.is_ok() {
-            self.record_success(started_at);
-        }
-        result
-    }
-}
-
 impl FailoverLlm {
     const CANDIDATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 
@@ -9729,34 +9820,6 @@ impl FailoverLlm {
         Err(last_error.unwrap_or_else(|| {
             CoreError::Llm("model_unconfigured: no usable LLM routing targets".to_string())
         }))
-    }
-}
-
-#[async_trait]
-impl LlmPort for FailoverLlm {
-    async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
-        self.attempt(|candidate| async move { candidate.extract_memory(episode).await })
-            .await
-    }
-
-    async fn extract_relationships(&self, memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
-        self.attempt(|candidate| async move { candidate.extract_relationships(memory).await })
-            .await
-    }
-
-    async fn decide(
-        &self,
-        goal: &str,
-        round: u64,
-        transcript: &[TranscriptEntry],
-        available_tools: &[String],
-    ) -> CoreResult<AgentAction> {
-        self.attempt(|candidate| async move {
-            candidate
-                .decide(goal, round, transcript, available_tools)
-                .await
-        })
-        .await
     }
 }
 
@@ -9840,43 +9903,6 @@ impl LlmPort for MockLocalLlm {
 
 struct AnthropicAgentLlm {
     inner: AnthropicLlm,
-}
-
-#[async_trait]
-impl LlmPort for AnthropicAgentLlm {
-    async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
-        Ok(MemoryDraft {
-            title: "Anthropic local memory".to_string(),
-            content: episode.content.clone(),
-            tags: Vec::new(),
-            entities: Vec::new(),
-        })
-    }
-
-    async fn decide(
-        &self,
-        goal: &str,
-        round: u64,
-        transcript: &[TranscriptEntry],
-        available_tools: &[String],
-    ) -> CoreResult<AgentAction> {
-        let user = json!({
-            "goal": goal,
-            "round": round,
-            "transcript": transcript,
-            "available_tools": available_tools,
-        })
-        .to_string();
-        let raw = self
-            .inner
-            .stream_complete(
-                "You are a ReAct agent. Respond with ONLY JSON: {\"kind\":\"finish\",\"answer\":string} or {\"kind\":\"call_tool\",\"tool\":string,\"input_json\":string}.",
-                user,
-                |_| {},
-            )
-            .await?;
-        parse_agent_action(&raw)
-    }
 }
 
 fn parse_agent_action(raw: &str) -> CoreResult<AgentAction> {
@@ -10054,7 +10080,7 @@ mod tests {
         String::from_utf8(output.stdout).expect("git output must be UTF-8")
     }
 
-    fn test_state(token: &str) -> Arc<LocalRuntimeState> {
+    pub(super) fn test_state(token: &str) -> Arc<LocalRuntimeState> {
         let state = test_state_without_session(token);
         state
             .session_store
@@ -10166,7 +10192,7 @@ mod tests {
             .expect("authenticated JSON request")
     }
 
-    fn seed_plan_conversation(state: &LocalRuntimeState, conversation_id: &str) {
+    pub(super) fn seed_plan_conversation(state: &LocalRuntimeState, conversation_id: &str) {
         state
             .session_store
             .insert_conversation(&LocalConversation {
@@ -14758,32 +14784,6 @@ mod tests {
                 .split(',')
                 .any(|header| header.trim().eq_ignore_ascii_case(expected)));
         }
-
-        let platform_plugin_preflight = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method(Method::OPTIONS)
-                    .uri("/api/v1/platform-plugins/apply-state")
-                    .header("origin", "http://localhost:5173")
-                    .header("access-control-request-method", "GET")
-                    .header("access-control-request-headers", "authorization")
-                    .body(Body::empty())
-                    .expect("platform plugin GET preflight request"),
-            )
-            .await
-            .expect("platform plugin GET preflight response");
-        assert_eq!(
-            platform_plugin_preflight.status(),
-            axum::http::StatusCode::OK
-        );
-        assert_eq!(
-            platform_plugin_preflight
-                .headers()
-                .get("access-control-allow-origin")
-                .and_then(|value| value.to_str().ok()),
-            Some("http://localhost:5173")
-        );
 
         let tenant_project_post_preflight = app
             .clone()

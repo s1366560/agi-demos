@@ -9,9 +9,6 @@ const {
 const {
   createLocalStorageActivityReadRetryStore,
 } = require("/tmp/agistack-desktop-test-dist/src/features/agent-authority/activityReadRetryStore.js");
-const {
-  resolveActivityAuthorityBinding,
-} = require("/tmp/agistack-desktop-test-dist/src/features/activity/useActivityInbox.js");
 
 const localConfig = {
   apiBaseUrl: "http://127.0.0.1:43121",
@@ -67,9 +64,6 @@ test("Local adapter exposes only the narrow Activity authority client", () => {
     tenantId: "tenant-1",
     projectId: "project-1",
   });
-  const binding = resolveActivityAuthorityBinding(adapter, undefined);
-  assert.equal(binding.client, adapter.activityClient);
-  assert.equal(binding.scope, adapter.activityScope);
 });
 
 test("Local Activity GET uses the canonical path, launch credential, and response contract", async () => {

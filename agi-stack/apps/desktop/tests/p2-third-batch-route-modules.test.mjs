@@ -8,16 +8,24 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 
-const { createEvolutionRouteClient } = require(`${root}/evolutionRouteClient.js`);
+const { createDesktopTenantEvolutionHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantEvolutionHttpProjectionV2.js',
+);
 const { createEvolutionRouteController } = require(`${root}/evolutionRouteController.js`);
 const { createEvolutionRouteModuleLoader } = require(`${root}/evolutionRouteModule.js`);
-const { createChannelsRouteClient } = require(`${root}/channelsRouteClient.js`);
+const { createDesktopProjectChannelsHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectChannelsHttpProjectionV2.js',
+);
 const { createChannelsRouteController } = require(`${root}/channelsRouteController.js`);
 const { createChannelsRouteModuleLoader } = require(`${root}/channelsRouteModule.js`);
-const { createTemplatesRouteClient } = require(`${root}/templatesRouteClient.js`);
+const { createDesktopTenantTemplatesHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTemplatesHttpProjectionV2.js',
+);
 const { createTemplatesRouteController } = require(`${root}/templatesRouteController.js`);
 const { createTemplatesRouteModuleLoader } = require(`${root}/templatesRouteModule.js`);
-const { createProfileRouteClient } = require(`${root}/profileRouteClient.js`);
+const { createDesktopUserProfileHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopUserProfileHttpProjectionV2.js',
+);
 const { createProfileRouteController } = require(`${root}/profileRouteController.js`);
 const { createProfileRouteModuleLoader } = require(`${root}/profileRouteModule.js`);
 const { EvolutionRoutePage } = require(`${root}/EvolutionRoutePage.js`);
@@ -98,7 +106,7 @@ test('Evolution client uses Cloud trusted-session actions and Local sidecar reas
   ]);
   try {
     const scope = { authority: 'cloud', tenantId: 'tenant-1' };
-    const client = createEvolutionRouteClient(cloudConfig);
+    const client = createDesktopTenantEvolutionHttpProjectionV2(cloudConfig);
     const observed = await client.observe(scope);
     assert.equal(observed.itemCount, 1);
     assert.deepEqual(observed.allowedActions, [
@@ -134,7 +142,7 @@ test('Evolution client uses Cloud trusted-session actions and Local sidecar reas
   ]);
   try {
     await assert.rejects(
-      createEvolutionRouteClient(localConfig).observe({
+      createDesktopTenantEvolutionHttpProjectionV2(localConfig).observe({
         authority: 'local',
         tenantId: 'tenant-1',
       }),
@@ -165,8 +173,8 @@ test('Channels client exposes project CRUD/test authority and fails closed in Lo
       tenantId: 'tenant-1',
       projectId: 'project-1',
     };
-    const client = createChannelsRouteClient(cloudConfig);
-    const observed = await client.observe(scope);
+    const client = createDesktopProjectChannelsHttpProjectionV2(cloudConfig);
+    const observed = await client.load(scope);
     assert.equal(observed.itemCount, 1);
     assert.equal(observed.catalog.length, 1);
     await client.create(scope, {
@@ -199,7 +207,7 @@ test('Channels client exposes project CRUD/test authority and fails closed in Lo
   ]);
   try {
     await assert.rejects(
-      createChannelsRouteClient(localConfig).observe({
+      createDesktopProjectChannelsHttpProjectionV2(localConfig).load({
         authority: 'local',
         tenantId: 'tenant-1',
         projectId: 'project-1',
@@ -216,18 +224,26 @@ test('Channels client exposes project CRUD/test authority and fails closed in Lo
 test('Templates client owns list, categories, detail, install, and seed contracts', async () => {
   const requests = [];
   const restore = mockFetch(requests, [
-    { templates: [templateSummary()], total: 1 },
+    { templates: [templateDetail()], total: 1 },
     { categories: ['coding'] },
     templateDetail(),
-    { id: 'agent-1', name: 'installed', display_name: 'Installed' },
+    {
+      id: 'agent-1',
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      name: 'installed',
+      enabled: true,
+      source: 'database',
+    },
     { created: 2, message: 'Seeded 2 builtin templates' },
   ]);
   try {
     const scope = { authority: 'cloud', tenantId: 'tenant-1' };
-    const client = createTemplatesRouteClient(cloudConfig);
-    const observed = await client.observe(scope, {
+    const client = createDesktopTenantTemplatesHttpProjectionV2(cloudConfig);
+    const observed = await client.load(scope, {
       page: 1,
       pageSize: 12,
+      category: '',
       search: 'code',
     });
     assert.equal(observed.itemCount, 1);
@@ -256,10 +272,10 @@ test('Templates client owns list, categories, detail, install, and seed contract
   ]);
   try {
     await assert.rejects(
-      createTemplatesRouteClient(localConfig).observe({
-        authority: 'local',
-        tenantId: 'tenant-1',
-      }),
+      createDesktopTenantTemplatesHttpProjectionV2(localConfig).load(
+        { authority: 'local', tenantId: 'tenant-1' },
+        { page: 1, pageSize: 12, category: '', search: '' },
+      ),
       (error) => error.status === 501 && error.reasonCode === 'local_subagent_registry_unavailable',
     );
   } finally {
@@ -279,7 +295,7 @@ test('Profile client is Cloud editable and Local observed read-only with stable 
   ]);
   try {
     const scope = { authority: 'cloud' };
-    const client = createProfileRouteClient(cloudConfig);
+    const client = createDesktopUserProfileHttpProjectionV2(cloudConfig);
     const observed = await client.observe(scope);
     assert.equal(observed.user.email, 'user@example.test');
     assert.deepEqual(observed.allowedActions, [
@@ -312,7 +328,7 @@ test('Profile client is Cloud editable and Local observed read-only with stable 
   const localRequests = [];
   const restoreLocal = mockFetch(localRequests, [currentUser({ user_id: 'local-user' })]);
   try {
-    const client = createProfileRouteClient(localConfig);
+    const client = createDesktopUserProfileHttpProjectionV2(localConfig);
     const scope = { authority: 'local' };
     const observed = await client.observe(scope);
     assert.equal(observed.availability, 'degraded');
@@ -414,7 +430,7 @@ test('native route errors never promote localized detail text into reason codes'
   ]);
   try {
     await assert.rejects(
-      createProfileRouteClient(cloudConfig).observe({ authority: 'cloud' }),
+      createDesktopUserProfileHttpProjectionV2(cloudConfig).observe({ authority: 'cloud' }),
       (error) => error.status === 403 && error.reasonCode === 'desktop_native_route_http_403',
     );
   } finally {

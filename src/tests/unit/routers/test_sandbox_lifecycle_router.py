@@ -10,7 +10,6 @@ from fastapi import HTTPException, status
 
 from src.infrastructure.adapters.primary.web.routers.sandbox import (
     lifecycle as lifecycle_router,
-    utils as sandbox_utils,
 )
 from src.infrastructure.adapters.primary.web.routers.sandbox.schemas import CreateSandboxRequest
 from src.infrastructure.adapters.primary.web.routers.sandbox.utils import assert_caller_owns_sandbox
@@ -35,57 +34,35 @@ def _sandbox_info() -> SimpleNamespace:
     )
 
 
-@pytest.mark.unit
-def test_get_event_publisher_error_log_omits_exception_text(
+def _sandbox_authority(lifecycle_service: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        services=SimpleNamespace(lifecycle_service=lifecycle_service),
+    )
+
+
+class _SandboxAuthorityContext:
+    def __init__(self, lifecycle_service: object) -> None:
+        self._authority = _sandbox_authority(lifecycle_service)
+
+    async def __aenter__(self) -> SimpleNamespace:
+        return self._authority
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+
+def _install_sandbox_authority(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
+    lifecycle_service: object,
+    *,
+    captured: dict[str, object] | None = None,
 ) -> None:
-    class FailingContainer:
-        def sandbox_event_publisher(self) -> object:
-            raise RuntimeError("event publisher secret")
+    def factory(**kwargs: object) -> _SandboxAuthorityContext:
+        if captured is not None:
+            captured.update(kwargs)
+        return _SandboxAuthorityContext(lifecycle_service)
 
-    request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(container=FailingContainer()))
-    )
-    monkeypatch.setattr(sandbox_utils, "_event_publisher", None)
-    caplog.set_level(
-        logging.WARNING,
-        logger="src.infrastructure.adapters.primary.web.routers.sandbox.utils",
-    )
-
-    result = sandbox_utils.get_event_publisher(request)
-
-    assert result is None
-    assert sandbox_utils._event_publisher is None
-    assert "Could not create event publisher" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
-    assert "event publisher secret" not in caplog.text
-
-
-@pytest.mark.unit
-async def test_ensure_sandbox_sync_error_log_omits_exception_text(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    class FailingAdapter:
-        async def sync_from_docker(self) -> int:
-            raise RuntimeError("docker sync secret")
-
-    monkeypatch.setattr(sandbox_utils, "_sandbox_adapter", FailingAdapter())
-    monkeypatch.setattr(sandbox_utils, "_worker_id", 123)
-    monkeypatch.setattr(sandbox_utils, "_sync_pending", True)
-    monkeypatch.setattr(sandbox_utils, "_get_worker_id", lambda: 123)
-    caplog.set_level(
-        logging.WARNING,
-        logger="src.infrastructure.adapters.primary.web.routers.sandbox.utils",
-    )
-
-    await sandbox_utils.ensure_sandbox_sync()
-
-    assert sandbox_utils._sync_pending is False
-    assert "API Server: Failed to sync sandboxes from Docker" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
-    assert "docker sync secret" not in caplog.text
+    monkeypatch.setattr(lifecycle_router, "sandbox_operation_authority_v2", factory)
 
 
 @pytest.mark.unit
@@ -98,13 +75,18 @@ async def test_create_sandbox_sanitizes_internal_errors(
             raise RuntimeError(f"internal docker secret for {project_id}:{tenant_id}")
 
     class FakeDIContainer:
-        def project_sandbox_lifecycle_service(self) -> FailingLifecycleService:
-            return FailingLifecycleService()
+        pass
 
     import src.configuration.di_container as di_container
 
     monkeypatch.setattr(lifecycle_router, "assert_caller_owns_project", _allow_project_access)
     monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
+    captured: dict[str, object] = {}
+    _install_sandbox_authority(
+        monkeypatch,
+        FailingLifecycleService(),
+        captured=captured,
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await lifecycle_router.create_sandbox(
@@ -120,6 +102,10 @@ async def test_create_sandbox_sanitizes_internal_errors(
     assert exc_info.value.detail == "Failed to create sandbox"
     assert "internal" not in exc_info.value.detail
     assert "tenant-secret" not in exc_info.value.detail
+    scope = captured["scope"]
+    assert scope.kind.value == "project"
+    assert scope.tenant_id == "tenant-secret"
+    assert scope.project_id == "project-1"
 
 
 @pytest.mark.unit
@@ -132,8 +118,7 @@ async def test_create_sandbox_mcp_connect_log_omits_exception_text(
             return _sandbox_info()
 
     class FakeDIContainer:
-        def project_sandbox_lifecycle_service(self) -> LifecycleService:
-            return LifecycleService()
+        pass
 
     class Adapter:
         async def connect_mcp(self, _sandbox_id: str) -> None:
@@ -143,6 +128,7 @@ async def test_create_sandbox_mcp_connect_log_omits_exception_text(
 
     monkeypatch.setattr(lifecycle_router, "assert_caller_owns_project", _allow_project_access)
     monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
+    _install_sandbox_authority(monkeypatch, LifecycleService())
     caplog.set_level(
         logging.WARNING,
         logger="src.infrastructure.adapters.primary.web.routers.sandbox.lifecycle",
@@ -178,13 +164,6 @@ async def test_create_sandbox_tool_registration_log_omits_exception_text(
         async def register_sandbox_tools(self, **_kwargs: Any) -> list[Any]:
             raise RuntimeError("tool registry secret")
 
-    class FakeDIContainer:
-        def project_sandbox_lifecycle_service(self) -> LifecycleService:
-            return LifecycleService()
-
-        def sandbox_tool_registry(self) -> FailingRegistry:
-            return FailingRegistry()
-
     class Adapter:
         async def connect_mcp(self, _sandbox_id: str) -> None:
             return None
@@ -192,10 +171,13 @@ async def test_create_sandbox_tool_registration_log_omits_exception_text(
         async def list_tools(self, _sandbox_id: str) -> list[dict[str, str]]:
             return [{"name": "read"}]
 
-    import src.configuration.di_container as di_container
-
     monkeypatch.setattr(lifecycle_router, "assert_caller_owns_project", _allow_project_access)
-    monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
+    monkeypatch.setattr(
+        lifecycle_router,
+        "get_sandbox_tool_registry",
+        lambda: FailingRegistry(),
+    )
+    _install_sandbox_authority(monkeypatch, LifecycleService())
     caplog.set_level(
         logging.WARNING,
         logger="src.infrastructure.adapters.primary.web.routers.sandbox.lifecycle",
@@ -227,8 +209,7 @@ async def test_create_sandbox_publish_error_log_omits_exception_text(
             return _sandbox_info()
 
     class FakeDIContainer:
-        def project_sandbox_lifecycle_service(self) -> LifecycleService:
-            return LifecycleService()
+        pass
 
     class Adapter:
         async def connect_mcp(self, _sandbox_id: str) -> None:
@@ -245,6 +226,7 @@ async def test_create_sandbox_publish_error_log_omits_exception_text(
 
     monkeypatch.setattr(lifecycle_router, "assert_caller_owns_project", _allow_project_access)
     monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
+    _install_sandbox_authority(monkeypatch, LifecycleService())
     caplog.set_level(
         logging.WARNING,
         logger="src.infrastructure.adapters.primary.web.routers.sandbox.lifecycle",
@@ -321,18 +303,16 @@ async def test_terminate_sandbox_tool_unregister_log_omits_exception_text(
         async def unregister_sandbox_tools(self, _sandbox_id: str) -> bool:
             raise RuntimeError("tool unregister secret")
 
-    class FakeDIContainer:
-        def sandbox_tool_registry(self) -> FailingRegistry:
-            return FailingRegistry()
-
     class Adapter:
         async def terminate_sandbox(self, _sandbox_id: str) -> bool:
             return True
 
-    import src.configuration.di_container as di_container
-
     monkeypatch.setattr(lifecycle_router, "assert_caller_owns_sandbox", allow_sandbox_access)
-    monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
+    monkeypatch.setattr(
+        lifecycle_router,
+        "get_sandbox_tool_registry",
+        lambda: FailingRegistry(),
+    )
     caplog.set_level(
         logging.WARNING,
         logger="src.infrastructure.adapters.primary.web.routers.sandbox.lifecycle",

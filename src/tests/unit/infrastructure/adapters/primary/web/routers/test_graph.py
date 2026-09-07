@@ -26,6 +26,13 @@ def _store() -> Mock:
     return store
 
 
+def _application(graph_store: object, db: object | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db if db is not None else SimpleNamespace(),
+        services=SimpleNamespace(graph_store=graph_store),
+    )
+
+
 async def test_get_graph_assembles_elements_from_rows() -> None:
     source_props = {
         "uuid": "source-1",
@@ -55,7 +62,7 @@ async def test_get_graph_assembles_elements_from_rows() -> None:
     response = await get_graph(
         project_id="project-1",
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     node = response["elements"]["nodes"][0]["data"]
@@ -75,7 +82,7 @@ async def test_get_graph_forwards_tenant_scope_for_superuser() -> None:
         tenant_id="tenant-1",
         project_id=None,
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     assert response == {"elements": {"nodes": [], "edges": []}}
@@ -91,7 +98,7 @@ async def test_get_graph_forwards_since_filter() -> None:
         project_id="project-1",
         since="2026-05-16T04:58:00+00:00",
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     assert response == {"elements": {"nodes": [], "edges": []}}
@@ -133,7 +140,7 @@ async def test_get_subgraph_assembles_elements_from_rows() -> None:
     response = await get_subgraph(
         SubgraphRequest(node_uuids=["source-1"], project_id="project-1"),
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     nodes = response["elements"]["nodes"]
@@ -158,7 +165,7 @@ async def test_list_entities_forwards_entity_type_filter() -> None:
         project_id="project-1",
         entity_type="Person",
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     assert response["total"] == 1
@@ -174,7 +181,7 @@ async def test_list_entities_forwards_tenant_scope_for_superuser() -> None:
         tenant_id="tenant-1",
         project_id=None,
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     assert response["total"] == 0
@@ -189,7 +196,7 @@ async def test_list_communities_forwards_tenant_scope_for_superuser() -> None:
         tenant_id="tenant-1",
         project_id=None,
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     assert response["total"] == 0
@@ -199,14 +206,12 @@ async def test_list_communities_forwards_tenant_scope_for_superuser() -> None:
 
 async def test_get_entity_types_returns_store_counts() -> None:
     store = _store()
-    store.get_entity_types = AsyncMock(
-        return_value=[{"entity_type": "Person", "count": 2}]
-    )
+    store.get_entity_types = AsyncMock(return_value=[{"entity_type": "Person", "count": 2}])
 
     response = await get_entity_types(
         project_id="project-1",
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     assert response == {"entity_types": [{"entity_type": "Person", "count": 2}], "total": 1}
@@ -219,7 +224,7 @@ async def test_get_entity_types_forwards_tenant_scope_for_superuser() -> None:
         tenant_id="tenant-1",
         project_id=None,
         current_user=SimpleNamespace(is_superuser=True),
-        graph_store=store,
+        graph_application=_application(store),
     )
 
     assert response == {"entity_types": [], "total": 0}

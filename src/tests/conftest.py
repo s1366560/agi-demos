@@ -24,12 +24,12 @@ from sqlalchemy.ext.compiler import compiles
 from src.configuration.di_container import DIContainer
 from src.domain.model.auth.api_key import APIKey
 from src.domain.model.auth.user import User as DomainUser
-from src.domain.ports.services.workspace_authority_port import (
-    WorkspaceAuthorityResolvedProfile,
-)
 
 # Domain models
 from src.domain.model.task.task_log import TaskLog
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityResolvedProfile,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Base,
     Memory,
@@ -54,12 +54,67 @@ from src.infrastructure.adapters.secondary.persistence.sql_task_repository impor
 from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
     SqlUserRepository,
 )
+from src.infrastructure.scheduler import scheduler_service
 
 # Constants
 TEST_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 TEST_TENANT_ID = "550e8400-e29b-41d4-a716-446655440001"
 TEST_PROJECT_ID = "550e8400-e29b-41d4-a716-446655440002"
 TEST_MEMORY_ID = "550e8400-e29b-41d4-a716-446655440003"
+
+
+@pytest.fixture(autouse=True)
+def isolate_cron_scheduler_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep tests from opening process-global APScheduler infrastructure implicitly."""
+    monkeypatch.setattr(scheduler_service, "start_scheduler", AsyncMock(return_value=object()))
+    monkeypatch.setattr(scheduler_service, "sync_all_jobs", AsyncMock())
+    monkeypatch.setattr(scheduler_service, "stop_scheduler", AsyncMock())
+
+
+@pytest.fixture(autouse=True)
+def isolate_artifact_content_gc_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep generic V2 profile tests from starting a durable database worker."""
+    from src.infrastructure.plugins.v2 import artifact_content_gc_runtime
+
+    worker = Mock(owner_id="artifact-gc-test-isolation")
+    worker.stop = AsyncMock()
+    monkeypatch.setattr(
+        artifact_content_gc_runtime,
+        "ArtifactContentOrphanGcWorker",
+        Mock(return_value=worker),
+    )
+
+
+@pytest.fixture(autouse=True)
+def isolate_llm_health_checker_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep generic V2 profile tests from starting the process health loop."""
+    from src.infrastructure.plugins.v2 import llm_health_runtime
+
+    monkeypatch.setattr(llm_health_runtime, "start_health_checker", AsyncMock())
+    monkeypatch.setattr(
+        llm_health_runtime,
+        "sync_llm_health_checker_providers_v2",
+        AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(llm_health_runtime, "stop_health_checker", AsyncMock())
+
+
+@pytest.fixture(autouse=True)
+def isolate_docker_event_monitor_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep generic V2 profile tests from starting Docker event streaming."""
+    from src.infrastructure.plugins.v2 import docker_monitor_runtime
+
+    monkeypatch.setattr(
+        docker_monitor_runtime,
+        "start_docker_event_monitor",
+        AsyncMock(return_value=Mock()),
+    )
+    monkeypatch.setattr(
+        docker_monitor_runtime,
+        "stop_docker_event_monitor",
+        AsyncMock(),
+    )
+
 
 # --- Database Fixtures ---
 
@@ -350,7 +405,8 @@ def test_tenant_repository(test_db):
 @pytest.fixture
 def di_container(test_db, mock_graph_service):
     """Create a DI container for testing."""
-    return DIContainer(test_db, graph_service=mock_graph_service)
+    del mock_graph_service
+    return DIContainer(test_db)
 
 
 # --- Domain Model Fixtures ---
@@ -665,6 +721,9 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
         get_neo4j_client,
     )
     from src.infrastructure.adapters.primary.web.main import create_app
+    from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+        workflow_engine_authority_dependency_v2,
+    )
     from src.infrastructure.adapters.secondary.persistence.database import get_db
     from src.infrastructure.adapters.secondary.persistence.models import User
 
@@ -697,17 +756,12 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
 
     app.state.workspace_authority = TestWorkspaceAuthority()
 
-    # Add workflow_engine to app state
-    app.state.workflow_engine = mock_workflow_engine
-
     # Add graph_service to app state
     app.state.graph_service = mock_graph_service
 
     # Add container to app state for agent endpoints
     app.state.container = DIContainer(
         redis_client=None,  # Mock for tests
-        graph_service=mock_graph_service,
-        workflow_engine=mock_workflow_engine,
     )
 
     # Override database dependency to use test SQLite database
@@ -750,6 +804,7 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     app.dependency_overrides[get_graph_service] = override_get_graph_service
     app.dependency_overrides[get_graph_store] = override_get_graph_service
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[workflow_engine_authority_dependency_v2] = lambda: mock_workflow_engine
 
     return app
 

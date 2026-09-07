@@ -35,8 +35,6 @@ from src.infrastructure.agent.events import (
     EventBus,
     EventMapper,
     SSEEvent,
-    get_event_bus,
-    set_event_bus,
 )
 from src.infrastructure.agent.routing.execution_router import (
     ExecutionPath,
@@ -216,7 +214,6 @@ class TestToolAndEventIntegration:
 
         assert result.success is False
         # In real implementation, executor would emit TOOL_ERROR
-
 
 
 class TestFullIntegration:
@@ -569,21 +566,6 @@ class TestGlobalSingletons:
 
         config3 = get_config("test")
         assert config3.execution.max_steps == 99
-
-    def test_global_event_bus_isolation(self) -> None:
-        """Global event bus should be isolated."""
-        bus1 = get_event_bus()
-        bus2 = get_event_bus()
-
-        assert bus1 is bus2
-
-        # Change global
-        custom = EventBus()
-        set_event_bus(custom)
-
-        bus3 = get_event_bus()
-        assert bus3 is custom
-        assert bus3 is not bus1
 
 
 class TestSSEFormat:

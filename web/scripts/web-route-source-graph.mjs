@@ -62,8 +62,10 @@ function isLocalSourceSpecifier(moduleSpecifier) {
 function collectReachableModuleSpecifiers(sourceFile) {
   const componentBindings = new Set();
   const importedModulesByBinding = new Map();
+  const referencedBindings = new Set();
   const reexportedModules = new Set();
   const moduleSpecifiers = new Set();
+  const routeArtifactFactoryModules = new Set();
 
   function moduleSpecifierValue(expression) {
     const moduleSpecifier = staticModuleSpecifier(expression);
@@ -71,6 +73,12 @@ function collectReachableModuleSpecifiers(sourceFile) {
   }
 
   function visit(node) {
+    if (ts.isImportDeclaration(node)) {
+      return;
+    }
+    if (ts.isIdentifier(node)) {
+      referencedBindings.add(node.text);
+    }
     const tagName = jsxTagName(node);
     if (tagName) {
       componentBindings.add(tagName.split('.')[0]);
@@ -116,7 +124,8 @@ function collectReachableModuleSpecifiers(sourceFile) {
     if (
       !ts.isImportDeclaration(statement) ||
       !statement.moduleSpecifier ||
-      !statement.importClause
+      !statement.importClause ||
+      statement.importClause.isTypeOnly
     ) {
       continue;
     }
@@ -132,6 +141,9 @@ function collectReachableModuleSpecifiers(sourceFile) {
       importedModulesByBinding.set(namedBindings.name.text, moduleSpecifier);
     } else if (namedBindings && ts.isNamedImports(namedBindings)) {
       for (const element of namedBindings.elements) {
+        if (element.isTypeOnly) {
+          continue;
+        }
         importedModulesByBinding.set(element.name.text, moduleSpecifier);
       }
     }
@@ -140,16 +152,35 @@ function collectReachableModuleSpecifiers(sourceFile) {
   for (const binding of collectObjectRoutedComponentSymbols(sourceFile)) {
     componentBindings.add(binding.split('.')[0]);
   }
-  for (const binding of componentBindings) {
+  for (const binding of new Set([...componentBindings, ...referencedBindings])) {
     const moduleSpecifier = importedModulesByBinding.get(binding);
     if (moduleSpecifier) {
       moduleSpecifiers.add(moduleSpecifier);
     }
   }
+  function collectRouteArtifactFactories(node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'defineWebRouteArtifactV2' &&
+      node.arguments.length >= 2 &&
+      ts.isIdentifier(node.arguments[1])
+    ) {
+      const moduleSpecifier = importedModulesByBinding.get(node.arguments[1].text);
+      if (moduleSpecifier) {
+        routeArtifactFactoryModules.add(moduleSpecifier);
+      }
+    }
+    ts.forEachChild(node, collectRouteArtifactFactories);
+  }
+  collectRouteArtifactFactories(sourceFile);
   for (const moduleSpecifier of reexportedModules) {
     moduleSpecifiers.add(moduleSpecifier);
   }
-  return [...moduleSpecifiers].sort();
+  return {
+    module_specifiers: [...moduleSpecifiers].sort(),
+    route_artifact_factory_modules: routeArtifactFactoryModules,
+  };
 }
 
 function jsxTagName(node) {
@@ -215,6 +246,7 @@ function registersProductionRoutes(sourceFile) {
 
 export function discoverReachableWebRouteSources({ routerSource, repositoryRoot }) {
   const modules = new Map();
+  const routeArtifactSources = new Set();
   const pending = [
     {
       source_entry: ROUTER_RELATIVE_PATH,
@@ -237,13 +269,17 @@ export function discoverReachableWebRouteSources({ routerSource, repositoryRoot 
       continue;
     }
 
-    for (const moduleSpecifier of collectReachableModuleSpecifiers(sourceFile)) {
+    const reachableModules = collectReachableModuleSpecifiers(sourceFile);
+    for (const moduleSpecifier of reachableModules.module_specifiers) {
       const sourceEntry = resolveWebSourceEntry({
         moduleSpecifier,
         repositoryRoot,
         entryKind: 'reachable Web module',
         importerRelativePath: current.source_entry,
       });
+      if (reachableModules.route_artifact_factory_modules.has(moduleSpecifier)) {
+        routeArtifactSources.add(sourceEntry);
+      }
       if (!modules.has(sourceEntry)) {
         pending.push({
           source_entry: sourceEntry,
@@ -262,6 +298,7 @@ export function discoverReachableWebRouteSources({ routerSource, repositoryRoot 
   }
   return {
     reachable_sources: reachableSources,
+    route_artifact_sources: [...routeArtifactSources].sort(),
     route_registration_sources: routeRegistrationSources,
   };
 }

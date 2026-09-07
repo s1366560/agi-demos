@@ -6,10 +6,21 @@ This test file follows TDD methodology:
 3. Refactor while keeping tests passing (REFACTOR)
 
 The tests verify that when too many tools are available, the system preserves
-core tools, applies deterministic pruning, and accepts injected rankers.
+the full set unless an audited Agent judgment supplies the ranking.
 """
 
+import logging
 from unittest.mock import MagicMock
+
+import pytest
+
+import src.infrastructure.agent.core.tool_selector as tool_selector_module
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("authority_name", ("_selector", "get_tool_selector"))
+def test_process_global_tool_selector_authority_is_retired(authority_name: str) -> None:
+    assert not hasattr(tool_selector_module, authority_name)
 
 
 class TestToolSelectionContext:
@@ -80,9 +91,9 @@ class TestToolSelector:
         assert "edit" in selected
         assert "bash" in selected
 
-    def test_limit_to_max_tools(self):
+    def test_over_limit_without_agent_ranker_preserves_all_tools(self):
         """
-        Test that selection is limited to max_tools.
+        Tool pruning must not make a local subjective fallback decision.
         """
         from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
@@ -97,12 +108,11 @@ class TestToolSelector:
 
         selected = selector.select_tools(tools, context)
 
-        # Should not exceed max_tools
-        assert len(selected) <= 20
+        assert selected == list(tools)
 
-    def test_rank_tools_by_relevance(self):
+    def test_default_selection_preserves_declaration_order(self):
         """
-        Test that default pruning is deterministic without keyword ranking.
+        Without an Agent verdict, conversation text cannot influence pruning.
         """
         from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
@@ -125,8 +135,7 @@ class TestToolSelector:
 
         selected = selector.select_tools(tools, context)
 
-        assert selected == ["read", "write", "search_web"]
-        assert len(selected) <= 3
+        assert selected == list(tools)
 
     def test_no_selection_needed_when_under_limit(self):
         """
@@ -155,70 +164,188 @@ class TestToolSelector:
         assert "edit" in selected
 
 
-class TestToolRelevanceScoring:
-    """Test tool relevance scoring functionality."""
+class TestAgentToolRanking:
+    """Test explicit Agent-backed ranking behavior."""
 
-    def test_score_based_on_name_match(self):
-        """
-        Test that local conversation keywords do not affect score.
-        """
-        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
-
-        selector = ToolSelector()
-
-        tool = MagicMock()
-        tool.name = "search_web"
-        tool.description = "Search the web"
-
-        context = ToolSelectionContext(
-            conversation_history=[{"role": "user", "content": "I want to search for something"}]
+    def test_agent_ranker_can_order_prune_and_emit_audit(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        from src.infrastructure.agent.core.tool_selector import (
+            ToolRankingAuditV2,
+            ToolRankingDecisionV2,
+            ToolSelectionContext,
+            ToolSelector,
         )
 
-        score = selector.score_tool_relevance(tool, context)
+        selector = ToolSelector()
+        tools = {name: MagicMock() for name in ("alpha", "beta", "gamma", "delta")}
 
-        assert score == 0
+        class AgentRanker:
+            name = "test-agent-ranker"
+            decision_mode = "structured_tool_call"
+            audit_enabled = True
 
-    def test_score_based_on_description_match(self):
-        """
-        Test that local description keywords do not affect score.
-        """
+            def rank_tools(self, _tools, _context):
+                return ToolRankingDecisionV2(
+                    ordered_tool_names=("gamma", "beta"),
+                    audit=ToolRankingAuditV2(
+                        agent_id="judge:model-a",
+                        tool_name="rank_agent_tools_v2",
+                        input_json={"candidate_tool_names": list(_tools)},
+                        output_json={"ordered_tool_names": ["gamma", "beta"]},
+                        rationale="Gamma and beta match the supplied structured evidence.",
+                        latency_ms=7,
+                    ),
+                )
+
+        with caplog.at_level(logging.INFO, logger="agent_decision_audit"):
+            selected = selector.select_tools(
+                tools,
+                ToolSelectionContext(
+                    max_tools=2,
+                    metadata={
+                        "semantic_backend": "agent_decision",
+                        "semantic_ranker": AgentRanker(),
+                    },
+                ),
+            )
+
+        assert selected == ["gamma", "beta"]
+        audit = next(record for record in caplog.records if record.name == "agent_decision_audit")
+        assert audit.agent_id == "judge:model-a"
+        assert audit.tool_name == "rank_agent_tools_v2"
+        assert audit.latency_ms == 7
+
+    def test_agent_ranker_failure_preserves_all_tools(self):
         from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
+        tools = {name: MagicMock() for name in ("alpha", "beta", "gamma")}
 
-        tool = MagicMock()
-        tool.name = "tool_x"
-        tool.description = "This tool sends emails to users"
+        class FailingAgentRanker:
+            name = "failing-agent-ranker"
+            decision_mode = "structured_tool_call"
+            audit_enabled = True
 
-        context = ToolSelectionContext(
-            conversation_history=[{"role": "user", "content": "I need to send an email"}]
+            def rank_tools(self, _tools, _context):
+                raise RuntimeError("judge unavailable")
+
+        selected = selector.select_tools(
+            tools,
+            ToolSelectionContext(
+                max_tools=1,
+                metadata={
+                    "semantic_backend": "agent_decision",
+                    "semantic_ranker": FailingAgentRanker(),
+                },
+            ),
         )
 
-        score = selector.score_tool_relevance(tool, context)
+        assert selected == list(tools)
 
-        assert score == 0
+    def test_invalid_agent_ranker_output_preserves_all_tools(self):
+        from src.infrastructure.agent.core.tool_selector import (
+            ToolRankingAuditV2,
+            ToolRankingDecisionV2,
+            ToolSelectionContext,
+            ToolSelector,
+        )
 
-    def test_core_tools_get_high_score(self):
-        """
-        Test that core tools always get high relevance score.
-        """
+        selector = ToolSelector()
+        tools = {name: MagicMock() for name in ("alpha", "beta", "gamma")}
+
+        class InvalidAgentRanker:
+            name = "invalid-agent-ranker"
+            decision_mode = "structured_tool_call"
+            audit_enabled = True
+
+            def rank_tools(self, _tools, _context):
+                return ToolRankingDecisionV2(
+                    ordered_tool_names=("missing-tool",),
+                    audit=ToolRankingAuditV2(
+                        agent_id="judge:model-a",
+                        tool_name="rank_agent_tools_v2",
+                        input_json={},
+                        output_json={"ordered_tool_names": ["missing-tool"]},
+                        rationale="Invalid candidate.",
+                        latency_ms=1,
+                    ),
+                )
+
+        selected = selector.select_tools(
+            tools,
+            ToolSelectionContext(
+                max_tools=1,
+                metadata={
+                    "semantic_backend": "agent_decision",
+                    "semantic_ranker": InvalidAgentRanker(),
+                },
+            ),
+        )
+
+        assert selected == list(tools)
+
+    def test_untyped_callable_ranker_cannot_prune(self):
         from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
+        tools = {name: MagicMock() for name in ("alpha", "beta", "gamma")}
 
-        core_tools = ["read", "write", "edit", "bash", "todoread", "todowrite"]
+        selected = selector.select_tools(
+            tools,
+            ToolSelectionContext(
+                max_tools=1,
+                metadata={
+                    "semantic_backend": "agent_decision",
+                    "semantic_ranker": lambda _tools, _context: ["gamma"],
+                },
+            ),
+        )
 
-        context = ToolSelectionContext()
+        assert selected == list(tools)
 
-        for tool_name in core_tools:
-            tool = MagicMock()
-            tool.name = tool_name
-            tool.description = ""
+    def test_mismatched_agent_ranker_audit_cannot_prune(self):
+        from src.infrastructure.agent.core.tool_selector import (
+            ToolRankingAuditV2,
+            ToolRankingDecisionV2,
+            ToolSelectionContext,
+            ToolSelector,
+        )
 
-            score = selector.score_tool_relevance(tool, context)
+        selector = ToolSelector()
+        tools = {name: MagicMock() for name in ("alpha", "beta", "gamma")}
 
-            # Core tools should always have high score
-            assert score >= 100  # High baseline for core tools
+        class MismatchedAuditRanker:
+            name = "mismatched-audit-ranker"
+            decision_mode = "structured_tool_call"
+            audit_enabled = True
+
+            def rank_tools(self, _tools, _context):
+                return ToolRankingDecisionV2(
+                    ordered_tool_names=("gamma",),
+                    audit=ToolRankingAuditV2(
+                        agent_id="judge:model-a",
+                        tool_name="rank_agent_tools_v2",
+                        input_json={"candidate_tool_names": list(_tools)},
+                        output_json={"ordered_tool_names": ["alpha"]},
+                        rationale="The audit output does not match the returned decision.",
+                        latency_ms=1,
+                    ),
+                )
+
+        selected = selector.select_tools(
+            tools,
+            ToolSelectionContext(
+                max_tools=1,
+                metadata={
+                    "semantic_backend": "agent_decision",
+                    "semantic_ranker": MismatchedAuditRanker(),
+                },
+            ),
+        )
+
+        assert selected == list(tools)
 
 
 class TestToolSelectorIntegration:
@@ -244,8 +371,7 @@ class TestToolSelectorIntegration:
 
         selected = selector.select_tools(tools, context)
 
-        # At minimum, core tools should be included
-        assert "read" in selected or "write" in selected
+        assert selected == list(tools)
 
     def test_mcp_tools_selected_by_relevance(self):
         """
@@ -270,9 +396,4 @@ class TestToolSelectorIntegration:
 
         selected = selector.select_tools(tools, context)
 
-        # Core tools should be there
-        assert "read" in selected
-        assert "write" in selected
-
-        assert "mcp__api__get_users" in selected
-        assert len(selected) <= 4
+        assert selected == list(tools)

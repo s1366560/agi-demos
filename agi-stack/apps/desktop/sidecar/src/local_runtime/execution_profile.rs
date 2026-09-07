@@ -236,6 +236,13 @@ impl ProfiledToolHost {
 
 #[async_trait]
 impl ToolHost for ProfiledToolHost {
+    fn tool_definition(&self, name: &str) -> Option<agistack_core::ports::ToolDefinition> {
+        if !self.list_tools().iter().any(|allowed| allowed == name) {
+            return None;
+        }
+        self.inner.tool_definition(name)
+    }
+
     fn list_tools(&self) -> Vec<String> {
         let mut advertised = self
             .inner
@@ -302,6 +309,18 @@ impl LlmPort for ProfiledLlm {
 
     async fn extract_relationships(&self, memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
         self.inner.extract_relationships(memory).await
+    }
+
+    async fn decide_with_tools(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        tools: &[agistack_core::ports::ToolDefinition],
+    ) -> CoreResult<AgentAction> {
+        self.inner
+            .decide_with_tools(&self.goal(goal), round, transcript, tools)
+            .await
     }
 
     async fn decide(

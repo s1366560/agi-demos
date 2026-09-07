@@ -13,7 +13,7 @@
 
 import { logger } from '../utils/logger';
 
-import { httpClient } from './client/httpClient';
+import { httpClient, type HttpRequestConfig } from './client/httpClient';
 import {
   buildDesktopWebSocketUrl,
   buildProjectDesktopProxyPath,
@@ -354,7 +354,10 @@ export interface ProjectSandboxService {
    * Seed the scoped proxy auth cookie used by sandbox iframe and WebSocket connections.
    * @param projectId - Project ID
    */
-  ensureProxyAuthCookie(projectId: string): Promise<void>;
+  ensureProxyAuthCookie(
+    projectId: string,
+    options?: Pick<HttpRequestConfig, 'operation' | 'signal'>
+  ): Promise<void>;
 
   /**
    * Stop desktop service for project
@@ -678,8 +681,11 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     return response;
   }
 
-  async ensureProxyAuthCookie(projectId: string): Promise<void> {
-    await this.api.post(`/projects/${projectId}/sandbox/proxy-auth-cookie`, {});
+  async ensureProxyAuthCookie(
+    projectId: string,
+    options?: Pick<HttpRequestConfig, 'operation' | 'signal'>
+  ): Promise<void> {
+    await this.api.post(`/projects/${projectId}/sandbox/proxy-auth-cookie`, {}, options);
   }
 
   async startDesktop(projectId: string, resolution = '1920x1080'): Promise<DesktopStatus> {

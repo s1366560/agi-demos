@@ -37,7 +37,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, cast
+from typing import Any
 
 from src.domain.events.agent_events import AgentMessageSentEvent
 from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpValidationError, WtpVerb
@@ -59,7 +59,6 @@ from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
 _FAILED_TEST_COUNT_RE = re.compile(
     r"\b([1-9]\d*)\s+(?:failed|failing|failure|failures)\b",
     re.IGNORECASE,
@@ -110,14 +109,13 @@ def _supervisor_only_terminal_path() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
-def configure_workspace_wtp(orchestrator: AgentOrchestrator) -> None:
-    """Inject the orchestrator used to emit WTP envelopes.
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
 
-    Called once per worker runtime at agent startup (see
-    ``_add_agent_tools`` in ``agent_worker_state``).
-    """
-    global _orchestrator
-    _orchestrator = orchestrator
+    return current_agent_orchestrator_v2()
 
 
 def _runtime_string(ctx: ToolContext, key: str) -> str:
@@ -331,26 +329,11 @@ def _enrich_envelope_for_supervisor(
 
 
 async def _publish_envelope_for_supervisor(envelope: WtpEnvelope) -> str | None:
-    from src.infrastructure.agent.workspace.workspace_supervisor import (
-        publish_envelope,
-        publish_envelope_default,
+    from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
+        current_workspace_wtp_publisher_v2,
     )
 
-    entry_id = await publish_envelope_default(envelope)
-    if isinstance(entry_id, str) and entry_id.strip():
-        return entry_id
-    try:
-        from src.infrastructure.agent.state.agent_worker_state import get_redis_client
-
-        redis_client = await get_redis_client()
-        return await publish_envelope(cast(Any, redis_client), envelope)
-    except Exception:
-        logger.exception(
-            "workspace_wtp supervisor publish fallback failed (verb=%s task=%s)",
-            envelope.verb.value,
-            envelope.task_id,
-        )
-        return None
+    return await current_workspace_wtp_publisher_v2().publish(envelope)
 
 
 async def _send_envelope(
@@ -420,11 +403,9 @@ async def _send_envelope(
             is_error=not supervisor_delivered,
         )
 
-    if _orchestrator is None:
-        return _deny("workspace WTP not configured (multi-agent disabled?)")
-
+    orchestrator = _current_agent_orchestrator_v2()
     try:
-        result = await _orchestrator.send_message(
+        result = await orchestrator.send_message(
             from_agent_id=sender_agent_ref,
             to_agent_id=to_agent_id,
             message=envelope.to_content(),
@@ -452,10 +433,9 @@ async def _send_envelope(
 
     assert isinstance(result, SendResult)
 
-    # Fan-in copy for the WorkspaceSupervisor (Phase 2). Failures are
-    # swallowed inside publish_envelope_default — the A2A delivery has
-    # already succeeded and we refuse to surface a second error.
-    await _publish_envelope_for_supervisor(enriched_envelope)
+    # Fan-in copy for the WorkspaceSupervisor through the generation-selected
+    # publisher. A missing required service is a structured V2 failure.
+    _ = await _publish_envelope_for_supervisor(enriched_envelope)
 
     await ctx.emit(
         AgentMessageSentEvent(
@@ -931,7 +911,6 @@ async def workspace_report_blocked_tool(
 
 
 __all__ = [
-    "configure_workspace_wtp",
     "workspace_report_blocked_tool",
     "workspace_report_complete_tool",
     "workspace_report_progress_tool",

@@ -223,7 +223,10 @@ export default class Keyboard {
                 // text has been added to the field
                 e.target.blur();
                 // This has to be ran outside of the input handler in order to work
-                setTimeout(e.target.focus.bind(e.target), 0);
+                clearTimeout(this._focusTimeout);
+                this._focusTimeout = setTimeout(() => {
+                    if (this._grabbed) e.target.focus();
+                }, 0);
             } else {
                 this._lastKeyboardInput = newValue;
             }
@@ -462,6 +465,7 @@ export default class Keyboard {
     }
 
     grab() {
+        this._grabbed = true;
         //Log.Debug(">> Keyboard.grab");
 
         this._screenInput.addEventListener('keydown', this._eventHandlers.keydown);
@@ -480,6 +484,10 @@ export default class Keyboard {
     }
 
     ungrab() {
+        this._grabbed = false;
+        clearTimeout(this._focusTimeout);
+        clearTimeout(this._altGrTimeout);
+        this._altGrArmed = false;
         //Log.Debug(">> Keyboard.ungrab");
 
         this._screenInput.removeEventListener('keydown', this._eventHandlers.keydown);

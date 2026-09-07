@@ -12,6 +12,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from src.infrastructure.plugins.v1_retirement import PLUGIN_PROTOCOL_V1_INCOMPATIBLE_CODE
+
 
 class PluginRegistryError(ValueError):
     """Raised when an OCI artifact does not match its immutable digest."""
@@ -27,8 +29,10 @@ class RegistryPluginArtifact:
 
 
 OCI_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
-MEMSTACK_ARTIFACT_TYPE = "application/vnd.memstack.plugin.v1"
-MEMSTACK_LAYER_MEDIA_TYPE = "application/vnd.memstack.plugin.bundle.v1+zip"
+MEMSTACK_ARTIFACT_TYPE = "application/vnd.memstack.plugin.v2"
+MEMSTACK_LAYER_MEDIA_TYPE = "application/vnd.memstack.plugin.bundle.v2+zip"
+_V1_ARTIFACT_TYPE = "application/vnd.memstack.plugin.v1"
+_V1_LAYER_MEDIA_TYPE = "application/vnd.memstack.plugin.bundle.v1+zip"
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
 REPOSITORY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,254}$")
@@ -129,13 +133,19 @@ def normalize_digest(value: str) -> str:
 
 def _validate_oci_manifest(value: dict[str, Any]) -> None:
     layers = value.get("layers")
+    artifact_type = value.get("artifactType")
+    layer_media_type = (
+        layers[0].get("mediaType") if isinstance(layers, list) and len(layers) == 1 else None
+    )
+    if artifact_type == _V1_ARTIFACT_TYPE or layer_media_type == _V1_LAYER_MEDIA_TYPE:
+        raise PluginRegistryError(PLUGIN_PROTOCOL_V1_INCOMPATIBLE_CODE)
     if (
         value.get("schemaVersion") != 2
         or value.get("mediaType") != OCI_MANIFEST_MEDIA_TYPE
-        or value.get("artifactType") != MEMSTACK_ARTIFACT_TYPE
+        or artifact_type != MEMSTACK_ARTIFACT_TYPE
         or not isinstance(layers, list)
         or len(layers) != 1
-        or layers[0].get("mediaType") != MEMSTACK_LAYER_MEDIA_TYPE
+        or layer_media_type != MEMSTACK_LAYER_MEDIA_TYPE
         or layers[0].get("digest", "").removeprefix("sha256:") == ""
     ):
         raise PluginRegistryError("OCI artifact is not a MemStack plugin package")

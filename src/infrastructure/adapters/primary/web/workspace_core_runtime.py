@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import FastAPI
 
+from src.application.services.workspace_provider_admission_v2 import WorkspaceProviderAdmissionV2
 from src.configuration.workspace_core import WorkspaceCoreSettings
-from src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler import (
-    configure_workspace_access_verifier,
-)
-from src.infrastructure.adapters.primary.web.workspace_core_provider import (
-    router as workspace_core_provider_router,
+from src.infrastructure.plugins.v2.boundary import reserve_current_generation_v2
+from src.infrastructure.plugins.v2.workspace_core_runtime import (
+    WorkspaceCoreRuntimeServiceV2,
 )
 from src.infrastructure.workspace_core.agent_runtime_provider import (
     MemStackAgentRuntimeProvider,
@@ -29,16 +30,17 @@ from src.infrastructure.workspace_core.provider import (
 )
 
 
-def install_workspace_core_runtime(app: FastAPI, settings: WorkspaceCoreSettings) -> None:
-    """Install Avernet as the process-wide Workspace authority."""
-    app.state.workspace_core_settings = settings
-    app.include_router(workspace_core_provider_router)
+def _build_workspace_core_runtime_service_v2(
+    settings: WorkspaceCoreSettings,
+    *,
+    scoped_runtime_provider: Callable[[], object] | None = None,
+) -> WorkspaceCoreRuntimeServiceV2:
+    """Construct one isolated candidate without publishing process authority."""
     client = WorkspaceCoreClient(settings)
-    app.state.workspace_core_client = client
-    app.state.workspace_authority = AvernetWorkspaceAuthority(client)
-    app.state.workspace_core_context_judge = AgentWorkspaceContextJudge()
-    app.state.workspace_core_plan_judge = AgentWorkspacePlanJudge()
-    app.state.workspace_core_autonomy_judge = AgentWorkspaceAutonomyJudge()
+    authority = AvernetWorkspaceAuthority(client)
+    context_judge = AgentWorkspaceContextJudge()
+    plan_judge = AgentWorkspacePlanJudge()
+    autonomy_judge = AgentWorkspaceAutonomyJudge()
 
     assert settings.base_url is not None
     assert settings.provider_event_token is not None
@@ -47,14 +49,86 @@ def install_workspace_core_runtime(app: FastAPI, settings: WorkspaceCoreSettings
         event_token=settings.provider_event_token.get_secret_value(),
         timeout_seconds=settings.request_timeout_seconds,
     )
+    agent_runtime_provider = MemStackAgentRuntimeProvider(
+        workspace_core_client=client,
+        scoped_admission=(
+            WorkspaceProviderAdmissionV2(client, scoped_runtime_provider)
+            if scoped_runtime_provider is not None
+            else None
+        ),
+    )
     provider_adapter = AvernetProviderAdapter(
-        MemStackAgentRuntimeProvider(workspace_core_client=client),
+        agent_runtime_provider,
         event_sink,
         client,
+        generation_reserver=reserve_current_generation_v2,
     )
-    app.state.workspace_core_event_sink = event_sink
-    app.state.workspace_core_provider_adapter = provider_adapter
-    configure_workspace_access_verifier(AvernetWorkspaceAccessVerifier(client))
+    access_verifier = AvernetWorkspaceAccessVerifier(client)
+    return WorkspaceCoreRuntimeServiceV2(
+        settings=settings,
+        client=client,
+        authority=authority,
+        context_judge=context_judge,
+        plan_judge=plan_judge,
+        autonomy_judge=autonomy_judge,
+        access_verifier=access_verifier,
+        event_sink=event_sink,
+        agent_runtime_provider=agent_runtime_provider,
+        provider_adapter=provider_adapter,
+    )
+
+
+async def create_workspace_core_runtime_service_v2(
+    settings: WorkspaceCoreSettings,
+    *,
+    scoped_runtime_provider: Callable[[], object] | None = None,
+) -> WorkspaceCoreRuntimeServiceV2:
+    """Create and health-check a generation-owned Workspace Core candidate."""
+    runtime = _build_workspace_core_runtime_service_v2(
+        settings, scoped_runtime_provider=scoped_runtime_provider
+    )
+    try:
+        capabilities = await runtime.client.read_public_api_capabilities()
+        require_complete_public_api(capabilities)
+    except Exception:
+        await runtime.dispose()
+        raise
+    return runtime
+
+
+def install_workspace_core_runtime(
+    app: FastAPI,
+    _settings: WorkspaceCoreSettings | None = None,
+) -> None:
+    """Mount only the frozen V1 Provider routes for inventory materialization."""
+    from src.infrastructure.adapters.primary.web.workspace_core_provider import (
+        router as workspace_core_provider_router,
+    )
+
+    app.include_router(workspace_core_provider_router)
+
+
+def install_legacy_workspace_core_runtime(
+    app: FastAPI,
+    settings: WorkspaceCoreSettings,
+) -> None:
+    """Install process-state authority only for isolated V1 compatibility tests."""
+    from src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler import (
+        configure_workspace_access_verifier,
+    )
+
+    app.state.workspace_core_settings = settings
+    install_workspace_core_runtime(app, settings)
+    runtime = _build_workspace_core_runtime_service_v2(settings)
+    app.state.workspace_core_runtime_service_v2 = runtime
+    app.state.workspace_core_client = runtime.client
+    app.state.workspace_authority = runtime.authority
+    app.state.workspace_core_context_judge = runtime.context_judge
+    app.state.workspace_core_plan_judge = runtime.plan_judge
+    app.state.workspace_core_autonomy_judge = runtime.autonomy_judge
+    app.state.workspace_core_event_sink = runtime.event_sink
+    app.state.workspace_core_provider_adapter = runtime.provider_adapter
+    configure_workspace_access_verifier(runtime.access_verifier)
 
 
 async def start_workspace_core_runtime(app: FastAPI) -> None:

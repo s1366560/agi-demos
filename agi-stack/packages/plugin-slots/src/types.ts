@@ -7,9 +7,29 @@ export type UiSlotKind =
   | 'nav_item'
   | 'settings_page'
   | 'conversation_renderer'
+  | 'conversation_surface'
   | 'tool_result_renderer'
   | 'composer_action'
-  | 'mcp_canvas';
+  | 'mcp_canvas'
+  | 'session_workspace_surface'
+  | 'workspace_collaboration_surface'
+  | 'new_thread_composer_surface'
+  | 'my_work_queue_surface'
+  | 'activity_inbox_surface'
+  | 'authenticated_shell_surface'
+  | 'keyboard_shortcuts_surface'
+  | 'status_bar_surface'
+  | 'titlebar_surface'
+  | 'sidebar_surface'
+  | 'right_sidebar_surface'
+  | 'new_task_flow_surface'
+  | 'command_palette_surface'
+  | 'workspace_create_surface'
+  | 'workspace_settings_surface'
+  | 'workbench_tab_bar_surface'
+  | 'settings_window_surface'
+  | 'session_canvas_surface'
+  | 'workbench_surface';
 
 export interface UiSlotDefinition {
   pluginId: string;
@@ -20,33 +40,4 @@ export interface UiSlotDefinition {
   moduleRef: string;
   permission: string;
   sandbox: boolean;
-}
-
-export interface PlatformPluginSnapshotPayload {
-  schema_version: number;
-  profile_id: string;
-  plugins: PlatformPluginSnapshotRow[];
-  digest: string;
-}
-
-export interface PlatformPluginSnapshotRow {
-  id: string;
-  provides: PlatformPluginCapability[];
-  config?: Record<string, unknown>;
-}
-
-export interface PlatformPluginCapability {
-  kind: string;
-  id: string;
-  contract: string;
-  config_schema?: Record<string, unknown>;
-  permissions?: string[] | undefined;
-}
-
-export interface PlatformPluginSnapshotResponse {
-  version: number;
-  nonce: string;
-  profile_id: string;
-  digest: string;
-  payload: PlatformPluginSnapshotPayload;
 }

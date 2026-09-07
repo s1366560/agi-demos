@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from datetime import UTC, datetime
+from inspect import getsource
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -39,22 +42,27 @@ def _build_service(
 ) -> _TestAgentService:
     conversation_repo = AsyncMock()
     execution_repo = AsyncMock()
-    graph_service = AsyncMock()
     llm = AsyncMock()
-    neo4j_client = AsyncMock()
     agent_event_repo = AsyncMock()
     service = _TestAgentService(
         conversation_repository=conversation_repo,
         execution_repository=execution_repo,
-        graph_service=graph_service,
         llm=llm,
-        neo4j_client=neo4j_client,
         agent_execution_event_repository=agent_event_repo,
         tool_execution_record_repository=tool_execution_record_repo,
         redis_client=None,
     )
     service._event_bus = SimpleNamespace(stream_read=AsyncMock())
     return service
+
+
+def test_connect_chat_stream_has_no_title_generation_side_effect() -> None:
+    source = getsource(AgentService.connect_chat_stream)
+
+    assert "_handle_title_generation" not in source
+    assert "_trigger_title_generation" not in source
+    assert not hasattr(AgentService, "_handle_title_generation")
+    assert not hasattr(AgentService, "_trigger_title_generation")
 
 
 @pytest.mark.unit
@@ -92,7 +100,6 @@ async def test_connect_chat_stream_skips_db_replay_when_disabled() -> None:
 
     service._event_bus.stream_read = _stream_read
     service._read_delayed_events = AsyncMock(return_value=[])
-    service._handle_title_generation = AsyncMock()
 
     events = []
     async for event in service.connect_chat_stream(
@@ -104,6 +111,44 @@ async def test_connect_chat_stream_skips_db_replay_when_disabled() -> None:
 
     service._replay_db_events.assert_not_awaited()
     assert [event["type"] for event in events] == ["text_delta", "complete"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_chat_stream_close_propagates_to_event_bus_stream() -> None:
+    service = _build_service()
+    event_bus_closed = False
+
+    async def _stream_read(*_args: object, **_kwargs: object):
+        nonlocal event_bus_closed
+        try:
+            yield {
+                "id": "1-0",
+                "data": {
+                    "type": "text_delta",
+                    "event_time_us": 10,
+                    "event_counter": 1,
+                    "data": {"message_id": "m1", "delta": "hello"},
+                },
+            }
+        finally:
+            event_bus_closed = True
+
+    service._event_bus.stream_read = _stream_read
+    stream = cast(
+        AsyncGenerator[dict[str, Any], None],
+        service.connect_chat_stream(
+            conversation_id="conv-1",
+            message_id="m1",
+            replay_from_db=False,
+        ),
+    )
+
+    async with aclosing(stream) as events:
+        assert (await anext(events))["type"] == "text_delta"
+        assert event_bus_closed is False
+
+    assert event_bus_closed is True
 
 
 @pytest.mark.unit
@@ -152,7 +197,6 @@ async def test_connect_chat_stream_honors_cursor_without_db_replay() -> None:
 
     service._event_bus.stream_read = _stream_read
     service._read_delayed_events = AsyncMock(return_value=[])
-    service._handle_title_generation = AsyncMock()
 
     events = []
     async for event in service.connect_chat_stream(
@@ -208,7 +252,6 @@ async def test_connect_chat_stream_keeps_higher_cursor_than_replay() -> None:
     service._replay_db_events = AsyncMock(return_value=([], 31, 1, False))
     service._event_bus.stream_read = _stream_read
     service._read_delayed_events = AsyncMock(return_value=[])
-    service._handle_title_generation = AsyncMock()
 
     events = []
     async for event in service.connect_chat_stream(
@@ -276,7 +319,6 @@ async def test_connect_chat_stream_persists_live_tool_execution_records() -> Non
     service._replay_db_events = AsyncMock(return_value=([], 0, 0, False))
     service._event_bus.stream_read = _stream_read
     service._read_delayed_events = AsyncMock(return_value=[])
-    service._handle_title_generation = AsyncMock()
 
     events = []
     async for event in service.connect_chat_stream(
@@ -411,6 +453,49 @@ async def test_replay_db_events_preserves_execution_identity_beside_response_id(
         "content": "Persisted response",
     }
     assert last_event_time_us == 34
+    assert last_event_counter == 1
+    assert saw_complete is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_replay_db_events_projects_turn_admitted_as_user_message() -> None:
+    service = _build_service()
+    created_at = datetime.now(UTC)
+    event_data = {
+        "content": "Typed V2 user turn",
+        "model_message": {"role": "user", "content": "Typed V2 user turn"},
+        "role": "user",
+    }
+    service._agent_execution_event_repo.get_events_by_message.return_value = [
+        SimpleNamespace(
+            message_id="execution-message-v2",
+            event_type="turn_admitted",
+            event_data=event_data,
+            created_at=created_at,
+            event_time_us=35,
+            event_counter=1,
+        )
+    ]
+
+    events, last_event_time_us, last_event_counter, saw_complete = await service._replay_db_events(
+        "conv-1",
+        "execution-message-v2",
+    )
+
+    assert events == [
+        {
+            "type": "user_message",
+            "data": {
+                **event_data,
+                "execution_message_id": "execution-message-v2",
+            },
+            "timestamp": created_at.isoformat(),
+            "event_time_us": 35,
+            "event_counter": 1,
+        }
+    ]
+    assert last_event_time_us == 35
     assert last_event_counter == 1
     assert saw_complete is False
 
@@ -573,58 +658,6 @@ async def test_replay_db_events_repairs_task_update_for_wrong_conversation() -> 
         message_id="msg-1",
     )
     service._load_task_snapshot.assert_awaited_once_with("conv-1")
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_extract_first_user_message_scopes_event_lookup_to_conversation() -> None:
-    service = _build_service()
-    service._agent_execution_event_repo.get_events_by_message.return_value = [
-        SimpleNamespace(
-            event_type="user_message",
-            event_data={"content": "hello"},
-        )
-    ]
-
-    content = await service._extract_first_user_message("conv-1", "msg-1")
-
-    assert content == "hello"
-    service._agent_execution_event_repo.get_events_by_message.assert_awaited_once_with(
-        conversation_id="conv-1",
-        message_id="msg-1",
-    )
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_extract_title_seed_exchange_reads_user_and_assistant_message() -> None:
-    service = _build_service()
-    service._agent_execution_event_repo.get_events_by_message.return_value = [
-        SimpleNamespace(
-            event_type="user_message",
-            event_data={"content": "it still fails"},
-        ),
-        SimpleNamespace(
-            event_type="thought",
-            event_data={"content": "not title material"},
-        ),
-        SimpleNamespace(
-            event_type="assistant_message",
-            event_data={"content": "The traceback points to FastAPI dependency injection."},
-        ),
-    ]
-
-    user_message, assistant_message = await service._extract_title_seed_exchange(
-        "conv-1",
-        "msg-1",
-    )
-
-    assert user_message == "it still fails"
-    assert assistant_message == "The traceback points to FastAPI dependency injection."
-    service._agent_execution_event_repo.get_events_by_message.assert_awaited_once_with(
-        conversation_id="conv-1",
-        message_id="msg-1",
-    )
 
 
 @pytest.mark.unit

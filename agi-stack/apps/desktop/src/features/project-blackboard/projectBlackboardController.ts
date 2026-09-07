@@ -7,6 +7,7 @@ import {
   buildProjectBlackboardPresentation,
   type ProjectBlackboardViewModel,
 } from './projectBlackboardPresentationModel';
+import type { WorkspaceCollaborationClient } from '../workspace/workspaceCollaborationClient';
 
 export type ProjectBlackboardController = Readonly<{
   getSnapshot: () => ProjectBlackboardViewModel;
@@ -20,10 +21,12 @@ export type ProjectBlackboardController = Readonly<{
 export function createProjectBlackboardController({
   authority,
   client,
+  collaborationClient,
   initialScope,
 }: Readonly<{
   authority: ProjectBlackboardAuthority;
   client: ProjectBlackboardClient;
+  collaborationClient: WorkspaceCollaborationClient;
   initialScope: ProjectBlackboardScope;
 }>): ProjectBlackboardController {
   let activeScope = freezeScope(initialScope);
@@ -69,7 +72,7 @@ export function createProjectBlackboardController({
     try {
       const snapshot = await client.probe(scope, controller.signal);
       if (!currentRequest(revision, controller)) return;
-      emit(buildProjectBlackboardPresentation({ kind: 'snapshot', snapshot }));
+      emit(buildProjectBlackboardPresentation({ kind: 'snapshot', snapshot, collaborationClient }));
     } catch (error) {
       if (!currentRequest(revision, controller)) return;
       emit(failureModel(error, scope));

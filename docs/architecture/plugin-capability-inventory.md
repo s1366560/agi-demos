@@ -1,39 +1,50 @@
-# Plugin Capability Inventory
+# Protocol V2 Capability Inventory
 
-This is the Phase 0 ownership map. Rows marked **Kernel** stay deterministic platform
-infrastructure or trusted builtin capability; they are not exposed to untrusted plugins.
+This document describes ownership categories. It is not a manually maintained module inventory.
+Exact module, service, event, scope, target, version, artifact, and digest records come from the
+generated V2 catalog and graphs linked below.
 
-| Capability kind | Current owner | Current consumers | Scope | Trust | Migration |
-| --- | --- | --- | --- | --- | --- |
-| `agent_loop` | `src/infrastructure/agent/core/react_agent.py`, `src/infrastructure/agent/processor/processor.py` | Agent worker, Ray actors, workspace runtime | session | Kernel / builtin | Phase 3 interface extraction. |
-| `tool` | `src/infrastructure/agent/tools/define.py`, `tool_provider.py`, `plugin_tools.py`, `pipeline.py` | ReAct processor, tool selection, MCP runtime | tenant / project / session | builtin or isolated | Phase 3 capability-provider bridge. |
-| `skill_provider` | `src/infrastructure/agent/plugins/registry.py`, `plugin_skill_loader.py`, skill filesystem/database loaders | Agent routing and prompt assembly | tenant / project | builtin or isolated | Phase 3. |
-| `subagent_provider` | `src/infrastructure/agent/subagent/`, `plugins/registry.py` | SubAgent router, delegation tools, workflows | project / session | builtin or isolated | Phase 3. |
-| `hook` | `AgentPluginRegistry`, processor hook call sites | Runtime plugins, workspace, memory, skill evolution | global / tenant | builtin or isolated | Context bridge implemented; event modes remain Phase 3. |
-| `policy` | Tool pipeline, permission manager, sandbox gates | Tool execution, subprocess, filesystem, approval | global / tenant / project | Kernel | Phase 3/4 typed enforcement. |
-| `llm_provider` | `src/application/services/llm_provider_manager.py`, `provider_resolution_service.py`, LiteLLM adapters | Agent, embeddings, health, resilience | tenant | builtin or signed | Phase 4. |
-| `embedder` | graph embedding services and provider manager | Graph ingestion, retrieval | tenant | builtin or signed | Phase 4. |
-| `reranker` | retrieval services and provider manager | Hybrid search | tenant | builtin or signed | Phase 4. |
-| `channel` | `src/infrastructure/agent/plugins/registry.py`, channel adapter modules, connection manager | Channel APIs, Feishu/IM routing, HITL | tenant / project | builtin or signed | Phase 4. |
-| `http_route` | FastAPI `main.py` static imports and `PluginHttpRoute` registry | API gateway and browser clients | global / tenant | Kernel / builtin | Phase 4 route capability migration. |
-| `cli_command` | agent plugin registry and ACP/CLI command surfaces | Automation and CLI | global | builtin | Phase 4. |
-| `ui_slot` / `ui_renderer` | React and desktop feature modules | Web and Electron rendering | tenant / project | frontend | Phase 5. |
-| `storage` | storage services and repositories | Artifacts, attachments, workspace data | tenant / project | Kernel / builtin or signed | Phase 4. |
-| `graph_backend` | graph backend factory and native adapter | Memory graph, extraction, search | tenant / project | builtin or signed | Phase 4. |
-| `retrieval_backend` | retrieval registry and stores | Recall, hybrid search, reranking | tenant / project | builtin or signed | Phase 4. |
-| `workflow_engine` | workflow engine and background/runtime managers | Automation, jobs, workflows | project | builtin or isolated | Phase 4. |
-| `credential_source` | application vault/provider credential paths | Provider calls, desktop vault, HITL env flows | tenant | Kernel | Reference-only seam; never an untrusted provider. |
-| `telemetry_exporter` | telemetry config/exporters | Observability and product telemetry | global / tenant | builtin or signed | Phase 4. |
-| Wasm tool host | `agi-stack/crates/plugin-host`, `adapters-wasmtime` | Rust registry, desktop sidecar, sandboxed tools | project / session | isolated | Phase 5 reconcile integration. |
+## Generated authority
 
-## Explicit non-plugin kernel surfaces
+- `shared/catalogs/plugin-module-catalog.v2.json`
+- `shared/graphs/plugin-service-dependencies.v2.json`
+- `shared/graphs/plugin-events.v2.json`
+- `shared/profiles/memstack-default-bootstrap.v2.json`
 
-- Authentication and authorization enforcement.
-- Tenant membership and project access checks.
-- Alembic migrations and schema authority.
-- Credential vault encryption and secret grant enforcement.
-- Plugin host lifecycle and profile composition engine.
-- Versioned control-plane protocol and audit storage.
+Run `make plugin-v2-contract-gate` after changing a manifest, Profile, contract, or runtime effect.
 
-These surfaces may be represented by trusted builtin capabilities for observability, but
-tenant-approved or untrusted plugins cannot replace them.
+## Capability ownership
+
+| Area | V2 ownership | Typical scope | Targets |
+| --- | --- | --- | --- |
+| Agent loop, prompts, tools, skills, subagents, definitions, hooks | Explicit service/event effects resolved per pinned turn | tenant/project/session | Python |
+| Session event log and replay | Ordered generation-owned service | session/operation | Python |
+| Persistence, tenant, project, transaction factories | Repository/service effects; request DB session remains a kernel resource | root/tenant/project | Python |
+| Memory, graph, retrieval, model/provider adapters | Versioned provider and resolver services | tenant/project/session | Python |
+| Sandbox, MCP, channels, workflow, background tasks | Runtime/service effects with typed events and disposers | project/session | Python/Rust/sidecar |
+| HTTP routes and OpenAPI | Route contributions mounted by the generation-aware dispatcher | root/tenant/project | Python |
+| Routes, navigation, UI slots | Renderer contributions resolved from target artifact catalogs | renderer generation | Web/Desktop |
+| Telemetry | Generation-owned runtime service; exporters remain permission constrained | root/tenant | Python/Rust |
+| Bundle/Profile/Marketplace/HMR | Desired Bundle Set plus complete candidate generation | root/tenant/project/session | control plane/all targets |
+| Publication receipts/readiness | Immutable publication roster and per-target ACK/NACK | deployment | control plane/all targets |
+
+## Non-plugin kernel
+
+These surfaces are never replaceable by tenant or untrusted plugins:
+
+- authentication and tenant/project authorization;
+- Alembic migrations and database schema authority;
+- vault encryption, secret grant issuance, and credential redaction;
+- sandbox and process-boundary enforcement;
+- Loader/Fiber/generation leases and contract verification;
+- V2 publication, receipt validation, readiness aggregation, and audit persistence.
+
+Trusted builtins may expose observations or adapters for these surfaces, but they cannot replace the
+enforcement authority.
+
+## Trust and isolation
+
+Builtin and verified signed artifacts may run only in their declared target and isolation mode.
+Tenant-approved or untrusted code must use an isolated Wasm, MCP, or subprocess boundary and cannot
+receive raw vault secrets. Renderer contributions are resolved from an allow-listed target artifact
+catalog; unknown module or artifact references NACK the candidate generation.

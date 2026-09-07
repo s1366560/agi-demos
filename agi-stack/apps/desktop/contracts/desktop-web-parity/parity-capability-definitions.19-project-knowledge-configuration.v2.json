@@ -172,8 +172,10 @@
       "cloud_actions": ["view", "list-entity-types"],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
@@ -183,7 +185,12 @@
         "agi-stack/apps/desktop/src/features/project-administration/projectSchemaController.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectSchemaPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -192,8 +199,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
@@ -203,9 +212,14 @@
         "agi-stack/apps/desktop/src/features/project-administration/projectSchemaController.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectSchemaPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical Web capability, and SchemaOverview performs client-side JSON copy and download export without a separate export API. Desktop now binds the production user_id identity contract, project membership and workspace-context scope revision, so the native route can load entity, edge and mapping data. ProjectAdministrationPage renders only the entity-type list; it does not render edge types or mappings and exposes none of the schema mutations, copy or export actions, so Cloud remains partial with view and entity-list actions only. Local uses the same real route but its renderer-declared static result remains closed with local_project_schema_authority_unavailable until a sidecar authority is observed."
+      "judgment_rationale": "Accepted after reviewing the checked-in Project Schema definition, generation-backed authority module, strict operation boundary, HTTP projection, App composition, route injection, required workbench injection, and focused tests at 42b60c723. The migration replaces the production read path with one project-scoped generation lease. The canonical Web surface retains client-side JSON copy and download export, while Desktop does not add schema mutations, edge/mapping management, copy, or export UI. Cloud therefore remains partial/degraded with only view and the entity-type list action (list-entity-types) under cloud_service authority. Local rejects before transport because no sidecar schema authority exists and remains unavailable with no actions. Source, contract, build, and unit evidence does not establish native Electron QA, globally-ready publication, ACK or release readiness, or V1 retirement."
     },
     {
       "id": "project-project-channels",
@@ -235,17 +249,8 @@
       ],
       "actions": [
         "view",
-        "list",
-        "install",
-        "enable",
-        "disable",
-        "uninstall",
-        "reload",
         "view-channel-catalog",
         "view-channel-schema",
-        "view-config-schema",
-        "view-config",
-        "update-config",
         "list-channel-configs",
         "create-channel-config",
         "update-channel-config",
@@ -254,17 +259,8 @@
       ],
       "web_actions": [
         "view",
-        "list",
-        "install",
-        "enable",
-        "disable",
-        "uninstall",
-        "reload",
         "view-channel-catalog",
         "view-channel-schema",
-        "view-config-schema",
-        "view-config",
-        "update-config",
         "list-channel-configs",
         "create-channel-config",
         "update-channel-config",
@@ -285,12 +281,6 @@
         {
           "surface": "web",
           "method": "GET",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
           "path": "/api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog",
           "authority": "web_service"
         },
@@ -298,54 +288,6 @@
           "surface": "web",
           "method": "GET",
           "path": "/api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog/{channel_type}/schema",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/install",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/enable",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/disable",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/uninstall",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/reload",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config-schema",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "PUT",
-          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
           "authority": "web_service"
         },
         {
@@ -436,31 +378,7 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": ["view", "list", "view-channel-catalog", "view-channel-schema", "view-config-schema", "view-config"],
-          "authentication": "authenticated",
-          "authorization": ["tenant_member"],
-          "enforcement": "enforced",
-          "feature_gate": null
-        },
-        {
-          "surface": "web",
-          "actions": ["install", "enable", "disable", "uninstall", "reload", "update-config"],
-          "authentication": "authenticated",
-          "authorization": ["tenant_admin"],
-          "enforcement": "enforced",
-          "feature_gate": null
-        },
-        {
-          "surface": "web",
-          "actions": ["install", "enable", "disable", "uninstall", "reload", "update-config"],
-          "authentication": "authenticated",
-          "authorization": ["tenant_owner"],
-          "enforcement": "enforced",
-          "feature_gate": null
-        },
-        {
-          "surface": "web",
-          "actions": ["list-channel-configs", "test-channel-config"],
+          "actions": ["view", "view-channel-catalog", "view-channel-schema", "list-channel-configs", "test-channel-config"],
           "authentication": "authenticated",
           "authorization": ["project_member"],
           "enforcement": "enforced",
@@ -531,10 +449,14 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "partial",
-      "cloud_reason_code": "desktop_project_channels_partial",
+      "cloud_status": "implemented",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/api/client.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/ChannelsRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/channelsRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/channelsRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/channelsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/channelsRoutePresentationModel.ts",
         "agi-stack/apps/desktop/src/features/settings/ChannelConnectionsDialog.tsx",
         "agi-stack/apps/desktop/src/features/settings/useChannelConnectionManagement.ts",
         "agi-stack/apps/desktop/src/features/settings/SettingsManagementDialogs.tsx",
@@ -544,7 +466,7 @@
       "local_policy": "native_equivalent",
       "local_reason_code": "local_channel_runtime_not_applicable",
       "local_deviation": "The Local sidecar currently returns the stable local_channel_runtime_not_applicable reason for channel runtime routes; the native dialog must not fall back to a WebView or external browser.",
-      "judgment_rationale": "ProjectChannelsRedirect sends the canonical Web project Channels route to PluginHub with project context. That production page owns tenant plugin discovery and lifecycle, plugin configuration, the channel catalog and schema, and project channel-config CRUD and test; it does not call the single-config read, status, or observability APIs, and PluginDetail remains a separate route boundary. Cloud Desktop's native ChannelConnectionsDialog implements only catalog, schema, and channel-config CRUD and test, behind the SettingsWindow admin-or-owner UI gate intersected with tenant and project service authority. Local parity routes deliberately report channel runtime as not applicable."
+      "judgment_rationale": "ProjectChannelsRedirect sends the canonical Web project Channels route to PluginHub with project context. This capability is independent from Marketplace lifecycle: it consumes only the generation-backed channel catalog and schema plus project channel-config CRUD and test. Cloud Desktop's native Channels route and ChannelConnectionsDialog expose the same action set behind the SettingsWindow admin-or-owner UI gate intersected with project service authority. Generic V1 plugin install, toggle, reload, and configuration endpoints are not claimed. Local parity routes deliberately report channel runtime as not applicable."
     },
     {
       "id": "project-project-maintenance",
@@ -706,8 +628,10 @@
       "cloud_actions": ["view"],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
@@ -717,7 +641,12 @@
         "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceController.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectMaintenancePresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -726,8 +655,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
@@ -737,9 +668,14 @@
         "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceController.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectMaintenancePresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and the Web page exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. Desktop now binds the production user_id identity contract and a revision-bound project scope, so the controller loads its three status payloads. The generic ProjectAdministrationPage does not render those maintenance models and exposes no maintenance mutations or export, so client-only POST methods are excluded from the Desktop Cloud API projection. Those latent client methods also call /maintenance/incremental-refresh instead of /maintenance/refresh/incremental and /maintenance/communities/rebuild instead of /graph/communities/rebuild; these endpoint mismatches remain explicit completion gaps while Cloud stays partial with route view only. Local binds the same real route but remains renderer-declared and closed with local_project_maintenance_authority_unavailable."
+      "judgment_rationale": "Accepted after reviewing the Project Maintenance V2 authority module, service contract, strict project-operation boundary, Cloud HTTP projection, App and route wiring, required workbench injection, and focused tests at c4fbfb9ee. The production Desktop read path now acquires one project-scoped generation lease and validates maintenance status, data statistics, and embedding status under the same generation; Local rejects before transport because no sidecar maintenance authority exists. Cloud remains partial/degraded with view only because the generic ProjectAdministrationPage does not render maintenance actions or export. The canonical Web surface alone continues to call /maintenance/refresh/incremental and /graph/communities/rebuild and to export downloaded graph data; those Web-only mutations and export are not Desktop capabilities. The old Desktop static factory and its latent mutation methods have been removed, so the previous rationale about Desktop calling mismatched mutation endpoints is no longer applicable. Source, contract, build, and unit evidence does not establish native Electron QA, globally-ready publication, ACK or release readiness, or V1 retirement."
     }
   ],
   "source_ownership": {

@@ -1,13 +1,18 @@
 """Unit tests for channel reload planning."""
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from src.infrastructure.adapters.primary.web.startup.channel_reload import (
+    ChannelReloadPlan,
+    _notify_plugin_reload_hooks,
     build_channel_reload_plan,
 )
+from src.infrastructure.plugins.v2.channel_adapters import CHANNEL_RUNTIME_RELOAD_EVENT_V2
 
 
 def _config(config_id: str, *, updated_at: datetime | None) -> SimpleNamespace:
@@ -55,3 +60,48 @@ def test_build_channel_reload_plan_skips_restart_when_no_heartbeat() -> None:
 
     assert plan.to_restart == ()
     assert plan.unchanged == ("cfg-1",)
+
+
+@pytest.mark.unit
+async def test_reload_notification_dispatches_v2_event_in_leased_operation() -> None:
+    operation = SimpleNamespace(
+        generation=SimpleNamespace(digest="a" * 64),
+        operation_id="channel-reload:test",
+        dispatch=AsyncMock(return_value=()),
+    )
+    observed: dict[str, object] = {}
+
+    @asynccontextmanager
+    async def _pin_operation(_host: object, **kwargs: object):
+        observed.update(kwargs)
+        yield operation
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.startup.channel_reload."
+            "current_process_generation_host_v2",
+            return_value=object(),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.startup.channel_reload."
+            "pin_operation_context_v2",
+            _pin_operation,
+        ),
+    ):
+        await _notify_plugin_reload_hooks(
+            plan=ChannelReloadPlan(to_add=("config-a",), unchanged=("config-b",)),
+            dry_run=True,
+        )
+
+    assert str(observed["operation_id"]).startswith("channel-reload:")
+    scope = observed["scope"]
+    assert getattr(scope, "kind", None).value == "root"
+    operation.dispatch.assert_awaited_once_with(
+        CHANNEL_RUNTIME_RELOAD_EVENT_V2,
+        {
+            "dry_run": True,
+            "generation_digest": "a" * 64,
+            "operation_id": "channel-reload:test",
+            "plan": {"add": 1, "remove": 0, "restart": 0, "unchanged": 1},
+        },
+    )

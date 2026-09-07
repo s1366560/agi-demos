@@ -131,6 +131,11 @@ class PooledAgentSessionAdapter:
             f"resource_isolation={self.adapter_config.enable_resource_isolation}"
         )
 
+    @property
+    def pool_manager(self) -> AgentPoolManager | None:
+        """Return the manager owned by this adapter without exposing mutation."""
+        return self._pool_manager
+
     async def start(self) -> None:
         """启动适配器."""
         if self._running:
@@ -141,34 +146,46 @@ class PooledAgentSessionAdapter:
                 return  # type: ignore[unreachable]
 
             logger.info("[PooledAgentSessionAdapter] Starting...")
+            try:
+                # 初始化池管理器
+                if self.adapter_config.enable_pool_management:
+                    self._pool_manager = AgentPoolManager(config=self.pool_config)
+                    await self._pool_manager.start()
 
-            # 初始化池管理器
-            if self.adapter_config.enable_pool_management:
-                self._pool_manager = AgentPoolManager(config=self.pool_config)
-                await self._pool_manager.start()
+                # 预热 (如果启用)
+                if self.adapter_config.enable_prewarming and self.adapter_config.prewarm_on_startup:
+                    await self._prewarm_pool()
 
-            # 预热 (如果启用)
-            if self.adapter_config.enable_prewarming and self.adapter_config.prewarm_on_startup:
-                await self._prewarm_pool()
-
-            self._running = True
-            logger.info("[PooledAgentSessionAdapter] Started")
+                self._running = True
+                logger.info("[PooledAgentSessionAdapter] Started")
+            except Exception:
+                manager = self._pool_manager
+                self._pool_manager = None
+                self._running = False
+                if manager is not None:
+                    try:
+                        await manager.stop()
+                    except Exception:
+                        logger.exception(
+                            "[PooledAgentSessionAdapter] Failed to clean partial startup"
+                        )
+                raise
 
     async def stop(self) -> None:
         """停止适配器."""
-        if not self._running:
+        if not self._running and self._pool_manager is None:
             return
 
         async with self._lock:
-            if not self._running:
-                return  # type: ignore[unreachable]
+            if not self._running and self._pool_manager is None:
+                return
 
             logger.info("[PooledAgentSessionAdapter] Stopping...")
-
-            if self._pool_manager:
-                await self._pool_manager.stop()
-
+            manager = self._pool_manager
+            self._pool_manager = None
             self._running = False
+            if manager is not None:
+                await manager.stop()
             logger.info("[PooledAgentSessionAdapter] Stopped")
 
     async def get_session(
@@ -367,11 +384,13 @@ class PooledAgentSessionAdapter:
         for instance in self._pool_manager._instances.values():
             metrics = instance.metrics
             if metrics.total_requests > 0:
-                active_projects.append((
-                    instance.config.tenant_id,
-                    instance.config.project_id,
-                    instance.config.agent_mode,
-                ))
+                active_projects.append(
+                    (
+                        instance.config.tenant_id,
+                        instance.config.project_id,
+                        instance.config.agent_mode,
+                    )
+                )
 
         # Pre-create instances for recently active projects
         prewarmed_count = 0
@@ -385,8 +404,7 @@ class PooledAgentSessionAdapter:
                 prewarmed_count += 1
             except Exception as e:
                 logger.warning(
-                    f"[PooledAgentSessionAdapter] Prewarm failed: "
-                    f"project={project_id}, error={e}"
+                    f"[PooledAgentSessionAdapter] Prewarm failed: project={project_id}, error={e}"
                 )
 
         logger.info(

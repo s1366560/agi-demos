@@ -155,6 +155,7 @@ function ForcedSkillMessageBadgeQa() {
           <div className="message-scroll">
             <div className="message-stack">
               <AgentTimeline
+                imagePreviewClient={null}
                 state={state}
                 expandedItems={{}}
                 onToggleItem={() => undefined}
@@ -166,7 +167,7 @@ function ForcedSkillMessageBadgeQa() {
                 respondableHitlRequestIds={[]}
                 activityPresence="recorded"
               />
-              <WorkspaceTranscriptMessage message={workspaceMessage} />
+              <WorkspaceTranscriptMessage imagePreviewClient={null} message={workspaceMessage} />
             </div>
           </div>
         </section>

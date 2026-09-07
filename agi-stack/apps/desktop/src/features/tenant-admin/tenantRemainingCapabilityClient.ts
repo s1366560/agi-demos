@@ -2,49 +2,41 @@ import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig, RuntimeMode } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import {
-  createTenantAcpClient,
   TENANT_ACP_LOCAL_REASON,
   TENANT_ACP_ROUTE_ID,
   type TenantAcpClient,
 } from './tenantAcpClient';
 import {
-  createTenantDecisionRecordsClient,
   TENANT_DECISION_RECORDS_LOCAL_REASON,
   TENANT_DECISION_RECORDS_ROUTE_ID,
   type TenantDecisionRecordsClient,
 } from './tenantDecisionRecordsClient';
 import {
-  createTenantEventsClient,
   TENANT_EVENTS_LOCAL_REASON,
   TENANT_EVENTS_ROUTE_ID,
   type TenantEventsClient,
 } from './tenantEventsClient';
 import {
-  createTenantGenesClient,
   TENANT_GENES_LOCAL_REASON,
   TENANT_GENES_ROUTE_ID,
   type TenantGenesClient,
 } from './tenantGenesClient';
 import {
-  createTenantOrganizationSettingsClient,
   TENANT_ORGANIZATION_SETTINGS_LOCAL_REASON,
   TENANT_ORGANIZATION_SETTINGS_ROUTE_ID,
   type TenantOrganizationSettingsClient,
 } from './tenantOrganizationSettingsClient';
 import {
-  createTenantPatternsClient,
   TENANT_PATTERNS_LOCAL_REASON,
   TENANT_PATTERNS_ROUTE_ID,
   type TenantPatternsClient,
 } from './tenantPatternsClient';
 import {
-  createTenantSettingsClient,
   TENANT_SETTINGS_LOCAL_REASON,
   TENANT_SETTINGS_ROUTE_ID,
   type TenantSettingsClient,
 } from './tenantSettingsClient';
 import {
-  createTenantWebhooksClient,
   TENANT_WEBHOOKS_LOCAL_REASON,
   TENANT_WEBHOOKS_ROUTE_ID,
   type TenantWebhooksClient,
@@ -73,14 +65,14 @@ export type TenantRemainingCapabilityClient = Readonly<{
   load(signal?: AbortSignal): Promise<TenantRemainingCapabilitySet>;
 }>;
 export type TenantRemainingCapabilityDependencies = Readonly<{
-  patterns?: Pick<TenantPatternsClient, 'load'>;
-  acp?: Pick<TenantAcpClient, 'load'>;
-  webhooks?: Pick<TenantWebhooksClient, 'load'>;
-  genes?: Pick<TenantGenesClient, 'load'>;
-  events?: Pick<TenantEventsClient, 'load'>;
-  decisionRecords?: Pick<TenantDecisionRecordsClient, 'load'>;
-  organizationSettings?: Pick<TenantOrganizationSettingsClient, 'load'>;
-  settings?: Pick<TenantSettingsClient, 'load'>;
+  patterns: Pick<TenantPatternsClient, 'load'>;
+  acp: Pick<TenantAcpClient, 'load'>;
+  webhooks: Pick<TenantWebhooksClient, 'load'>;
+  genes: Pick<TenantGenesClient, 'load'>;
+  events: Pick<TenantEventsClient, 'load'>;
+  decisionRecords: Pick<TenantDecisionRecordsClient, 'load'>;
+  organizationSettings: Pick<TenantOrganizationSettingsClient, 'load'>;
+  settings: Pick<TenantSettingsClient, 'load'>;
 }>;
 
 const REASON_PREFIX = Object.freeze({
@@ -171,21 +163,18 @@ const ACTION_CATALOG = Object.freeze({
 
 export function createTenantRemainingCapabilityClient(
   config: DesktopRuntimeConfig,
-  dependencies: TenantRemainingCapabilityDependencies = {},
+  dependencies: TenantRemainingCapabilityDependencies,
 ): TenantRemainingCapabilityClient {
   const runtimeConfig = Object.freeze({ ...config });
   const clients = Object.freeze({
-    patterns: dependencies.patterns ?? createTenantPatternsClient(runtimeConfig),
-    acp: dependencies.acp ?? createTenantAcpClient(runtimeConfig),
-    webhooks: dependencies.webhooks ?? createTenantWebhooksClient(runtimeConfig),
-    genes: dependencies.genes ?? createTenantGenesClient(runtimeConfig),
-    events: dependencies.events ?? createTenantEventsClient(runtimeConfig),
-    decisionRecords:
-      dependencies.decisionRecords ?? createTenantDecisionRecordsClient(runtimeConfig),
-    organizationSettings:
-      dependencies.organizationSettings ??
-      createTenantOrganizationSettingsClient(runtimeConfig),
-    settings: dependencies.settings ?? createTenantSettingsClient(runtimeConfig),
+    patterns: dependencies.patterns,
+    acp: dependencies.acp,
+    webhooks: dependencies.webhooks,
+    genes: dependencies.genes,
+    events: dependencies.events,
+    decisionRecords: dependencies.decisionRecords,
+    organizationSettings: dependencies.organizationSettings,
+    settings: dependencies.settings,
   });
 
   return Object.freeze({

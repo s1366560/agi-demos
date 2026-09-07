@@ -130,110 +130,6 @@ export type GetRunChangesOptions = Readonly<{
 
 export type AgentAuthorityReadOptions = Readonly<{ signal?: AbortSignal }>;
 
-export type CloudRunInputDelivery = 'steer_now' | 'queue_next';
-export type CloudRunInputStatus =
-  | 'pending_boundary'
-  | 'queued'
-  | 'applied'
-  | 'ready'
-  | 'blocked'
-  | 'promoted_to_plan';
-export type CloudRunInputDispatchStatus =
-  | 'not_required'
-  | 'dispatching'
-  | 'dispatched'
-  | 'failed';
-
-export type CloudRunInputReference = Readonly<{
-  type: 'code_range';
-  snapshot_id: string;
-  environment_id: string;
-  path: string;
-  start_line: number;
-  end_line: number;
-  side: 'old' | 'new';
-  patch_digest: string;
-}>;
-
-export type CloudRunInputContextItem = Readonly<{
-  kind: 'attachment' | 'agent' | 'skill' | 'plugin' | 'command' | 'thread';
-  resource_id: string;
-  label: string;
-  metadata: Readonly<Record<string, string | number | boolean | null>> | null;
-}>;
-
-export type CreateCloudRunInputRequest = Readonly<{
-  expected_run_revision: number;
-  message: string;
-  message_id: string;
-  idempotency_key: string;
-  delivery: CloudRunInputDelivery;
-  references: readonly CloudRunInputReference[];
-  context_items: readonly CloudRunInputContextItem[];
-}>;
-
-export type CloudRunInputReceipt = Readonly<{
-  id: string;
-  conversation_id: string;
-  run_id: string;
-  expected_run_revision: number;
-  message_id: string;
-  idempotency_key: string;
-  delivery: CloudRunInputDelivery;
-  status: CloudRunInputStatus;
-  sequence: number;
-  queue_position: number | null;
-  content: string;
-  references: readonly CloudRunInputReference[];
-  context_items: readonly CloudRunInputContextItem[];
-  applied_round: number | null;
-  applied_at: string | null;
-  injected_via: string | null;
-  dispatch_status: CloudRunInputDispatchStatus;
-  dispatch_attempts: number;
-  dispatch_lease_expires_at: string | null;
-  dispatch_error_code: string | null;
-  promotion_idempotency_key: string | null;
-  promoted_at: string | null;
-  created_at: string;
-  updated_at: string;
-}>;
-
-export type CloudRunInputAck = Readonly<{
-  accepted: boolean;
-  created: boolean;
-  action: 'send_message';
-  conversation_id: string;
-  message_id: string;
-  delivery_mode: CloudRunInputDelivery;
-  run_id: string;
-  run_revision: number;
-  queue_position: number | null;
-  input: CloudRunInputReceipt;
-}>;
-
-export type CloudRunInputListResponse = Readonly<{
-  run_id: string;
-  run_revision: number;
-  inputs: readonly CloudRunInputReceipt[];
-  total_count: number;
-}>;
-
-export type PromoteCloudRunInputRequest = Readonly<{
-  expected_source_run_revision: number;
-  idempotency_key: string;
-}>;
-
-export type PromoteCloudRunInputResponse = Readonly<{
-  accepted: boolean;
-  created: boolean;
-  action: 'start_plan_turn';
-  input: CloudRunInputReceipt;
-  conversation: Readonly<Record<string, unknown>>;
-  source_run: Readonly<Record<string, unknown>> &
-    Readonly<{ revision: number }>;
-}>;
-
 export interface ActivityReadRetryStore {
   load(scope: ActivityAuthorityScope): readonly ActivityReadEntry[];
   save(
@@ -241,6 +137,10 @@ export interface ActivityReadRetryStore {
     entries: readonly ActivityReadEntry[],
   ): void;
   clear(scope: ActivityAuthorityScope): void;
+  acknowledge(
+    scope: ActivityAuthorityScope,
+    submittedEntries: readonly ActivityReadEntry[],
+  ): void;
 }
 
 export interface DesktopActivityAuthorityClient {
@@ -275,24 +175,6 @@ export interface DesktopCloudAgentAuthorityClient
     runId: string,
     options: GetRunChangesOptions,
   ): Promise<RunChanges>;
-  createRunInput(
-    scope: CloudAgentAuthorityScope,
-    runId: string,
-    request: CreateCloudRunInputRequest,
-    options?: AgentAuthorityReadOptions,
-  ): Promise<CloudRunInputAck>;
-  listRunInputs(
-    scope: CloudAgentAuthorityScope,
-    runId: string,
-    options?: AgentAuthorityReadOptions,
-  ): Promise<CloudRunInputListResponse>;
-  promoteRunInput(
-    scope: CloudAgentAuthorityScope,
-    runId: string,
-    inputId: string,
-    request: PromoteCloudRunInputRequest,
-    options?: AgentAuthorityReadOptions,
-  ): Promise<PromoteCloudRunInputResponse>;
 }
 
 export type DesktopAgentAuthorityAction =
@@ -300,10 +182,7 @@ export type DesktopAgentAuthorityAction =
   | 'read_activity'
   | 'write_activity'
   | 'review_run_summary'
-  | 'review_run_changes'
-  | 'create_run_input'
-  | 'list_run_inputs'
-  | 'promote_run_input';
+  | 'review_run_changes';
 
 export type DesktopAgentAuthorityAdapter =
   | Readonly<{

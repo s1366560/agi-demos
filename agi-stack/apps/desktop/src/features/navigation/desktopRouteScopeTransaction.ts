@@ -60,7 +60,12 @@ export type DesktopRouteScopeCommit = Readonly<{
 
 export type DesktopRouteScopeTransactionPorts = Readonly<{
   getCurrent: () => DesktopRouteScopeCurrent;
-  createAuthority: (config: DesktopRuntimeConfig) => DesktopRouteScopeAuthority;
+  createAuthority: <TResult>(
+    config: DesktopRuntimeConfig,
+    operation: (
+      authority: DesktopRouteScopeAuthority,
+    ) => TResult | Promise<TResult>,
+  ) => Promise<TResult>;
   commit: (value: DesktopRouteScopeCommit) => void;
   refresh: (
     value: DesktopRouteScopeCommit,
@@ -136,68 +141,68 @@ export function createDesktopRouteScopeTransaction(
       projectId: '',
       workspaceId: '',
     });
-    const authority = ports.createAuthority(authorityConfig);
-
-    assertCurrent(ports, captured, revision, latestRevision, signal);
-    const listedProjects = await authority.listProjects(targetConfig.tenantId, signal);
-    assertCurrent(ports, captured, revision, latestRevision, signal);
-    const scopedProjects = requireTargetProject(
-      listedProjects,
-      targetConfig.tenantId,
-      targetConfig.projectId,
-    );
-
-    assertCurrent(ports, captured, revision, latestRevision, signal);
-    const currentResponse = await authority.getWorkspaceContext(signal);
-    assertCurrent(ports, captured, revision, latestRevision, signal);
-    const currentContext = requireAuthorityContext(currentResponse);
-
-    let nextContext = currentContext;
-    if (
-      !workspaceContextMatchesSelection(
-        currentContext,
-        targetConfig.tenantId,
-        targetConfig.projectId,
-      )
-    ) {
+    return ports.createAuthority(authorityConfig, async (authority) => {
       assertCurrent(ports, captured, revision, latestRevision, signal);
-      const switchResponse = await authority.switchWorkspaceContext(
+      const listedProjects = await authority.listProjects(targetConfig.tenantId, signal);
+      assertCurrent(ports, captured, revision, latestRevision, signal);
+      const scopedProjects = requireTargetProject(
+        listedProjects,
         targetConfig.tenantId,
         targetConfig.projectId,
-        currentContext.revision,
-        globalThis.crypto.randomUUID(),
-        signal,
       );
+
       assertCurrent(ports, captured, revision, latestRevision, signal);
-      nextContext = requireAuthorityContext(switchResponse);
-      if (nextContext.revision < currentContext.revision) {
-        throw transactionError('desktop_route_scope_authority_invalid');
+      const currentResponse = await authority.getWorkspaceContext(signal);
+      assertCurrent(ports, captured, revision, latestRevision, signal);
+      const currentContext = requireAuthorityContext(currentResponse);
+
+      let nextContext = currentContext;
+      if (
+        !workspaceContextMatchesSelection(
+          currentContext,
+          targetConfig.tenantId,
+          targetConfig.projectId,
+        )
+      ) {
+        assertCurrent(ports, captured, revision, latestRevision, signal);
+        const switchResponse = await authority.switchWorkspaceContext(
+          targetConfig.tenantId,
+          targetConfig.projectId,
+          currentContext.revision,
+          globalThis.crypto.randomUUID(),
+          signal,
+        );
+        assertCurrent(ports, captured, revision, latestRevision, signal);
+        nextContext = requireAuthorityContext(switchResponse);
+        if (nextContext.revision < currentContext.revision) {
+          throw transactionError('desktop_route_scope_authority_invalid');
+        }
       }
-    }
 
-    if (
-      !workspaceContextMatchesSelection(
-        nextContext,
-        targetConfig.tenantId,
-        targetConfig.projectId,
-      )
-    ) {
-      throw transactionError('desktop_route_scope_authority_mismatch');
-    }
-    assertCurrent(ports, captured, revision, latestRevision, signal);
+      if (
+        !workspaceContextMatchesSelection(
+          nextContext,
+          targetConfig.tenantId,
+          targetConfig.projectId,
+        )
+      ) {
+        throw transactionError('desktop_route_scope_authority_mismatch');
+      }
+      assertCurrent(ports, captured, revision, latestRevision, signal);
 
-    const value = freezeCommit({
-      config: targetConfig,
-      context: nextContext,
-      projects: scopedProjects,
-    });
-    ports.commit(value);
-    await ports.refresh(value, signal);
-    return Object.freeze({
-      status: 'applied',
-      config: value.config,
-      context: value.context,
-      projects: value.projects,
+      const value = freezeCommit({
+        config: targetConfig,
+        context: nextContext,
+        projects: scopedProjects,
+      });
+      ports.commit(value);
+      await ports.refresh(value, signal);
+      return Object.freeze({
+        status: 'applied' as const,
+        config: value.config,
+        context: value.context,
+        projects: value.projects,
+      });
     });
   };
 

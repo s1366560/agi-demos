@@ -25,20 +25,21 @@ async def my_tool(ctx: ToolContext, **kwargs) -> ToolResult: ...
 - Creates `ToolInfo` registered in module-level `_TOOL_REGISTRY`
 - Events emitted via `ctx.emit(event_dict)` — no manual consume needed
 - Returns `ToolResult` instead of raw string
-- DI via module-level `configure_*()` functions (e.g., `configure_terminal()`)
+- Runtime dependencies use generation-bound factories and V2 contributions; do not add
+  process-global `configure_*()` seams.
 
 ## Tool Categories
 
 | Category | Files | Notes |
 |----------|-------|-------|
 | Task management | `todo_tools.py` | Both legacy + new patterns as reference |
-| Sandbox | `terminal_tool.py`, `desktop_tool.py` | Shell/UI execution |
+| Sandbox | `src/infrastructure/plugins/v2/agent_sandbox_mcp_tools.py` | Generation-bound shell/UI MCP contributions |
 | Interaction | `clarification.py`, `decision.py`, `env_var_tools.py` | HITL triggers |
 | Memory | `memory_tools.py` | Recall/store memories |
 | Environment | `env_var_tools.py` | Get/request env vars |
 | Plugin | `plugin_manager.py`, `plugin_tools.py` | Plugin CRUD |
-| MCP | `register_mcp_server.py`, `debug_mcp_server.py` | MCP server management |
-| Skill | `skill_tool.py`, `skill_loader.py`, `skill_installer.py` | Skill CRUD |
+| MCP | `register_mcp_server.py` | MCP server registration |
+| Skill | `skill_loader.py`, `skill_installer.py`, `skill_sync.py` | Skill load/install/sync |
 | Workspace planning | `workspace_plan_contract_tools.py`, `workspace_planning_contract.py` | Planning contracts and workspace plan state |
 | Self-modifying | `tool_mutation_guard.py`, custom tool loaders | Guardrails around runtime tool changes |
 

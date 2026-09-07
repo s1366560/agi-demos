@@ -5,6 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.infrastructure.agent.core.tool_selector import (
+    ToolRankingAuditV2,
+    ToolRankingDecisionV2,
+)
 from src.infrastructure.agent.plugins.selection_pipeline import (
     ToolSelectionContext,
     ToolSelectionPipeline,
@@ -13,11 +17,11 @@ from src.infrastructure.agent.plugins.selection_pipeline import (
 
 
 @pytest.mark.unit
-def test_default_pipeline_limits_tools_and_emits_trace() -> None:
-    """Semantic stage should cap user MCP tools and emit stage traces.
+def test_default_pipeline_preserves_tools_without_agent_ranker_and_emits_trace() -> None:
+    """Semantic stage must not prune user MCP tools without an Agent verdict.
 
     System built-in tools (non mcp__* prefix) are always included.
-    Only user MCP tools (mcp__* prefix) are subject to budget pruning.
+    User MCP tools may exceed the optimization budget when no judge is available.
     """
     pipeline = build_default_tool_selection_pipeline()
     tools = {
@@ -40,10 +44,8 @@ def test_default_pipeline_limits_tools_and_emits_trace() -> None:
         ),
     )
 
-    # Budget is 5 total, 2 built-in (read, write) always included,
-    # so at most 3 user MCP tools should survive
     mcp_tools = [n for n in result.tools if n.startswith("mcp__")]
-    assert len(mcp_tools) <= 3
+    assert len(mcp_tools) == 30
     assert "read" in result.tools
     assert "write" in result.tools
     assert any(step.stage == "semantic_ranker_stage" for step in result.trace)
@@ -136,8 +138,8 @@ def test_policy_stage_normalizes_ui_style_tool_names() -> None:
 
 
 @pytest.mark.unit
-def test_semantic_stage_uses_layered_max_tools_budget() -> None:
-    """Layered max_tools budget should cap user MCP tool selection."""
+def test_semantic_stage_layered_budget_does_not_replace_agent_judgment() -> None:
+    """Layered budgets are triggers, not subjective pruning verdicts."""
     pipeline = build_default_tool_selection_pipeline()
     tools = {
         f"mcp__srv__tool_{idx}": SimpleNamespace(name=f"mcp__srv__tool_{idx}", description="desc")
@@ -158,9 +160,8 @@ def test_semantic_stage_uses_layered_max_tools_budget() -> None:
         ),
     )
 
-    # Budget is 4, 2 built-in always included, so at most 2 user MCP tools
     mcp_tools = [n for n in result.tools if n.startswith("mcp__")]
-    assert len(mcp_tools) <= 2
+    assert len(mcp_tools) == 20
     assert "read" in result.tools
     assert "write" in result.tools
     semantic = next(step for step in result.trace if step.stage == "semantic_ranker_stage")
@@ -212,21 +213,37 @@ def test_semantic_stage_supports_custom_ranker_backend() -> None:
         "mcp__srv__delta": SimpleNamespace(name="mcp__srv__delta", description="delta tool"),
     }
 
-    def _custom_ranker(tool_map, _context):
-        return [
-            "mcp__srv__gamma",
-            "mcp__srv__beta",
-            "mcp__srv__alpha",
-            "mcp__srv__delta",
-            "read",
-        ]
+    class CustomAgentRanker:
+        name = "custom-agent-ranker"
+        decision_mode = "structured_tool_call"
+        audit_enabled = True
+
+        def rank_tools(self, tool_map, _context):
+            ordered = (
+                "mcp__srv__gamma",
+                "mcp__srv__beta",
+                "mcp__srv__alpha",
+                "mcp__srv__delta",
+            )
+            return ToolRankingDecisionV2(
+                ordered_tool_names=ordered,
+                audit=ToolRankingAuditV2(
+                    agent_id="judge:model-a",
+                    tool_name="rank_agent_tools_v2",
+                    input_json={"candidate_tool_names": list(tool_map)},
+                    output_json={"ordered_tool_names": list(ordered)},
+                    rationale="Structured Agent ranking for the supplied MCP candidates.",
+                    latency_ms=3,
+                ),
+            )
 
     result = pipeline.select_with_trace(
         tools,
         ToolSelectionContext(
             metadata={
                 "max_tools": 3,
-                "semantic_ranker": _custom_ranker,
+                "semantic_backend": "agent_decision",
+                "semantic_ranker": CustomAgentRanker(),
             }
         ),
     )
@@ -235,8 +252,8 @@ def test_semantic_stage_supports_custom_ranker_backend() -> None:
     assert "read" in result.tools
     assert "mcp__srv__gamma" in result.tools
     semantic = next(step for step in result.trace if step.stage == "semantic_ranker_stage")
-    assert semantic.explain.get("semantic_backend") == "embedding_vector"
-    assert semantic.explain.get("semantic_backend_effective") == "token_vector"
+    assert semantic.explain.get("semantic_backend") == "agent_decision"
+    assert semantic.explain.get("semantic_backend_effective") == "agent_decision"
 
 
 @pytest.mark.unit
@@ -266,8 +283,8 @@ def test_policy_stage_normalizes_extended_layer_order() -> None:
 
 
 @pytest.mark.unit
-def test_semantic_stage_uses_embedding_ranker_when_configured() -> None:
-    """Embedding backend should honor embedding_ranker callable when provided."""
+def test_semantic_stage_embedding_backend_cannot_issue_subjective_verdict() -> None:
+    """Embedding similarity alone cannot prune model-visible tools."""
     pipeline = build_default_tool_selection_pipeline()
     tools = {
         "read": SimpleNamespace(name="read", description="Read files"),
@@ -290,17 +307,15 @@ def test_semantic_stage_uses_embedding_ranker_when_configured() -> None:
         ),
     )
 
-    # read is built-in (always included), budget=2, 1 built-in, 1 mcp slot
-    assert "read" in result.tools
-    assert "mcp__srv__beta" in result.tools
+    assert set(result.tools) == set(tools)
     semantic = next(step for step in result.trace if step.stage == "semantic_ranker_stage")
     assert semantic.explain.get("semantic_backend") == "embedding_vector"
-    assert semantic.explain.get("semantic_backend_effective") == "embedding_vector"
+    assert semantic.explain.get("semantic_backend_effective") == "unfiltered"
 
 
 @pytest.mark.unit
-def test_semantic_stage_applies_tool_quality_scores() -> None:
-    """Quality scores should bias semantic selection when tools are otherwise similar."""
+def test_semantic_stage_quality_scores_cannot_issue_subjective_verdict() -> None:
+    """Arithmetic quality metrics cannot decide which tools are relevant."""
     pipeline = build_default_tool_selection_pipeline()
     tools = {
         "read": SimpleNamespace(name="read", description="Read files"),
@@ -324,5 +339,4 @@ def test_semantic_stage_applies_tool_quality_scores() -> None:
         ),
     )
 
-    assert "read" in result.tools
-    assert "mcp__srv__tool_b" in result.tools
+    assert set(result.tools) == set(tools)

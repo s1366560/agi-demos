@@ -16,9 +16,11 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
-  createProjectBlackboardCloudClient,
-  createProjectBlackboardLocalClient,
+  createProjectBlackboardV2Client,
 } = require('/tmp/agistack-desktop-test-dist/src/features/project-blackboard/projectBlackboardClient.js');
+const {
+  createDesktopProjectBlackboardAuthorityV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectBlackboardTransportV2.js');
 const {
   createProjectBlackboardController,
 } = require('/tmp/agistack-desktop-test-dist/src/features/project-blackboard/projectBlackboardController.js');
@@ -46,21 +48,34 @@ const localConfig = Object.freeze({
   workspaceRoot: '/workspace',
 });
 
-test('Project Blackboard cloud client probes the existing canonical collaboration authority', async () => {
+test('Project Blackboard V2 client delegates its frozen scope to the generation operations facade', async () => {
   const calls = [];
-  const collaborationClient = collaborationAuthority('cloud', calls);
-  const client = createProjectBlackboardCloudClient(
+  const client = createProjectBlackboardV2Client(
     Object.freeze({ ...localConfig, mode: 'cloud', localApiToken: '' }),
-    { collaborationClient },
+    {
+      async probeProjectBlackboard(input) {
+        calls.push(input);
+        return {
+          scope: input.scope,
+          authority: 'cloud',
+          availability: 'available',
+          reasonCode: null,
+          initialSurface: 'goals',
+          allowedActions: ['view', 'select-workspace', 'read-surfaces', 'mutate-surfaces'],
+          authorityRevision: 4,
+        };
+      },
+    },
   );
   const snapshot = await client.probe(cloudScope);
   assert.equal(snapshot.availability, 'available');
   assert.equal(snapshot.reasonCode, null);
   assert.equal(snapshot.initialSurface, 'goals');
-  assert.equal(snapshot.collaborationClient, collaborationClient);
-  assert.deepEqual(calls, [
-    { method: 'getSurface', workspaceId: 'workspace-1', surface: 'goals' },
-  ]);
+  assert.equal(snapshot.authorityRevision, 4);
+  assert.equal('collaborationClient' in snapshot, false);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].scope, cloudScope);
+  assert.equal(calls[0].config.mode, 'cloud');
 });
 
 test('Project Blackboard local client reads sidecar plan/tasks and makes every unsupported surface structured unavailable', async () => {
@@ -88,22 +103,29 @@ test('Project Blackboard local client reads sidecar plan/tasks and makes every u
     });
   };
   try {
-    const client = createProjectBlackboardLocalClient(localConfig);
-    const snapshot = await client.probe(localScope);
+    const authority = createDesktopProjectBlackboardAuthorityV2(localConfig);
+    const snapshot = await authority.probeProjectBlackboard(localScope);
     assert.equal(snapshot.availability, 'degraded');
     assert.equal(snapshot.reasonCode, 'local_workspace_plan_read_only');
     assert.equal(snapshot.initialSurface, 'status');
-    const status = await snapshot.collaborationClient.getSurface('workspace-1', 'status');
+    assert.equal(snapshot.authorityRevision, null);
+    const status = await authority.getWorkspaceSurface(
+      'project-blackboard',
+      'workspace-1',
+      'status',
+    );
     assert.equal(status.authority, 'local');
     assert.equal(status.status, 'ready');
     assert.equal(status.data.tasks[0].id, 'task-1');
-    const discussion = await snapshot.collaborationClient.getSurface(
+    const discussion = await authority.getWorkspaceSurface(
+      'project-blackboard',
       'workspace-1',
       'discussion',
     );
     assert.equal(discussion.status, 'unavailable');
     assert.equal(discussion.reason_code, 'local_blackboard_surface_unavailable');
-    const mutation = await snapshot.collaborationClient.mutateSurface(
+    const mutation = await authority.mutateWorkspaceSurface(
+      'project-blackboard',
       'workspace-1',
       'status',
       {
@@ -129,6 +151,7 @@ test('Project Blackboard local client reads sidecar plan/tasks and makes every u
 test('Project Blackboard controller maps authority mismatch and forbidden states without leaking stale data', async () => {
   const controller = createProjectBlackboardController({
     authority: 'cloud',
+    collaborationClient: collaborationAuthority('cloud', []),
     client: {
       async probe() {
         const error = new Error('forbidden');

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DesktopProjectMcpServersClientV2 } from '../../plugins/desktopProjectMcpServersAuthorityModuleV2';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  DesktopApiClient,
   type DesktopMCPServerSummary,
   type DesktopMCPTransport,
   type DesktopMCPTransportConfig,
@@ -33,7 +33,7 @@ type MCPServerDialogState =
   | null;
 
 type MCPManagementRequestContext = Readonly<{
-  client: DesktopApiClient;
+  client: DesktopProjectMcpServersClientV2;
   contextKey: string;
 }>;
 
@@ -94,7 +94,7 @@ async function prepareTransportConfig({
   mutationIdempotencyKey,
   requireCredentialSecret,
 }: {
-  client: DesktopApiClient;
+  client: DesktopProjectMcpServersClientV2;
   config: DesktopRuntimeConfig;
   input: MCPServerSubmission;
   idempotencyKey: string;
@@ -129,17 +129,18 @@ async function prepareTransportConfig({
 }
 
 export function useMCPServerManagement({
+  client,
   active,
   config,
   contextKey,
   canManage,
 }: {
+  client: DesktopProjectMcpServersClientV2;
   active: boolean;
   config: DesktopRuntimeConfig;
   contextKey: string;
   canManage: boolean;
 }) {
-  const client = useMemo(() => new DesktopApiClient(config), [config]);
   const [servers, setServers] = useState<DesktopMCPServerSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,7 +234,7 @@ export function useMCPServerManagement({
         ) {
           return;
         }
-        retainCurrentMCPToggleAttempts(toggleAttemptKeysRef.current, contextKey, loaded);
+        retainCurrentMCPToggleAttempts(toggleAttemptKeysRef.current, contextKey, loaded, config.mode);
         setServers(loaded);
       } catch (caught) {
         if (
@@ -255,7 +256,7 @@ export function useMCPServerManagement({
         }
       }
     },
-    [captureRequestContext, config.projectId, contextKey, requestContextIsCurrent],
+    [captureRequestContext, config.mode, config.projectId, contextKey, requestContextIsCurrent],
   );
 
   useEffect(() => {
@@ -317,6 +318,12 @@ export function useMCPServerManagement({
           mutationIdempotencyKey,
           requireCredentialSecret: true,
         });
+        if (
+          request !== dialogRequestId.current ||
+          !requestContextIsCurrent(requestContext)
+        ) {
+          return;
+        }
         await requestContext.client.createMCPServer({
           name: input.name,
           description: input.description,
@@ -385,6 +392,12 @@ export function useMCPServerManagement({
           mutationIdempotencyKey,
           requireCredentialSecret: credentialSecretRequired(target, input),
         });
+        if (
+          request !== dialogRequestId.current ||
+          !requestContextIsCurrent(requestContext)
+        ) {
+          return;
+        }
         await requestContext.client.updateMCPServer(target.id, {
           name: input.name,
           description: input.description ?? null,
@@ -392,7 +405,7 @@ export function useMCPServerManagement({
           transport_config: transportConfig,
           enabled: target.enabled,
           project_id: config.projectId,
-          expected_revision: mcpServerRevision(target),
+          ...(config.mode === 'local' ? { expected_revision: mcpServerRevision(target) } : {}),
           idempotency_key: mutationIdempotencyKey,
         });
         if (
@@ -438,7 +451,7 @@ export function useMCPServerManagement({
       setActionMessage(null);
       setError(null);
       try {
-        const attemptIdentity = mcpToggleAttemptIdentity(contextKey, server);
+        const attemptIdentity = mcpToggleAttemptIdentity(contextKey, server, config.mode);
         const attemptKey = resolveMCPMutationAttemptKey(
           toggleAttemptKeysRef.current,
           attemptIdentity,
@@ -447,7 +460,7 @@ export function useMCPServerManagement({
         await requestContext.client.setMCPServerEnabled(server.id, {
           enabled: !server.enabled,
           project_id: config.projectId,
-          expected_revision: mcpServerRevision(server),
+          ...(config.mode === 'local' ? { expected_revision: mcpServerRevision(server) } : {}),
           idempotency_key: `mcp-server-toggle:${attemptKey}`,
         });
         if (
@@ -476,6 +489,7 @@ export function useMCPServerManagement({
     [
       canManage,
       captureRequestContext,
+      config.mode,
       config.projectId,
       contextKey,
       load,
@@ -493,7 +507,7 @@ export function useMCPServerManagement({
     try {
       await requestContext.client.deleteMCPServer(target.id, {
         project_id: config.projectId,
-        expected_revision: mcpServerRevision(target),
+        ...(config.mode === 'local' ? { expected_revision: mcpServerRevision(target) } : {}),
         idempotency_key: `mcp-server-delete:${dialog.key}`,
       });
       if (request !== dialogRequestId.current || !requestContextIsCurrent(requestContext)) {
@@ -513,6 +527,7 @@ export function useMCPServerManagement({
   }, [
     canManage,
     captureRequestContext,
+    config.mode,
     config.projectId,
     contextKey,
     dialog,

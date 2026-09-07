@@ -150,6 +150,13 @@ impl AuthorizedRunToolHost {
 
 #[async_trait]
 impl ToolHost for AuthorizedRunToolHost {
+    fn tool_definition(&self, name: &str) -> Option<agistack_core::ports::ToolDefinition> {
+        if !self.list_tools().iter().any(|allowed| allowed == name) {
+            return None;
+        }
+        self.inner.tool_definition(name)
+    }
+
     fn list_tools(&self) -> Vec<String> {
         self.inner
             .list_tools()
@@ -488,6 +495,7 @@ const MUTATING_TOOLS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
+    include!("authorized_tool_contract_tests.rs");
     use super::*;
     use crate::local_runtime::{
         authority_store::{

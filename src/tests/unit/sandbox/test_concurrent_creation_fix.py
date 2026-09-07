@@ -278,11 +278,11 @@ class TestAgentWorkerSandboxConsistency:
         # Patch database session factory and global adapter
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
 
         try:
             # Set the mock adapter as the global
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             # Patch database imports
             with monkeypatch.context() as m:
@@ -314,7 +314,7 @@ class TestAgentWorkerSandboxConsistency:
 
         finally:
             # Restore original adapter
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_load_project_sandbox_tools_uses_db_sandbox(
         self, mock_sandbox_adapter, monkeypatch
@@ -353,10 +353,10 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -390,12 +390,13 @@ class TestAgentWorkerSandboxConsistency:
                 mock_sandbox_adapter.connect_mcp.assert_called_with("db-sandbox-id")
 
         finally:
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_project_sandbox_tools_cache_reuses_loaded_wrappers(
         self, mock_sandbox_adapter, monkeypatch
     ):
         """Avoid repeated DB sandbox resolution when agent sessions rebuild quickly."""
+        from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
         from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
 
         existing_sandbox = ProjectSandbox(
@@ -418,11 +419,11 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
         worker_state._project_sandbox_tools_cache.clear()
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -438,17 +439,29 @@ class TestAgentWorkerSandboxConsistency:
                     _get_or_load_project_sandbox_tools,
                 )
 
+                descriptor = PluginGenerationDescriptorV2(
+                    profile_id="memstack-default-v2",
+                    generation=82,
+                    digest="a" * 64,
+                )
+                m.setattr(
+                    worker_state,
+                    "resolve_generation_cache_descriptor_v2",
+                    lambda _descriptor=None: descriptor,
+                )
                 first = await _get_or_load_project_sandbox_tools(
                     project_id="test-proj",
                     tenant_id="test-tenant",
                     redis_client=None,
                     ttl_seconds=300,
+                    generation_descriptor=descriptor,
                 )
                 second = await _get_or_load_project_sandbox_tools(
                     project_id="test-proj",
                     tenant_id="test-tenant",
                     redis_client=None,
                     ttl_seconds=300,
+                    generation_descriptor=descriptor,
                 )
 
                 assert set(first) == {"bash"}
@@ -459,7 +472,7 @@ class TestAgentWorkerSandboxConsistency:
 
         finally:
             worker_state._project_sandbox_tools_cache.clear()
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_project_sandbox_tools_force_refresh_bypasses_cache(
         self, mock_sandbox_adapter, monkeypatch
@@ -487,11 +500,11 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
         worker_state._project_sandbox_tools_cache.clear()
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -527,7 +540,7 @@ class TestAgentWorkerSandboxConsistency:
 
         finally:
             worker_state._project_sandbox_tools_cache.clear()
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_load_project_sandbox_tools_recovers_stale_db_sandbox(
         self, mock_sandbox_adapter, monkeypatch
@@ -577,10 +590,10 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -611,7 +624,7 @@ class TestAgentWorkerSandboxConsistency:
                 )
                 mock_sandbox_adapter.connect_mcp.assert_called_with("recovered-sandbox-id")
         finally:
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_load_project_sandbox_tools_falls_back_to_existing_project_container(
         self, mock_sandbox_adapter, monkeypatch
@@ -650,10 +663,10 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -678,7 +691,7 @@ class TestAgentWorkerSandboxConsistency:
                 mock_sandbox_adapter.connect_mcp.assert_called_with("existing-project-sandbox")
 
         finally:
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
 
 @pytest.mark.unit
@@ -732,8 +745,8 @@ class TestWebSocketSandboxIntegration:
             "Sandbox integration should have error handling"
         )
 
-    def test_websocket_lifecycle_uses_context_container(self):
-        """WebSocket lifecycle helpers should not instantiate a new sandbox adapter."""
+    def test_websocket_lifecycle_uses_v2_operation_authority(self):
+        """WebSocket lifecycle helpers resolve from a generation-owned operation."""
         import inspect
 
         from src.infrastructure.adapters.primary.web.websocket.handlers.lifecycle_handler import (
@@ -744,7 +757,9 @@ class TestWebSocketSandboxIntegration:
         ensure_source = inspect.getsource(_ensure_sandbox_exists)
         repair_source = inspect.getsource(_sync_and_repair_sandbox)
 
-        assert "context.get_scoped_container().project_sandbox_lifecycle_service()" in ensure_source
-        assert "context.get_scoped_container().project_sandbox_lifecycle_service()" in repair_source
+        assert "sandbox_operation_authority_v2" in ensure_source
+        assert "sandbox_operation_authority_v2" in repair_source
+        assert "project_sandbox_lifecycle_service" not in ensure_source
+        assert "project_sandbox_lifecycle_service" not in repair_source
         assert "MCPSandboxAdapter()" not in ensure_source
         assert "MCPSandboxAdapter()" not in repair_source

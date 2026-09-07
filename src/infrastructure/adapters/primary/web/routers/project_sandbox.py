@@ -23,7 +23,6 @@ from typing import Any, cast
 from urllib.parse import parse_qsl, quote, urlencode, urlparse
 from uuid import uuid4
 
-import redis.asyncio as redis
 from fastapi import (
     APIRouter,
     Depends,
@@ -59,6 +58,12 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     get_api_key_from_header,
     get_current_user_from_desktop_proxy,
 )
+from src.infrastructure.adapters.primary.web.sandbox_application_authority_v2 import (
+    SandboxApplicationAuthorityV2,
+    sandbox_application_authority_dependency_v2,
+    sandbox_application_proxy_authority_dependency_v2,
+    sandbox_application_websocket_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.websocket.auth import select_websocket_auth_subprotocol
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -67,6 +72,10 @@ from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.sandbox_http_service_registry import (
+    SandboxHttpServiceRegistryProtocolV2,
+    current_sandbox_http_service_registry_v2,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -465,99 +474,53 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
 
 
 def get_lifecycle_service(
-    request: Request, db: AsyncSession = Depends(get_db)
+    authority: SandboxApplicationAuthorityV2 = Depends(sandbox_application_authority_dependency_v2),
 ) -> ProjectSandboxLifecycleService:
-    """Get the project sandbox lifecycle service.
-
-    Uses the properly initialized container from app.state which has
-    redis_client configured for distributed locking. Falls back to a new
-    container if app.state.container is not available.
-    """
-    try:
-        # Get container from app.state which has redis_client properly configured
-        # This enables Redis distributed locks instead of PostgreSQL advisory locks
-        container = request.app.state.container.with_db(db)
-    except (AttributeError, KeyError):
-        # Fallback for tests or when app.state.container is not set
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer().with_db(db)
-
-    return cast(ProjectSandboxLifecycleService, container.project_sandbox_lifecycle_service())
+    """Project the lifecycle service from the request-owned V2 operation."""
+    return authority.services.lifecycle_service
 
 
 def get_lifecycle_service_for_websocket(
-    websocket: WebSocket, db: AsyncSession = Depends(get_db)
+    authority: SandboxApplicationAuthorityV2 = Depends(
+        sandbox_application_websocket_authority_dependency_v2
+    ),
 ) -> ProjectSandboxLifecycleService:
-    """Get the project sandbox lifecycle service for WebSocket endpoints.
+    """Project the lifecycle service from the connection-owned V2 operation."""
+    return authority.services.lifecycle_service
 
-    WebSocket handlers receive WebSocket instead of Request, so we need
-    a separate dependency that extracts app.state from the WebSocket.
-    """
-    try:
-        # Get container from app.state which has redis_client properly configured
-        container = websocket.app.state.container.with_db(db)
-    except (AttributeError, KeyError):
-        # Fallback for tests or when app.state.container is not set
-        from src.configuration.di_container import DIContainer
 
-        container = DIContainer().with_db(db)
-
-    return cast(ProjectSandboxLifecycleService, container.project_sandbox_lifecycle_service())
+def get_lifecycle_service_for_proxy(
+    authority: SandboxApplicationAuthorityV2 = Depends(
+        sandbox_application_proxy_authority_dependency_v2
+    ),
+) -> ProjectSandboxLifecycleService:
+    """Project lifecycle service for cookie/query-authenticated HTTP proxy requests."""
+    return authority.services.lifecycle_service
 
 
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
-    """Get the sandbox event publisher from app container.
+    """Project the event publisher from this request's pinned generation."""
+    _ = request
+    from src.infrastructure.plugins.v2.sandbox_projection import (
+        current_sandbox_application_services_v2,
+    )
 
-    Uses the properly initialized container from app.state which has
-    redis_client configured for the event bus.
-    """
-    try:
-        # Get container from app.state which has redis_client properly configured
-        container = request.app.state.container
-        return cast(SandboxEventPublisher | None, container.sandbox_event_publisher())
-    except Exception as e:
-        logger.warning("Could not create event publisher: error_type=%s", type(e).__name__)
-        return None
+    return current_sandbox_application_services_v2().event_publisher
 
 
 def get_event_publisher_for_websocket(websocket: WebSocket) -> SandboxEventPublisher | None:
-    """Get the sandbox event publisher for WebSocket endpoints."""
-    try:
-        container = websocket.app.state.container
-        return cast(SandboxEventPublisher | None, container.sandbox_event_publisher())
-    except Exception as e:
-        logger.warning(
-            "Could not create websocket event publisher: error_type=%s",
-            type(e).__name__,
-        )
-        return None
+    """Project the event publisher from this connection's pinned generation."""
+    _ = websocket
+    from src.infrastructure.plugins.v2.sandbox_projection import (
+        current_sandbox_application_services_v2,
+    )
+
+    return current_sandbox_application_services_v2().event_publisher
 
 
-def get_http_service_redis_client(request: Request) -> redis.Redis | None:
-    """Get Redis client for HTTP service registry persistence."""
-    try:
-        container = request.app.state.container
-        return cast(redis.Redis | None, container.redis_client)
-    except Exception as e:
-        logger.debug(
-            "Could not get Redis client for HTTP service routes: error_type=%s",
-            type(e).__name__,
-        )
-        return None
-
-
-def get_http_service_redis_client_for_websocket(websocket: WebSocket) -> redis.Redis | None:
-    """Get Redis client for HTTP service WebSocket routes."""
-    try:
-        container = websocket.app.state.container
-        return cast(redis.Redis | None, container.redis_client)
-    except Exception as e:
-        logger.debug(
-            "Could not get Redis client for HTTP service websocket routes: error_type=%s",
-            type(e).__name__,
-        )
-        return None
+def get_http_service_registry() -> SandboxHttpServiceRegistryProtocolV2:
+    """Project the HTTP service registry from the pinned generation."""
+    return current_sandbox_http_service_registry_v2()
 
 
 def get_orchestrator() -> SandboxOrchestrator:
@@ -574,33 +537,15 @@ def get_orchestrator() -> SandboxOrchestrator:
     return get_sandbox_orchestrator()
 
 
-# In-memory registry for HTTP services: project_id -> service_id -> service info
-_http_service_registry: dict[str, dict[str, HttpServiceProxyInfo]] = {}
-_http_service_registry_lock = asyncio.Lock()
-
-
-def _http_service_registry_redis_key(project_id: str) -> str:
-    """Build Redis hash key for project-scoped HTTP services."""
-    return f"project:sandbox:http-services:{project_id}"
-
-
-def _decode_redis_text(value: Any) -> str:
-    """Decode Redis bytes values to text."""
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    return str(value)
-
-
 def _deserialize_http_service_payload(
-    payload: Any,
+    payload: str,
     *,
     project_id: str,
     service_id: str | None = None,
 ) -> HttpServiceProxyInfo | None:
     """Deserialize an HTTP service payload from Redis."""
     try:
-        serialized = _decode_redis_text(payload)
-        return HttpServiceProxyInfo.model_validate_json(serialized)
+        return HttpServiceProxyInfo.model_validate_json(payload)
     except Exception as e:
         logger.warning(
             "Failed to deserialize HTTP service payload for project %s service %s: %s",
@@ -801,9 +746,9 @@ def _parse_http_preview_host(host_header: str) -> tuple[str, str] | None:
 async def _get_http_service_by_preview_label(
     project_id: str,
     service_label: str,
-    redis_client: redis.Redis | None = None,
+    registry: SandboxHttpServiceRegistryProtocolV2,
 ) -> HttpServiceProxyInfo | None:
-    services = await _list_http_services(project_id, redis_client)
+    services = await _list_http_services(project_id, registry)
     for service in services:
         if _preview_service_host_label(service.service_id) == service_label:
             return service
@@ -846,165 +791,62 @@ async def _resolve_sandbox_container_ip(adapter: MCPSandboxAdapter, sandbox_id: 
 async def _upsert_http_service(
     project_id: str,
     info: HttpServiceProxyInfo,
-    redis_client: redis.Redis | None = None,
+    registry: SandboxHttpServiceRegistryProtocolV2,
 ) -> tuple[bool, HttpServiceProxyInfo]:
     """Insert/update a service record. Returns (already_exists, stored_record)."""
-    if redis_client:
-        redis_key = _http_service_registry_redis_key(project_id)
-        try:
-            existing = await redis_client.hget(redis_key, info.service_id)  # type: ignore[misc]
-            await redis_client.hset(  # type: ignore[misc]
-                redis_key,
-                info.service_id,
-                info.model_dump_json(),
-            )
-            async with _http_service_registry_lock:
-                project_services = _http_service_registry.setdefault(project_id, {})
-                project_services[info.service_id] = info
-            return existing is not None, info
-        except Exception as e:
-            logger.warning(
-                "Failed to persist HTTP service %s to Redis for project %s: %s",
-                info.service_id,
-                project_id,
-                e,
-            )
-
-    async with _http_service_registry_lock:
-        project_services = _http_service_registry.setdefault(project_id, {})
-        existed = info.service_id in project_services
-        project_services[info.service_id] = info
-        return existed, info
+    existed = await registry.upsert_payload(
+        project_id,
+        info.service_id,
+        info.model_dump_json(),
+    )
+    return existed, info
 
 
 async def _list_http_services(
-    project_id: str, redis_client: redis.Redis | None = None
+    project_id: str,
+    registry: SandboxHttpServiceRegistryProtocolV2,
 ) -> list[HttpServiceProxyInfo]:
-    if redis_client:
-        redis_key = _http_service_registry_redis_key(project_id)
-        try:
-            payloads = await redis_client.hgetall(redis_key)  # type: ignore[misc]
-            services: list[HttpServiceProxyInfo] = []
-            for raw_service_id, raw_payload in payloads.items():
-                service_info = _deserialize_http_service_payload(
-                    raw_payload,
-                    project_id=project_id,
-                    service_id=_decode_redis_text(raw_service_id),
-                )
-                if service_info:
-                    services.append(service_info)
-
-            async with _http_service_registry_lock:
-                if services:
-                    _http_service_registry[project_id] = {
-                        service.service_id: service for service in services
-                    }
-                else:
-                    _http_service_registry.pop(project_id, None)
-            return services
-        except Exception as e:
-            logger.warning(
-                "Failed to list HTTP services from Redis for project %s: %s", project_id, e
-            )
-
-    async with _http_service_registry_lock:
-        project_services = _http_service_registry.get(project_id, {})
-        return list(project_services.values())
+    payloads = await registry.list_payloads(project_id)
+    services: list[HttpServiceProxyInfo] = []
+    for service_id, payload in payloads.items():
+        service_info = _deserialize_http_service_payload(
+            payload,
+            project_id=project_id,
+            service_id=service_id,
+        )
+        if service_info:
+            services.append(service_info)
+    return services
 
 
 async def _get_http_service(
     project_id: str,
     service_id: str,
-    redis_client: redis.Redis | None = None,
+    registry: SandboxHttpServiceRegistryProtocolV2,
 ) -> HttpServiceProxyInfo | None:
-    if redis_client:
-        redis_key = _http_service_registry_redis_key(project_id)
-        try:
-            payload = await redis_client.hget(redis_key, service_id)  # type: ignore[misc]
-            if payload is None:
-                async with _http_service_registry_lock:
-                    project_services = _http_service_registry.get(project_id, {})
-                    project_services.pop(service_id, None)
-                    if not project_services:
-                        _http_service_registry.pop(project_id, None)
-                return None
-
-            service_info = _deserialize_http_service_payload(
-                payload,
-                project_id=project_id,
-                service_id=service_id,
-            )
-            if service_info:
-                async with _http_service_registry_lock:
-                    project_services = _http_service_registry.setdefault(project_id, {})
-                    project_services[service_id] = service_info
-                return service_info
-        except Exception as e:
-            logger.warning(
-                "Failed to get HTTP service %s from Redis for project %s: %s",
-                service_id,
-                project_id,
-                e,
-            )
-
-    async with _http_service_registry_lock:
-        project_services = _http_service_registry.get(project_id, {})
-        return project_services.get(service_id)
+    payload = await registry.get_payload(project_id, service_id)
+    if payload is None:
+        return None
+    return _deserialize_http_service_payload(
+        payload,
+        project_id=project_id,
+        service_id=service_id,
+    )
 
 
 async def _pop_http_service(
     project_id: str,
     service_id: str,
-    redis_client: redis.Redis | None = None,
+    registry: SandboxHttpServiceRegistryProtocolV2,
 ) -> HttpServiceProxyInfo | None:
-    async def _pop_from_memory() -> HttpServiceProxyInfo | None:
-        async with _http_service_registry_lock:
-            project_services = _http_service_registry.get(project_id, {})
-            service_info = project_services.pop(service_id, None)
-            if not project_services:
-                _http_service_registry.pop(project_id, None)
-            return service_info
-
-    async def _drop_from_memory() -> None:
-        async with _http_service_registry_lock:
-            project_services = _http_service_registry.get(project_id, {})
-            project_services.pop(service_id, None)
-            if not project_services:
-                _http_service_registry.pop(project_id, None)
-
-    if redis_client:
-        redis_key = _http_service_registry_redis_key(project_id)
-        try:
-            payload = await redis_client.eval(  # type: ignore[misc]
-                (
-                    "local value = redis.call('HGET', KEYS[1], ARGV[1]); "
-                    "if value then redis.call('HDEL', KEYS[1], ARGV[1]); end; "
-                    "return value"
-                ),
-                1,
-                redis_key,
-                service_id,
-            )
-            if payload is None:
-                await _drop_from_memory()
-                return None
-
-            service_info = _deserialize_http_service_payload(
-                payload,
-                project_id=project_id,
-                service_id=service_id,
-            )
-            await _drop_from_memory()
-            return service_info
-        except Exception as e:
-            logger.warning(
-                "Failed to pop HTTP service %s from Redis for project %s: %s",
-                service_id,
-                project_id,
-                e,
-            )
-
-    return await _pop_from_memory()
+    payload = await registry.pop_payload(project_id, service_id)
+    if payload is None:
+        return None
+    return _deserialize_http_service_payload(
+        payload,
+        project_id=project_id,
+        service_id=service_id,
+    )
 
 
 def _format_error_message(detail: Any) -> str:
@@ -2471,7 +2313,9 @@ async def register_project_http_service(
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+    http_service_registry: SandboxHttpServiceRegistryProtocolV2 = Depends(
+        get_http_service_registry
+    ),
 ) -> HttpServiceResponse:
     """Register or update an HTTP service preview for a project sandbox."""
     project_tenant_id = await verify_project_access(
@@ -2528,7 +2372,11 @@ async def register_project_http_service(
             restart_token=restart_token,
             updated_at=now_iso,
         )
-        existed, stored = await _upsert_http_service(project_id, service_info, redis_client)
+        existed, stored = await _upsert_http_service(
+            project_id,
+            service_info,
+            http_service_registry,
+        )
     except HTTPException as e:
         await _publish_http_service_error_event(
             event_publisher,
@@ -2640,11 +2488,13 @@ async def list_project_http_services(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+    http_service_registry: SandboxHttpServiceRegistryProtocolV2 = Depends(
+        get_http_service_registry
+    ),
 ) -> ListHttpServicesResponse:
     """List all registered HTTP services for a project."""
     await verify_project_access(project_id, current_user, db)
-    services = await _list_http_services(project_id, redis_client)
+    services = await _list_http_services(project_id, http_service_registry)
     return ListHttpServicesResponse(
         services=[
             HttpServiceResponse(
@@ -2675,12 +2525,14 @@ async def create_project_http_service_preview_session(
     service_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+    http_service_registry: SandboxHttpServiceRegistryProtocolV2 = Depends(
+        get_http_service_registry
+    ),
 ) -> HttpServicePreviewSessionResponse:
     """Create a short-lived root-host preview launch URL for a sandbox HTTP service."""
     await verify_project_access(project_id, current_user, db)
 
-    service_info = await _get_http_service(project_id, service_id, redis_client)
+    service_info = await _get_http_service(project_id, service_id, http_service_registry)
     if not service_info:
         raise _http_service_not_found_error()
 
@@ -2710,14 +2562,16 @@ async def stop_project_http_service(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+    http_service_registry: SandboxHttpServiceRegistryProtocolV2 = Depends(
+        get_http_service_registry
+    ),
 ) -> HttpServiceActionResponse:
     """Stop/unregister an HTTP service preview for a project."""
     project_tenant_id = await verify_project_access(
         project_id, current_user, db, ["owner", "admin", "member"]
     )
 
-    removed = await _pop_http_service(project_id, service_id, redis_client)
+    removed = await _pop_http_service(project_id, service_id, http_service_registry)
     if not removed:
         raise _http_service_not_found_error()
 
@@ -3125,12 +2979,14 @@ async def proxy_project_http_service(
     current_user: User = Depends(get_current_user_from_desktop_proxy),
     db: AsyncSession = Depends(get_db),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+    http_service_registry: SandboxHttpServiceRegistryProtocolV2 = Depends(
+        get_http_service_registry
+    ),
 ) -> Any:
     """HTTP reverse proxy for registered sandbox internal web services."""
     await verify_project_access(project_id, current_user, db)
 
-    service_info = await _get_http_service(project_id, service_id, redis_client)
+    service_info = await _get_http_service(project_id, service_id, http_service_registry)
     if not service_info:
         raise _http_service_not_found_error()
 
@@ -3255,12 +3111,14 @@ async def proxy_project_http_service_websocket(
     current_user: User = Depends(get_current_user_from_desktop_proxy),
     db: AsyncSession = Depends(get_db),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher_for_websocket),
-    redis_client: redis.Redis | None = Depends(get_http_service_redis_client_for_websocket),
+    http_service_registry: SandboxHttpServiceRegistryProtocolV2 = Depends(
+        get_http_service_registry
+    ),
 ) -> None:
     """WebSocket reverse proxy for registered sandbox internal web services."""
     await verify_project_access(project_id, current_user, db)
 
-    service_info = await _get_http_service(project_id, service_id, redis_client)
+    service_info = await _get_http_service(project_id, service_id, http_service_registry)
     if not service_info:
         await websocket.close(
             code=1008,
@@ -3337,7 +3195,9 @@ async def proxy_project_http_service_preview_host(
     request: Request,
     path: str = "",
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+    http_service_registry: SandboxHttpServiceRegistryProtocolV2 = Depends(
+        get_http_service_registry
+    ),
 ) -> Any:
     """Root-path reverse proxy for preview hosts.
 
@@ -3349,7 +3209,11 @@ async def proxy_project_http_service_preview_host(
         raise HTTPException(status_code=404, detail=_("Not found"))
     project_id, service_label = route
 
-    service_info = await _get_http_service_by_preview_label(project_id, service_label, redis_client)
+    service_info = await _get_http_service_by_preview_label(
+        project_id,
+        service_label,
+        http_service_registry,
+    )
     if not service_info:
         raise _http_service_not_found_error()
     if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
@@ -3470,7 +3334,9 @@ async def proxy_project_http_service_preview_host_websocket(
     websocket: WebSocket,
     path: str = "",
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher_for_websocket),
-    redis_client: redis.Redis | None = Depends(get_http_service_redis_client_for_websocket),
+    http_service_registry: SandboxHttpServiceRegistryProtocolV2 = Depends(
+        get_http_service_registry
+    ),
 ) -> None:
     """Root-path WebSocket proxy for preview hosts."""
     route = _parse_http_preview_host(websocket.headers.get("host", ""))
@@ -3479,7 +3345,11 @@ async def proxy_project_http_service_preview_host_websocket(
         return
     project_id, service_label = route
 
-    service_info = await _get_http_service_by_preview_label(project_id, service_label, redis_client)
+    service_info = await _get_http_service_by_preview_label(
+        project_id,
+        service_label,
+        http_service_registry,
+    )
     if not service_info:
         await websocket.close(
             code=1008,
@@ -3552,7 +3422,7 @@ async def proxy_project_desktop(
     request: Request,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
     db: AsyncSession = Depends(get_db),
-    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_proxy),
 ) -> Any:
     """Proxy requests to the project's sandbox desktop (KasmVNC) web client.
 

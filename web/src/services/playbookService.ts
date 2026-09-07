@@ -60,19 +60,25 @@ const buildQuery = (limit?: number): string => {
 
 export const playbookService = {
   listPlaybooks: async (projectId: string, limit?: number): Promise<Playbook[]> => {
-    const response = await apiFetch.get(`/projects/${projectId}/playbooks${buildQuery(limit)}`);
-    const body = (await response.json()) as PlaybooksResponse;
-    return body.items;
+    return apiFetch.get(
+      `/projects/${projectId}/playbooks${buildQuery(limit)}`,
+      async (response) => {
+        const body = (await response.json()) as PlaybooksResponse;
+        return body.items;
+      }
+    );
   },
 
   listReflectionVerdicts: async (
     projectId: string,
     limit?: number
   ): Promise<ReflectionVerdict[]> => {
-    const response = await apiFetch.get(
-      `/projects/${projectId}/reflection-verdicts${buildQuery(limit)}`
+    return apiFetch.get(
+      `/projects/${projectId}/reflection-verdicts${buildQuery(limit)}`,
+      async (response) => {
+        const body = (await response.json()) as VerdictsResponse;
+        return body.items;
+      }
     );
-    const body = (await response.json()) as VerdictsResponse;
-    return body.items;
   },
 };

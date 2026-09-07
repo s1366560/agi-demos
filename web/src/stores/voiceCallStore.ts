@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
+import { getWebOperationAvailabilityV2 } from '../plugins/webOperationAdmissionV2';
+
 export type CallStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 export type CallMode = 'audio' | 'video';
 
@@ -12,6 +14,9 @@ export interface DeviceInfo {
 }
 
 export interface VoiceCallState {
+  callId: number;
+  owner: object | null;
+  bindCallCleanup: (callId: number, close: () => Promise<void>) => () => void;
   // Connection state
   status: CallStatus;
   conversationId: string | null;
@@ -45,7 +50,7 @@ export interface VoiceCallState {
 
   // Actions
   startCall: (conversationId: string, projectId: string, mode?: CallMode) => Promise<void>;
-  endCall: () => Promise<void>;
+  endCall: (expectedCallId?: number) => Promise<void>;
   setConnected: () => void;
   toggleMute: () => void;
   toggleCamera: () => void;
@@ -67,10 +72,14 @@ export interface VoiceCallState {
   setAgentComplete: (content: string) => void;
   setAgentStreaming: (streaming: boolean) => void;
   clearTranscript: () => void;
-  reset: () => void;
+  reset: () => Promise<void>;
 }
 
+let callIntent = 0;
+let cleanupBinding: { callId: number; close: () => Promise<void> } | null = null;
 const initialState = {
+  callId: 0,
+  owner: null as object | null,
   status: 'idle' as CallStatus,
   conversationId: null as string | null,
   projectId: null as string | null,
@@ -96,31 +105,63 @@ const initialState = {
 
 export const useVoiceCallStore = create<VoiceCallState>()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       ...initialState,
 
-      startCall: (conversationId: string, projectId: string, mode: CallMode) => {
-        set({
-          status: 'connecting',
-          error: null,
-          callMode: mode,
-          isMinimized: false,
-          conversationId,
-          projectId,
-          asrInterimText: '',
-          asrFinalText: '',
-          agentResponseText: '',
-        });
-        // Actual WS connection is handled by useVoiceChat hook in the component.
-        // The hook reads conversationId/projectId from the store.
-        // We just set status to 'connecting' and let the hook take over.
-        return Promise.resolve();
+      bindCallCleanup: (callId, close) => {
+        if (get().callId !== callId || !callId) return () => {};
+        const binding = { callId, close };
+        cleanupBinding = binding;
+        return () => {
+          if (cleanupBinding === binding) cleanupBinding = null;
+          // React effect replay can rebind the same user-started call synchronously.
+          // Resource cancellation happens immediately in the component cleanup.
+          queueMicrotask(() => {
+            if (get().callId === callId && cleanupBinding?.callId !== callId) {
+              void get()
+                .endCall(callId)
+                .catch(() => {
+                  console.warn('Voice cleanup failed');
+                });
+            }
+          });
+        };
       },
 
-      endCall: () => {
-        // Just reset state. The useVoiceChat hook watches status and disconnects.
+      startCall: async (conversationId, projectId, mode = 'audio') => {
+        const availability = getWebOperationAvailabilityV2();
+        if (!availability.available) throw new Error('web_operation_generation_unavailable');
+        const callId = ++callIntent;
+        const previous = cleanupBinding;
+        cleanupBinding = null;
         set({ ...initialState });
-        return Promise.resolve();
+        await previous?.close();
+        if (callIntent !== callId) return;
+        if (
+          !getWebOperationAvailabilityV2().available ||
+          getWebOperationAvailabilityV2().owner !== availability.owner
+        ) {
+          throw new DOMException('Voice owner replaced', 'AbortError');
+        }
+        set({
+          ...initialState,
+          callId,
+          owner: availability.owner,
+          status: 'connecting',
+          callMode: mode,
+          conversationId,
+          projectId,
+        });
+      },
+
+      endCall: (expectedCallId) => {
+        if (expectedCallId !== undefined && get().callId !== expectedCallId)
+          return Promise.resolve();
+        callIntent += 1;
+        const previous = cleanupBinding;
+        cleanupBinding = null;
+        set({ ...initialState });
+        return previous?.close() ?? Promise.resolve();
       },
 
       setConnected: () => {
@@ -193,9 +234,7 @@ export const useVoiceCallStore = create<VoiceCallState>()(
         });
       },
 
-      reset: () => {
-        set({ ...initialState });
-      },
+      reset: () => get().endCall(),
     }),
     { name: 'voice-call-store' }
   )

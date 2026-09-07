@@ -2,7 +2,12 @@
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
+from inspect import getsource
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
@@ -15,6 +20,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.workspace_core import WorkspaceCoreSettings
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.routers.agent.plans import (
     ApprovePlanAndStartRequest,
     SwitchModeRequest,
@@ -34,7 +40,33 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.plugins.v2.agent_turn_services import AGENT_TURN_MODULE_V2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+    clear_process_generation_host_v2,
+    current_operation_context_v2,
+    install_process_generation_host_v2,
+    pin_generation_v2,
+    pin_operation_context_v2,
+)
+from src.infrastructure.plugins.v2.builtin_modules import (
+    RUNTIME_BOUNDARY_SERVICE_V2,
+    builtin_runtime_definitions_v2,
+)
+from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.workspace_core.client import WorkspaceCoreClient
+
+_ROOT = Path(__file__).resolve().parents[5]
+
+
+@asynccontextmanager
+async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
+    yield None
 
 
 def _workspace_core_settings() -> WorkspaceCoreSettings:
@@ -155,7 +187,9 @@ async def test_workspace_policy_snapshot_comes_from_core_and_ignores_renderer_pr
         _workspace_core_settings(),
         transport=httpx.MockTransport(handler),
     )
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(workspace_core_client=client)))
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(workspace_core_client=client))
+    )
     conversation = SimpleNamespace(
         tenant_id="tenant-1",
         project_id="project-1",
@@ -196,7 +230,7 @@ async def test_workspace_policy_snapshot_fails_closed_without_core() -> None:
 
 
 @pytest.mark.unit
-async def test_resolve_cloud_run_environment_uses_server_sandbox_identity_and_root(
+async def test_resolve_cloud_run_environment_uses_exact_project_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
@@ -219,14 +253,26 @@ async def test_resolve_cloud_run_environment_uses_server_sandbox_identity_and_ro
             )
         )
     )
-    scoped_container = SimpleNamespace(
-        project_sandbox_lifecycle_service=lambda: lifecycle,
-    )
-    base_container = SimpleNamespace(with_db=lambda _db: scoped_container)
+
+    class SandboxAuthorityContext:
+        async def __aenter__(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                services=SimpleNamespace(lifecycle_service=lifecycle),
+            )
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
     monkeypatch.setattr(plans_router, "async_session_factory", SandboxSessionContext)
+    captured: dict[str, object] = {}
+
+    def sandbox_authority(**kwargs: object) -> SandboxAuthorityContext:
+        captured.update(kwargs)
+        return SandboxAuthorityContext()
+
+    monkeypatch.setattr(plans_router, "sandbox_operation_authority_v2", sandbox_authority)
 
     environment = await plans_router._resolve_cloud_run_environment(
-        base_container=base_container,
         project_id="project-1",
         tenant_id="tenant-1",
         kind="worktree",
@@ -248,6 +294,15 @@ async def test_resolve_cloud_run_environment_uses_server_sandbox_identity_and_ro
         project_id="project-1",
         tenant_id="tenant-1",
     )
+    assert captured["scope"] == ScopeV2(
+        kind=ScopeKindV2.PROJECT,
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    assert captured["identity"] == {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+    }
 
 
 @pytest.mark.unit
@@ -344,6 +399,7 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
 ) -> None:
     import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
 
+    lifecycle: list[str] = []
     run = SimpleNamespace(
         status="queued",
         revision=1,
@@ -372,12 +428,30 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
             received.update(kwargs)
             yield {"type": "complete"}
 
-    scoped_container = SimpleNamespace(agent_service=lambda _llm: Service())
-    base_container = SimpleNamespace(with_db=lambda _session: scoped_container)
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object) -> AsyncIterator[None]:
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-generation-release")
+
+    async def publish_status(**_kwargs: object) -> None:
+        lifecycle.append("status-publish")
+
     monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
-    monkeypatch.setattr(plans_router, "create_llm_client", AsyncMock(return_value=object()))
+    resolve_turn_service = AsyncMock(return_value=Service())
+    monkeypatch.setattr(
+        plans_router,
+        "current_agent_turn_service_v2",
+        resolve_turn_service,
+    )
+    monkeypatch.setattr(
+        plans_router,
+        "pin_agent_turn_operation_v2",
+        operation_context,
+    )
     monkeypatch.setattr(plans_router, "settle_agent_plan_run", AsyncMock())
-    publish_run_status = AsyncMock()
+    publish_run_status = AsyncMock(side_effect=publish_status)
     monkeypatch.setattr(
         plans_router,
         "_publish_plan_run_status",
@@ -386,7 +460,6 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
     )
 
     await plans_router._execute_approved_plan(
-        base_container=base_container,
         run_id="plan-run-1",
         conversation_id="conversation-1",
         project_id="project-1",
@@ -398,13 +471,211 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
 
     assert received["execution_message_id"] == "client-message-1"
     assert received["canonical_run_id"] == "plan-run-1"
+    resolve_turn_service.assert_awaited_once_with()
     session.refresh.assert_awaited_once_with(run)
-    publish_run_status.assert_awaited_once_with(
-        base_container=base_container,
-        run=run,
-    )
+    publish_run_status.assert_awaited_once_with(run=run)
+    assert lifecycle.index("status-publish") < lifecycle.index("operation-generation-release")
     assert run.status == "ready_review"
     assert run.revision == 2
+
+
+@pytest.mark.unit
+async def test_execute_approved_plan_replaces_expired_copied_http_generation_with_own_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="approved-plan-http-generation",
+    )
+    install_process_generation_host_v2(host)
+    enter_background = asyncio.Event()
+    observed: dict[str, object] = {}
+    run = SimpleNamespace(
+        status="queued",
+        revision=1,
+        updated_at=datetime.now(UTC),
+        completed_at=None,
+        error=None,
+    )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run),
+        refresh=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            await enter_background.wait()
+            return session
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class Service:
+        async def stream_chat_v2(self, **_kwargs: object):
+            operation = current_operation_context_v2()
+            observed["generation"] = operation.descriptor.generation
+            observed["db"] = operation.require(OPERATION_DB_SESSION_SERVICE_V2)
+            observed["identity"] = operation.require(OPERATION_IDENTITY_SERVICE_V2)
+            observed["metadata"] = operation.require(OPERATION_METADATA_SERVICE_V2)
+            observed["distribution"] = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+            assert operation.generation.resolve(
+                RUNTIME_BOUNDARY_SERVICE_V2,
+                ScopeV2(kind=ScopeKindV2.ROOT),
+            )
+            yield {"type": "complete"}
+
+    monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
+    resolve_turn_service = AsyncMock(return_value=Service())
+    monkeypatch.setattr(
+        plans_router,
+        "current_agent_turn_service_v2",
+        resolve_turn_service,
+    )
+    monkeypatch.setattr(plans_router, "settle_agent_plan_run", AsyncMock())
+    monkeypatch.setattr(plans_router, "_publish_plan_run_status", AsyncMock())
+    background_task: asyncio.Task[None] | None = None
+
+    try:
+        async with pin_generation_v2(host) as copied_http_generation:
+            await host.bootstrap(
+                profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+                manifest_paths=(
+                    _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+                ),
+                generation=2,
+                version=2,
+                nonce="approved-plan-background-generation",
+            )
+            background_task = asyncio.create_task(
+                plans_router._execute_approved_plan(
+                    run_id="plan-run-1",
+                    conversation_id="conversation-1",
+                    project_id="project-1",
+                    tenant_id="tenant-1",
+                    user_id="user-1",
+                    message="Execute",
+                    message_id="client-message-1",
+                )
+            )
+            await asyncio.sleep(0)
+
+        with pytest.raises(RuntimeV2Error, match="generation is disposed"):
+            copied_http_generation.resolve(
+                RUNTIME_BOUNDARY_SERVICE_V2,
+                ScopeV2(kind=ScopeKindV2.ROOT),
+            )
+        enter_background.set()
+        await background_task
+
+        assert observed["generation"] == 2
+        assert observed["db"] is session
+        assert observed["identity"] == {
+            "tenant_id": "tenant-1",
+            "user_id": "user-1",
+            "project_id": "project-1",
+        }
+        assert observed["metadata"] == {
+            "kind": "agent-turn",
+            "channel": "approved-plan",
+            "conversation_id": "conversation-1",
+            "run_id": "plan-run-1",
+            "message_id": "client-message-1",
+        }
+        distribution = observed["distribution"]
+        assert isinstance(distribution, dict)
+        assert distribution["descriptor"]["generation"] == 2
+        resolve_turn_service.assert_awaited_once_with()
+    finally:
+        enter_background.set()
+        if background_task is not None and not background_task.done():
+            background_task.cancel()
+            await asyncio.gather(background_task, return_exceptions=True)
+        clear_process_generation_host_v2(host)
+        await host.close()
+
+
+@pytest.mark.unit
+async def test_execute_approved_plan_rejects_missing_v2_turn_service_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    def disable_turn_service(document: ProfileDocumentV2) -> ProfileDocumentV2:
+        return replace(
+            document,
+            entries=tuple(
+                replace(entry, enabled=False) if entry.module_ref == AGENT_TURN_MODULE_V2 else entry
+                for entry in document.entries
+            ),
+        )
+
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    publication = await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=3,
+        version=3,
+        nonce="approved-plan-turn-missing-service",
+        profile_projector=disable_turn_service,
+    )
+    assert publication.accepted is True
+    install_process_generation_host_v2(host)
+    run = SimpleNamespace(
+        status="queued",
+        revision=1,
+        updated_at=datetime.now(UTC),
+        completed_at=None,
+        error=None,
+    )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run),
+        refresh=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            return session
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    settle = AsyncMock()
+    monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
+    monkeypatch.setattr(plans_router, "settle_agent_plan_run", settle)
+    monkeypatch.setattr(plans_router, "_publish_plan_run_status", AsyncMock())
+
+    try:
+        await plans_router._execute_approved_plan(
+            run_id="plan-run-1",
+            conversation_id="conversation-1",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            message="Execute",
+            message_id="client-message-1",
+        )
+
+        assert run.status == "failed"
+        assert run.revision == 2
+        assert run.error == (
+            "service service:agent.turn-service@1.0.0 is unavailable for scope session"
+        )
+        session.rollback.assert_awaited_once_with()
+        settle.assert_awaited_once()
+        assert settle.await_args.kwargs["succeeded"] is False
+    finally:
+        clear_process_generation_host_v2(host)
+        await host.close()
 
 
 @pytest.mark.unit
@@ -413,6 +684,7 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
 ) -> None:
     import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
 
+    lifecycle: list[str] = []
     run = SimpleNamespace(
         status="queued",
         revision=1,
@@ -439,13 +711,31 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
             yield {"type": "start"}
             raise RuntimeError("stream failed")
 
-    scoped_container = SimpleNamespace(agent_service=lambda _llm: Service())
-    base_container = SimpleNamespace(with_db=lambda _session: scoped_container)
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object) -> AsyncIterator[None]:
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-generation-release")
+
+    async def publish_status(**_kwargs: object) -> None:
+        lifecycle.append("status-publish")
+
     settle = AsyncMock()
     monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
-    monkeypatch.setattr(plans_router, "create_llm_client", AsyncMock(return_value=object()))
+    resolve_turn_service = AsyncMock(return_value=Service())
+    monkeypatch.setattr(
+        plans_router,
+        "current_agent_turn_service_v2",
+        resolve_turn_service,
+    )
+    monkeypatch.setattr(
+        plans_router,
+        "pin_agent_turn_operation_v2",
+        operation_context,
+    )
     monkeypatch.setattr(plans_router, "settle_agent_plan_run", settle)
-    publish_run_status = AsyncMock()
+    publish_run_status = AsyncMock(side_effect=publish_status)
     monkeypatch.setattr(
         plans_router,
         "_publish_plan_run_status",
@@ -454,7 +744,6 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
     )
 
     await plans_router._execute_approved_plan(
-        base_container=base_container,
         run_id="plan-run-1",
         conversation_id="conversation-1",
         project_id="project-1",
@@ -469,10 +758,188 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
     assert run.status == "failed"
     assert run.revision == 2
     settle.assert_awaited_once()
-    publish_run_status.assert_awaited_once_with(
-        base_container=base_container,
-        run=run,
+    publish_run_status.assert_awaited_once_with(run=run)
+    assert lifecycle.index("status-publish") < lifecycle.index("operation-generation-release")
+
+
+@pytest.mark.unit
+async def test_execute_approved_plan_closes_stream_before_boundary_release_on_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    lifecycle: list[str] = []
+    waiting_for_next = asyncio.Event()
+    run = SimpleNamespace(
+        status="queued",
+        revision=1,
+        updated_at=datetime.now(UTC),
+        completed_at=None,
+        error=None,
     )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run),
+        refresh=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            lifecycle.append("session-enter")
+            return session
+
+        async def __aexit__(self, *_args: object) -> None:
+            lifecycle.append("session-exit")
+
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object) -> AsyncIterator[None]:
+        lifecycle.append("operation-enter")
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-generation-release")
+
+    class ClosingStream:
+        def __init__(self) -> None:
+            self._event_emitted = False
+
+        def __aiter__(self) -> "ClosingStream":
+            return self
+
+        async def __anext__(self) -> dict[str, str]:
+            if not self._event_emitted:
+                self._event_emitted = True
+                return {"type": "start"}
+            waiting_for_next.set()
+            await asyncio.Future()
+            raise AssertionError("unreachable")
+
+        async def aclose(self) -> None:
+            lifecycle.append("stream-close")
+
+    class Service:
+        def stream_chat_v2(self, **_kwargs: object) -> ClosingStream:
+            return ClosingStream()
+
+    monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
+    monkeypatch.setattr(
+        plans_router,
+        "current_agent_turn_service_v2",
+        AsyncMock(return_value=Service()),
+    )
+    monkeypatch.setattr(plans_router, "pin_agent_turn_operation_v2", operation_context)
+
+    task = asyncio.create_task(
+        plans_router._execute_approved_plan(
+            run_id="plan-run-1",
+            conversation_id="conversation-1",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            message="Execute",
+            message_id="client-message-1",
+        )
+    )
+    await asyncio.wait_for(waiting_for_next.wait(), timeout=1)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert lifecycle.index("stream-close") < lifecycle.index("operation-generation-release")
+    assert lifecycle.index("operation-generation-release") < lifecycle.index("session-exit")
+
+
+@pytest.mark.unit
+async def test_execute_approved_plan_closes_stream_before_boundary_release_on_stream_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    lifecycle: list[str] = []
+    run = SimpleNamespace(
+        status="queued",
+        revision=1,
+        updated_at=datetime.now(UTC),
+        completed_at=None,
+        error=None,
+    )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run),
+        refresh=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            lifecycle.append("session-enter")
+            return session
+
+        async def __aexit__(self, *_args: object) -> None:
+            lifecycle.append("session-exit")
+
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object) -> AsyncIterator[None]:
+        lifecycle.append("operation-enter")
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-generation-release")
+
+    class FailingClosingStream:
+        def __init__(self) -> None:
+            self._event_emitted = False
+
+        def __aiter__(self) -> "FailingClosingStream":
+            return self
+
+        async def __anext__(self) -> dict[str, str]:
+            if not self._event_emitted:
+                self._event_emitted = True
+                return {"type": "start"}
+            raise RuntimeError("stream failed")
+
+        async def aclose(self) -> None:
+            lifecycle.append("stream-close")
+
+    class Service:
+        def stream_chat_v2(self, **_kwargs: object) -> FailingClosingStream:
+            return FailingClosingStream()
+
+    monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
+    monkeypatch.setattr(
+        plans_router,
+        "current_agent_turn_service_v2",
+        AsyncMock(return_value=Service()),
+    )
+    monkeypatch.setattr(plans_router, "pin_agent_turn_operation_v2", operation_context)
+    monkeypatch.setattr(plans_router, "settle_agent_plan_run", AsyncMock())
+    monkeypatch.setattr(plans_router, "_publish_plan_run_status", AsyncMock())
+
+    await plans_router._execute_approved_plan(
+        run_id="plan-run-1",
+        conversation_id="conversation-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        message="Execute",
+        message_id="client-message-1",
+    )
+
+    assert lifecycle.index("stream-close") < lifecycle.index("operation-generation-release")
+    assert lifecycle.index("operation-generation-release") < lifecycle.index("session-exit")
+
+
+def test_execute_approved_plan_has_no_static_llm_or_di_composition() -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    source = getsource(plans_router._execute_approved_plan)
+
+    assert "create_llm_client" not in source
+    assert "DIContainer" not in source
+    assert ".agent_service(" not in source
 
 
 @pytest.mark.unit
@@ -483,9 +950,35 @@ async def test_publish_plan_run_status_persists_and_broadcasts_authority(
 
     published: list[tuple[str, dict[str, Any]]] = []
 
+    class TrackedRedis:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.close_calls = 0
+
+        async def aclose(self) -> None:
+            self.close_calls += 1
+
+    first_redis = TrackedRedis("first")
+    second_redis = TrackedRedis("second")
+    redis_clients = iter((first_redis, second_redis))
+
+    async def redis_factory() -> TrackedRedis:
+        return next(redis_clients)
+
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(redis_runtime_factory=redis_factory)
+    )
+    first = await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=901,
+        version=901,
+    )
+    assert first.accepted is True
+
     class EventBus:
         def __init__(self, redis_client: object) -> None:
-            assert redis_client is redis
+            assert redis_client is first_redis
 
         async def publish_to_stream(
             self,
@@ -493,9 +986,18 @@ async def test_publish_plan_run_status_persists_and_broadcasts_authority(
             event: dict[str, Any],
         ) -> str:
             published.append((conversation_id, event))
+            second = await host.bootstrap(
+                profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+                manifest_paths=(
+                    _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+                ),
+                generation=902,
+                version=902,
+            )
+            assert second.accepted is True
+            assert first_redis.close_calls == 0
             return "1-0"
 
-    redis = object()
     manager = SimpleNamespace(broadcast_to_conversation=AsyncMock(return_value=1))
     monkeypatch.setattr(plans_router, "RedisEventBusAdapter", EventBus, raising=False)
     monkeypatch.setattr(
@@ -528,10 +1030,22 @@ async def test_publish_plan_run_status_persists_and_broadcasts_authority(
         },
     )
 
-    await plans_router._publish_plan_run_status(
-        base_container=SimpleNamespace(redis_client=redis),
-        run=run,
-    )
+    try:
+        async with pin_operation_context_v2(
+            host,
+            operation_id="plan-status-publication",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            await plans_router._publish_plan_run_status(run=run)
+            assert first_redis.close_calls == 0
+            assert second_redis.close_calls == 0
+
+        assert first_redis.close_calls == 1
+        assert second_redis.close_calls == 0
+    finally:
+        await host.close()
+
+    assert second_redis.close_calls == 1
 
     assert len(published) == 1
     conversation_id, event = published[0]

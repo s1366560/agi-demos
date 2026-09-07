@@ -74,6 +74,15 @@ const extendedClipboardActionPeek    = 1 << 26;
 const extendedClipboardActionNotify  = 1 << 27;
 const extendedClipboardActionProvide = 1 << 28;
 
+export class RfbInitializationError extends Error {
+    constructor(cause, disposal) {
+        super('RFB initialization failed', { cause });
+        this.name = 'RfbInitializationError';
+        this.disposal = disposal;
+        disposal.catch(() => {});
+    }
+}
+
 export default class RFB extends EventTargetMixin {
     constructor(target, touchInput, urlOrChannel, options) {
         if (!target) {
@@ -267,6 +276,7 @@ export default class RFB extends EventTargetMixin {
             Log.Error("Display exception: " + exc);
             throw exc;
         }
+        try {
         this._display.onflush = this._onFlush.bind(this);
 
         // populate decoder array with objects
@@ -285,9 +295,11 @@ export default class RFB extends EventTargetMixin {
 
         this._sock = new Websock();
         this._sock.on('message', () => {
+            if (this._disposed) return;
             this._handleMessage();
         });
         this._sock.on('open', () => {
+            if (this._disposed) return;
             if ((this._rfbConnectionState === 'connecting') &&
                 (this._rfbInitState === '')) {
                 this._rfbInitState = 'ProtocolVersion';
@@ -337,7 +349,9 @@ export default class RFB extends EventTargetMixin {
 
         // Slight delay of the actual connection so that the caller has
         // time to set up callbacks
-        setTimeout(this._updateConnectionState.bind(this, 'connecting'));
+        this._initTimer = setTimeout(() => {
+            if (!this._disposed) this._updateConnectionState('connecting');
+        });
 
         Log.Debug("<< RFB.constructor");
 
@@ -363,6 +377,9 @@ export default class RFB extends EventTargetMixin {
         this._qualityLevel = 6;
         this._compressionLevel = 2;
         this._clipHash = 0;
+        } catch (error) {
+            throw new RfbInitializationError(error, this.dispose());
+        }
     }
 
     // ===== PROPERTIES =====
@@ -433,7 +450,7 @@ export default class RFB extends EventTargetMixin {
         if (this._rfbConnectionState === "connecting" ||
             this._rfbConnectionState === "connected") {
             if (viewOnly) {
-                this._keyboard.ungrab();
+                this._keyboard?.ungrab();
             } else {
                 this._keyboard.grab();
             }
@@ -800,8 +817,12 @@ export default class RFB extends EventTargetMixin {
     }
 
     sendCredentials(creds) {
+        if (this._disposed) return;
         this._rfbCredentials = creds;
-        setTimeout(this._initMsg.bind(this), 0);
+        clearTimeout(this._credentialsTimer);
+        this._credentialsTimer = setTimeout(() => {
+            if (!this._disposed) this._initMsg();
+        }, 0);
     }
 
     sendCtrlAltDel() {
@@ -869,25 +890,35 @@ export default class RFB extends EventTargetMixin {
         this._keyboard.blur();
     }
 
+    _trackClipboardTask(work) {
+        if (this._disposed) return Promise.resolve();
+        // Start work in a microtask so it is registered before any external callback runs.
+        const task = Promise.resolve().then(() => {
+            if (!this._disposed) return work();
+        });
+        (this._clipboardPending ||= new Set()).add(task);
+        task.then(() => this._clipboardPending.delete(task),
+                  () => this._clipboardPending.delete(task));
+        return task;
+    }
+
     checkLocalClipboard() {
+        if (this._disposed) return Promise.resolve();
         if (this.clipboardUp && this.clipboardSeamless && this._resendClipboardNextUserDrivenEvent) {
             this._resendClipboardNextUserDrivenEvent = false;
-            if (this.clipboardBinary) {
-                navigator.clipboard.read().then((data) => {
-                    this.clipboardPasteDataFrom(data);
-                }, (err) => {
-                    Log.Debug("No data in clipboard: " + err);
-                }); 
-            } else {
-                if (navigator.clipboard && navigator.clipboard.readText) {
-                    navigator.clipboard.readText().then(function (text) {
-                        this.clipboardPasteFrom(text);
-                    }.bind(this)).catch(function () {
-                      return Log.Debug("Failed to read system clipboard");
-                    });
+            return this._trackClipboardTask(async () => {
+                if (this.clipboardBinary) {
+                    const data = await navigator.clipboard.read();
+                    if (this._disposed) return;
+                    await this.clipboardPasteDataFrom(data);
+                } else if (navigator.clipboard && navigator.clipboard.readText) {
+                    const text = await navigator.clipboard.readText();
+                    if (this._disposed) return;
+                    this.clipboardPasteFrom(text);
                 }
-            }
+            }).catch(() => { Log.Debug("Failed to read system clipboard"); });
         }
+        return Promise.resolve();
     }
 
     clipboardPasteFrom(text) {
@@ -912,7 +943,11 @@ export default class RFB extends EventTargetMixin {
         RFB.messages.sendBinaryClipboard(this._sock, dataset, mimes);
     }
 
-    async clipboardPasteDataFrom(clipdata) {
+    clipboardPasteDataFrom(clipdata) {
+        return this._trackClipboardTask(() => this._pasteClipboardData(clipdata));
+    }
+
+    async _pasteClipboardData(clipdata) {
         if (this._rfbConnectionState !== 'connected' || this._viewOnly) { return; }
 
         let dataset = [];
@@ -927,10 +962,12 @@ export default class RFB extends EventTargetMixin {
                     case 'text/plain':
                     case 'text/html':
                         let blob = await clipdata[i].getType(mime);
+                        if (this._disposed) return;
                         if (!blob) {
                             continue;
                         }
                         let buff = await blob.arrayBuffer();
+                        if (this._disposed) return;
                         let data = new Uint8Array(buff);
 
                         if (!h) {
@@ -1102,7 +1139,8 @@ export default class RFB extends EventTargetMixin {
             });
             this._udpChannel.binaryType = "arraybuffer";
 
-            this._udpChannel.onerror = function(e) {
+            this._udpChannel.onerror = (e) => {
+                if (this._disposed) return;
                 Log.Error("data channel error " + e.message);
                 this._udpTransitFailures+=1;
                 this._sendUdpDowngrade();
@@ -1112,6 +1150,7 @@ export default class RFB extends EventTargetMixin {
             let udpBuffer = this._udpBuffer;
             let me = this;
             this._udpChannel.onmessage = function(e) {
+                if (me._disposed) return;
                 //Log.Info("got udp msg", e.data);
                 const u8 = new Uint8Array(e.data);
                 // Got an UDP packet. Do we need reassembly?
@@ -1181,54 +1220,95 @@ export default class RFB extends EventTargetMixin {
         }
 
 	    if (this._useUdp && typeof RTCPeerConnection !== 'undefined') {
-            setTimeout(function() { this._sendUdpUpgrade() }.bind(this), 3000);
+            this._udpUpgradeTimer = setTimeout(() => {
+                if (!this._disposed) this._sendUdpUpgrade();
+            }, 3000);
         }
 
         Log.Debug("<< RFB.connect");
     }
 
     _disconnect() {
-        Log.Debug(">> RFB.disconnect");
-        this._cursor.detach();
-        this._canvas.removeEventListener("gesturestart", this._eventHandlers.handleGesture);
-        this._canvas.removeEventListener("gesturemove", this._eventHandlers.handleGesture);
-        this._canvas.removeEventListener("gestureend", this._eventHandlers.handleGesture);
-        this._canvas.removeEventListener("wheel", this._eventHandlers.handleWheel);
-        this._canvas.removeEventListener('mousedown', this._eventHandlers.handleMouse);
-        this._canvas.removeEventListener('mouseup', this._eventHandlers.handleMouse);
-        this._canvas.removeEventListener('mousemove', this._eventHandlers.handleMouse);
-        this._canvas.removeEventListener('click', this._eventHandlers.handleMouse);
-        this._canvas.removeEventListener('contextmenu', this._eventHandlers.handleMouse);
+        // Legacy disconnect events are logical; the owner observes physical socket close.
+        this.dispose().catch(() => {});
+    }
+
+    dispose() {
+        if (this._disposePromise) return this._disposePromise;
+        let resolveDispose, rejectDispose;
+        this._disposePromise = new Promise((resolve, reject) => {
+            resolveDispose = resolve;
+            rejectDispose = reject;
+        });
+        this._disposePromise.catch(() => {});
+        this._disposed = true;
+        this._rfbConnectionState = 'disconnecting';
+        const errors = [];
+        const pending = [];
+        const clean = (work) => {
+            try { pending.push(Promise.resolve(work()).catch(error => { errors.push(error); })); }
+            catch (error) { errors.push(error); }
+        };
+        for (const timer of [this._initTimer, this._credentialsTimer, this._udpUpgradeTimer,
+                            this._udpRetryTimer, this._resizeTimeout, this._mouseMoveTimer,
+                            this._disconnTimer, this._watchForPinchAndZoom]) {
+            clearTimeout(timer);
+            clearInterval(timer);
+        }
+        cancelAnimationFrame(this._resizeFrame);
+        for (const event of ['open', 'message', 'error']) this._sock?.off(event);
+        clean(() => this._canvas.removeEventListener('touchend', this._eventHandlers.updateHiddenKeyboard));
+        if (this._udpChannel) {
+            this._udpChannel.onmessage = null;
+            this._udpChannel.onerror = null;
+            clean(() => this._udpChannel.close());
+        }
+        if (this._udpPeer) {
+            this._udpPeer.onicecandidate = null;
+            this._udpPeer.ondatachannel = null;
+            clean(() => this._udpPeer.close());
+        }
+        clean(() => this._decoders[encodings.encodingTight]?.dispose());
+        clean(() => { this._cursor.detach(); });
+        clean(() => { this._canvas.removeEventListener("gesturestart", this._eventHandlers.handleGesture); });
+        clean(() => { this._canvas.removeEventListener("gesturemove", this._eventHandlers.handleGesture); });
+        clean(() => { this._canvas.removeEventListener("gestureend", this._eventHandlers.handleGesture); });
+        clean(() => { this._canvas.removeEventListener("wheel", this._eventHandlers.handleWheel); });
+        clean(() => { this._canvas.removeEventListener('mousedown', this._eventHandlers.handleMouse); });
+        clean(() => { this._canvas.removeEventListener('mouseup', this._eventHandlers.handleMouse); });
+        clean(() => { this._canvas.removeEventListener('mousemove', this._eventHandlers.handleMouse); });
+        clean(() => { this._canvas.removeEventListener('click', this._eventHandlers.handleMouse); });
+        clean(() => { this._canvas.removeEventListener('contextmenu', this._eventHandlers.handleMouse); });
         if (document.onpointerlockchange !== undefined) {
-            document.removeEventListener('pointerlockchange', this._eventHandlers.handlePointerLockChange);
-            document.removeEventListener('pointerlockerror', this._eventHandlers.handlePointerLockError);
+            clean(() => { document.removeEventListener('pointerlockchange', this._eventHandlers.handlePointerLockChange); });
+            clean(() => { document.removeEventListener('pointerlockerror', this._eventHandlers.handlePointerLockError); });
         } else if (document.onmozpointerlockchange !== undefined) {
-            document.removeEventListener('mozpointerlockchange', this._eventHandlers.handlePointerLockChange);
-            document.removeEventListener('mozpointerlockerror', this._eventHandlers.handlePointerLockError);
+            clean(() => { document.removeEventListener('mozpointerlockchange', this._eventHandlers.handlePointerLockChange); });
+            clean(() => { document.removeEventListener('mozpointerlockerror', this._eventHandlers.handlePointerLockError); });
         }
-        this._canvas.removeEventListener("mousedown", this._eventHandlers.focusCanvas);
-        this._canvas.removeEventListener("touchstart", this._eventHandlers.focusCanvas);
-        this._canvas.removeEventListener("focus", this._eventHandlers.handleFocusChange);
-        window.removeEventListener('resize', this._eventHandlers.windowResize);
-        window.removeEventListener('focus', this._eventHandlers.handleFocusChange);
-        window.removeEventListener('focus', this._eventHandlers.handleFocusChange);
-        this._keyboard.ungrab();
-        this._gestures.detach();
-        this._sock.close();
-        try {
-            this._target.removeChild(this._screen);
-        } catch (e) {
-            if (e.name === 'NotFoundError') {
-                // Some cases where the initial connection fails
-                // can disconnect before the _screen is created
-            } else {
-                throw e;
-            }
-        }
-        this._display.dispose();
-        clearTimeout(this._resizeTimeout);
-        clearTimeout(this._mouseMoveTimer);
-        Log.Debug("<< RFB.disconnect");
+        clean(() => { this._canvas.removeEventListener("mousedown", this._eventHandlers.focusCanvas); });
+        clean(() => { this._canvas.removeEventListener("touchstart", this._eventHandlers.focusCanvas); });
+        clean(() => { this._canvas.removeEventListener("focus", this._eventHandlers.handleFocusChange); });
+        clean(() => { window.removeEventListener('resize', this._eventHandlers.windowResize); });
+        clean(() => { window.removeEventListener('blur', this._eventHandlers.handleFocusChange); });
+        clean(() => { window.removeEventListener('focus', this._eventHandlers.handleFocusChange); });
+        clean(() => { this._keyboard?.ungrab(); });
+        clean(() => { this._gestures?.detach(); });
+        clean(() => { this._sock?.close(); });
+        clean(() => {
+            if (this._screen.parentNode === this._target) this._target.removeChild(this._screen);
+        });
+        clean(() => { this._display.dispose(); });
+        clean(() => { clearTimeout(this._resizeTimeout); });
+        clean(() => { clearTimeout(this._mouseMoveTimer); });
+        Promise.allSettled([
+            ...pending, ...(this._rtcPending || []), ...(this._clipboardPending || [])
+        ]).then(() => {
+            if (errors.length) rejectDispose(new AggregateError(errors, 'RFB resource cleanup failed'));
+            else resolveDispose();
+        });
+        this._disposePromise.catch(() => {});
+        return this._disposePromise;
     }
 
     _updateHiddenKeyboard(event) {
@@ -1242,6 +1322,7 @@ export default class RFB extends EventTargetMixin {
     }
 
     _focusCanvas(event) {
+        if (this._disposed) return;
         // Hack:
         // On most mobile phones it's possible to play audio
         // only if it's triggered by user action. It's also
@@ -1278,9 +1359,12 @@ export default class RFB extends EventTargetMixin {
     }
 
     _windowResize(event) {
+        if (this._disposed) return;
         // If the window resized then our screen element might have
         // as well. Update the viewport dimensions.
-        window.requestAnimationFrame(() => {
+        cancelAnimationFrame(this._resizeFrame);
+        this._resizeFrame = window.requestAnimationFrame(() => {
+            if (this._disposed) return;
             this._updateClip();
             this._updateScale();
         });
@@ -1333,6 +1417,7 @@ export default class RFB extends EventTargetMixin {
     // Requests a change of remote desktop size. This message is an extension
     // and may only be sent if we have received an ExtendedDesktopSize message
     _requestRemoteResize() {
+        if (this._disposed) return;
         clearTimeout(this._resizeTimeout);
         this._resizeTimeout = null;
 
@@ -1491,10 +1576,7 @@ export default class RFB extends EventTargetMixin {
             case 'disconnecting':
                 this._disconnect();
 
-                this._disconnTimer = setTimeout(() => {
-                    Log.Error("Disconnection timed out.");
-                    this._updateConnectionState('disconnected');
-                }, DISCONNECT_TIMEOUT * 1000);
+                this._updateConnectionState('disconnected');
                 break;
 
             case 'disconnected':
@@ -1576,6 +1658,7 @@ export default class RFB extends EventTargetMixin {
     }
 
     _handleMouse(ev) {
+        if (this._disposed) return;
         /*
          * We don't check connection status or viewOnly here as the
          * mouse events might be used to control the viewport
@@ -1801,6 +1884,7 @@ export default class RFB extends EventTargetMixin {
     }
 
     _handleWheel(ev) {
+        if (this._disposed) return;
         if (this._rfbConnectionState !== 'connected') { return; }
         if (this._viewOnly) { return; } // View only, skip mouse events
 
@@ -1890,6 +1974,7 @@ export default class RFB extends EventTargetMixin {
     }
 
     _handleGesture(ev) {
+        if (this._disposed) return;
         let magnitude;
 
         let pos = clientToElement(ev.detail.clientX, ev.detail.clientY,
@@ -3159,6 +3244,7 @@ export default class RFB extends EventTargetMixin {
     }
 
     _sendUdpUpgrade() {
+        if (this._disposed) return;
         if (this._transitConnectionState == this.TransitConnectionStates.Upgrading) {
             return;
         }
@@ -3167,9 +3253,11 @@ export default class RFB extends EventTargetMixin {
         let peer = this._udpPeer;
         let sock = this._sock;
 
-        peer.createOffer().then(function(offer) {
+        const task = peer.createOffer().then((offer) => {
+            if (this._disposed) return;
             return peer.setLocalDescription(offer);
-        }).then(function() {
+        }).then(() => {
+            if (this._disposed) return;
             const buff = sock._sQ;
             const offset = sock._sQlen;
             const str = Uint8Array.from(Array.from(peer.localDescription.sdp).map(letter => letter.charCodeAt(0)));
@@ -3182,11 +3270,14 @@ export default class RFB extends EventTargetMixin {
 
             sock._sQlen += 3 + str.length;
             sock.flush();
-        }).catch(function(reason) {
+        }).catch((reason) => {
+            if (this._disposed) return;
             Log.Error("Failed to create offer " + reason);
             this._changeTransitConnectionState(this.TransitConnectionStates.Tcp);
             this._udpConnectFailures++;
         });
+        (this._rtcPending ||= new Set()).add(task);
+        task.then(() => this._rtcPending.delete(task), () => this._rtcPending.delete(task));
     }
 
     _sendUdpDowngrade() {
@@ -3203,6 +3294,7 @@ export default class RFB extends EventTargetMixin {
     }
 
     _handleUdpUpgrade() {
+        if (this._disposed) return false;
         if (this._sock.rQwait("UdpUgrade header", 2, 1)) { return false; }
         let len = this._sock.rQshift16();
         if (this._sock.rQwait("UdpUpgrade payload", len, 3)) { return false; }
@@ -3213,20 +3305,25 @@ export default class RFB extends EventTargetMixin {
 
         var response = JSON.parse(payload);
         Log.Debug("UDP Upgrade recieved from server: " + payload);
-        peer.setRemoteDescription(new RTCSessionDescription(response.answer)).then(function() {
+        const task = peer.setRemoteDescription(new RTCSessionDescription(response.answer)).then(function() {
+            if (this._disposed) return;
             var candidate = new RTCIceCandidate(response.candidate);
-            peer.addIceCandidate(candidate).then(function() {
+            return peer.addIceCandidate(candidate).then(function() {
                 Log.Debug("success in addicecandidate");
             }.bind(this)).catch(function(err) {
+                if (this._disposed) return;
                 Log.Error("Failure in addIceCandidate", err);
                 this._changeTransitConnectionState(this.TransitConnectionStates.Failure)
                 this._udpConnectFailures++;
             }.bind(this));
         }.bind(this)).catch(function(e) {
+            if (this._disposed) return;
             Log.Error("Failure in setRemoteDescription", e);
             this._changeTransitConnectionState(this.TransitConnectionStates.Failure)
             this._udpConnectFailures++;
         }.bind(this));
+        (this._rtcPending ||= new Set()).add(task);
+        task.then(() => this._rtcPending.delete(task), () => this._rtcPending.delete(task));
     }
 
     // KasmVNC 1.4.0+ message handlers
@@ -3660,7 +3757,8 @@ export default class RFB extends EventTargetMixin {
                 this._display.clear();
                 if (this._useUdp) {
                     if (this._udpConnectFailures < 3 && this._udpTransitFailures < 3) {
-                        setTimeout(function() {
+                        this._udpRetryTimer = setTimeout(function() {
+                            if (this._disposed) return;
                             Log.Warn("Attempting to connect via UDP again after failure.")
                             this.enableWebRTC = true;
                         }.bind(this), 3000);

@@ -6,7 +6,15 @@
  * Standard noVNC cannot handle these extensions and disconnects.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -23,12 +31,19 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-import { buildDesktopWebSocketProtocols } from '@/services/sandboxWebSocketUtils';
+import { KasmRetainedSessionV2, type KasmAttemptContextV2 } from '@/services/kasmRetainedSessionV2';
+
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+  WebOperationCleanupErrorV2,
+  type WebOperationContextV2,
+} from '@/plugins/webOperationAdmissionV2';
 
 // vendored KasmVNC noVNC fork
 import MouseButtonMapper, { XVNC_BUTTONS } from '@/vendor/kasmvnc/core/mousebuttonmapper.js';
 // vendored KasmVNC noVNC fork (ES modules, no TS declarations)
-import RFB from '@/vendor/kasmvnc/core/rfb.js';
+import RFB, { RfbInitializationError, type RFBEventDetail } from '@/vendor/kasmvnc/core/rfb.js';
 
 import type { TFunction } from 'i18next';
 
@@ -48,6 +63,8 @@ function tFallback(t: TFunction, key: string, fallback: string): string {
 }
 
 export interface KasmVNCViewerProps {
+  projectId: string;
+  sandboxId: string;
   /** WebSocket URL to the KasmVNC proxy endpoint */
   wsUrl: string;
   /** Current resolution */
@@ -69,6 +86,8 @@ export interface KasmVNCViewerProps {
 }
 
 export function KasmVNCViewer({
+  projectId,
+  sandboxId,
   wsUrl,
   resolution = 'auto',
   audioEnabled = false,
@@ -82,12 +101,39 @@ export function KasmVNCViewer({
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const rfbRef = useRef<InstanceType<typeof RFB> | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectAttemptRef = useRef(0);
-  const intentionalDisconnectRef = useRef(false);
-  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const viewRef = useRef<{
+    rfb: InstanceType<typeof RFB>;
+    operation: WebOperationContextV2;
+    attempt: KasmAttemptContextV2;
+  } | null>(null);
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
+  const [retryNonce, setRetryNonce] = useState(0);
+  const identity = useMemo(
+    () => ({
+      owner: availability.owner,
+      projectId,
+      sandboxId,
+      wsUrl,
+      retryNonce,
+      available: availability.available,
+    }),
+    [availability.owner, availability.available, projectId, sandboxId, wsUrl, retryNonce]
+  );
+  const [connectionSnapshot, setConnectionSnapshot] = useState<{
+    identity: object;
+    state: ConnectionState;
+  } | null>(null);
+  const connectionState =
+    connectionSnapshot?.identity === identity ? connectionSnapshot.state : 'disconnected';
+  const [fullscreenSnapshot, setFullscreenSnapshot] = useState<{
+    identity: object;
+    value: boolean;
+  } | null>(null);
+  const isFullscreen = fullscreenSnapshot?.identity === identity && fullscreenSnapshot.value;
   const [isMuted, setIsMuted] = useState(!audioEnabled);
   const [currentResolution, setCurrentResolution] = useState(resolution);
   const muteAudioLabel = tFallback(t, 'components.kasmVNC.muteAudio', 'Mute audio');
@@ -106,235 +152,271 @@ export function KasmVNCViewer({
     'Failed to connect'
   );
 
-  const clearReconnectTimer = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-  }, []);
-
-  // Safely disconnect RFB, handling the case where it hasn't finished initializing
-  const safeDisconnect = useCallback((rfb: InstanceType<typeof RFB> | null) => {
-    if (!rfb) return;
-    try {
-      // KasmVNC RFB defers state transition to 'connecting' via setTimeout.
-      // If React StrictMode unmounts before that fires, state is still ''.
-      // Check internal state to avoid "Bad transition" error.
-      const state = rfb._rfbConnectionState;
-      if (state === 'connected' || state === 'connecting') {
-        rfb.disconnect();
-      } else {
-        // Force-close the underlying WebSocket if state hasn't initialized
-        rfb._sock?.close();
-      }
-    } catch {
-      // ignore cleanup errors
-    }
-  }, []);
-
-  // Connect to the VNC server via KasmVNC RFB
-  const connectRFB = useCallback(() => {
-    const target = canvasContainerRef.current;
-    if (!target || !wsUrl) return;
-
-    // Clean up existing connection
-    if (rfbRef.current) {
-      intentionalDisconnectRef.current = true;
-      safeDisconnect(rfbRef.current);
-      rfbRef.current = null;
-    }
-
-    // Clear canvas container (RFB appends its own canvas)
-    target.innerHTML = '';
-    setConnectionState('connecting');
-    intentionalDisconnectRef.current = false;
-
-    try {
-      // KasmVNC RFB constructor: (target, touchInput, url, options)
-      // touchInput is required for keyboard input (used by Keyboard class)
-      const touchInput = document.createElement('textarea');
-      touchInput.style.cssText =
-        'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;';
-      touchInput.setAttribute('autocapitalize', 'off');
-      touchInput.setAttribute('autocomplete', 'off');
-      touchInput.setAttribute('spellcheck', 'false');
-      touchInput.setAttribute('tabindex', '-1');
-      target.appendChild(touchInput);
-
-      const rfb = new RFB(target, touchInput, wsUrl, {
-        wsProtocols: buildDesktopWebSocketProtocols(),
-        shared: true,
-      });
-
-      const isAuto = currentResolution === 'auto';
-      rfb.scaleViewport = true;
-      rfb.resizeSession = isAuto && dynamicResize;
-      rfb.clipViewport = false;
-      rfb.background = '#000000';
-      rfb.qualityLevel = 8;
-
-      // Initialize mouse button mapper (required by KasmVNC's RFB)
-      const mapper = new MouseButtonMapper();
-      mapper.set(0, XVNC_BUTTONS.LEFT_BUTTON);
-      mapper.set(1, XVNC_BUTTONS.MIDDLE_BUTTON);
-      mapper.set(2, XVNC_BUTTONS.RIGHT_BUTTON);
-      mapper.set(3, XVNC_BUTTONS.BACK_BUTTON);
-      mapper.set(4, XVNC_BUTTONS.FORWARD_BUTTON);
-      rfb.mouseButtonMapper = mapper;
-
-      rfb.addEventListener('connect', () => {
-        setConnectionState('connected');
-        reconnectAttemptRef.current = 0;
-        onConnect?.();
-      });
-
-      rfb.addEventListener(
-        'disconnect',
-        (e: { detail: { clean: boolean; reason?: string | undefined } }) => {
-          console.warn('[KasmVNC] Disconnected', {
-            clean: e.detail.clean,
-            reason: e.detail.reason || '(no reason)',
-          });
-          rfbRef.current = null;
-
-          if (intentionalDisconnectRef.current) {
-            setConnectionState('disconnected');
-            onDisconnect?.();
-            return;
-          }
-
-          // Auto-reconnect on unexpected disconnect
-          const attempt = reconnectAttemptRef.current;
-          const MAX_RECONNECT_ATTEMPTS = 10;
-          if (attempt < MAX_RECONNECT_ATTEMPTS) {
-            const delay = Math.min(1000 * Math.pow(1.5, attempt), 15000);
-            reconnectAttemptRef.current = attempt + 1;
-            setConnectionState('connecting');
-            console.info(
-              `[KasmVNC] Auto-reconnect attempt ${(attempt + 1).toString()} in ${delay.toString()}ms`
-            );
-            reconnectTimerRef.current = setTimeout(() => {
-              connectRFB();
-            }, delay);
-          } else {
-            setConnectionState('error');
-            onError?.(
-              tFallback(
-                t,
-                'components.kasmVNC.connectionLostRetries',
-                'Connection lost after max retries'
-              )
-            );
-            onDisconnect?.(tFallback(t, 'components.kasmVNC.connectionLost', 'Connection lost'));
-          }
-        }
-      );
-
-      rfb.addEventListener('credentialsrequired', () => {
-        // KasmVNC with -disableBasicAuth should not need credentials
-        // but send empty password just in case
-        rfb.sendCredentials({ password: '' });
-      });
-
-      rfb.addEventListener('desktopname', (e: { detail: { name: string } }) => {
-        // Desktop name received (informational)
-        void e;
-      });
-
-      rfb.addEventListener('clipboard', (e: { detail: { text: string } }) => {
-        // Server clipboard -> browser clipboard
-        void navigator.clipboard.writeText(e.detail.text).catch(() => {
-          // clipboard write may fail without user gesture
-        });
-      });
-
-      rfbRef.current = rfb;
-    } catch (err) {
-      setConnectionState('error');
-      onError?.(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }, [
-    wsUrl,
+  const settings = useRef({
     currentResolution,
     dynamicResize,
     onConnect,
     onDisconnect,
     onError,
-    safeDisconnect,
     t,
-  ]);
-
-  // Connect on mount and when wsUrl changes
-  useEffect(() => {
-    if (!wsUrl) return;
-    // RFB defers its own connection with setTimeout. Defer construction too so
-    // React StrictMode can cancel the discarded mount before it creates a
-    // second WebSocket and canvas.
+  });
+  useLayoutEffect(() => {
+    settings.current = { currentResolution, dynamicResize, onConnect, onDisconnect, onError, t };
+  });
+  useLayoutEffect(() => {
+    const target = canvasContainerRef.current;
+    if (!target || !availability.available || !projectId || !sandboxId || !wsUrl) return;
+    let active = true;
+    const owner = availability.owner;
+    const captured = settings.current;
+    const current = () =>
+      active &&
+      getWebOperationAvailabilityV2().owner === owner &&
+      getWebOperationAvailabilityV2().available;
+    const session = new KasmRetainedSessionV2({
+      projectId,
+      sandboxId,
+      wsUrl,
+      onAdmitted() {
+        const fullscreenTarget = containerRef.current;
+        return async () => {
+          if (fullscreenTarget && document.fullscreenElement === fullscreenTarget) {
+            try {
+              await document.exitFullscreen();
+            } catch (error) {
+              throw new WebOperationCleanupErrorV2([error], 'Kasm fullscreen cleanup failed');
+            }
+          }
+        };
+      },
+      onStateChange(state) {
+        if (current()) setConnectionSnapshot({ identity, state });
+      },
+      onError() {
+        if (current())
+          captured.onError?.(
+            tFallback(captured.t, 'components.kasmVNC.failedToConnect', 'Failed to connect')
+          );
+      },
+      onDisconnect(reason) {
+        if (current()) captured.onDisconnect?.(reason);
+      },
+      createAttempt(socket, operation, attempt) {
+        attempt.check();
+        const touchInput = document.createElement('textarea');
+        touchInput.style.cssText =
+          'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;';
+        touchInput.setAttribute('autocapitalize', 'off');
+        touchInput.setAttribute('autocomplete', 'off');
+        touchInput.setAttribute('spellcheck', 'false');
+        touchInput.setAttribute('tabindex', '-1');
+        target.appendChild(touchInput);
+        let owned: InstanceType<typeof RFB> | undefined;
+        let initializationCleanup: Promise<void> | undefined;
+        const removers: Array<() => void> = [];
+        let disposed = false;
+        const dispose = async () => {
+          if (disposed) return;
+          disposed = true;
+          const errors: unknown[] = [];
+          for (const remove of removers) {
+            try {
+              remove();
+            } catch (error) {
+              errors.push(error);
+            }
+          }
+          if (viewRef.current?.attempt === attempt) viewRef.current = null;
+          try {
+            await owned?.dispose();
+            await initializationCleanup;
+          } catch (error) {
+            errors.push(error);
+          }
+          touchInput.remove();
+          if (errors.length) throw new WebOperationCleanupErrorV2(errors, 'Kasm UI cleanup failed');
+        };
+        try {
+          owned = new RFB(target, touchInput, socket, { shared: true });
+          const rfb = owned;
+          const check = () => {
+            if (!current() || disposed) throw new DOMException('Kasm view retired', 'AbortError');
+            attempt.check();
+          };
+          const listen = (name: string, callback: (event: RFBEventDetail) => void) => {
+            const guarded = (event: RFBEventDetail) => {
+              try {
+                check();
+              } catch {
+                return;
+              }
+              callback(event);
+            };
+            rfb.addEventListener(name, guarded);
+            removers.push(() => {
+              rfb.removeEventListener(name, guarded);
+            });
+          };
+          rfb.scaleViewport = true;
+          rfb.resizeSession =
+            settings.current.currentResolution === 'auto' && settings.current.dynamicResize;
+          rfb.clipViewport = false;
+          rfb.background = '#000000';
+          rfb.qualityLevel = 8;
+          const mapper = new MouseButtonMapper();
+          mapper.set(0, XVNC_BUTTONS.LEFT_BUTTON);
+          mapper.set(1, XVNC_BUTTONS.MIDDLE_BUTTON);
+          mapper.set(2, XVNC_BUTTONS.RIGHT_BUTTON);
+          mapper.set(3, XVNC_BUTTONS.BACK_BUTTON);
+          mapper.set(4, XVNC_BUTTONS.FORWARD_BUTTON);
+          rfb.mouseButtonMapper = mapper;
+          listen('connect', () => {
+            attempt.connected();
+            check();
+            captured.onConnect?.();
+          });
+          listen('disconnect', (event) => {
+            const detail = event.detail;
+            const reason =
+              detail &&
+              typeof detail === 'object' &&
+              'reason' in detail &&
+              typeof detail.reason === 'string'
+                ? detail.reason
+                : undefined;
+            attempt.disconnected(reason);
+          });
+          listen('credentialsrequired', () => {
+            rfb.sendCredentials({ password: '' });
+          });
+          listen('clipboard', (event) => {
+            const detail = event.detail;
+            const text =
+              detail && typeof detail === 'object' && 'text' in detail ? detail.text : undefined;
+            if (typeof text !== 'string') return;
+            void attempt
+              .runChild(async (child) => {
+                child.check();
+                check();
+                await navigator.clipboard.writeText(text);
+                child.check();
+                check();
+              })
+              .catch(() => {
+                /* Clipboard access can be denied by the browser. */
+              });
+          });
+          const fullscreen = () => {
+            try {
+              check();
+            } catch {
+              return;
+            }
+            setFullscreenSnapshot({
+              identity,
+              value: document.fullscreenElement === containerRef.current,
+            });
+          };
+          document.addEventListener('fullscreenchange', fullscreen);
+          removers.push(() => {
+            document.removeEventListener('fullscreenchange', fullscreen);
+          });
+          viewRef.current = { rfb, operation, attempt };
+          return { dispose };
+        } catch (error) {
+          // Resource construction failure still has to return its cleanup to the parent drain.
+          if (error instanceof RfbInitializationError) initializationCleanup = error.disposal;
+          attempt.fail(error instanceof Error ? error : new Error('Kasm initialization failed'));
+          return { dispose };
+        }
+      },
+    });
+    // Cancel the discarded StrictMode mount before it admits a socket or constructs RFB.
     const connectTimer = setTimeout(() => {
-      connectRFB();
+      void session.connect().catch(() => {
+        /* Session callbacks report non-retirement failures. */
+      });
     }, 0);
     return () => {
       clearTimeout(connectTimer);
-      clearReconnectTimer();
-      intentionalDisconnectRef.current = true;
-      safeDisconnect(rfbRef.current);
-      rfbRef.current = null;
+      active = false;
+      void session.disconnect().catch(() => {
+        console.warn('Kasm cleanup failed');
+      });
     };
-    // Only reconnect when wsUrl changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wsUrl]);
+  }, [
+    projectId,
+    sandboxId,
+    wsUrl,
+    availability.owner,
+    availability.available,
+    retryNonce,
+    identity,
+  ]);
 
-  // Update RFB resize mode when resolution changes (no reconnect needed)
   useEffect(() => {
-    const rfb = rfbRef.current;
-    if (!rfb) return;
-    const isAuto = currentResolution === 'auto';
-    rfb.resizeSession = isAuto && dynamicResize;
-    rfb.scaleViewport = true;
-  }, [currentResolution, dynamicResize]);
-
-  // Handle fullscreen toggle
-  const toggleFullscreen = useCallback(async () => {
-    if (!containerRef.current) return;
+    const view = viewRef.current;
+    if (!view) return;
     try {
-      if (!document.fullscreenElement) {
-        await containerRef.current.requestFullscreen();
-        setIsFullscreen(true);
-      } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
-      }
+      view.attempt.check();
     } catch {
-      setIsFullscreen((prev) => !prev);
+      return;
     }
-  }, []);
-
-  // Listen for fullscreen changes
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
-  }, []);
-
-  // Handle resolution change
+    view.rfb.resizeSession = currentResolution === 'auto' && dynamicResize;
+    view.rfb.scaleViewport = true;
+  }, [currentResolution, dynamicResize]);
+  const toggleFullscreen = useCallback(async () => {
+    const view = viewRef.current;
+    const target = containerRef.current;
+    if (!view || !target) return;
+    try {
+      view.attempt.check();
+      await view.attempt.runChild(async (child) => {
+        child.check();
+        view.attempt.check();
+        let failed = false;
+        let primary: unknown;
+        try {
+          if (!document.fullscreenElement) await target.requestFullscreen();
+          else await document.exitFullscreen();
+          child.check();
+          view.attempt.check();
+          setFullscreenSnapshot({ identity, value: document.fullscreenElement === target });
+        } catch (error) {
+          failed = true;
+          primary = error;
+        }
+        if (child.signal.aborted && document.fullscreenElement === target) {
+          try {
+            await document.exitFullscreen();
+          } catch (error) {
+            throw new WebOperationCleanupErrorV2([error], 'Kasm fullscreen cleanup failed');
+          }
+        }
+        if (failed) throw primary;
+      });
+    } catch {
+      /* Fullscreen can be denied without a user gesture. */
+    }
+  }, [identity]);
   const handleResolutionChange = useCallback(
     (value: string) => {
+      const view = viewRef.current;
+      if (!view) return;
+      try {
+        view.attempt.check();
+      } catch {
+        return;
+      }
       setCurrentResolution(value);
       onResolutionChange?.(value);
     },
     [onResolutionChange]
   );
-
-  // Reconnect (manual)
   const handleReconnect = useCallback(() => {
-    clearReconnectTimer();
-    reconnectAttemptRef.current = 0;
-    connectRFB();
-  }, [connectRFB, clearReconnectTimer]);
+    if (!getWebOperationAvailabilityV2().available) return;
+    setRetryNonce((value) => value + 1);
+  }, []);
 
   const containerStyle: React.CSSProperties = isFullscreen
     ? { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 50 }

@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../plugins/webOperationAdmissionV2';
 /**
  * Sandbox Store - State management for sandbox terminal and tool execution
  *
@@ -21,6 +22,7 @@ import {
 import { logger } from '../utils/logger';
 
 import { useCanvasStore } from './canvasStore';
+import { beginSandboxTerminalRequestV2, terminalRequestRetired } from './sandboxTerminalRequestV2';
 import { useLayoutModeStore } from './layoutMode';
 
 import type { ToolExecution } from '../components/agent/sandbox/SandboxOutputViewer';
@@ -120,7 +122,7 @@ export interface SandboxState {
   ) => Promise<{ success: boolean; content: string; isError: boolean }>;
 
   // SSE subscription actions
-  subscribeSSE: (projectId: string) => void;
+  subscribeSSE: (projectId: string) => () => void;
   unsubscribeSSE: () => void;
 
   // Desktop and Terminal control actions (project-scoped)
@@ -485,34 +487,46 @@ export const useSandboxStore = create<SandboxState>()(
 
       // SSE subscription methods
       subscribeSSE: (projectId) => {
+        const availability = getWebOperationAvailabilityV2();
+        if (!availability.available) return () => {};
         // Unsubscribe from previous subscription if exists
-        const { activeProjectId, sseUnsubscribe } = get();
-        if (activeProjectId === projectId && sseUnsubscribe) {
-          return;
-        }
+        const { sseUnsubscribe } = get();
         if (sseUnsubscribe) {
           sseUnsubscribe();
         }
 
         // Subscribe to new project events
+        const handleEvent: Parameters<typeof sandboxSSEService.subscribe>[1]['onStatusUpdate'] = (
+          event
+        ) => {
+          if (
+            getWebOperationAvailabilityV2().owner === availability.owner &&
+            getWebOperationAvailabilityV2().available
+          )
+            get().handleSSEEvent(event);
+        };
         const unsubscribe = sandboxSSEService.subscribe(projectId, {
-          onSandboxCreated: get().handleSSEEvent,
-          onSandboxTerminated: get().handleSSEEvent,
-          onDesktopStarted: get().handleSSEEvent,
-          onDesktopStopped: get().handleSSEEvent,
-          onTerminalStarted: get().handleSSEEvent,
-          onTerminalStopped: get().handleSSEEvent,
-          onHttpServiceStarted: get().handleSSEEvent,
-          onHttpServiceUpdated: get().handleSSEEvent,
-          onHttpServiceStopped: get().handleSSEEvent,
-          onHttpServiceError: get().handleSSEEvent,
-          onStatusUpdate: get().handleSSEEvent,
+          onSandboxCreated: handleEvent,
+          onSandboxTerminated: handleEvent,
+          onDesktopStarted: handleEvent,
+          onDesktopStopped: handleEvent,
+          onTerminalStarted: handleEvent,
+          onTerminalStopped: handleEvent,
+          onHttpServiceStarted: handleEvent,
+          onHttpServiceUpdated: handleEvent,
+          onHttpServiceStopped: handleEvent,
+          onHttpServiceError: handleEvent,
+          onStatusUpdate: handleEvent,
           onError: (error) => {
             logger.error('[SandboxSSE] Error:', error);
           },
         });
 
         set({ sseUnsubscribe: unsubscribe, activeProjectId: projectId });
+        return () => {
+          unsubscribe();
+          if (get().sseUnsubscribe === unsubscribe) set({ sseUnsubscribe: null });
+        };
       },
 
       unsubscribeSSE: () => {
@@ -585,16 +599,22 @@ export const useSandboxStore = create<SandboxState>()(
           return;
         }
 
+        const request = beginSandboxTerminalRequestV2(useSandboxStore);
         set({ isTerminalLoading: true });
 
         try {
+          if (!request.current()) throw terminalRequestRetired();
           const status = await projectSandboxService.startTerminal(activeProjectId);
+          if (!request.current()) throw terminalRequestRetired();
           set({ terminalStatus: status, isTerminalLoading: false });
           logger.info(`[SandboxStore] Terminal started for project ${activeProjectId}`);
         } catch (error) {
+          if (!request.current()) throw terminalRequestRetired();
           logger.error('[SandboxStore] Failed to start terminal:', error);
           set({ isTerminalLoading: false });
           throw error;
+        } finally {
+          request.finish();
         }
       },
 
@@ -606,10 +626,13 @@ export const useSandboxStore = create<SandboxState>()(
           return;
         }
 
+        const request = beginSandboxTerminalRequestV2(useSandboxStore);
         set({ isTerminalLoading: true });
 
         try {
+          if (!request.current()) throw terminalRequestRetired();
           await projectSandboxService.stopTerminal(activeProjectId);
+          if (!request.current()) throw terminalRequestRetired();
           set({
             terminalStatus: {
               running: false,
@@ -622,9 +645,12 @@ export const useSandboxStore = create<SandboxState>()(
           });
           logger.info(`[SandboxStore] Terminal stopped for project ${activeProjectId}`);
         } catch (error) {
+          if (!request.current()) throw terminalRequestRetired();
           logger.error('[SandboxStore] Failed to stop terminal:', error);
           set({ isTerminalLoading: false });
           throw error;
+        } finally {
+          request.finish();
         }
       },
 

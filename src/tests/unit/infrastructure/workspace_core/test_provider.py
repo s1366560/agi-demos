@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
+from typing import Any
 
 import httpx
 import pytest
@@ -131,12 +134,40 @@ class RecordingAcknowledger:
         )
 
 
+class ImmediateGenerationReservation:
+    @asynccontextmanager
+    async def admit(self) -> AsyncIterator[object]:
+        yield object()
+
+    async def release(self) -> None:
+        return None
+
+
+async def _reserve_immediate_generation() -> ImmediateGenerationReservation:
+    return ImmediateGenerationReservation()
+
+
+def _adapter(
+    runtime: FakeRuntime,
+    sink: RecordingSink,
+    acknowledger: RecordingAcknowledger,
+    **kwargs: Any,
+) -> AvernetProviderAdapter:
+    return AvernetProviderAdapter(
+        runtime,
+        sink,
+        acknowledger,
+        generation_reserver=_reserve_immediate_generation,
+        **kwargs,
+    )
+
+
 @pytest.mark.unit
 async def test_send_acks_then_publishes_ordered_terminal_events() -> None:
     runtime = FakeRuntime()
     sink = RecordingSink()
     acknowledger = RecordingAcknowledger()
-    adapter = AvernetProviderAdapter(runtime, sink, acknowledger)
+    adapter = _adapter(runtime, sink, acknowledger)
 
     response = await adapter.handle(_request())
     await adapter.wait_until_idle()
@@ -156,7 +187,7 @@ async def test_send_acks_then_publishes_ordered_terminal_events() -> None:
 @pytest.mark.unit
 async def test_send_retries_only_the_same_persisted_terminal_callback() -> None:
     sink = FlakyTerminalSink(failures=2)
-    adapter = AvernetProviderAdapter(
+    adapter = _adapter(
         FakeRuntime(),
         sink,
         RecordingAcknowledger(),
@@ -175,7 +206,7 @@ async def test_send_retries_only_the_same_persisted_terminal_callback() -> None:
 @pytest.mark.unit
 async def test_inject_history_and_abort_use_runtime_port() -> None:
     runtime = FakeRuntime()
-    adapter = AvernetProviderAdapter(runtime, RecordingSink(), RecordingAcknowledger())
+    adapter = _adapter(runtime, RecordingSink(), RecordingAcknowledger())
 
     inject = await adapter.handle(_request("chat.inject"))
     history = await adapter.handle(_request("chat.history"))
@@ -220,7 +251,7 @@ async def test_abort_publishes_and_acknowledges_target_run_terminal() -> None:
 
     sink = RecordingSink()
     acknowledger = RecordingAcknowledger()
-    adapter = AvernetProviderAdapter(TerminalAbortRuntime(), sink, acknowledger)
+    adapter = _adapter(TerminalAbortRuntime(), sink, acknowledger)
     request = _request("chat.abort").model_copy(update={"run_id": "target-run-1"})
 
     result = await adapter.handle(request)
@@ -246,12 +277,86 @@ async def test_send_without_persisted_terminal_suppresses_error_callback() -> No
             )
 
     sink = RecordingSink()
-    adapter = AvernetProviderAdapter(NoTerminalRuntime(), sink, RecordingAcknowledger())
+    adapter = _adapter(NoTerminalRuntime(), sink, RecordingAcknowledger())
 
     _ = await adapter.handle(_request())
     await adapter.wait_until_idle()
 
     assert [event.state for _, _, event in sink.events] == ["delta"]
+
+
+@pytest.mark.unit
+async def test_send_closes_runtime_stream_before_releasing_generation() -> None:
+    order: list[str] = []
+
+    class ClosingRuntime(FakeRuntime):
+        async def stream_send(
+            self,
+            request: ProviderWebhookRequest,
+        ) -> AsyncIterator[ProviderRuntimeEvent]:
+            try:
+                yield ProviderRuntimeEvent(
+                    state="final",
+                    sequence=1,
+                    message={"content": "complete"},
+                    persisted=True,
+                    correlation_id="correlation-1",
+                )
+            finally:
+                order.append("stream-closed")
+
+    class RecordingReservation(ImmediateGenerationReservation):
+        @asynccontextmanager
+        async def admit(self) -> AsyncIterator[object]:
+            order.append("generation-entered")
+            try:
+                yield object()
+            finally:
+                order.append("generation-released")
+
+    async def reserve() -> RecordingReservation:
+        return RecordingReservation()
+
+    adapter = AvernetProviderAdapter(
+        ClosingRuntime(),
+        RecordingSink(),
+        RecordingAcknowledger(),
+        generation_reserver=reserve,
+    )
+
+    _ = await adapter.handle(_request())
+    await adapter.wait_until_idle()
+
+    assert order == ["generation-entered", "stream-closed", "generation-released"]
+
+
+@pytest.mark.unit
+async def test_cancelled_unstarted_send_releases_reserved_generation() -> None:
+    release_calls = 0
+
+    class CancellableReservation(ImmediateGenerationReservation):
+        async def release(self) -> None:
+            nonlocal release_calls
+            release_calls += 1
+
+    async def reserve() -> CancellableReservation:
+        return CancellableReservation()
+
+    adapter = AvernetProviderAdapter(
+        FakeRuntime(),
+        RecordingSink(),
+        RecordingAcknowledger(),
+        generation_reserver=reserve,
+    )
+
+    _ = await adapter.handle(_request())
+    send_task = next(iter(adapter._tasks))
+    send_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await send_task
+    await adapter.wait_until_idle()
+
+    assert release_calls == 1
 
 
 @pytest.mark.unit

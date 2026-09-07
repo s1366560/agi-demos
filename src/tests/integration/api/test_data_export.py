@@ -1,13 +1,17 @@
+from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import status
+from fastapi import FastAPI, status
 
 from src.domain.model.graph.dtos import GraphExportDTO
-from src.infrastructure.adapters.primary.web.dependencies import get_graph_store
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     verify_api_key_dependency,
+)
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.models import APIKey
 
@@ -33,10 +37,29 @@ def mock_graphiti_service():
     return service
 
 
+@pytest.fixture(autouse=True)
+async def initialize_data_export_route_generation(
+    test_app: FastAPI,
+    mock_graphiti_service: object,
+) -> AsyncIterator[None]:
+    """Run integration requests through the production V2 generation dispatcher."""
+
+    async def graph_runtime_factory() -> object:
+        return mock_graphiti_service
+
+    await initialize_plugin_runtime_v2(
+        test_app,
+        graph_runtime_factory=graph_runtime_factory,
+    )
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+
+
 @pytest.mark.asyncio
 async def test_export_data(mock_api_key_dependency, mock_graphiti_service, test_app, async_client):
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
-    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
 
     mock_props = {"uuid": "123", "content": "test"}
     mock_graphiti_service.data_export.return_value = GraphExportDTO(
@@ -77,7 +100,6 @@ async def test_export_data(mock_api_key_dependency, mock_graphiti_service, test_
 @pytest.mark.asyncio
 async def test_get_stats(mock_api_key_dependency, mock_graphiti_service, test_app, async_client):
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
-    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
 
     mock_graphiti_service.count_stats.return_value = {
         "entities": 5,
@@ -106,7 +128,6 @@ async def test_cleanup_dry_run(
 ):
     # Setup overrides on the test app
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
-    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
 
     # User is already created by test_user fixture
     # Do NOT create user manually here
@@ -128,7 +149,6 @@ async def test_cleanup_execute(
     mock_api_key_dependency, mock_graphiti_service, test_db, async_client, test_app, test_user
 ):
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
-    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
 
     # User is already created by test_user fixture
 

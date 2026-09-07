@@ -1,5 +1,6 @@
 """Tests for @tool_define, ToolInfo, wrap_legacy_tool, and registry functions."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from src.infrastructure.agent.tools.define import (
     _TOOL_REGISTRY,
     ToolInfo,
+    capture_tool_definitions,
     clear_registry,
     get_registered_tools,
     tool_define,
@@ -175,6 +177,67 @@ class TestRegistryFunctions:
         assert len(get_registered_tools()) > 0
         clear_registry()
         assert len(get_registered_tools()) == 0
+
+
+@pytest.mark.unit
+class TestToolDefinitionCapture:
+    """Tests for invocation-local decorator registration capture."""
+
+    def setup_method(self) -> None:
+        self._registry_snapshot: dict[str, ToolInfo] = dict(_TOOL_REGISTRY)
+        clear_registry()
+
+    def teardown_method(self) -> None:
+        clear_registry()
+        _TOOL_REGISTRY.update(self._registry_snapshot)
+
+    def test_capture_routes_definition_away_from_global_registry(self) -> None:
+        with capture_tool_definitions() as captured:
+
+            @tool_define(
+                name="captured_tool",
+                description="captured",
+                parameters={"type": "object"},
+            )
+            async def captured_tool(ctx: object) -> str:
+                return "captured"
+
+        assert captured == {"captured_tool": captured_tool}
+        assert get_registered_tools() == {}
+
+    async def test_capture_is_isolated_between_interleaved_tasks(self) -> None:
+        first_entered = asyncio.Event()
+        release_first = asyncio.Event()
+
+        async def define_in_capture(label: str, *, wait: bool) -> dict[str, ToolInfo]:
+            with capture_tool_definitions() as captured:
+                if wait:
+                    first_entered.set()
+                    await release_first.wait()
+                else:
+                    await first_entered.wait()
+                    release_first.set()
+
+                @tool_define(
+                    name="shared_name",
+                    description=label,
+                    parameters={"type": "object"},
+                )
+                async def captured_tool(ctx: object) -> str:
+                    return label
+
+                await asyncio.sleep(0)
+                return dict(captured)
+
+        captured_a, captured_b = await asyncio.gather(
+            define_in_capture("generation-a", wait=True),
+            define_in_capture("generation-b", wait=False),
+        )
+
+        assert captured_a["shared_name"].description == "generation-a"
+        assert captured_b["shared_name"].description == "generation-b"
+        assert captured_a["shared_name"] is not captured_b["shared_name"]
+        assert get_registered_tools() == {}
 
 
 @pytest.mark.unit

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
@@ -27,11 +27,16 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.permission.manager import PermissionManager
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
-    from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolver
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
+from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
+
+
+class AgentLoopResolverLike(Protocol):
+    def resolve(self, provider_id: str, model_id: str) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -48,6 +53,7 @@ class ProcessorFactory:
         artifact_service: Artifact service for rich outputs.
         command_interceptor: Command interceptor for slash commands (main agent only).
         base_model: Default model name (used when SubAgent inherits).
+        base_provider_id: Provider identity inherited by SubAgent turns.
         base_api_key: API key for LLM calls.
         base_url: Base URL for LLM API.
         tool_pipeline: ToolPipeline | None = None
@@ -58,11 +64,10 @@ class ProcessorFactory:
     artifact_service: ArtifactService | None = None
     command_interceptor: CommandInterceptor | None = None
     base_model: str = ""
+    base_provider_id: str = ""
     base_api_key: str | None = None
     base_url: str | None = None
     tool_pipeline: ToolPipeline | None = None
-    plugin_registry: object | None = None
-    plugin_event_dispatcher: object | None = None
     message_bus: object | None = None
     control_channel: ControlChannelPort | None = None
 
@@ -72,6 +77,8 @@ class ProcessorFactory:
         tools: list[ToolDefinition],
         *,
         model_override: str | None = None,
+        configured_model_route: ModelRouteRef | None = None,
+        model_route_override: ModelRouteRef | None = None,
         abort_signal: asyncio.Event | None = None,
         doom_loop_threshold: int | None = None,
         thinking_override: bool | None = None,
@@ -79,13 +86,16 @@ class ProcessorFactory:
     ) -> SessionProcessor:
         """Create a SessionProcessor configured for a SubAgent.
 
-        Resolves model inheritance: if SubAgent uses INHERIT, falls back to
-        base_model or model_override.
+        Resolves an explicit provider/model pair. Inherited models use the
+        factory's pinned base pair; configured and retry models require their
+        own ``ModelRouteRef``.
 
         Args:
             subagent: The SubAgent definition.
             tools: Filtered tool definitions for this SubAgent.
-            model_override: Optional model override (takes precedence over base_model).
+            model_override: Optional legacy model value, valid only with a matching route.
+            configured_model_route: Explicit route for a SubAgent-declared model.
+            model_route_override: Explicit route for a spawn or retry override.
             abort_signal: Not used by processor directly; caller manages abort.
             doom_loop_threshold: Optional doom-loop detection threshold.
                 Defaults to 3 (ProcessorConfig default). Subagents typically
@@ -95,11 +105,52 @@ class ProcessorFactory:
         Returns:
             Configured SessionProcessor instance.
         """
-        # Resolve model
-        if subagent.model == AgentModel.INHERIT:
-            model = model_override or self.base_model
+        normalized_model_override = (model_override or "").strip() or None
+        if model_route_override is not None:
+            if (
+                normalized_model_override is not None
+                and model_route_override.model_id != normalized_model_override
+            ):
+                raise RuntimeV2Error(
+                    "subagent_model_override_route_mismatch",
+                    f"subagent model override {normalized_model_override} does not match route "
+                    f"model {model_route_override.model_id}",
+                )
+            model_route = model_route_override
+        elif normalized_model_override is not None:
+            raise RuntimeV2Error(
+                "subagent_model_override_route_missing",
+                f"subagent model override {normalized_model_override} has no provider route",
+            )
+        elif subagent.model != AgentModel.INHERIT:
+            declared_model = subagent.model.value
+            if configured_model_route is None:
+                raise RuntimeV2Error(
+                    "subagent_model_route_missing",
+                    f"subagent {subagent.id} declares model {declared_model} "
+                    "without an explicit provider route",
+                )
+            if configured_model_route.model_id != declared_model:
+                raise RuntimeV2Error(
+                    "subagent_model_route_mismatch",
+                    f"subagent {subagent.id} declares model {declared_model}, but its route "
+                    f"declares {configured_model_route.model_id}",
+                )
+            model_route = configured_model_route
+        elif configured_model_route is not None:
+            if configured_model_route.model_id != self.base_model:
+                raise RuntimeV2Error(
+                    "subagent_model_route_mismatch",
+                    f"inherited model {self.base_model} does not match route model "
+                    f"{configured_model_route.model_id}",
+                )
+            model_route = configured_model_route
         else:
-            model = subagent.model.value
+            model_route = ModelRouteRef(
+                provider_id=self.base_provider_id,
+                model_id=self.base_model,
+            )
+        model = model_route.model_id
 
         from src.infrastructure.llm.reasoning_config import build_reasoning_config
 
@@ -121,13 +172,14 @@ class ProcessorFactory:
             max_tokens=subagent.max_tokens,
             max_steps=subagent.max_iterations,
             llm_client=self.llm_client,
-            plugin_registry=self.plugin_registry,
-            plugin_event_dispatcher=self.plugin_event_dispatcher,
+            plugin_event_dispatcher=_default_runtime_dispatcher(),
             doom_loop_threshold=doom_loop_threshold if doom_loop_threshold is not None else 3,
             provider_options=_provider_opts,
             message_bus=self.message_bus,
             control_channel=self.control_channel,
             run_id=run_id,
+            provider_id=model_route.provider_id,
+            loop_resolver=_default_loop_resolver(),
         )
 
         return SessionProcessor(
@@ -155,8 +207,7 @@ class ProcessorFactory:
         Returns:
             Configured SessionProcessor instance.
         """
-        if config.loop_resolver is None:
-            config.loop_resolver = _default_loop_resolver()
+        config.loop_resolver = _default_loop_resolver()
         return SessionProcessor(
             config=config,
             tools=tools,
@@ -167,33 +218,30 @@ class ProcessorFactory:
         )
 
 
-def _default_loop_resolver() -> AgentLoopResolver | None:
-    """Build the per-turn agent loop resolver from the platform runtime host.
+def _default_loop_resolver() -> AgentLoopResolverLike:
+    """Resolve the required agent-loop service from the pinned v2 operation."""
+    from src.infrastructure.plugins.v2.agent_loop import AGENT_LOOP_RESOLVER_SERVICE_V2
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 
-    Returns ``None`` when the plugin control plane is not active (tests,
-    bare CLI runs); the processor then always uses the builtin ReAct loop.
-    """
-    try:
-        from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolver
-        from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
+    operation = current_operation_context_v2()
+    resolver = operation.require(AGENT_LOOP_RESOLVER_SERVICE_V2)
+    if not callable(getattr(resolver, "resolve", None)):
+        raise RuntimeError("v2 agent loop resolver has no callable resolve method")
+    return cast(AgentLoopResolverLike, resolver)
 
-        return AgentLoopResolver(
-            get_platform_plugin_runtime_host().capabilities,
-            builtin_loop=_BuiltinReActLoop(),
+
+def _default_runtime_dispatcher() -> object:
+    """Resolve the required Agent dispatcher from the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+        AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
+        AgentRuntimeDispatcherProtocolV2,
+    )
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    dispatcher = current_operation_context_v2().require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)
+    if not isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_agent_runtime_dispatcher",
+            "service:agent-runtime-dispatcher has an invalid implementation",
         )
-    except Exception:
-        return None
-
-
-class _BuiltinReActLoop:
-    """Sentinel for the builtin ReAct loop in per-turn resolution (I2).
-
-    Lets ``AgentLoopResolver`` resolve ``scope="builtin"`` instead of raising
-    when no plugin row matches, so the selection is recorded in the execution
-    summary. The processor never dispatches builtin-scope selections to the
-    driver contract — it continues on the native ReAct path — so ``run`` is
-    unreachable by construction.
-    """
-
-    async def run(self, context: object) -> None:
-        raise NotImplementedError("builtin ReAct loop is the in-process default path")
+    return dispatcher

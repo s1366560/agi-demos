@@ -5,7 +5,6 @@ use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 use super::config::{CronSchedulerConfig, CRON_PRODUCTION_READY_ENV};
@@ -103,15 +102,10 @@ impl CronScheduler {
             }
             CronSchedulerGate::Open => {}
         }
-        let (shutdown, receiver) = watch::channel(false);
-        let scheduler = Arc::clone(&self);
-        let join = tokio::spawn(async move {
-            scheduler.run_loop(receiver).await;
-        });
-        Some(CronSchedulerRuntime {
-            shutdown,
-            join: Some(join),
-        })
+        Some(CronSchedulerRuntime::spawn(
+            "cron-scheduler",
+            move |receiver| self.run_loop(receiver),
+        ))
     }
 
     #[cfg(test)]
@@ -223,17 +217,13 @@ impl CronScheduler {
             match self.run_control_once().await {
                 Ok((_, scopes)) => {
                     for scope in &scopes {
-                        tokio::select! {
-                            changed = shutdown.changed() => {
-                                if changed.is_err() || *shutdown.borrow() {
-                                    return;
-                                }
-                            }
-                            result = self.driver.drive_runtime_scope(scope) => {
-                                if let Err(error) = result {
-                                    eprintln!("[agistack] cron Agent runtime poll failed: {error:?}");
-                                }
-                            }
+                        // A claimed runtime operation must settle before its generation retires.
+                        // Stop admission between scopes, never by dropping the active driver future.
+                        if *shutdown.borrow() || shutdown.has_changed().is_err() {
+                            return;
+                        }
+                        if let Err(error) = self.driver.drive_runtime_scope(scope).await {
+                            eprintln!("[agistack] cron Agent runtime poll failed: {error:?}");
                         }
                     }
                 }
@@ -255,27 +245,7 @@ fn ownership_error(_error: CronSchedulerOwnerError) -> CoreError {
     CoreError::Storage("cron scheduler ownership storage failed".to_string())
 }
 
-pub(crate) struct CronSchedulerRuntime {
-    shutdown: watch::Sender<bool>,
-    join: Option<JoinHandle<()>>,
-}
-
-impl CronSchedulerRuntime {
-    pub(crate) async fn shutdown(mut self) {
-        let _ = self.shutdown.send(true);
-        if let Some(join) = self.join.take() {
-            let _ = join.await;
-        }
-    }
-}
-
-impl Drop for CronSchedulerRuntime {
-    fn drop(&mut self) {
-        if let Some(join) = &self.join {
-            join.abort();
-        }
-    }
-}
+pub(crate) type CronSchedulerRuntime = crate::worker_lifecycle_v2::WorkerRuntimeV2;
 
 #[cfg(test)]
 mod tests;

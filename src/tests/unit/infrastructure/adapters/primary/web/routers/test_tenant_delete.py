@@ -94,7 +94,7 @@ async def test_tenant_delete_purges_every_project_before_database_deletion() -> 
             "tenant-1",
             request,  # type: ignore[arg-type]
             current_user=user,  # type: ignore[arg-type]
-            db=db,  # type: ignore[arg-type]
+            project_tenant=SimpleNamespace(db=db),  # type: ignore[arg-type]
         )
 
     assert purge.await_args_list == [
@@ -134,10 +134,45 @@ async def test_tenant_delete_does_not_mutate_database_when_resource_purge_fails(
             "tenant-1",
             request,  # type: ignore[arg-type]
             current_user=user,  # type: ignore[arg-type]
-            db=db,  # type: ignore[arg-type]
+            project_tenant=SimpleNamespace(db=db),  # type: ignore[arg-type]
         )
 
     delete_dependents.assert_not_awaited()
+    db.execute.assert_not_awaited()
+    db.delete.assert_not_awaited()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_tenant_delete_v2_unavailable_leaves_all_project_rows_unmodified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import HTTPException
+
+    from src.infrastructure.plugins.v2 import sandbox_projection
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    db = SimpleNamespace(execute=AsyncMock(), delete=AsyncMock(), commit=AsyncMock())
+    tenant = object()
+    lock = AsyncMock(return_value=(tenant, ["project-a", "project-b"]))
+    dependents = AsyncMock()
+
+    def unavailable():
+        raise RuntimeV2Error("sandbox_runtime_unavailable", "unavailable")
+
+    monkeypatch.setattr(tenants, "_lock_tenant_delete_scope", lock)
+    monkeypatch.setattr(tenants, "_delete_project_dependents", dependents)
+    monkeypatch.setattr(sandbox_projection, "current_sandbox_application_services_v2", unavailable)
+    with pytest.raises(HTTPException) as failure:
+        await tenants.delete_tenant(
+            "tenant-1",
+            SimpleNamespace(),
+            current_user=SimpleNamespace(id="owner-1"),
+            project_tenant=SimpleNamespace(db=db),
+        )
+    assert failure.value.status_code == 503
+    lock.assert_awaited_once_with(db, tenant_id="tenant-1", owner_user_id="owner-1")
+    dependents.assert_not_awaited()
     db.execute.assert_not_awaited()
     db.delete.assert_not_awaited()
     db.commit.assert_not_awaited()

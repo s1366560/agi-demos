@@ -11,7 +11,8 @@ import { createElement } from 'react';
 import type { ReactNode } from 'react';
 
 import { getBuiltinRenderer } from '@/services/pluginRendererRegistry';
-import { findToolResultSlot } from '@/services/pluginSlotService';
+
+import { useWebToolResultSlotV2 } from '@/routes/v2/webUiSlotAuthorityStateV2';
 
 import { PluginSlotHost } from './PluginSlotHost';
 
@@ -26,7 +27,7 @@ export function PluginToolResultRenderer({
   result,
   fallback,
 }: PluginToolResultRendererProps) {
-  const slot = findToolResultSlot(toolName);
+  const slot = useWebToolResultSlotV2(toolName);
   if (!slot) return <>{fallback}</>;
   const keyed = getBuiltinRenderer(slot);
   if (keyed) return createElement(keyed, { slot, context: { toolName, result } });

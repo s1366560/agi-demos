@@ -332,21 +332,3 @@ class AttachmentProcessor:
         """
         context = self.build_context(attachment_metadata, attachment_content)
         return self.build_user_message(user_message, context)
-
-
-# Module-level singleton for convenience
-_default_processor: AttachmentProcessor | None = None
-
-
-def get_attachment_processor() -> AttachmentProcessor:
-    """Get the default attachment processor singleton."""
-    global _default_processor
-    if _default_processor is None:
-        _default_processor = AttachmentProcessor()
-    return _default_processor
-
-
-def set_attachment_processor(processor: AttachmentProcessor) -> None:
-    """Set the default attachment processor singleton."""
-    global _default_processor
-    _default_processor = processor

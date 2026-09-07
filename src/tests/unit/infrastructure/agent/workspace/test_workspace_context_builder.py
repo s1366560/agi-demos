@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 
@@ -12,14 +14,16 @@ from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_message import MessageSenderType, WorkspaceMessage
 from src.domain.model.workspace.workspace_role import WorkspaceRole
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.infrastructure.agent.workspace import workspace_context_builder
 from src.infrastructure.agent.workspace.workspace_context_builder import (
     build_workspace_context,
     format_timestamp,
     format_workspace_context,
     truncate,
 )
-from src.infrastructure.workspace_core.legacy_runtime import (
-    LegacyWorkspaceRuntimeRetiredError,
+from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.workspace_prompt_context_services import (
+    WORKSPACE_PROMPT_CONTEXT_SERVICE_V2,
 )
 
 _NOW = datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC)
@@ -301,17 +305,67 @@ class TestBuildWorkspaceContext:
         result = await build_workspace_context("p-1", "")
         assert result is None
 
-    async def test_retired_platform_lookup_fails_closed(self) -> None:
-        """The dynamic Workspace context lookup is retired to Avernet Core."""
-        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
+    async def test_uses_only_the_service_from_the_current_pinned_operation(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls: list[tuple[OperationContextV2, str, str]] = []
+
+        class PromptContextService:
+            async def build(
+                self,
+                operation: OperationContextV2,
+                *,
+                project_id: str,
+                tenant_id: str,
+            ) -> str:
+                calls.append((operation, project_id, tenant_id))
+                return "<cyber-workspace />"
+
+        service = PromptContextService()
+
+        class Operation:
+            def require(self, key: str) -> object:
+                assert key == WORKSPACE_PROMPT_CONTEXT_SERVICE_V2
+                return service
+
+        operation = cast("OperationContextV2", Operation())
+        monkeypatch.setattr(
+            workspace_context_builder,
+            "current_operation_context_v2",
+            lambda: operation,
+        )
+
+        result = await build_workspace_context("p-1", "t-1")
+
+        assert result == "<cyber-workspace />"
+        assert calls == [(operation, "p-1", "t-1")]
+
+    async def test_missing_v2_service_fails_closed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class Operation:
+            def require(self, _key: str) -> object:
+                raise RuntimeV2Error(
+                    "service_not_found",
+                    "workspace prompt context service is unavailable",
+                )
+
+        monkeypatch.setattr(
+            workspace_context_builder,
+            "current_operation_context_v2",
+            lambda: cast("OperationContextV2", Operation()),
+        )
+
+        with pytest.raises(RuntimeV2Error) as error:
             await build_workspace_context("p-1", "t-1")
 
-    async def test_retired_lookup_raises_before_any_query(self) -> None:
-        """Retirement fires before the retired SQL query composition runs."""
-        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
-            await build_workspace_context("p-1", "t-1")
+        assert error.value.code == "service_not_found"
 
-    async def test_retired_lookup_raises_instead_of_swallowing_errors(self) -> None:
-        """The retired path fails loudly rather than returning stale context."""
-        with pytest.raises(LegacyWorkspaceRuntimeRetiredError):
-            await build_workspace_context("p-1", "t-1")
+    def test_has_no_static_sql_or_legacy_workspace_runtime_reference(self) -> None:
+        source = inspect.getsource(workspace_context_builder)
+
+        assert "async_session_factory" not in source
+        assert "legacy_workspace_runtime_retired" not in source
+        assert "LegacyWorkspaceRuntime" not in source

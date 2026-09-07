@@ -1,0 +1,1132 @@
+import { AGENT_WORKSPACE_ROUTE_ID } from '../features/agent-workspace/agentWorkspaceRouteModule';
+import {
+  CANONICAL_DESKTOP_NAVIGATION_METADATA,
+  DESKTOP_AUXILIARY_NAVIGATION_METADATA,
+} from '../features/navigation/desktopCanonicalNavigationCatalog';
+import {
+  DESKTOP_PRODUCTION_ROUTE_IDS,
+  PROJECT_AGENT_DASHBOARD_ROUTE_ID,
+  PROJECT_AGENT_LOGS_ROUTE_ID,
+  PROJECT_AGENT_PATTERNS_ROUTE_ID,
+  PROJECT_CHANNELS_ROUTE_ID,
+  PROJECT_COMMUNITIES_ROUTE_ID,
+  PROJECT_CRON_JOBS_ROUTE_ID,
+  PROJECT_ENTITIES_ROUTE_ID,
+  PROJECT_GRAPH_ROUTE_ID,
+  PROJECT_MEMORIES_ROUTE_ID,
+  PROJECT_MAINTENANCE_ROUTE_ID,
+  PROJECT_BLACKBOARD_ROUTE_ID,
+  PROJECT_OVERVIEW_ROUTE_ID,
+  PROJECT_SCHEMA_ROUTE_ID,
+  PROJECT_SEARCH_ROUTE_ID,
+  PROJECT_SETTINGS_ROUTE_ID,
+  PROJECT_TEAM_ROUTE_ID,
+  PROJECT_WORKSPACES_ROUTE_ID,
+  TENANT_CLUSTERS_ROUTE_ID,
+  TENANT_CREATION_ROUTE_ID,
+  TENANT_ANALYTICS_ROUTE_ID,
+  TENANT_ACP_ROUTE_ID,
+  TENANT_AGENT_BINDINGS_ROUTE_ID,
+  TENANT_AGENT_DASHBOARD_ROUTE_ID,
+  TENANT_AGENT_DEFINITIONS_ROUTE_ID,
+  TENANT_AUDIT_LOGS_ROUTE_ID,
+  TENANT_BILLING_ROUTE_ID,
+  TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+  TENANT_DECISION_RECORDS_ROUTE_ID,
+  TENANT_DEPLOY_ROUTE_ID,
+  TENANT_EVOLUTION_ROUTE_ID,
+  TENANT_EVENTS_ROUTE_ID,
+  TENANT_GENES_ROUTE_ID,
+  TENANT_INSTANCES_ROUTE_ID,
+  TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
+  TENANT_PATTERNS_ROUTE_ID,
+  TENANT_POOL_ROUTE_ID,
+  TENANT_OVERVIEW_ROUTE_ID,
+  TENANT_MCP_SERVERS_ROUTE_ID,
+  TENANT_ORGANIZATION_SETTINGS_ROUTE_ID,
+  TENANT_PLUGINS_ROUTE_ID,
+  TENANT_PROVIDERS_ROUTE_ID,
+  TENANT_PROJECTS_ROUTE_ID,
+  TENANT_RUNTIMES_ROUTE_ID,
+  TENANT_SETTINGS_ROUTE_ID,
+  TENANT_SKILLS_ROUTE_ID,
+  TENANT_TASKS_ROUTE_ID,
+  TENANT_TEMPLATES_ROUTE_ID,
+  TENANT_TRUST_POLICIES_ROUTE_ID,
+  TENANT_USERS_ROUTE_ID,
+  TENANT_WEBHOOKS_ROUTE_ID,
+  TENANT_WORKSPACES_ROUTE_ID,
+} from '../features/navigation/desktopProductionRouteRegistry';
+
+import { PROFILE_ROUTE_ID } from '../features/settings-routes/profileRoutePresentationModel';
+import type { UiSlotDefinition } from './uiSlotRegistry';
+
+type DesktopRendererContributionKindV2 = 'route' | 'navigation' | 'ui-slot';
+
+interface DesktopRendererContributionV2 {
+  readonly id: string;
+  readonly kind: DesktopRendererContributionKindV2;
+  readonly order: number;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly sourceEntryId: string;
+}
+
+export const DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.tenant-creation.v1';
+export const DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.auxiliary.v1';
+export const DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.project-knowledge.v1';
+export const DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.project-agent.v1';
+export const DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.project-administration.v1';
+export const DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.runtime-infrastructure.v1';
+export const DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.project-workspace.v1';
+export const DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.project-discovery.v1';
+export const DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.tenant-core.v1';
+export const DESKTOP_TENANT_AGENT_BUILDING_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.tenant-agent-building.v1';
+export const DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.tenant-extensions-integrations.v1';
+export const DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.tenant-governance.v1';
+export const DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.auxiliary.v1';
+export const DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.project-knowledge.v1';
+export const DESKTOP_PROJECT_AGENT_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.project-agent.v1';
+export const DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.project-administration.v1';
+export const DESKTOP_RUNTIME_INFRASTRUCTURE_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.runtime-infrastructure.v1';
+export const DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.project-workspace.v1';
+export const DESKTOP_PROJECT_DISCOVERY_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.project-discovery.v1';
+export const DESKTOP_TENANT_CORE_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.tenant-core.v1';
+export const DESKTOP_TENANT_AGENT_BUILDING_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.tenant-agent-building.v1';
+export const DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.tenant-extensions-integrations.v1';
+export const DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.tenant-governance.v1';
+export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
+export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.authenticated-shell-surface.v2';
+export const DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.keyboard-shortcuts-surface.v1';
+export const DESKTOP_STATUS_BAR_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.status-bar-surface.v1';
+export const DESKTOP_TITLEBAR_SURFACE_ARTIFACT_ID_V2 = 'desktop.ui-slots.titlebar-surface.v1';
+export const DESKTOP_SIDEBAR_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.sidebar-surface.v1';
+export const DESKTOP_RIGHT_SIDEBAR_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.right-sidebar-surface.v1';
+export const DESKTOP_NEW_TASK_FLOW_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.new-task-flow-surface.v1';
+export const DESKTOP_COMMAND_PALETTE_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.command-palette-surface.v1';
+export const DESKTOP_WORKSPACE_CREATE_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.workspace-create-surface.v1';
+export const DESKTOP_WORKSPACE_SETTINGS_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.workspace-settings-surface.v1';
+export const DESKTOP_WORKBENCH_TAB_BAR_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.workbench-tab-bar-surface.v1';
+export const DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.settings-window-surface.v1';
+export const DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.session-canvas-surface.v1';
+export const DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2 = 'desktop.ui-slots.workbench-surface.v2';
+export const DESKTOP_SESSION_WORKSPACE_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.session-workspace-surface.v1';
+export const DESKTOP_WORKSPACE_COLLABORATION_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.workspace-collaboration-surface.v1';
+export const DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.new-thread-composer-surface.v1';
+export const DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.my-work-queue-surface.v1';
+export const DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.activity-inbox-surface.v1';
+export const DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.conversation-surface.v1';
+export const DESKTOP_CONVERSATION_RENDERER_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.conversation-renderer.v1';
+export const DESKTOP_TOOL_RESULT_RENDERER_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.tool-result-renderer.v1';
+
+const TENANT_CREATION_ROUTE_IDS_V2 = Object.freeze([TENANT_CREATION_ROUTE_ID]);
+const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(
+  DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+);
+const AUXILIARY_ROUTE_IDS_V2 = Object.freeze(
+  [
+    ...DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => AUXILIARY_ROUTE_ID_SET_V2.has(routeId)),
+    PROFILE_ROUTE_ID,
+  ],
+);
+const PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2 = new Set<string>([
+  PROJECT_TEAM_ROUTE_ID,
+  PROJECT_MEMORIES_ROUTE_ID,
+  PROJECT_ENTITIES_ROUTE_ID,
+  PROJECT_COMMUNITIES_ROUTE_ID,
+  PROJECT_GRAPH_ROUTE_ID,
+]);
+const PROJECT_KNOWLEDGE_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId)),
+);
+const PROJECT_AGENT_ROUTE_ID_SET_V2 = new Set<string>([
+  PROJECT_AGENT_DASHBOARD_ROUTE_ID,
+  PROJECT_AGENT_LOGS_ROUTE_ID,
+  PROJECT_AGENT_PATTERNS_ROUTE_ID,
+]);
+const PROJECT_AGENT_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId)),
+);
+const PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2 = new Set<string>([
+  PROJECT_SCHEMA_ROUTE_ID,
+  PROJECT_CHANNELS_ROUTE_ID,
+  PROJECT_MAINTENANCE_ROUTE_ID,
+  PROJECT_CRON_JOBS_ROUTE_ID,
+  PROJECT_SETTINGS_ROUTE_ID,
+]);
+const PROJECT_ADMINISTRATION_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) =>
+    PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId),
+  ),
+);
+const RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2 = new Set<string>([
+  TENANT_RUNTIMES_ROUTE_ID,
+  TENANT_POOL_ROUTE_ID,
+  TENANT_INSTANCES_ROUTE_ID,
+  TENANT_CLUSTERS_ROUTE_ID,
+  TENANT_DEPLOY_ROUTE_ID,
+  TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
+  TENANT_GENES_ROUTE_ID,
+]);
+const RUNTIME_INFRASTRUCTURE_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) =>
+    RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId),
+  ),
+);
+const PROJECT_WORKSPACE_ROUTE_ID_SET_V2 = new Set<string>([
+  PROJECT_OVERVIEW_ROUTE_ID,
+  PROJECT_WORKSPACES_ROUTE_ID,
+  PROJECT_BLACKBOARD_ROUTE_ID,
+]);
+const PROJECT_WORKSPACE_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => PROJECT_WORKSPACE_ROUTE_ID_SET_V2.has(routeId)),
+);
+const PROJECT_DISCOVERY_ROUTE_ID_SET_V2 = new Set<string>([PROJECT_SEARCH_ROUTE_ID]);
+const PROJECT_DISCOVERY_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => PROJECT_DISCOVERY_ROUTE_ID_SET_V2.has(routeId)),
+);
+const TENANT_CORE_ROUTE_ID_SET_V2 = new Set<string>([
+  AGENT_WORKSPACE_ROUTE_ID,
+  TENANT_OVERVIEW_ROUTE_ID,
+  TENANT_PROJECTS_ROUTE_ID,
+  TENANT_WORKSPACES_ROUTE_ID,
+  TENANT_TASKS_ROUTE_ID,
+  TENANT_ANALYTICS_ROUTE_ID,
+]);
+const TENANT_CORE_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => TENANT_CORE_ROUTE_ID_SET_V2.has(routeId)),
+);
+const TENANT_AGENT_BUILDING_ROUTE_ID_SET_V2 = new Set<string>([
+  TENANT_AGENT_DASHBOARD_ROUTE_ID,
+  TENANT_AGENT_DEFINITIONS_ROUTE_ID,
+  TENANT_AGENT_BINDINGS_ROUTE_ID,
+  TENANT_SKILLS_ROUTE_ID,
+  TENANT_EVOLUTION_ROUTE_ID,
+  TENANT_PATTERNS_ROUTE_ID,
+]);
+const TENANT_AGENT_BUILDING_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) =>
+    TENANT_AGENT_BUILDING_ROUTE_ID_SET_V2.has(routeId),
+  ),
+);
+const TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2 = new Set<string>([
+  TENANT_PLUGINS_ROUTE_ID,
+  TENANT_MCP_SERVERS_ROUTE_ID,
+  TENANT_ACP_ROUTE_ID,
+  TENANT_TEMPLATES_ROUTE_ID,
+  TENANT_PROVIDERS_ROUTE_ID,
+  TENANT_WEBHOOKS_ROUTE_ID,
+]);
+const TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) =>
+    TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId),
+  ),
+);
+const TENANT_GOVERNANCE_ROUTE_ID_SET_V2 = new Set<string>([
+  TENANT_USERS_ROUTE_ID,
+  TENANT_AUDIT_LOGS_ROUTE_ID,
+  TENANT_EVENTS_ROUTE_ID,
+  TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+  TENANT_TRUST_POLICIES_ROUTE_ID,
+  TENANT_DECISION_RECORDS_ROUTE_ID,
+  TENANT_BILLING_ROUTE_ID,
+  TENANT_ORGANIZATION_SETTINGS_ROUTE_ID,
+  TENANT_SETTINGS_ROUTE_ID,
+]);
+const TENANT_GOVERNANCE_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) =>
+    TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
+  ),
+);
+const AUXILIARY_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+]);
+const PROJECT_KNOWLEDGE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const PROJECT_AGENT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const PROJECT_ADMINISTRATION_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const RUNTIME_INFRASTRUCTURE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const PROJECT_WORKSPACE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    PROJECT_WORKSPACE_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const PROJECT_DISCOVERY_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    PROJECT_DISCOVERY_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const TENANT_CORE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    TENANT_CORE_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const TENANT_AGENT_BUILDING_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    TENANT_AGENT_BUILDING_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const TENANT_GOVERNANCE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-ui',
+    slot: 'settings_page',
+    id: 'plugin-settings',
+    contract: 'ui-builtin:plugin-settings',
+    moduleRef: 'builtin:plugin-settings',
+    permission: 'ui.settings.plugins',
+    sandbox: true,
+  }),
+]);
+const AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'authenticated_shell_surface',
+    id: 'authenticated-shell',
+    contract: 'ui-builtin:desktop-authenticated-shell-surface',
+    moduleRef: 'builtin:desktop-authenticated-shell-surface',
+    permission: 'ui.authenticated-shell',
+    sandbox: true,
+  }),
+]);
+const KEYBOARD_SHORTCUTS_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'keyboard_shortcuts_surface',
+    id: 'keyboard-shortcuts',
+    contract: 'ui-builtin:desktop-keyboard-shortcuts-surface',
+    moduleRef: 'builtin:desktop-keyboard-shortcuts-surface',
+    permission: 'ui.keyboard-shortcuts',
+    sandbox: true,
+  }),
+]);
+const STATUS_BAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'status_bar_surface',
+    id: 'status-bar',
+    contract: 'ui-builtin:desktop-status-bar-surface',
+    moduleRef: 'builtin:desktop-status-bar-surface',
+    permission: 'ui.status-bar',
+    sandbox: true,
+  }),
+]);
+const TITLEBAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'titlebar_surface',
+    id: 'titlebar',
+    contract: 'ui-builtin:desktop-titlebar-surface',
+    moduleRef: 'builtin:desktop-titlebar-surface',
+    permission: 'ui.titlebar',
+    sandbox: true,
+  }),
+]);
+const SIDEBAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'sidebar_surface',
+    id: 'sidebar',
+    contract: 'ui-builtin:desktop-sidebar-surface',
+    moduleRef: 'builtin:desktop-sidebar-surface',
+    permission: 'ui.sidebar',
+    sandbox: true,
+  }),
+]);
+const RIGHT_SIDEBAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'right_sidebar_surface',
+    id: 'right-sidebar',
+    contract: 'ui-builtin:desktop-right-sidebar-surface',
+    moduleRef: 'builtin:desktop-right-sidebar-surface',
+    permission: 'ui.right-sidebar',
+    sandbox: true,
+  }),
+]);
+const NEW_TASK_FLOW_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'new_task_flow_surface',
+    id: 'new-task-flow',
+    contract: 'ui-builtin:desktop-new-task-flow-surface',
+    moduleRef: 'builtin:desktop-new-task-flow-surface',
+    permission: 'ui.new-task-flow',
+    sandbox: true,
+  }),
+]);
+const COMMAND_PALETTE_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'command_palette_surface',
+    id: 'command-palette',
+    contract: 'ui-builtin:desktop-command-palette-surface',
+    moduleRef: 'builtin:desktop-command-palette-surface',
+    permission: 'ui.command-palette',
+    sandbox: true,
+  }),
+]);
+const WORKSPACE_CREATE_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'workspace_create_surface',
+    id: 'workspace-create',
+    contract: 'ui-builtin:desktop-workspace-create-surface',
+    moduleRef: 'builtin:desktop-workspace-create-surface',
+    permission: 'ui.workspace-create',
+    sandbox: true,
+  }),
+]);
+const WORKSPACE_SETTINGS_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'workspace_settings_surface',
+    id: 'workspace-settings',
+    contract: 'ui-builtin:desktop-workspace-settings-surface',
+    moduleRef: 'builtin:desktop-workspace-settings-surface',
+    permission: 'ui.workspace-settings',
+    sandbox: true,
+  }),
+]);
+const WORKBENCH_TAB_BAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'workbench_tab_bar_surface',
+    id: 'workbench-tab-bar',
+    contract: 'ui-builtin:desktop-workbench-tab-bar-surface',
+    moduleRef: 'builtin:desktop-workbench-tab-bar-surface',
+    permission: 'ui.workbench-tabs',
+    sandbox: true,
+  }),
+]);
+const SETTINGS_WINDOW_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'settings_window_surface',
+    id: 'settings-window',
+    contract: 'ui-builtin:desktop-settings-window-surface',
+    moduleRef: 'builtin:desktop-settings-window-surface',
+    permission: 'ui.settings-window',
+    sandbox: true,
+  }),
+]);
+const SESSION_CANVAS_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'session_canvas_surface',
+    id: 'session-canvas',
+    contract: 'ui-builtin:desktop-session-canvas-surface',
+    moduleRef: 'builtin:desktop-session-canvas-surface',
+    permission: 'ui.session-canvas',
+    sandbox: true,
+  }),
+]);
+const WORKBENCH_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'workbench_surface',
+    id: 'workbench',
+    contract: 'ui-builtin:desktop-workbench-surface',
+    moduleRef: 'builtin:desktop-workbench-surface',
+    permission: 'ui.workbench',
+    sandbox: true,
+  }),
+]);
+const SESSION_WORKSPACE_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'session_workspace_surface',
+    id: 'session-workspace',
+    contract: 'ui-builtin:desktop-session-workspace-surface',
+    moduleRef: 'builtin:desktop-session-workspace-surface',
+    permission: 'ui.session-workspace',
+    sandbox: true,
+  }),
+]);
+const WORKSPACE_COLLABORATION_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'workspace_collaboration_surface',
+    id: 'workspace-collaboration',
+    contract: 'ui-builtin:desktop-workspace-collaboration-surface',
+    moduleRef: 'builtin:desktop-workspace-collaboration-surface',
+    permission: 'ui.workspace-collaboration',
+    sandbox: true,
+  }),
+]);
+const NEW_THREAD_COMPOSER_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'new_thread_composer_surface',
+    id: 'new-thread-composer',
+    contract: 'ui-builtin:desktop-new-thread-composer-surface',
+    moduleRef: 'builtin:desktop-new-thread-composer-surface',
+    permission: 'ui.new-thread-composer',
+    sandbox: true,
+  }),
+]);
+const MY_WORK_QUEUE_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'my_work_queue_surface',
+    id: 'my-work-queue',
+    contract: 'ui-builtin:desktop-my-work-queue-surface',
+    moduleRef: 'builtin:desktop-my-work-queue-surface',
+    permission: 'ui.my-work-queue',
+    sandbox: true,
+  }),
+]);
+const ACTIVITY_INBOX_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'activity_inbox_surface',
+    id: 'activity-inbox',
+    contract: 'ui-builtin:desktop-activity-inbox-surface',
+    moduleRef: 'builtin:desktop-activity-inbox-surface',
+    permission: 'ui.activity-inbox',
+    sandbox: true,
+  }),
+]);
+const CONVERSATION_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'conversation_surface',
+    id: 'conversation',
+    contract: 'ui-builtin:desktop-conversation-surface',
+    moduleRef: 'builtin:desktop-conversation-surface',
+    permission: 'ui.conversation',
+    sandbox: true,
+  }),
+]);
+const CONVERSATION_RENDERER_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'conversation_renderer',
+    id: 'conversation-renderer',
+    contract: 'ui-builtin:desktop-conversation-renderer',
+    moduleRef: 'builtin:desktop-conversation-renderer',
+    permission: 'ui.conversation.renderer',
+    sandbox: true,
+  }),
+]);
+const TOOL_RESULT_RENDERER_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-ui',
+    slot: 'tool_result_renderer',
+    id: 'structured-tool-result',
+    contract: 'ui-builtin:structured-tool-result',
+    moduleRef: 'builtin:structured-tool-result',
+    permission: 'ui.render',
+    sandbox: true,
+  }),
+]);
+
+interface DesktopRendererArtifactBaseV2 {
+  readonly id: string;
+  readonly kind: DesktopRendererContributionKindV2;
+}
+
+export interface DesktopRouteArtifactV2 extends DesktopRendererArtifactBaseV2 {
+  readonly kind: 'route';
+  readonly routeIds: readonly string[];
+}
+
+export interface DesktopNavigationArtifactV2 extends DesktopRendererArtifactBaseV2 {
+  readonly discoveryRouteIds: readonly string[];
+  readonly kind: 'navigation';
+  readonly routeIds: readonly string[];
+}
+
+export interface DesktopUiSlotArtifactV2 extends DesktopRendererArtifactBaseV2 {
+  readonly kind: 'ui-slot';
+  readonly slotDefinitions: readonly UiSlotDefinition[];
+}
+
+export type DesktopRendererArtifactV2 =
+  | DesktopRouteArtifactV2
+  | DesktopNavigationArtifactV2
+  | DesktopUiSlotArtifactV2;
+
+export class DesktopRendererArtifactErrorV2 extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'DesktopRendererArtifactErrorV2';
+  }
+}
+
+const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArtifactV2>([
+  [
+    DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
+      TENANT_CREATION_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
+      AUXILIARY_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2,
+      PROJECT_KNOWLEDGE_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2,
+      PROJECT_AGENT_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2,
+      PROJECT_ADMINISTRATION_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2,
+      RUNTIME_INFRASTRUCTURE_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2,
+      PROJECT_WORKSPACE_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2,
+      PROJECT_DISCOVERY_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2,
+      TENANT_CORE_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_TENANT_AGENT_BUILDING_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_TENANT_AGENT_BUILDING_ROUTE_ARTIFACT_ID_V2,
+      TENANT_AGENT_BUILDING_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ARTIFACT_ID_V2,
+      TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
+      TENANT_GOVERNANCE_ROUTE_IDS_V2,
+    ),
+  ],
+  [
+    DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: AUXILIARY_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: AUXILIARY_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: PROJECT_KNOWLEDGE_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: PROJECT_KNOWLEDGE_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_PROJECT_AGENT_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: PROJECT_AGENT_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_PROJECT_AGENT_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: PROJECT_AGENT_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: PROJECT_ADMINISTRATION_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: PROJECT_ADMINISTRATION_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_RUNTIME_INFRASTRUCTURE_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: RUNTIME_INFRASTRUCTURE_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_RUNTIME_INFRASTRUCTURE_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: RUNTIME_INFRASTRUCTURE_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: PROJECT_WORKSPACE_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: PROJECT_WORKSPACE_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_PROJECT_DISCOVERY_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: PROJECT_DISCOVERY_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_PROJECT_DISCOVERY_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: PROJECT_DISCOVERY_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_TENANT_CORE_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: TENANT_CORE_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_TENANT_CORE_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: TENANT_CORE_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_TENANT_AGENT_BUILDING_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: TENANT_AGENT_BUILDING_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_TENANT_AGENT_BUILDING_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: TENANT_AGENT_BUILDING_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: TENANT_GOVERNANCE_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: TENANT_GOVERNANCE_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
+      AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2,
+      SETTINGS_WINDOW_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_ARTIFACT_ID_V2,
+      KEYBOARD_SHORTCUTS_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_STATUS_BAR_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_STATUS_BAR_SURFACE_ARTIFACT_ID_V2,
+      STATUS_BAR_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_COMMAND_PALETTE_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_COMMAND_PALETTE_SURFACE_ARTIFACT_ID_V2,
+      COMMAND_PALETTE_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2,
+      SESSION_CANVAS_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_WORKSPACE_CREATE_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_WORKSPACE_CREATE_SURFACE_ARTIFACT_ID_V2,
+      WORKSPACE_CREATE_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_WORKSPACE_SETTINGS_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_WORKSPACE_SETTINGS_SURFACE_ARTIFACT_ID_V2,
+      WORKSPACE_SETTINGS_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_TITLEBAR_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_TITLEBAR_SURFACE_ARTIFACT_ID_V2,
+      TITLEBAR_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_SIDEBAR_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_SIDEBAR_SURFACE_ARTIFACT_ID_V2,
+      SIDEBAR_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_RIGHT_SIDEBAR_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_RIGHT_SIDEBAR_SURFACE_ARTIFACT_ID_V2,
+      RIGHT_SIDEBAR_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_NEW_TASK_FLOW_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_NEW_TASK_FLOW_SURFACE_ARTIFACT_ID_V2,
+      NEW_TASK_FLOW_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_WORKBENCH_TAB_BAR_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_WORKBENCH_TAB_BAR_SURFACE_ARTIFACT_ID_V2,
+      WORKBENCH_TAB_BAR_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2,
+      WORKBENCH_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_SESSION_WORKSPACE_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_SESSION_WORKSPACE_SURFACE_ARTIFACT_ID_V2,
+      SESSION_WORKSPACE_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_WORKSPACE_COLLABORATION_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_WORKSPACE_COLLABORATION_SURFACE_ARTIFACT_ID_V2,
+      WORKSPACE_COLLABORATION_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2,
+      NEW_THREAD_COMPOSER_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2,
+      MY_WORK_QUEUE_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2,
+      ACTIVITY_INBOX_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2,
+      CONVERSATION_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_CONVERSATION_RENDERER_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_CONVERSATION_RENDERER_ARTIFACT_ID_V2,
+      CONVERSATION_RENDERER_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_TOOL_RESULT_RENDERER_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_TOOL_RESULT_RENDERER_ARTIFACT_ID_V2,
+      TOOL_RESULT_RENDERER_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
+      DEFAULT_UI_SLOT_DEFINITIONS_V2,
+    ),
+  ],
+]);
+
+export function defineDesktopRouteArtifactV2(
+  id: string,
+  routeIds: readonly string[],
+): DesktopRouteArtifactV2 {
+  if (!id.trim()) {
+    throw artifactErrorV2('desktop_renderer_route_artifact_id_required', id);
+  }
+  if (routeIds.length === 0 || routeIds.some((routeId) => !routeId.trim())) {
+    throw artifactErrorV2('desktop_renderer_route_artifact_routes_invalid', id);
+  }
+  if (new Set(routeIds).size !== routeIds.length) {
+    throw artifactErrorV2('desktop_renderer_route_artifact_routes_duplicate', id);
+  }
+  return Object.freeze({
+    id,
+    kind: 'route',
+    routeIds: Object.freeze([...routeIds]),
+  });
+}
+
+export function defineDesktopUiSlotArtifactV2(
+  id: string,
+  slotDefinitions: readonly UiSlotDefinition[],
+): DesktopUiSlotArtifactV2 {
+  const owners = new Set<string>();
+  const definitions = slotDefinitions.map((slot) => {
+    const ownerKey = `${slot.pluginId}/${slot.id}`;
+    if (owners.has(ownerKey)) {
+      throw artifactErrorV2('desktop_renderer_ui_slot_conflict', ownerKey);
+    }
+    owners.add(ownerKey);
+    if (!slot.moduleRef.startsWith('builtin:')) {
+      throw artifactErrorV2('desktop_renderer_ui_slot_module_ref_invalid', ownerKey);
+    }
+    if (!slot.permission.startsWith('ui.')) {
+      throw artifactErrorV2('desktop_renderer_ui_slot_permission_invalid', ownerKey);
+    }
+    if (!slot.sandbox) {
+      throw artifactErrorV2('desktop_renderer_ui_slot_sandbox_required', ownerKey);
+    }
+    return Object.freeze({ ...slot });
+  });
+  return Object.freeze({
+    id,
+    kind: 'ui-slot',
+    slotDefinitions: Object.freeze(definitions),
+  });
+}
+
+export function validateDesktopRendererContributionsV2(
+  contributions: readonly DesktopRendererContributionV2[],
+): void {
+  resolveDesktopRendererArtifactsV2(contributions);
+}
+
+export function resolveDesktopRendererArtifactsV2(
+  contributions: readonly DesktopRendererContributionV2[],
+): readonly DesktopRendererArtifactV2[] {
+  const artifacts: DesktopRendererArtifactV2[] = [];
+  const routeOwners = new Map<string, string>();
+  const navigationOwners = new Map<string, string>();
+  const uiSlotArtifactOwners = new Map<string, string>();
+  const uiSlotOwners = new Map<string, string>();
+  const ordered = [...contributions].sort(
+    (left, right) =>
+      left.order - right.order ||
+      `${left.kind}:${left.id}`.localeCompare(`${right.kind}:${right.id}`),
+  );
+
+  for (const contribution of ordered) {
+    for (const artifactRef of artifactRefsV2(contribution)) {
+      const artifact = DESKTOP_RENDERER_ARTIFACT_CATALOG_V2.get(artifactRef);
+      if (!artifact) {
+        throw artifactErrorV2('desktop_renderer_artifact_unknown', artifactRef);
+      }
+      if (artifact.kind !== contribution.kind) {
+        throw artifactErrorV2(
+          'desktop_renderer_artifact_kind_mismatch',
+          `${artifactRef}:${contribution.kind}`,
+        );
+      }
+      if (artifact.kind === 'route') {
+        validateRouteOwnershipV2(routeOwners, artifact.routeIds, contribution);
+      } else if (artifact.kind === 'navigation') {
+        validateRouteOwnershipV2(navigationOwners, artifact.routeIds, contribution);
+      } else {
+        validateUiSlotArtifactOwnershipV2(
+          uiSlotArtifactOwners,
+          uiSlotOwners,
+          artifact,
+          contribution,
+        );
+      }
+      artifacts.push(artifact);
+    }
+  }
+
+  return Object.freeze(artifacts);
+}
+
+function artifactRefsV2(contribution: DesktopRendererContributionV2): readonly string[] {
+  const payload = contribution.payload;
+  const keys = Object.keys(payload).sort();
+  const artifactRefs = payload.artifact_refs;
+  if (
+    keys.length !== 2 ||
+    keys[0] !== 'artifact_refs' ||
+    keys[1] !== 'schema_version' ||
+    payload.schema_version !== 1 ||
+    !Array.isArray(artifactRefs) ||
+    artifactRefs.length === 0 ||
+    artifactRefs.some((value) => typeof value !== 'string' || value.length === 0) ||
+    new Set(artifactRefs).size !== artifactRefs.length
+  ) {
+    throw artifactErrorV2('desktop_renderer_artifact_payload_invalid', contribution.id);
+  }
+  return artifactRefs as readonly string[];
+}
+
+function validateRouteOwnershipV2(
+  owners: Map<string, string>,
+  routeIds: readonly string[],
+  contribution: DesktopRendererContributionV2,
+): void {
+  for (const routeId of routeIds) {
+    const existingOwner = owners.get(routeId);
+    if (existingOwner !== undefined) {
+      throw artifactErrorV2(
+        'desktop_renderer_route_conflict',
+        `${routeId}:${existingOwner}:${contribution.id}`,
+      );
+    }
+    owners.set(routeId, contribution.id);
+  }
+}
+
+function validateUiSlotArtifactOwnershipV2(
+  artifactOwners: Map<string, string>,
+  slotOwners: Map<string, string>,
+  artifact: DesktopUiSlotArtifactV2,
+  contribution: DesktopRendererContributionV2,
+): void {
+  const existingOwner = artifactOwners.get(artifact.id);
+  if (existingOwner !== undefined) {
+    throw artifactErrorV2(
+      'desktop_renderer_ui_slot_artifact_conflict',
+      `${artifact.id}:${existingOwner}:${contribution.id}`,
+    );
+  }
+  artifactOwners.set(artifact.id, contribution.id);
+  for (const definition of artifact.slotDefinitions) {
+    const slotKey = `${definition.slot}:${definition.id}`;
+    const existingSlotOwner = slotOwners.get(slotKey);
+    if (existingSlotOwner !== undefined) {
+      throw artifactErrorV2(
+        'desktop_renderer_ui_slot_conflict',
+        `${slotKey}:${existingSlotOwner}:${contribution.id}`,
+      );
+    }
+    slotOwners.set(slotKey, contribution.id);
+  }
+}
+
+function artifactErrorV2(code: string, detail: string): DesktopRendererArtifactErrorV2 {
+  return new DesktopRendererArtifactErrorV2(code, `${code}:${detail}`);
+}

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { createDeadLetterQueueHttpClient } =
-  await import('/tmp/agistack-desktop-test-dist/src/features/governance/deadLetterQueueHttpClient.js');
+const { createDesktopDeadLetterQueueHttpProjectionV2 } = await import(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopDeadLetterQueueHttpProjectionV2.js'
+);
 
 const originalFetch = globalThis.fetch;
 
@@ -48,7 +49,7 @@ test('Cloud DLQ client binds list, detail, retry, discard, stats and cleanup con
     return jsonResponse({ message_id: 'message-1', success: true });
   };
 
-  const client = createDeadLetterQueueHttpClient(runtimeConfig());
+  const client = createDesktopDeadLetterQueueHttpProjectionV2(runtimeConfig());
   const scope = cloudScope();
   const page = await client.listMessages(scope, {
     status: 'pending',
@@ -99,7 +100,7 @@ test('Cloud DLQ client binds list, detail, retry, discard, stats and cleanup con
 
 test('DLQ client rejects malformed authority payloads and invalid mutations', async () => {
   globalThis.fetch = async () => jsonResponse({ messages: [], total: -1, limit: 50, offset: 0 });
-  const client = createDeadLetterQueueHttpClient(runtimeConfig());
+  const client = createDesktopDeadLetterQueueHttpProjectionV2(runtimeConfig());
 
   await assert.rejects(
     client.listMessages(cloudScope()),
@@ -121,7 +122,7 @@ test('Local DLQ is stable not-applicable and performs zero Cloud requests', asyn
     fetchCalls += 1;
     return jsonResponse({});
   };
-  const client = createDeadLetterQueueHttpClient(
+  const client = createDesktopDeadLetterQueueHttpProjectionV2(
     runtimeConfig({ mode: 'local', apiBaseUrl: 'http://127.0.0.1:4777' }),
   );
   const scope = { authority: 'local', tenantId: 'tenant-1' };

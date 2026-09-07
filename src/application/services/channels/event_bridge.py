@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.infrastructure.channels.connection_manager import ChannelConnectionManager
+    from src.infrastructure.plugins.v2.channel_runtime import ChannelRuntimeServiceProtocolV2
 
 # Type alias for event handler coroutines
 EventHandler = Callable[
@@ -69,7 +70,7 @@ class ChannelEventBridge:
 
     def __init__(
         self,
-        channel_manager: ChannelConnectionManager | None = None,
+        channel_manager: ChannelConnectionManager | ChannelRuntimeServiceProtocolV2 | None = None,
         *,
         subagent_focus_ttl_seconds: float | None = None,
     ) -> None:
@@ -126,8 +127,7 @@ class ChannelEventBridge:
             return
 
         logger.info(
-            "[EventBridge] Received forwarded event: event_type=%s "
-            "has_conversation_id=%s",
+            "[EventBridge] Received forwarded event: event_type=%s has_conversation_id=%s",
             event_type,
             bool(conversation_id),
         )
@@ -197,20 +197,18 @@ class ChannelEventBridge:
 
     def _get_adapter(self, channel_config_id: str) -> ChannelAdapter | None:
         """Get the channel adapter for a config ID."""
-        if not self._channel_manager:
+        channel_runtime = self._channel_manager
+        if channel_runtime is None:
             try:
-                from src.infrastructure.adapters.primary.web.startup.channels import (
-                    get_channel_manager,
+                from src.infrastructure.plugins.v2.channel_runtime import (
+                    current_channel_runtime_v2,
                 )
 
-                self._channel_manager = get_channel_manager()
+                channel_runtime = current_channel_runtime_v2()
             except Exception:
                 return None
 
-        if not self._channel_manager:
-            return None
-
-        conn = self._channel_manager.connections.get(channel_config_id)
+        conn = channel_runtime.connections.get(channel_config_id)
         if conn and getattr(conn, "adapter", None):
             return cast("ChannelAdapter", conn.adapter)
         return None
@@ -260,8 +258,7 @@ class ChannelEventBridge:
             tenant_id = event_data.get("_tenant_id", "")
             project_id = event_data.get("_project_id", "")
             logger.info(
-                "[EventBridge] Building HITL card: type=%s has_request_id=%s "
-                "has_chat_id=%s",
+                "[EventBridge] Building HITL card: type=%s has_request_id=%s has_chat_id=%s",
                 event_type,
                 bool(request_id),
                 bool(chat_id),
@@ -282,8 +279,7 @@ class ChannelEventBridge:
                     )
                     if ok:
                         logger.info(
-                            "[EventBridge] Added HITL buttons to streaming card: "
-                            "has_card_id=%s",
+                            "[EventBridge] Added HITL buttons to streaming card: has_card_id=%s",
                             bool(card_state.card_id),
                         )
                         return
@@ -341,8 +337,7 @@ class ChannelEventBridge:
                 text = self._format_hitl_text(question, options)
                 if text:
                     logger.info(
-                        "[EventBridge] Falling back to text for HITL: has_chat_id=%s "
-                        "has_text=%s",
+                        "[EventBridge] Falling back to text for HITL: has_chat_id=%s has_text=%s",
                         bool(chat_id),
                         bool(text),
                     )
@@ -449,8 +444,7 @@ class ChannelEventBridge:
                         )
                         return
                     logger.warning(
-                        "[EventBridge] Patch card failed, sending new card: "
-                        "has_existing_msg_id=%s",
+                        "[EventBridge] Patch card failed, sending new card: has_existing_msg_id=%s",
                         bool(existing_msg_id),
                     )
                 except Exception as e:
@@ -465,8 +459,7 @@ class ChannelEventBridge:
                 if msg_id and conversation_id:
                     self._task_card_states[conversation_id] = msg_id
                     logger.info(
-                        "[EventBridge] Sent new task card: has_msg_id=%s "
-                        "has_conversation_id=%s",
+                        "[EventBridge] Sent new task card: has_msg_id=%s has_conversation_id=%s",
                         bool(msg_id),
                         bool(conversation_id),
                     )

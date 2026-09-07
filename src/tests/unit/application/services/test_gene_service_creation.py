@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.di_container import DIContainer
+from src.application.services.gene_service import GeneService
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.plugins.v2.gene_services import SqlGeneServiceFactoryV2
+from src.infrastructure.plugins.v2.runtime import OperationContextV2
+
+
+def _gene_service(db: AsyncSession) -> GeneService:
+    operation = cast(
+        OperationContextV2,
+        SimpleNamespace(require=lambda _service: db),
+    )
+    return SqlGeneServiceFactoryV2().build(operation).genes
 
 
 def _slug(prefix: str) -> str:
@@ -19,7 +31,7 @@ async def test_create_gene_rejects_duplicate_slug(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     slug = _slug("duplicate-gene")
 
     await service.create_gene(
@@ -44,7 +56,7 @@ async def test_create_gene_allows_duplicate_slug_in_different_tenant(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     slug = _slug("shared-gene")
 
     first = await service.create_gene(
@@ -70,7 +82,7 @@ async def test_create_gene_persists_source_metadata(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     gene = await service.create_gene(
         name="Imported Gene",
@@ -93,7 +105,7 @@ async def test_create_gene_accepts_unlisted_visibility(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     gene = await service.create_gene(
         name="Unlisted Gene",
@@ -114,7 +126,7 @@ async def test_update_gene_applies_slug_and_metadata_fields(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     gene = await service.create_gene(
         name="Original Gene",
         slug=_slug("original-gene"),
@@ -141,7 +153,7 @@ async def test_update_gene_normalizes_nullable_collection_fields(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     gene = await service.create_gene(
         name="Configurable Gene",
         slug=_slug("configurable-gene"),
@@ -173,7 +185,7 @@ async def test_update_gene_rejects_duplicate_slug(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     slug = _slug("existing-gene")
     await service.create_gene(
         name="Existing Gene",
@@ -198,7 +210,7 @@ async def test_update_gene_allows_duplicate_slug_in_different_tenant(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     slug = _slug("shared-update-gene")
     await service.create_gene(
         name="Existing Gene",
@@ -225,7 +237,7 @@ async def test_create_genome_rejects_duplicate_slug(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     slug = _slug("duplicate-genome")
 
     await service.create_genome(
@@ -250,7 +262,7 @@ async def test_create_genome_allows_duplicate_slug_in_different_tenant(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     slug = _slug("shared-genome")
 
     first = await service.create_genome(
@@ -276,7 +288,7 @@ async def test_create_genome_normalizes_gene_slugs(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     gene = await service.create_gene(
         name="Genome Gene",
         slug=_slug("genome-gene"),
@@ -301,7 +313,7 @@ async def test_create_genome_allows_published_global_gene_slugs(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     global_gene = await service.create_gene(
         name="Global Genome Gene",
         slug=_slug("global-genome-gene"),
@@ -327,7 +339,7 @@ async def test_create_genome_rejects_missing_or_foreign_gene_slugs(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     foreign_gene = await service.create_gene(
         name="Foreign Gene",
         slug=_slug("foreign-gene"),
@@ -351,7 +363,7 @@ async def test_update_genome_applies_slug(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     genome = await service.create_genome(
         name="Original Genome",
         slug=_slug("original-genome"),
@@ -371,7 +383,7 @@ async def test_update_genome_accepts_unlisted_visibility(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     genome = await service.create_genome(
         name="Visibility Genome",
         slug=_slug("visibility-genome"),
@@ -390,7 +402,7 @@ async def test_update_genome_normalizes_nullable_config_override(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     genome = await service.create_genome(
         name="Configurable Genome",
         slug=_slug("configurable-genome"),
@@ -410,7 +422,7 @@ async def test_update_genome_rejects_duplicate_slug(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     slug = _slug("existing-genome")
     await service.create_genome(
         name="Existing Genome",
@@ -435,7 +447,7 @@ async def test_update_genome_allows_duplicate_slug_in_different_tenant(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     slug = _slug("shared-update-genome")
     await service.create_genome(
         name="Existing Genome",
@@ -462,7 +474,7 @@ async def test_update_genome_rejects_missing_or_foreign_gene_slugs(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     genome = await service.create_genome(
         name="Editable Genome",
         slug=_slug("editable-genome"),

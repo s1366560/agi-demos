@@ -63,6 +63,7 @@ dependencies = [
     "babel>=2.14.0",
     # Plugin profile documents are authored as YAML.
     "pyyaml>=6.0.1",
+    "rfc8785>=0.1.4",
     "wasmtime>=47.0.1",
 ]
 
@@ -251,7 +252,6 @@ ignore = [
 "src/infrastructure/adapters/primary/web/routers/voice_websocket.py" = ["C901", "PLR0911", "PLR0912", "PLR0915", "SIM105", "ANN401"]
 "src/infrastructure/adapters/primary/web/websocket/handlers/hitl_handler.py" = ["PLR0911"]
 "src/infrastructure/agent/tools/memory_tools.py" = ["TC003"]
-"src/infrastructure/agent/tools/mutation_ledger.py" = ["TC003"]
 "src/infrastructure/agent/tools/skill_loader.py" = ["TC001"]
 "src/infrastructure/agent/tools/tool_mutation_guard.py" = ["TC003"]
 "src/infrastructure/agent/tools/web_scrape.py" = ["PIE810"]
@@ -265,7 +265,6 @@ ignore = [
 
 # Application services and use cases
 "src/application/services/channels/event_bridge.py" = ["ANN401"]
-"src/application/services/llm_provider_manager.py" = ["ANN401"]
 "src/application/use_cases/agent/compose_tools.py" = ["ANN401"]
 
 # Example file
@@ -336,13 +335,7 @@ ignore = [
 "src/infrastructure/agent/mcp/registry.py" = ["ANN401"]
 
 # Infrastructure - agent plugins
-"src/infrastructure/agent/plugins/discovery.py" = ["ANN401"]
-"src/infrastructure/agent/plugins/manager.py" = ["ANN401"]
-"src/infrastructure/agent/plugins/registry.py" = ["ANN401"]
-"src/infrastructure/agent/plugins/runtime_api.py" = ["ANN401"]
-"src/infrastructure/agent/plugins/sdk.py" = ["ANN401"]
 "src/infrastructure/agent/plugins/selection_pipeline.py" = ["ANN401"]
-"src/infrastructure/agent/plugins/state_store.py" = ["ANN401"]
 
 # Infrastructure - agent pool
 "src/infrastructure/agent/pool/circuit_breaker/breaker.py" = ["ANN401"]
@@ -468,13 +461,10 @@ ignore = [
 "src/infrastructure/agent/output/table_formatter.py" = ["ANN401"]
 
 # Infrastructure - agent plugins and processor (additional)
-"src/infrastructure/agent/plugins/manifest.py" = ["ANN401"]
 "src/infrastructure/agent/processor/hitl_tool_handler.py" = ["ANN401"]
 
 # Infrastructure - agent routing
 "src/infrastructure/agent/routing/execution_router.py" = ["ANN401"]
-"src/infrastructure/agent/routing/hybrid_router.py" = ["ANN401"]
-"src/infrastructure/agent/routing/subagent_orchestrator.py" = ["ANN401"]
 
 # Infrastructure - agent subagent (additional)
 "src/infrastructure/agent/subagent/memory_accessor.py" = ["ANN401"]
@@ -495,7 +485,6 @@ ignore = [
 "src/tests/unit/fixtures/user_fixtures.py" = ["ANN401"]
 "src/tests/unit/infrastructure/agent/core/test_execution_path_integration.py" = ["ANN401"]
 "src/tests/unit/infrastructure/agent/core/test_react_agent_components.py" = ["ANN401"]
-"src/tests/unit/infrastructure/agent/routing/test_execution_router.py" = ["ANN401"]
 "src/tests/unit/infrastructure/agent/tools/test_base.py" = ["ANN401"]
 "src/tests/unit/infrastructure/agent/tools/test_tool_registry.py" = ["ANN401"]
 

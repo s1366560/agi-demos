@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
+from typing import Any
 
 from src.infrastructure.agent.canvas.a2ui_builder import (
     canonicalize_a2ui_messages,
@@ -21,16 +24,15 @@ from src.infrastructure.agent.canvas.a2ui_builder import (
 from src.infrastructure.agent.canvas.events import build_canvas_event_dict
 from src.infrastructure.agent.canvas.manager import CanvasManager
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Module-level DI (same pattern as todo_tools.py)
-# ---------------------------------------------------------------------------
-
-_canvas_manager: CanvasManager | None = None
+_canvas_runtime: ContextVar[CanvasManager | None] = ContextVar(
+    f"{__name__}.canvas_runtime",
+    default=None,
+)
 
 
 def _prepare_canvas_metadata(
@@ -100,20 +102,17 @@ def _validate_interactive_a2ui_content(
     return merged_content
 
 
-def configure_canvas(manager: CanvasManager) -> None:
-    """Inject the shared CanvasManager instance.
-
-    Called during agent initialisation.
-    """
-    global _canvas_manager
-    _canvas_manager = manager
-
-
 def get_canvas_manager() -> CanvasManager:
-    if _canvas_manager is None:
-        msg = "Canvas not configured. Call configure_canvas() first."
-        raise RuntimeError(msg)
-    return _canvas_manager
+    """Resolve Canvas state from the bound executor or pinned V2 generation."""
+    runtime_manager = _canvas_runtime.get()
+    if runtime_manager is not None:
+        return runtime_manager
+
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_canvas_manager_v2,
+    )
+
+    return current_agent_canvas_manager_v2()
 
 
 # ---------------------------------------------------------------------------
@@ -635,3 +634,33 @@ async def canvas_create_interactive(
         ),
         title=f"Interactive Canvas: {title}",
     )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundCanvasExecutor:
+    template: ToolInfo
+    manager: CanvasManager
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:  # noqa: ANN401
+        token = _canvas_runtime.set(self.manager)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _canvas_runtime.reset(token)
+
+
+def make_canvas_tools(*, manager: CanvasManager) -> dict[str, ToolInfo]:
+    """Return Canvas ToolInfos bound to one runtime host's shared manager."""
+    templates = (
+        canvas_create,
+        canvas_create_interactive,
+        canvas_update,
+        canvas_delete,
+    )
+    return {
+        template.name: replace(
+            template,
+            execute=_BoundCanvasExecutor(template=template, manager=manager),
+        )
+        for template in templates
+    }

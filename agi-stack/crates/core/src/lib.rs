@@ -21,6 +21,7 @@ pub mod model;
 pub mod ports;
 pub mod service;
 pub mod sync;
+pub mod tool_definition;
 pub mod util;
 
 pub use agent::{

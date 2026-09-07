@@ -14,9 +14,11 @@ from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_graph_store,
-    get_workflow_engine,
 )
 from src.infrastructure.adapters.primary.web.routers.graph import _graph_project_scope
+from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+    workflow_engine_authority_dependency_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
@@ -85,7 +87,7 @@ async def incremental_refresh(
     project_id: str | None = Body(None, description="Project ID to scope maintenance"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> dict[str, Any]:
     """
     Perform incremental refresh of the knowledge graph.
@@ -182,7 +184,7 @@ async def deduplicate_entities(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graph_store: GraphStorePort | None = Depends(get_graph_store),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> dict[str, Any]:
     """
     Find and optionally merge duplicate entities.
@@ -700,7 +702,7 @@ async def optimize_graph(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graph_store: GraphStorePort | None = Depends(get_graph_store),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> Any:
     """
     Run multiple optimization operations.
@@ -1046,10 +1048,11 @@ async def get_native_embedding_status(
         dimension_counts: dict[str, int] = {}
         total_embeddings = 0
         if _has_project_scope(is_superuser, allowed_project_ids):
-            dimension_counts, total_embeddings = (
-                await graph_store.get_embedding_dimension_distribution(
-                    target_project_id, is_superuser, allowed_project_ids
-                )
+            (
+                dimension_counts,
+                total_embeddings,
+            ) = await graph_store.get_embedding_dimension_distribution(
+                target_project_id, is_superuser, allowed_project_ids
             )
 
         # Determine compatibility

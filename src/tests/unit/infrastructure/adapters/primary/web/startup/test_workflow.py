@@ -1,6 +1,8 @@
 """Unit tests for local workflow startup handlers."""
 
+import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -13,9 +15,20 @@ from src.infrastructure.adapters.primary.web.startup.workflow import (
     _run_episode_processing_workflow,
     _run_incremental_refresh_workflow,
     _run_rebuild_communities_workflow,
-    initialize_workflow_engine,
+    build_asyncio_workflow_engine_v2,
 )
+from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, TaskLog, User
+from src.infrastructure.plugins.v2.boundary import (
+    clear_process_generation_host_v2,
+    install_process_generation_host_v2,
+)
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+
+_ROOT = Path(__file__).resolve().parents[8]
+_PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
+_MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
 def _task(task_id: str, project_id: str, payload: dict[str, object]) -> TaskLog:
@@ -64,15 +77,86 @@ class FakeNeo4jClient:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_initialize_workflow_engine_registers_task_handlers() -> None:
-    graph_service = SimpleNamespace(process_episode=AsyncMock())
-
-    engine = await initialize_workflow_engine(graph_service)
+async def test_build_asyncio_workflow_engine_registers_task_handlers() -> None:
+    engine = build_asyncio_workflow_engine_v2(manager=TaskManager())
 
     assert engine is not None
     assert "episode_processing" in engine._workflow_handlers
     assert "incremental_refresh" in engine._workflow_handlers
     assert "rebuild_communities" in engine._workflow_handlers
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_workflow_handler_holds_an_independent_generation_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    handler_started = asyncio.Event()
+    finish_handler = asyncio.Event()
+    observed_graph_services: list[object] = []
+
+    class LeaseTrackedGraphService:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        async def close(self) -> None:
+            self.close_calls += 1
+
+    graph_services = [LeaseTrackedGraphService(), LeaseTrackedGraphService()]
+    factory_calls = 0
+
+    async def graph_factory() -> object:
+        nonlocal factory_calls
+        graph_service = graph_services[factory_calls]
+        factory_calls += 1
+        return graph_service
+
+    async def episode_handler(_payload: dict[str, object], graph_service: object) -> None:
+        observed_graph_services.append(graph_service)
+        handler_started.set()
+        await finish_handler.wait()
+
+    monkeypatch.setattr(workflow_module, "_run_episode_processing_workflow", episode_handler)
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(graph_runtime_factory=graph_factory)
+    )
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=1,
+        version=1,
+        nonce="workflow-generation-1",
+    )
+    assert first.accepted is True
+    install_process_generation_host_v2(host)
+
+    try:
+        engine = build_asyncio_workflow_engine_v2(manager=TaskManager())
+        assert engine is not None
+        task = asyncio.create_task(engine._workflow_handlers["episode_processing"]({}))
+        await handler_started.wait()
+
+        second = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=2,
+            version=2,
+            nonce="workflow-generation-2",
+        )
+
+        assert second.accepted is True
+        assert observed_graph_services == [graph_services[0]]
+        assert graph_services[0].close_calls == 0
+
+        finish_handler.set()
+        await task
+
+        assert graph_services[0].close_calls == 1
+        assert graph_services[1].close_calls == 0
+    finally:
+        finish_handler.set()
+        clear_process_generation_host_v2(host)
+        await host.close()
 
 
 @pytest.mark.unit

@@ -17,7 +17,7 @@ import asyncio
 import logging
 import re
 import time
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -39,14 +39,27 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.skill import Skill
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
+from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.agent_capabilities import AgentCapabilitySetV2
+from src.infrastructure.plugins.v2.agent_operation_tool_contributions import (
+    OPERATION_SUBAGENT_TOOL_SOURCE_V2,
+    SkillMCPManagerProtocolV2,
+    activate_skill_mcp_operation_tools_v2,
+    contribute_operation_tool_definitions_v2,
+    parse_skill_mcp_configs_v2,
+)
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
+from src.infrastructure.plugins.v2.tool_set import (
+    ToolSetContributionCatalogProtocolV2,
+    ToolSetV2,
+    bind_operation_tool_set_catalog_v2,
+    bind_prepared_tool_provider_v2,
+    restrict_tool_set_v2,
+)
 
 from ..i18n import directive_for, resolve_response_language
-from ..plugins.selection_pipeline import ToolSelectionContext
+from ..plugins.selection_pipeline import ToolSelectionContext, ToolSelectionTraceStep
 from ..routing import ExecutionPath, RoutingDecision
-from ..sisyphus.builtin_agent import (
-    DEFAULT_GENERAL_AGENT_ID,
-    build_builtin_all_access_agent,
-)
 from ..skill import SkillProtocol
 from ..workspace.runtime_role_contract import (
     WORKSPACE_ROLE_CONTRACT,
@@ -65,15 +78,281 @@ from ..workspace.workspace_metadata_keys import (
 # Runtime imports (not TYPE_CHECKING) — used to construct values inside ``stream``.
 from .processor import ToolDefinition
 from .react_agent_profile import (
-    _infer_provider_from_model_name,
-    _normalize_model_provider,
     _register_selected_agent_session,
 )
+from .react_agent_tool_policy import (
+    filter_non_workspace_conversation_tools,
+    filter_tools_by_name_policy,
+    filter_workspace_root_tools,
+)
+from .subagent_tool_set_v2 import SubAgentToolSetBindingV2
 
 if TYPE_CHECKING:
     from .processor import ProcessorConfig, SessionProcessor
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_model_route_override(
+    *,
+    model_override: str | None,
+    model_route_override: ModelRouteRef | None,
+) -> ModelRouteRef | None:
+    """Validate that a model override carries explicit provider identity."""
+    normalized_model_override = (model_override or "").strip() or None
+    if model_route_override is None:
+        if normalized_model_override is not None:
+            raise RuntimeV2Error(
+                "model_override_route_missing",
+                f"model override {normalized_model_override} has no provider route",
+            )
+        return None
+    if (
+        normalized_model_override is not None
+        and model_route_override.model_id != normalized_model_override
+    ):
+        raise RuntimeV2Error(
+            "model_override_route_mismatch",
+            f"model override {normalized_model_override} does not match route model "
+            f"{model_route_override.model_id}",
+        )
+    return model_route_override
+
+
+def _provider_config_matches_exact_route(provider: object, route: ModelRouteRef) -> bool:
+    """Return whether one active LLM config exactly owns a route identity."""
+    if not bool(getattr(provider, "is_active", False)) or not bool(
+        getattr(provider, "is_enabled", False)
+    ):
+        return False
+    provider_type = getattr(provider, "provider_type", "")
+    provider_id = str(getattr(provider_type, "value", provider_type)).strip()
+    if provider_id != route.provider_id:
+        return False
+    operation_type = getattr(provider, "operation_type", "llm")
+    operation_id = str(getattr(operation_type, "value", operation_type)).strip()
+    if operation_id != "llm":
+        return False
+    is_model_allowed = getattr(provider, "is_model_allowed", None)
+    return callable(is_model_allowed) and bool(is_model_allowed(route.model_id))
+
+
+async def _resolve_exact_provider_config_for_route(
+    *,
+    tenant_id: str,
+    route: ModelRouteRef,
+) -> Any:
+    """Resolve one provider config by exact explicit identity, without model inference."""
+    from src.application.services.provider_resolution_service import (
+        get_provider_resolution_service,
+    )
+    from src.domain.llm_providers.models import OperationType
+
+    repository = get_provider_resolution_service().repository
+    if tenant_id:
+        tenant_provider = await repository.find_tenant_provider(tenant_id, OperationType.LLM)
+        if tenant_provider is not None and _provider_config_matches_exact_route(
+            tenant_provider,
+            route,
+        ):
+            return tenant_provider
+
+    default_provider = await repository.find_default_provider(OperationType.LLM)
+    if default_provider is not None and _provider_config_matches_exact_route(
+        default_provider,
+        route,
+    ):
+        return default_provider
+
+    active_providers = await repository.list_active()
+    candidates: dict[str, Any] = {}
+    for provider in active_providers:
+        if not _provider_config_matches_exact_route(provider, route):
+            continue
+        provider_identity = str(getattr(provider, "id", id(provider)))
+        candidates[provider_identity] = provider
+    if len(candidates) == 1:
+        return next(iter(candidates.values()))
+    if not candidates:
+        raise RuntimeV2Error(
+            "model_route_provider_unavailable",
+            f"no active provider config matches route {route.provider_id}/{route.model_id}",
+        )
+    raise RuntimeV2Error(
+        "model_route_provider_ambiguous",
+        f"multiple active provider configs match route {route.provider_id}/{route.model_id}",
+    )
+
+
+async def _bind_processor_model_route(
+    *,
+    config: ProcessorConfig,
+    route: ModelRouteRef,
+    tenant_id: str,
+) -> None:
+    """Bind exact route identity and, when needed, its unambiguous LLM client."""
+    if config.provider_id.strip() != route.provider_id:
+        from src.infrastructure.llm.provider_factory import get_ai_service_factory
+
+        provider_config = await _resolve_exact_provider_config_for_route(
+            tenant_id=tenant_id,
+            route=route,
+        )
+        service_factory = get_ai_service_factory()
+        config.llm_client = service_factory.create_llm_client(provider_config)
+        config.api_key = ""
+        config.base_url = provider_config.base_url
+    config.provider_id = route.provider_id
+    config.model = route.model_id
+
+
+def _resolve_current_tools_from_runtime_v2(
+    agent: object,
+    selection_context: ToolSelectionContext,
+    *,
+    operation_catalog: ToolSetContributionCatalogProtocolV2,
+) -> ToolSetV2:
+    """Resolve tools through the required service in the pinned v2 operation."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+    from src.infrastructure.plugins.v2.tool_set import (
+        TOOL_SET_RESOLVER_SERVICE_V2,
+        ToolSetResolverProtocolV2,
+    )
+
+    operation = current_operation_context_v2()
+    resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
+    if not isinstance(resolver, ToolSetResolverProtocolV2):
+        raise RuntimeError("v2 tool-set resolver has an invalid implementation")
+    prepared_tool_provider = bind_prepared_tool_provider_v2(agent, operation)
+    raw_tool_set: object = resolver.resolve(
+        agent=agent,
+        selection_context=selection_context,
+        prepared_tool_provider=prepared_tool_provider,
+        operation_catalog=operation_catalog,
+    )
+    if not isinstance(raw_tool_set, ToolSetV2):
+        raise RuntimeV2Error(
+            "invalid_tool_set",
+            "service:tool-set-resolver returned an invalid immutable ToolSet",
+        )
+    return raw_tool_set
+
+
+def _pin_selection_context_tools_v2(
+    selection_context: ToolSelectionContext,
+    tool_names: Sequence[str],
+) -> ToolSelectionContext:
+    """Return a context with stable, de-duplicated model-visible tool pins."""
+    raw_existing = selection_context.metadata.get("skill_pinned_tools", ())
+    existing = (
+        raw_existing
+        if isinstance(raw_existing, Sequence) and not isinstance(raw_existing, (str, bytes))
+        else ()
+    )
+    pinned: list[str] = []
+    for name in (*existing, *tool_names):
+        if isinstance(name, str) and name and name not in pinned:
+            pinned.append(name)
+    if not pinned:
+        return selection_context
+    metadata = dict(selection_context.metadata)
+    metadata["skill_pinned_tools"] = tuple(pinned)
+    return replace(selection_context, metadata=metadata)
+
+
+def _finalize_turn_tool_set_v2(
+    tool_set: ToolSetV2,
+    *,
+    is_forced: bool,
+    matched_skill: Skill | None,
+    workspace_root_task: object | None,
+    is_workspace_conversation: bool,
+    allow_tools: Sequence[str] | None,
+    deny_tools: Sequence[str] | None,
+    forced_operation_tool_names: Sequence[str] = (),
+) -> ToolSetV2:
+    """Apply objective turn-scope filters once before every model consumer."""
+    definitions = list(tool_set.definitions)
+    before_names = tuple(definition.name for definition in definitions)
+
+    if is_forced and matched_skill:
+        skill_tools: set[str] = {
+            name for name in matched_skill.tools if isinstance(name, str) and name
+        }
+        skill_tools.update(
+            name for name in forced_operation_tool_names if isinstance(name, str) and name
+        )
+        if skill_tools:
+            allowed = skill_tools | {"todowrite", "todoread"}
+            definitions = [definition for definition in definitions if definition.name in allowed]
+        else:
+            definitions = [
+                definition for definition in definitions if definition.name != "skill_loader"
+            ]
+
+    definitions = filter_workspace_root_tools(definitions, workspace_root_task)
+    definitions = filter_non_workspace_conversation_tools(
+        definitions,
+        is_workspace_conversation=is_workspace_conversation,
+    )
+    definitions = filter_tools_by_name_policy(
+        definitions,
+        allow_tools=allow_tools,
+        deny_tools=deny_tools,
+    )
+
+    after_names = tuple(definition.name for definition in definitions)
+    selection_trace = tool_set.selection_trace
+    if before_names != after_names:
+        before_set = set(before_names)
+        after_set = set(after_names)
+        selection_trace = (
+            *selection_trace,
+            ToolSelectionTraceStep(
+                stage="turn_scope_filter",
+                before_count=len(before_names),
+                after_count=len(after_names),
+                removed_tools=tuple(sorted(before_set - after_set)),
+                added_tools=tuple(sorted(after_set - before_set)),
+                explain={
+                    "forced_skill": bool(is_forced and matched_skill),
+                    "workspace_root": workspace_root_task is not None,
+                    "workspace_conversation": is_workspace_conversation,
+                },
+            ),
+        )
+    return restrict_tool_set_v2(
+        tool_set,
+        definitions,
+        selection_trace=selection_trace,
+    )
+
+
+async def _resolve_agent_capabilities_from_runtime_v2(
+    agent: object,
+    *,
+    tenant_id: str,
+    project_id: str,
+) -> AgentCapabilitySetV2:
+    """Resolve Skills and SubAgents through the required pinned v2 service."""
+    from src.infrastructure.plugins.v2.agent_capabilities import (
+        AGENT_CAPABILITY_RESOLVER_SERVICE_V2,
+        AgentCapabilityResolverProtocolV2,
+    )
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    operation = current_operation_context_v2()
+    resolver = operation.require(AGENT_CAPABILITY_RESOLVER_SERVICE_V2)
+    if not isinstance(resolver, AgentCapabilityResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_agent_capability_resolver",
+            "service:agent-capability-resolver has an invalid implementation",
+        )
+    return await resolver.resolve(
+        agent=agent,
+        tenant_id=tenant_id,
+        project_id=project_id,
+    )
 
 
 def _normalize_preferred_language(value: object) -> str | None:
@@ -224,8 +503,6 @@ class _StreamAgent(Protocol):
     _max_subagent_active_runs: Any
     _max_subagent_children_per_requester: Any
     _max_subagent_active_runs_per_lineage: Any
-    _skill_mcp_manager: Any
-    _skill_mcp_tools: Any
     _enable_subagent_as_tool: Any
     _tool_builder: Any
 
@@ -274,7 +551,7 @@ class _StreamAgent(Protocol):
         deny_tools: list[str] | None = ...,
     ) -> ToolSelectionContext: ...
 
-    def _extract_sandbox_id_from_tools(self) -> str | None: ...
+    def _extract_sandbox_id_from_tools(self, *, tool_set: ToolSetV2) -> str | None: ...
 
     def _convert_domain_event(
         self,
@@ -329,7 +606,9 @@ class _StreamAgent(Protocol):
         tenant_id: str,
         tenant_agent_config_data: dict[str, Any] | None,
         selected_agent: Any,
+        selected_agent_model_route: ModelRouteRef | None,
         is_workspace_worker_runtime: bool,
+        available_skills: Sequence[Skill],
     ) -> Any: ...
 
     def _with_workspace_leader_replan_tool_allowlist(self, runtime_profile: Any) -> Any: ...
@@ -352,7 +631,12 @@ class _StreamAgent(Protocol):
     ) -> tuple[Any, list[dict[str, Any]]]: ...
 
     def _build_primary_agent_prompt(
-        self, *, runtime_profile: Any, selection_context: ToolSelectionContext
+        self,
+        *,
+        runtime_profile: Any,
+        selection_context: ToolSelectionContext,
+        tool_set: ToolSetV2,
+        available_subagents: Sequence[Any],
     ) -> str: ...
 
     async def _build_system_prompt(self, *args: Any, **kwargs: Any) -> str: ...
@@ -388,6 +672,7 @@ class _StreamAgent(Protocol):
         self,
         *,
         processor: Any,
+        tenant_id: str,
         project_id: str,
         workspace_task: Any,
     ) -> None: ...
@@ -417,7 +702,12 @@ class _StreamAgent(Protocol):
 
     def _stream_match_skill(self, *args: Any, **kwargs: Any) -> Iterator[dict[str, Any]]: ...
 
-    async def _stream_sync_skill_resources(self, matched_skill: Skill) -> None: ...
+    async def _stream_sync_skill_resources(
+        self,
+        matched_skill: Skill,
+        *,
+        tool_set: ToolSetV2,
+    ) -> None: ...
 
     def _stream_resolve_mode(
         self, *args: Any, **kwargs: Any
@@ -493,18 +783,11 @@ class StreamMixin:
 
         return None, user_message
 
-    def _resolve_subagent_by_name(self: _StreamAgent, name: str) -> Any | None:
-        """Find a SubAgent by name or display_name."""
-        for sa in self.subagents or []:
-            if sa.enabled and (sa.name == name or sa.display_name == name):
-                return sa
-        return None
-
     def _stream_match_skill(
         self: _StreamAgent,
         processed_user_message: str,
         forced_skill_name: str | None,
-        available_skills: list[SkillProtocol] | None = None,
+        available_skills: Sequence[SkillProtocol],
     ) -> Iterator[dict[str, Any]]:
         """Match skill by forced slash command, else no match.
 
@@ -523,7 +806,7 @@ class StreamMixin:
 
         if forced_skill_name:
             name_lower = forced_skill_name.strip().lower()
-            for skill in available_skills or cast("list[SkillProtocol]", self.skills or []):
+            for skill in available_skills:
                 if skill.name.lower() == name_lower and skill.status.value == "active":
                     matched_skill = skill
                     skill_score = 1.0
@@ -568,11 +851,13 @@ class StreamMixin:
     async def _stream_sync_skill_resources(
         self: _StreamAgent,
         matched_skill: Skill,
+        *,
+        tool_set: ToolSetV2,
     ) -> None:
         """Sync skill resources to sandbox before prompt injection."""
         if not self._resource_sync_service:
             return
-        sandbox_id = self._extract_sandbox_id_from_tools()
+        sandbox_id = self._extract_sandbox_id_from_tools(tool_set=tool_set)
         if not sandbox_id:
             return
         try:
@@ -696,16 +981,14 @@ class StreamMixin:
         selection_context: ToolSelectionContext,
         is_forced: bool,
         matched_skill: Skill | None,
+        *,
+        tool_set: ToolSetV2,
     ) -> Iterator[dict[str, Any]]:
-        """Prepare tools with selection trace and policy filtering events.
-
-        Sets self._stream_tools_to_use.
-        """
-        _current_raw_tools, current_tool_definitions = self._get_current_tools(
-            selection_context=selection_context
-        )
-        if self._last_tool_selection_trace:
-            removed_total = sum(len(step.removed_tools) for step in self._last_tool_selection_trace)
+        """Emit trace events for the already finalized immutable turn ToolSet."""
+        _ = (is_forced, matched_skill)
+        selection_trace = tool_set.selection_trace
+        if selection_trace:
+            removed_total = sum(len(step.removed_tools) for step in selection_trace)
             route_id = selection_context.metadata.get("route_id")
             trace_id = selection_context.metadata.get("trace_id", route_id)
             trace_data = [
@@ -717,7 +1000,7 @@ class StreamMixin:
                     "duration_ms": step.duration_ms,
                     "explain": dict(step.explain),
                 }
-                for step in self._last_tool_selection_trace
+                for step in selection_trace
             ]
             semantic_stage = next(
                 (stage for stage in trace_data if stage["stage"] == "semantic_ranker_stage"),
@@ -764,54 +1047,31 @@ class StreamMixin:
                         budget_exceeded_stages=[str(s) for s in budget_exceeded_stages],
                     ).to_event_dict(),
                 )
-        tools_to_use = list(current_tool_definitions)
-
-        # When a forced skill is active, narrow the tool surface to what the
-        # skill explicitly declares plus a small set of always-allowed planning
-        # tools. ``skill_loader`` is removed unconditionally to prevent the
-        # agent from side-loading a different skill mid-execution.
-        if is_forced and matched_skill:
-            skill_tools = set(matched_skill.tools) if matched_skill.tools else set()
-            if skill_tools:
-                # Strict whitelist: only the skill's declared tools plus the
-                # two planning helpers the agent always needs to make progress.
-                allowed = skill_tools | {"todowrite", "todoread"}
-                before = len(tools_to_use)
-                tools_to_use = [t for t in tools_to_use if t.name in allowed]
-                logger.info(
-                    f"[ReActAgent] Forced skill '{matched_skill.name}' active: "
-                    f"whitelisted to skill tools {sorted(skill_tools)} + "
-                    f"{{todowrite, todoread}} "
-                    f"({before} -> {len(tools_to_use)})"
-                )
-            else:
-                # No declared tools — fall back to keeping everything except
-                # skill_loader so the agent has full freedom under the skill prompt.
-                tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
-                logger.info(
-                    f"[ReActAgent] Forced skill '{matched_skill.name}' active "
-                    f"with no declared tools: kept {len(tools_to_use)} tools "
-                    f"(skill_loader removed)"
-                )
-
-        self._stream_tools_to_use = tools_to_use
 
     def _stream_create_processor_config(
         self: _StreamAgent,
         config: ProcessorConfig,
         selection_context: ToolSelectionContext,
+        *,
+        tool_set: ToolSetV2,
     ) -> ProcessorConfig:
-        """Create request-scoped processor config, optionally with dynamic tool provider."""
+        """Create a request config pinned to the already resolved turn ToolSet."""
+        from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+            AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
+            AgentRuntimeDispatcherProtocolV2,
+        )
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
         from .processor import ProcessorConfig as _ProcessorConfig
 
-        tool_provider: Callable[[], list[ToolDefinition]] | None = config.tool_provider
-        if self._use_dynamic_tools and self._tool_provider is not None:
+        _ = (selection_context, tool_set)
 
-            def _tool_provider_wrapper() -> list[ToolDefinition]:
-                _, tool_defs = self._get_current_tools(selection_context=selection_context)
-                return list(tool_defs)
-
-            tool_provider = _tool_provider_wrapper
+        dispatcher = current_operation_context_v2().require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)
+        if not isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_agent_runtime_dispatcher",
+                "service:agent-runtime-dispatcher has an invalid implementation",
+            )
 
         new_config = _ProcessorConfig(
             model=config.model,
@@ -834,11 +1094,9 @@ class StreamMixin:
             max_cost_per_request=config.max_cost_per_request,
             max_cost_per_session=config.max_cost_per_session,
             llm_client=config.llm_client,
-            plugin_registry=config.plugin_registry,
-            plugin_event_dispatcher=config.plugin_event_dispatcher,
-            runtime_hook_overrides=[dict(item) for item in config.runtime_hook_overrides],
+            plugin_event_dispatcher=dispatcher,
             runtime_context=dict(config.runtime_context),
-            tool_provider=tool_provider,
+            tool_provider=None,
             forced_skill_name=config.forced_skill_name,
             forced_skill_tools=(
                 list(config.forced_skill_tools) if config.forced_skill_tools else None
@@ -851,10 +1109,6 @@ class StreamMixin:
             provider_id=config.provider_id,
             loop_resolver=config.loop_resolver,
         )
-        if tool_provider is not None:
-            logger.debug(
-                "[ReActAgent] Created processor config with tool_provider for dynamic tools"
-            )
         return new_config
 
     async def _stream_process_events(
@@ -865,11 +1119,14 @@ class StreamMixin:
         abort_signal: asyncio.Event | None,
         matched_skill: Skill | None,
         agent_id: str | None = None,
+        plugin_generation: dict[str, str | int] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Process events from SessionProcessor and yield converted events.
 
         Sets self._stream_final_content and self._stream_success.
         """
+        from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+
         from .processor import RunContext as _RunContext
 
         self._stream_final_content = ""
@@ -883,6 +1140,11 @@ class StreamMixin:
                 if langfuse_context
                 else None,
                 agent_id=agent_id,
+                plugin_generation=(
+                    PluginGenerationDescriptorV2.from_payload(plugin_generation)
+                    if plugin_generation is not None
+                    else None
+                ),
             )
             async for domain_event in processor.process(
                 session_id=langfuse_context["conversation_id"],
@@ -905,11 +1167,12 @@ class StreamMixin:
         except Exception as e:
             logger.error(f"[ReActAgent] Error in stream: {e}", exc_info=True)
             self._stream_success = False
+            error_code = e.code if isinstance(e, RuntimeV2Error) else type(e).__name__
             yield cast(
                 dict[str, Any],
                 AgentErrorEvent(
                     message=str(e),
-                    code=type(e).__name__,
+                    code=error_code,
                 ).to_event_dict(),
             )
 
@@ -1015,6 +1278,7 @@ class StreamMixin:
         conversation_context: list[dict[str, str]],
         allow_tools: list[str] | None = None,
         deny_tools: list[str] | None = None,
+        forced_operation_tool_names: Sequence[str] = (),
     ) -> tuple[str, ToolSelectionContext]:
         """Resolve effective mode and build selection context.
 
@@ -1038,6 +1302,10 @@ class StreamMixin:
             routing_metadata=routing_metadata,
             allow_tools=allow_tools,
             deny_tools=deny_tools,
+        )
+        selection_context = _pin_selection_context_tools_v2(
+            selection_context,
+            forced_operation_tool_names,
         )
         if effective_mode == "plan":
             self.permission_manager.set_mode(AgentPermissionMode.PLAN)
@@ -1079,11 +1347,13 @@ class StreamMixin:
     def _stream_inject_subagent_tools(  # noqa: PLR0915
         self: _StreamAgent,
         tools_to_use: list[ToolDefinition],
+        available_subagents: Sequence[Any],
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
         conversation_id: str,
         abort_signal: asyncio.Event | None,
+        tool_set_binding: SubAgentToolSetBindingV2,
         workspace_root_task: Any | None = None,
         leader_agent_id: str | None = None,
         actor_user_id: str | None = None,
@@ -1093,7 +1363,7 @@ class StreamMixin:
 
         Returns updated tools list with SubAgent tools appended.
         """
-        if not self.subagents or not self._enable_subagent_as_tool:
+        if not available_subagents or not self._enable_subagent_as_tool:
             return tools_to_use
         if not _selected_agent_can_spawn(selected_agent):
             logger.info(
@@ -1104,7 +1374,7 @@ class StreamMixin:
             return tools_to_use
 
         enabled_subagents = _filter_subagents_for_selected_agent_policy(
-            [sa for sa in self.subagents if sa.enabled],
+            [sa for sa in available_subagents if sa.enabled],
             selected_agent,
         )
         if not enabled_subagents:
@@ -1241,12 +1511,14 @@ class StreamMixin:
             events = []
             async for evt in self._execute_subagent(
                 subagent=target,
+                available_subagents=available_subagents,
                 user_message=delegated_task,
                 conversation_context=conversation_context,
                 project_id=project_id,
                 tenant_id=tenant_id,
                 conversation_id=conversation_id,
                 abort_signal=abort_signal,
+                inherited_tool_set=tool_set_binding.require(),
             ):
                 if on_event:
                     event_type = evt.get("type")
@@ -1324,6 +1596,7 @@ class StreamMixin:
             await self._launch_subagent_session(
                 run_id=run_id,
                 subagent=target,
+                available_subagents=available_subagents,
                 user_message=delegated_task,
                 conversation_id=conversation_id,
                 conversation_context=conversation_context,
@@ -1336,6 +1609,7 @@ class StreamMixin:
                 thread_requested=bool(spawn_options.get("thread_requested")),
                 cleanup=str(spawn_options.get("cleanup") or "keep"),
                 run_metadata=task_binding,
+                inherited_tool_set=tool_set_binding.require(),
             )
             return run_id
 
@@ -1416,11 +1690,14 @@ class StreamMixin:
         plan_mode: bool = False,
         llm_overrides: dict[str, Any] | None = None,
         model_override: str | None = None,
+        selected_agent_model_route: ModelRouteRef | None = None,
+        model_route_override: ModelRouteRef | None = None,
         agent_id: str | None = None,
         tenant_agent_config_data: dict[str, Any] | None = None,
         preferred_language: str | None = None,
         api_auth_token: str | None = None,
         canonical_run_id: str | None = None,
+        plugin_generation: dict[str, str | int] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -1452,7 +1729,18 @@ class StreamMixin:
             - {"type": "complete", "data": {...}}
             - {"type": "error", "data": {...}}
         """
+        resolved_agent_id = (agent_id or "").strip()
+        if not resolved_agent_id:
+            raise RuntimeV2Error(
+                "agent_id_not_resolved",
+                "agent stream requires an explicit agent ID resolved by the pinned generation",
+            )
+
         conversation_context = conversation_context or []
+        resolved_model_route_override = _resolve_model_route_override(
+            model_override=model_override,
+            model_route_override=model_route_override,
+        )
         self._reset_stream_state()
         start_time = time.time()
 
@@ -1484,21 +1772,23 @@ class StreamMixin:
 
         # Phase 4b: Filesystem skill loading (lazy, once per agent instance)
         await self._load_filesystem_skills(tenant_id, project_id)
+        runtime_capabilities = await _resolve_agent_capabilities_from_runtime_v2(
+            self,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        available_skills = list(runtime_capabilities.skills)
+        available_subagents = list(runtime_capabilities.subagents)
 
-        resolved_agent_id = agent_id or DEFAULT_GENERAL_AGENT_ID
         selected_agent = await self._load_selected_agent(
             agent_id=resolved_agent_id,
             tenant_id=tenant_id,
             project_id=project_id,
         )
         if selected_agent is None:
-            logger.warning(
-                "[ReActAgent] Falling back to built-in all-access agent for missing agent %s",
-                resolved_agent_id,
-            )
-            selected_agent = build_builtin_all_access_agent(
-                tenant_id=tenant_id,
-                project_id=project_id,
+            raise RuntimeV2Error(
+                "agent_definition_not_found",
+                f"agent definition {resolved_agent_id} is unavailable in the pinned generation",
             )
         await _register_selected_agent_session(
             conversation_id=conversation_id,
@@ -1552,7 +1842,12 @@ class StreamMixin:
             tenant_id=tenant_id,
             tenant_agent_config_data=tenant_agent_config_data,
             selected_agent=selected_agent,
+            selected_agent_model_route=selected_agent_model_route,
             is_workspace_worker_runtime=has_workspace_binding,
+            available_skills=available_skills,
+        )
+        effective_model_route = (
+            resolved_model_route_override or runtime_profile.effective_model_route
         )
         runtime_limits = _workspace_runtime_limit_overrides(workspace_runtime_payload)
         if runtime_limits:
@@ -1566,10 +1861,6 @@ class StreamMixin:
             runtime_profile = self._with_workspace_leader_replan_tool_allowlist(runtime_profile)
         elif has_workspace_binding:
             runtime_profile = self._with_workspace_worker_tool_allowlist(runtime_profile)
-        self.config.runtime_hook_overrides = [
-            runtime_hook.to_dict()
-            for runtime_hook in runtime_profile.tenant_agent_config.runtime_hooks
-        ]
         runtime_workspace_manager = self._build_runtime_workspace_manager(selected_agent)
 
         # Phase 5: Skill matching
@@ -1588,7 +1879,10 @@ class StreamMixin:
             for event in self._stream_match_skill(
                 processed_user_message,
                 forced_skill_name,
-                available_skills=cast("list[SkillProtocol]", runtime_profile.available_skills),
+                available_skills=cast(
+                    "list[SkillProtocol]",
+                    runtime_profile.available_skills,
+                ),
             ):
                 yield event
         skill_state = self._stream_skill_state
@@ -1596,80 +1890,32 @@ class StreamMixin:
         is_forced: bool = cast(bool, skill_state["is_forced"])
         should_inject_prompt: bool = cast(bool, skill_state["should_inject_prompt"])
 
-        # Phase 5b: Sync skill resources
-        if should_inject_prompt and matched_skill:
-            await self._stream_sync_skill_resources(matched_skill)
+        # Phase 5b: Bind all turn-local tool effects to the pinned operation.
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 
-        # Phase 5c: Activate skill-embedded MCP servers
-        self._skill_mcp_tools = []
+        operation = current_operation_context_v2()
+        operation_catalog = bind_operation_tool_set_catalog_v2(operation)
+        from src.infrastructure.plugins.v2.agent_skill_mcp_service import (
+            SKILL_MCP_MANAGER_SERVICE_V2,
+        )
+
+        skill_mcp_manager = operation.require(SKILL_MCP_MANAGER_SERVICE_V2)
+        if not isinstance(skill_mcp_manager, SkillMCPManagerProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_skill_mcp_manager",
+                "service:agent.skill-mcp-manager has an invalid implementation",
+            )
+        mcp_tool_names: tuple[str, ...] = ()
         if matched_skill and matched_skill.metadata:
             mcp_servers_raw = matched_skill.metadata.get("mcp_servers")
-            if mcp_servers_raw and isinstance(mcp_servers_raw, list):
-                from ..mcp.skill_mcp_manager import SkillMCPConfig
-
-                mcp_configs = [
-                    SkillMCPConfig(
-                        server_name=cfg["server_name"],
-                        command=cfg["command"],
-                        args=cfg.get("args", []),
-                        env=cfg.get("env", {}),
-                        auto_start=cfg.get("auto_start", True),
-                    )
-                    for cfg in mcp_servers_raw
-                    if isinstance(cfg, dict) and "server_name" in cfg and "command" in cfg
-                ]
-                if mcp_configs:
-                    try:
-                        self._skill_mcp_manager.register_skill_mcps(matched_skill.name, mcp_configs)
-                        mcp_tools = await self._skill_mcp_manager.activate_skill(matched_skill.name)
-                        # Convert MCPTool objects to ToolDefinition for injection
-                        for mcp_tool in mcp_tools:
-                            if not mcp_tool.schema.is_model_visible:
-                                continue
-                            client = self._skill_mcp_manager.get_active_client(mcp_tool.server_name)
-
-                            async def _make_mcp_exec(
-                                _client: Any,
-                                _tool_name: str,
-                            ) -> Any:
-                                async def _exec(**kwargs: Any) -> Any:
-                                    if _client is None:
-                                        return f"MCP server not available for tool {_tool_name}"
-                                    result = await _client.call_tool(_tool_name, kwargs)
-                                    if isinstance(result, dict):
-                                        return result.get("content", str(result))
-                                    return result
-
-                                return _exec
-
-                            td = ToolDefinition(
-                                name=mcp_tool.schema.name,
-                                description=(
-                                    mcp_tool.schema.description
-                                    or f"MCP tool: {mcp_tool.schema.name}"
-                                ),
-                                parameters=(
-                                    mcp_tool.schema.input_schema
-                                    or {
-                                        "type": "object",
-                                        "properties": {},
-                                    }
-                                ),
-                                execute=await _make_mcp_exec(client, mcp_tool.schema.name),
-                            )
-                            self._skill_mcp_tools.append(td)
-                        if self._skill_mcp_tools:
-                            logger.info(
-                                "[ReActAgent] Activated %d MCP tool(s) for skill '%s': %s",
-                                len(self._skill_mcp_tools),
-                                matched_skill.name,
-                                [t.name for t in self._skill_mcp_tools],
-                            )
-                    except Exception:
-                        logger.exception(
-                            "[ReActAgent] Failed to activate MCP servers for skill '%s'",
-                            matched_skill.name,
-                        )
+            mcp_configs = parse_skill_mcp_configs_v2(mcp_servers_raw)
+            mcp_tool_names = await activate_skill_mcp_operation_tools_v2(
+                operation=operation,
+                catalog=operation_catalog,
+                manager=skill_mcp_manager,
+                skill_id=matched_skill.name,
+                configs=mcp_configs,
+            )
 
         # Phase 6: Mode/selection context setup
         effective_mode, selection_context = self._stream_resolve_mode(
@@ -1682,16 +1928,85 @@ class StreamMixin:
             conversation_context=conversation_context,
             allow_tools=runtime_profile.allow_tools,
             deny_tools=runtime_profile.deny_tools,
+            forced_operation_tool_names=mcp_tool_names,
         )
 
         # Phase 6b: Inject matched skill's declared tools into selection context
         # so the tool selection pipeline can pin them (survive semantic budget + deny lists)
         if matched_skill and matched_skill.tools:
-            skill_pinned = list(matched_skill.tools)
-            cast(dict[str, Any], selection_context.metadata)["skill_pinned_tools"] = skill_pinned
+            selection_context = _pin_selection_context_tools_v2(
+                selection_context,
+                matched_skill.tools,
+            )
+            skill_pinned = selection_context.metadata["skill_pinned_tools"]
             logger.info(
                 f"[ReActAgent] Skill '{matched_skill.name}' declares tools={skill_pinned}, "
                 f"injecting into selection context for pipeline pinning"
+            )
+
+        # Phase 6c: Contribute turn-bound SubAgent closures before the one
+        # selection pass so prompt, processor, traces, and telemetry share them.
+        subagent_tool_set_binding = SubAgentToolSetBindingV2(operation=operation)
+        subagent_definitions = self._stream_inject_subagent_tools(
+            tools_to_use=[],
+            available_subagents=available_subagents,
+            conversation_context=conversation_context,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            abort_signal=abort_signal,
+            workspace_root_task=workspace_root_task,
+            leader_agent_id=selected_agent.id,
+            actor_user_id=user_id,
+            selected_agent=selected_agent,
+            tool_set_binding=subagent_tool_set_binding,
+        )
+        if subagent_definitions:
+            await contribute_operation_tool_definitions_v2(
+                operation=operation,
+                catalog=operation_catalog,
+                source_id=OPERATION_SUBAGENT_TOOL_SOURCE_V2,
+                definitions=subagent_definitions,
+            )
+
+        # Phase 6d: Resolve and finalize one immutable model-visible ToolSet.
+        # Every consumer below receives this exact value; no consumer may
+        # independently refresh native/static tools during the turn.
+        from src.infrastructure.agent.workspace.runtime_role_contract import (
+            is_workspace_conversation as _is_workspace_conversation,
+        )
+
+        workspace_conversation_flag = _is_workspace_conversation(workspace_runtime_payload)
+        turn_tool_set = _resolve_current_tools_from_runtime_v2(
+            self,
+            selection_context,
+            operation_catalog=operation_catalog,
+        )
+        turn_tool_set = _finalize_turn_tool_set_v2(
+            turn_tool_set,
+            is_forced=is_forced,
+            matched_skill=matched_skill,
+            workspace_root_task=workspace_root_task,
+            is_workspace_conversation=workspace_conversation_flag,
+            allow_tools=runtime_profile.allow_tools,
+            deny_tools=runtime_profile.deny_tools,
+            forced_operation_tool_names=mcp_tool_names,
+        )
+        subagent_tool_set_binding.bind(
+            turn_tool_set,
+            rebindable_tool_names=(
+                definition.name
+                for definition in subagent_definitions
+                if definition.name in turn_tool_set.tools
+            ),
+        )
+
+        # Phase 6e: Operational resource sync derives its sandbox identity
+        # from the same pinned ToolSet used by model-visible consumers.
+        if should_inject_prompt and matched_skill:
+            await self._stream_sync_skill_resources(
+                matched_skill,
+                tool_set=turn_tool_set,
             )
 
         # Phase 7: Memory runtime prompt augmentation
@@ -1720,14 +2035,11 @@ class StreamMixin:
         primary_agent_prompt = self._build_primary_agent_prompt(
             runtime_profile=runtime_profile,
             selection_context=selection_context,
+            tool_set=turn_tool_set,
+            available_subagents=available_subagents,
         )
 
         # Phase 8: System prompt building
-        from src.infrastructure.agent.workspace.runtime_role_contract import (
-            is_workspace_conversation as _is_workspace_conversation,
-        )
-
-        workspace_conversation_flag = _is_workspace_conversation(workspace_runtime_payload)
         system_prompt = await self._build_system_prompt(
             processed_user_message,
             conversation_context,
@@ -1744,11 +2056,13 @@ class StreamMixin:
             agent_definition_prompt=runtime_profile.agent_definition_prompt,
             primary_agent_prompt=primary_agent_prompt,
             available_skills=runtime_profile.available_skills,
-            model_name=(model_override or runtime_profile.effective_model),
+            available_subagents=available_subagents,
+            model_name=effective_model_route.model_id,
             max_steps_override=runtime_profile.effective_max_steps,
             workspace_manager=runtime_workspace_manager,
             selected_agent_name=selected_agent.name,
             is_workspace_conversation=workspace_conversation_flag,
+            tool_set=turn_tool_set,
         )
 
         # Phase 9: Context building
@@ -1767,56 +2081,32 @@ class StreamMixin:
         messages = self._stream_messages
 
         # Phase 10: Tool preparation
-        for event in self._stream_prepare_tools(selection_context, is_forced, matched_skill):
+        for event in self._stream_prepare_tools(
+            selection_context,
+            is_forced,
+            matched_skill,
+            tool_set=turn_tool_set,
+        ):
             yield event
-        tools_to_use = self._filter_workspace_root_tools(
-            self._stream_tools_to_use,
-            workspace_root_task,
-        )
-        from src.infrastructure.agent.core.react_agent_tool_policy import (
-            filter_non_workspace_conversation_tools,
-        )
-
-        tools_to_use = filter_non_workspace_conversation_tools(
-            tools_to_use,
-            is_workspace_conversation=workspace_conversation_flag,
-        )
-
-        # Phase 10b: Inject skill-embedded MCP tools
-        if self._skill_mcp_tools:
-            existing_names = {t.name for t in tools_to_use}
-            for mcp_td in self._skill_mcp_tools:
-                if mcp_td.name not in existing_names:
-                    tools_to_use.append(mcp_td)
-            logger.info(
-                "[ReActAgent] Injected %d skill MCP tool(s) into tool set",
-                len(self._skill_mcp_tools),
-            )
-
-        # Phase 11: SubAgent-as-Tool injection
-        tools_to_use = self._stream_inject_subagent_tools(
-            tools_to_use=tools_to_use,
-            conversation_context=conversation_context,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            conversation_id=conversation_id,
-            abort_signal=abort_signal,
-            workspace_root_task=workspace_root_task,
-            leader_agent_id=selected_agent.id,
-            actor_user_id=user_id,
-            selected_agent=selected_agent,
-        )
-        tools_to_use = self._filter_tools_by_name_policy(
-            tools_to_use,
-            allow_tools=runtime_profile.allow_tools,
-            deny_tools=runtime_profile.deny_tools,
-        )
+        tools_to_use = list(turn_tool_set.definitions)
 
         # Phase 12: Processor creation
-        config = self._stream_create_processor_config(self.config, selection_context)
+        config = self._stream_create_processor_config(
+            self.config,
+            selection_context,
+            tool_set=turn_tool_set,
+        )
         config.run_id = canonical_run_id or message_id
         config.api_auth_token = api_auth_token
-        config.model = runtime_profile.effective_model
+        previous_model_route = ModelRouteRef(
+            provider_id=config.provider_id,
+            model_id=config.model,
+        )
+        await _bind_processor_model_route(
+            config=config,
+            route=effective_model_route,
+            tenant_id=tenant_id,
+        )
         config.temperature = runtime_profile.effective_temperature
         config.max_tokens = runtime_profile.effective_max_tokens
         config.max_steps = runtime_profile.effective_max_steps
@@ -1897,148 +2187,34 @@ class StreamMixin:
         # Pass forced skill context to processor for loop reinforcement (Fix 4)
         if is_forced and matched_skill:
             config.forced_skill_name = matched_skill.name
-            config.forced_skill_tools = list(matched_skill.tools) if matched_skill.tools else None
+            forced_skill_tools = tuple(dict.fromkeys((*matched_skill.tools, *mcp_tool_names)))
+            config.forced_skill_tools = list(forced_skill_tools) if forced_skill_tools else None
 
-        # Apply per-request model override before LLM parameter overrides.
-        normalized_model_override = (model_override or "").strip() or None
-        if normalized_model_override:
-            from src.infrastructure.llm.model_catalog import get_model_catalog_service
-            from src.infrastructure.llm.provider_factory import get_ai_service_factory
+        # Rebuild model-specific reasoning options after an explicit route change.
+        route_changed = previous_model_route != effective_model_route
+        if route_changed:
             from src.infrastructure.llm.reasoning_config import build_reasoning_config
 
-            catalog = get_model_catalog_service()
-            override_meta = catalog.get_model_fuzzy(normalized_model_override)
-            current_meta = catalog.get_model_fuzzy(config.model)
-            current_provider = _normalize_model_provider(
-                current_meta.provider if current_meta is not None else None
-            )
-            override_provider = _normalize_model_provider(
-                override_meta.provider if override_meta is not None else None
-            )
+            provider_options = dict(config.provider_options)
+            for key in (
+                "reasoning_effort",
+                "thinking",
+                "reasoning_split",
+                "__omit_temperature",
+                "__use_max_completion_tokens",
+                "__override_max_tokens",
+            ):
+                provider_options.pop(key, None)
 
-            if current_provider is None:
-                current_provider = _infer_provider_from_model_name(config.model)
-            if override_provider is None:
-                override_provider = _infer_provider_from_model_name(normalized_model_override)
-
-            resolved_provider_config: Any | None = None
-            resolved_provider: str | None = None
-            if tenant_id:
-                from src.domain.llm_providers.models import NoActiveProviderError, OperationType
-
-                factory = get_ai_service_factory()
-                try:
-                    resolved_provider_config = await factory.resolve_provider(
-                        tenant_id=tenant_id,
-                        operation_type=OperationType.LLM,
-                        model_id=normalized_model_override,
-                    )
-                except NoActiveProviderError:
-                    logger.warning(
-                        "[ReActAgent] Unable to resolve provider for model override '%s' (tenant=%s)",
-                        normalized_model_override,
-                        tenant_id,
-                    )
-
-                if resolved_provider_config is not None:
-                    provider_type_raw = getattr(
-                        resolved_provider_config.provider_type,
-                        "value",
-                        resolved_provider_config.provider_type,
-                    )
-                    resolved_provider = _normalize_model_provider(str(provider_type_raw))
-
-            if tenant_id:
-                # With tenant-scoped providers, fail closed unless resolution succeeds.
-                should_apply_override = (
-                    resolved_provider_config is not None
-                    and resolved_provider_config.is_model_allowed(normalized_model_override)
+            reasoning_cfg = build_reasoning_config(effective_model_route.model_id)
+            if reasoning_cfg:
+                provider_options.update(reasoning_cfg.provider_options)
+                provider_options["__omit_temperature"] = reasoning_cfg.omit_temperature
+                provider_options["__use_max_completion_tokens"] = (
+                    reasoning_cfg.use_max_completion_tokens
                 )
-            elif resolved_provider_config is not None:
-                should_apply_override = resolved_provider_config.is_model_allowed(
-                    normalized_model_override
-                )
-            else:
-                should_apply_override = override_meta is not None
-                if should_apply_override:
-                    if current_provider is None or override_provider is None:
-                        should_apply_override = False
-                    else:
-                        should_apply_override = current_provider == override_provider
-
-            if not should_apply_override:
-                logger.warning(
-                    "[ReActAgent] Ignoring invalid or cross-provider model override '%s' "
-                    "(current model: '%s', current provider: '%s', override provider: '%s')",
-                    normalized_model_override,
-                    config.model,
-                    current_provider,
-                    override_provider,
-                )
-                yield {
-                    "type": "model_override_rejected",
-                    "data": {
-                        "model": normalized_model_override,
-                        "reason": (
-                            f"Cross-provider switch not allowed: override provider "
-                            f"'{override_provider}' != current '{current_provider}'"
-                        ),
-                        "current_model": config.model,
-                        "current_provider": current_provider,
-                    },
-                }
-            else:
-                if resolved_provider_config is not None:
-                    current_client_provider = getattr(config.llm_client, "provider_config", None)
-                    current_provider_config_id = getattr(current_client_provider, "id", None)
-                    resolved_provider_config_id = getattr(resolved_provider_config, "id", None)
-                    should_refresh_llm_client = (
-                        current_provider_config_id is None
-                        or resolved_provider_config_id is None
-                        or current_provider_config_id != resolved_provider_config_id
-                    )
-                    if should_refresh_llm_client:
-                        resolved_provider_label = resolved_provider or _normalize_model_provider(
-                            str(
-                                getattr(
-                                    resolved_provider_config.provider_type,
-                                    "value",
-                                    resolved_provider_config.provider_type,
-                                )
-                            )
-                        )
-                        config.base_url = resolved_provider_config.base_url
-                        config.llm_client = get_ai_service_factory().create_llm_client(
-                            resolved_provider_config
-                        )
-                        logger.info(
-                            "[ReActAgent] Switched runtime provider for model override '%s': %s -> %s",
-                            normalized_model_override,
-                            current_provider,
-                            resolved_provider_label,
-                        )
-
-                config.model = normalized_model_override
-                provider_options = dict(config.provider_options)
-                for key in (
-                    "reasoning_effort",
-                    "thinking",
-                    "reasoning_split",
-                    "__omit_temperature",
-                    "__use_max_completion_tokens",
-                    "__override_max_tokens",
-                ):
-                    provider_options.pop(key, None)
-
-                reasoning_cfg = build_reasoning_config(normalized_model_override)
-                if reasoning_cfg:
-                    provider_options.update(reasoning_cfg.provider_options)
-                    provider_options["__omit_temperature"] = reasoning_cfg.omit_temperature
-                    provider_options["__use_max_completion_tokens"] = (
-                        reasoning_cfg.use_max_completion_tokens
-                    )
-                    provider_options["__override_max_tokens"] = reasoning_cfg.override_max_tokens
-                config.provider_options = provider_options
+                provider_options["__override_max_tokens"] = reasoning_cfg.override_max_tokens
+            config.provider_options = provider_options
 
         # Apply per-request LLM overrides (F1.4)
         if llm_overrides:
@@ -2100,6 +2276,7 @@ class StreamMixin:
         # cannot break the agent loop.
         await self._inject_lane_jit_guidance(
             processor=processor,
+            tenant_id=tenant_id,
             project_id=project_id,
             workspace_task=workspace_root_task,
         )
@@ -2110,7 +2287,7 @@ class StreamMixin:
             "tenant_id": tenant_id,
             "project_id": project_id,
             "message_id": message_id,
-            "sandbox_id": self._extract_sandbox_id_from_tools(),
+            "sandbox_id": self._extract_sandbox_id_from_tools(tool_set=turn_tool_set),
             "agent_name": selected_agent.name,
         }
 
@@ -2122,6 +2299,7 @@ class StreamMixin:
             abort_signal=abort_signal,
             matched_skill=matched_skill,
             agent_id=agent_id,
+            plugin_generation=plugin_generation,
         ):
             yield event
 
@@ -2152,7 +2330,9 @@ class StreamMixin:
             success=self._stream_success,
             execution_time_ms=execution_time_ms,
             tool_call_count=tool_call_count,
-            llm_client_override=config.llm_client if normalized_model_override else None,
+            llm_client_override=(
+                config.llm_client if resolved_model_route_override is not None else None
+            ),
         ):
             yield event
 
@@ -2161,17 +2341,6 @@ class StreamMixin:
         execution_time_ms = int((end_time - start_time) * 1000)
         logger.debug(f"[ReActAgent] Stream finished in {execution_time_ms}ms")
         self._stream_record_skill_usage(matched_skill, self._stream_success)
-
-        # Cleanup: Deactivate skill MCP servers
-        if matched_skill and self._skill_mcp_manager.active_skills:
-            try:
-                await self._skill_mcp_manager.deactivate_skill(matched_skill.name)
-            except Exception:
-                logger.exception(
-                    "[ReActAgent] Failed to deactivate MCP servers for skill '%s'",
-                    matched_skill.name,
-                )
-        self._skill_mcp_tools = []
 
     async def astream_multi_level(
         self: _StreamAgent,

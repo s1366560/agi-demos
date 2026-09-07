@@ -4,54 +4,75 @@ CRUD operations for Agent conversations.
 """
 
 import logging
-import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import String, and_, case, func, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.sql import ColumnElement, Select, Subquery
-from sqlalchemy.sql.compiler import SQLCompiler
-from sqlalchemy.sql.functions import FunctionElement
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
-from src.application.services.conversation_events import publish_conversation_created
-from src.configuration.factories import create_llm_client
 from src.domain.model.agent import ConversationStatus
-from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityNotFoundError,
     WorkspaceAuthorityScope,
     WorkspaceAuthorityUnavailableError,
 )
+from src.infrastructure.adapters.primary.web.conversation_collection_http_application_authority_v2 import (
+    ConversationCollectionHttpApplicationAuthorityV2,
+    conversation_create_http_application_authority_dependency_v2,
+    conversation_list_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.conversation_config_http_application_authority_v2 import (
+    ConversationConfigHttpApplicationAuthorityV2,
+    conversation_config_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.conversation_context_status_http_application_authority_v2 import (
+    ConversationContextStatusHttpApplicationAuthorityV2,
+    conversation_context_status_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.conversation_generation_http_application_authority_v2 import (
+    ConversationGenerationHttpApplicationAuthorityV2,
+    conversation_generation_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2 import (
+    ConversationHttpApplicationAuthorityV2,
+    conversation_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.conversation_revision_http_application_authority_v2 import (
+    ConversationRevisionHttpApplicationAuthorityV2,
+    conversation_revision_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
+)
+from src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2 import (
+    ProjectAccessHttpApplicationAuthorityV2,
+    project_access_create_http_application_authority_dependency_v2,
+    project_access_query_http_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.workspace_authority import (
     get_workspace_authority,
     workspace_core_unavailable_error,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import (
-    AgentExecutionEvent as AgentExecutionEventModel,
-    Conversation as ConversationModel,
-    Message as MessageModel,
-    Project,
-    ToolExecutionRecord,
-    User,
-    UserProject,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-    SqlConversationRepository,
-    conversation_activity_order,
-)
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.conversation_collection_services import (
+    InvalidConversationAgentSelectionV2,
+)
+from src.infrastructure.plugins.v2.conversation_config_services import ConversationConfigPatchV2
+from src.infrastructure.plugins.v2.conversation_generation_services import (
+    ConversationGenerationSourceMissingV2,
+)
+from src.infrastructure.plugins.v2.conversation_revision_services import (
+    ConversationRevisionAccessDeniedV2,
+    ConversationRevisionConversationNotFoundV2,
+    ConversationRevisionMessageNotFoundV2,
+    ConversationRevisionToolExecutionNotFoundV2,
+)
+from src.infrastructure.plugins.v2.project_access_services import ProjectAccessDeniedV2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from .schemas import (
     ConversationResponse,
@@ -61,85 +82,15 @@ from .schemas import (
     UpdateConversationModeRequest,
     UpdateConversationTitleRequest,
 )
-from .utils import get_container_with_db
 
 if TYPE_CHECKING:
-    from src.configuration.di_container import DIContainer
     from src.domain.model.agent.conversation.conversation import Conversation
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
 CONVERSATION_LIST_DEFAULT_LIMIT = 10
 WORKSPACE_GROUP_EXPANSION_HARD_LIMIT = 25
-
-
-class _LegacyWorkspaceId(FunctionElement[str]):
-    type = String()
-    inherit_cache = True
-
-
-class _MetadataWorkspaceId(FunctionElement[str]):
-    type = String()
-    inherit_cache = True
-
-
-@compiles(_MetadataWorkspaceId, "postgresql")
-def _compile_metadata_workspace_id_postgresql(  # pyright: ignore[reportUnusedFunction]
-    element: _MetadataWorkspaceId,
-    compiler: SQLCompiler,
-    **_kwargs: object,
-) -> str:
-    metadata = next(iter(element.clauses))
-    compiled_metadata = compiler.process(metadata)
-    return (
-        "CASE "
-        f"WHEN json_typeof({compiled_metadata} -> 'workspace_id') = 'string' "
-        f"THEN NULLIF(TRIM({compiled_metadata} ->> 'workspace_id'), '') "
-        "ELSE NULL END"
-    )
-
-
-@compiles(_MetadataWorkspaceId, "sqlite")
-def _compile_metadata_workspace_id_sqlite(  # pyright: ignore[reportUnusedFunction]
-    element: _MetadataWorkspaceId,
-    compiler: SQLCompiler,
-    **_kwargs: object,
-) -> str:
-    metadata = next(iter(element.clauses))
-    compiled_metadata = compiler.process(metadata)
-    return (
-        "CASE "
-        f"WHEN json_type({compiled_metadata}, '$.workspace_id') = 'text' "
-        f"THEN NULLIF(TRIM(json_extract({compiled_metadata}, '$.workspace_id')), '') "
-        "ELSE NULL END"
-    )
-
-
-@compiles(_LegacyWorkspaceId, "postgresql")
-def _compile_legacy_workspace_id_postgresql(  # pyright: ignore[reportUnusedFunction]
-    element: _LegacyWorkspaceId,
-    compiler: SQLCompiler,
-    **_kwargs: object,
-) -> str:
-    conversation_id = next(iter(element.clauses))
-    compiled_id = compiler.process(conversation_id)
-    return f"NULLIF(TRIM(SPLIT_PART({compiled_id}, ':', 2)), '')"
-
-
-@compiles(_LegacyWorkspaceId, "sqlite")
-def _compile_legacy_workspace_id_sqlite(  # pyright: ignore[reportUnusedFunction]
-    element: _LegacyWorkspaceId,
-    compiler: SQLCompiler,
-    **_kwargs: object,
-) -> str:
-    conversation_id = next(iter(element.clauses))
-    compiled_id = compiler.process(conversation_id)
-    remainder = f"SUBSTR({compiled_id}, INSTR({compiled_id}, ':') + 1)"
-    segment_length = (
-        f"CASE INSTR({remainder}, ':') "
-        f"WHEN 0 THEN LENGTH({remainder}) ELSE INSTR({remainder}, ':') - 1 END"
-    )
-    return f"NULLIF(TRIM(SUBSTR({remainder}, 1, {segment_length})), '')"
 
 
 def _workspace_group_expansion_limit(page_limit: int) -> int:
@@ -178,61 +129,6 @@ def _linked_workspace_task_id_for_response(conversation: "Conversation") -> str 
     )
 
 
-def _last_activity_subquery() -> Subquery:
-    return (
-        select(
-            AgentExecutionEventModel.conversation_id,
-            func.max(AgentExecutionEventModel.event_time_us).label("last_event_time_us"),
-        )
-        .group_by(AgentExecutionEventModel.conversation_id)
-        .subquery("last_activity")
-    )
-
-
-def _ordered_conversation_query() -> Select[tuple[ConversationModel]]:
-    last_activity_subq = _last_activity_subquery()
-    return (
-        select(ConversationModel)
-        .outerjoin(
-            last_activity_subq,
-            ConversationModel.id == last_activity_subq.c.conversation_id,
-        )
-        .order_by(
-            *conversation_activity_order(
-                cast("ColumnElement[int]", last_activity_subq.c.last_event_time_us)
-            )
-        )
-    )
-
-
-def _workspace_link_filter(workspace_ids: set[str]) -> ColumnElement[bool]:
-    return _effective_workspace_id_expression().in_(workspace_ids)
-
-
-def _effective_workspace_id_expression() -> ColumnElement[str | None]:
-    persisted_workspace_id = func.nullif(func.trim(ConversationModel.workspace_id), "")
-    metadata_workspace_id = _MetadataWorkspaceId(ConversationModel.meta)
-    legacy_workspace_id = case(
-        (
-            ConversationModel.id.like("workspace-%:%"),
-            _LegacyWorkspaceId(ConversationModel.id),
-        ),
-        else_=None,
-    )
-    return cast(
-        "ColumnElement[str | None]",
-        func.coalesce(
-            persisted_workspace_id,
-            metadata_workspace_id,
-            legacy_workspace_id,
-        ),
-    )
-
-
-def _unbound_workspace_filter() -> ColumnElement[bool]:
-    return _effective_workspace_id_expression().is_(None)
-
-
 def _conversation_list_filters(
     workspace_id: str | None,
     *,
@@ -249,79 +145,24 @@ def _conversation_list_filters(
 
 
 async def _ensure_project_access(
-    db: AsyncSession,
+    project_access: ProjectAccessHttpApplicationAuthorityV2,
     *,
     current_user: User,
     project_id: str,
-    tenant_id: str | None = None,
+    tenant_id: str,
 ) -> str:
-    conditions = [
-        UserProject.user_id == current_user.id,
-        UserProject.project_id == project_id,
-    ]
-    if tenant_id is not None:
-        conditions.append(Project.tenant_id == tenant_id)
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(Project.tenant_id)
-            .select_from(UserProject)
-            .join(Project, UserProject.project_id == Project.id)
-            .where(and_(*conditions))
+    try:
+        grant = await project_access.service.require_access(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=str(current_user.id),
         )
-    )
-    project_tenant_id = result.scalar_one_or_none()
-    if project_tenant_id is None:
+    except ProjectAccessDeniedV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied"),
-        )
-    return str(project_tenant_id)
-
-
-async def _ensure_selected_agent_access(
-    agent_config: dict[str, Any] | None,
-    *,
-    container: "DIContainer",
-    tenant_id: str,
-    project_id: str,
-) -> None:
-    selected_agent_id = selected_agent_id_from_config(agent_config)
-    if selected_agent_id is None:
-        return
-
-    registry = container.agent_registry()
-    agent = await registry.get_by_id(
-        selected_agent_id,
-        tenant_id=tenant_id,
-        project_id=project_id,
-    )
-    if agent is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Invalid agent selection"),
-        )
-
-
-async def _load_owned_conversation_row(
-    db: AsyncSession,
-    *,
-    conversation_id: str,
-    current_user: User,
-    tenant_id: str,
-) -> ConversationModel:
-    conversation = await db.get(ConversationModel, conversation_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail=_("Conversation not found"))
-    if conversation.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail=_("Access denied"))
-    await _ensure_project_access(
-        db,
-        current_user=current_user,
-        project_id=conversation.project_id,
-        tenant_id=conversation.tenant_id,
-    )
-    return conversation
+        ) from exc
+    return grant.tenant_id
 
 
 async def _workspace_name_by_id(
@@ -345,7 +186,6 @@ async def _workspace_name_by_id(
 
 
 async def _ensure_workspace_access(
-    db: AsyncSession,
     *,
     request: Request,
     current_user: User,
@@ -408,7 +248,6 @@ async def _ensure_workspace_task_linkage(
 
 
 async def _ensure_workspace_linkage_access(
-    db: AsyncSession,
     *,
     request: Request,
     conversation: "Conversation",
@@ -427,7 +266,6 @@ async def _ensure_workspace_linkage_access(
 
     if workspace_id:
         await _ensure_workspace_access(
-            db,
             request=request,
             current_user=current_user,
             tenant_id=tenant_id,
@@ -470,106 +308,6 @@ async def _accessible_workspace_ids(
         is_superuser=bool(getattr(current_user, "is_superuser", False)),
     )
     return set(profiles)
-
-
-async def _list_workspace_conversations(
-    db: AsyncSession,
-    *,
-    project_id: str,
-    tenant_id: str,
-    workspace_ids: set[str],
-    status: ConversationStatus | None,
-    limit: int | None = None,
-    offset: int = 0,
-) -> list["Conversation"]:
-    if not workspace_ids:
-        return []
-
-    query = _ordered_conversation_query().where(
-        ConversationModel.project_id == project_id,
-        ConversationModel.tenant_id == tenant_id,
-        _workspace_link_filter(workspace_ids),
-    )
-    if status is not None:
-        query = query.where(ConversationModel.status == status.value)
-    if limit is not None:
-        query = query.offset(offset).limit(limit)
-
-    result = await db.execute(refresh_select_statement(query))
-    repo = SqlConversationRepository(db)
-    return [d for c in result.scalars().all() if (d := repo._to_domain(c)) is not None]
-
-
-async def _count_workspace_conversations(
-    db: AsyncSession,
-    *,
-    project_id: str,
-    tenant_id: str,
-    workspace_id: str,
-    status: ConversationStatus | None,
-) -> int:
-    query = (
-        select(func.count())
-        .select_from(ConversationModel)
-        .where(
-            ConversationModel.project_id == project_id,
-            ConversationModel.tenant_id == tenant_id,
-            _workspace_link_filter({workspace_id}),
-        )
-    )
-    if status is not None:
-        query = query.where(ConversationModel.status == status.value)
-    result = await db.execute(refresh_select_statement(query))
-    return result.scalar() or 0
-
-
-async def _list_unbound_conversations(
-    db: AsyncSession,
-    *,
-    project_id: str,
-    tenant_id: str,
-    user_id: str,
-    status: ConversationStatus | None,
-    limit: int,
-    offset: int,
-) -> list["Conversation"]:
-    query = _ordered_conversation_query().where(
-        ConversationModel.project_id == project_id,
-        ConversationModel.tenant_id == tenant_id,
-        ConversationModel.user_id == user_id,
-        _unbound_workspace_filter(),
-    )
-    if status is not None:
-        query = query.where(ConversationModel.status == status.value)
-    query = query.offset(offset).limit(limit)
-
-    result = await db.execute(refresh_select_statement(query))
-    repo = SqlConversationRepository(db)
-    return [d for c in result.scalars().all() if (d := repo._to_domain(c)) is not None]
-
-
-async def _count_unbound_conversations(
-    db: AsyncSession,
-    *,
-    project_id: str,
-    tenant_id: str,
-    user_id: str,
-    status: ConversationStatus | None,
-) -> int:
-    query = (
-        select(func.count())
-        .select_from(ConversationModel)
-        .where(
-            ConversationModel.project_id == project_id,
-            ConversationModel.tenant_id == tenant_id,
-            ConversationModel.user_id == user_id,
-            _unbound_workspace_filter(),
-        )
-    )
-    if status is not None:
-        query = query.where(ConversationModel.status == status.value)
-    result = await db.execute(refresh_select_statement(query))
-    return result.scalar() or 0
 
 
 def _merge_workspace_groups(
@@ -680,35 +418,31 @@ async def create_conversation(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_create_http_application_authority_dependency_v2
+    ),
+    conversation_collection: ConversationCollectionHttpApplicationAuthorityV2 = Depends(
+        conversation_create_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Create a new conversation."""
     try:
         assert request is not None
         tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=data.project_id,
-        )
-        container = get_container_with_db(request, db)
-        await _ensure_selected_agent_access(
-            data.agent_config,
-            container=container,
             tenant_id=tenant_id,
-            project_id=data.project_id,
         )
         if data.workspace_id:
             await _ensure_workspace_access(
-                db,
                 request=request,
                 current_user=current_user,
                 tenant_id=tenant_id,
                 project_id=data.project_id,
                 workspace_id=data.workspace_id,
             )
-        llm = await create_llm_client(tenant_id)
-        use_case = container.create_conversation_use_case(llm)
-        conversation = await use_case.execute(
+        conversation = await conversation_collection.service.create_conversation(
             project_id=data.project_id,
             user_id=current_user.id,
             tenant_id=tenant_id,
@@ -716,25 +450,25 @@ async def create_conversation(
             agent_config=data.agent_config,
             workspace_id=data.workspace_id,
         )
-        await db.commit()
+        await conversation_collection.db.commit()
         try:
-            redis_client = container.redis()
-            if redis_client is not None:
-                await publish_conversation_created(
-                    redis_client=redis_client,
-                    conversation=conversation,
-                )
+            await conversation_collection.service.after_create_committed(conversation)
         except Exception:
             logger.exception(
-                "Failed to publish conversation_created after conversation commit",
+                "Failed to dispatch conversation.created after conversation commit",
                 extra={"conversation_id": conversation.id, "project_id": conversation.project_id},
             )
         return ConversationResponse.from_domain(conversation)
 
+    except InvalidConversationAgentSelectionV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid agent selection"),
+        ) from exc
     except HTTPException:
         raise
     except (ValueError, AttributeError) as e:
-        await db.rollback()
+        await conversation_collection.db.rollback()
         logger.error(
             f"Validation error creating conversation: {e}",
             exc_info=True,
@@ -742,7 +476,7 @@ async def create_conversation(
         )
         raise HTTPException(status_code=400, detail=_("Invalid request")) from e
     except SQLAlchemyError as e:
-        await db.rollback()
+        await conversation_collection.db.rollback()
         logger.error(
             f"Database error creating conversation: {e}",
             exc_info=True,
@@ -753,7 +487,7 @@ async def create_conversation(
             detail=_("A database error occurred while creating the conversation"),
         ) from e
     except Exception as e:
-        await db.rollback()
+        await conversation_collection.db.rollback()
         logger.error(
             f"Unexpected error creating conversation: {e}",
             exc_info=True,
@@ -788,18 +522,24 @@ async def list_conversations(
     ),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_collection: ConversationCollectionHttpApplicationAuthorityV2 = Depends(
+        conversation_list_http_application_authority_dependency_v2
+    ),
 ) -> PaginatedConversationsResponse:
     """List conversations for a project with pagination."""
     try:
         assert request is not None
         tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
 
-        engine = db.get_bind()
+        engine = conversation_collection.db.get_bind()
         pool = engine.pool  # type: ignore[union-attr]
         pool_size = getattr(pool, "size", lambda: 0)()
         checked_out = getattr(pool, "checkedout", lambda: 0)()
@@ -816,8 +556,7 @@ async def list_conversations(
         )
 
         if requested_unbound_only:
-            conversations = await _list_unbound_conversations(
-                db,
+            conversations = await conversation_collection.service.list_unbound_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 user_id=current_user.id,
@@ -825,8 +564,7 @@ async def list_conversations(
                 limit=limit,
                 offset=offset,
             )
-            total = await _count_unbound_conversations(
-                db,
+            total = await conversation_collection.service.count_unbound_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 user_id=current_user.id,
@@ -834,15 +572,13 @@ async def list_conversations(
             )
         elif requested_workspace_id:
             await _ensure_workspace_access(
-                db,
                 request=request,
                 current_user=current_user,
                 tenant_id=tenant_id,
                 project_id=project_id,
                 workspace_id=requested_workspace_id,
             )
-            conversations = await _list_workspace_conversations(
-                db,
+            conversations = await conversation_collection.service.list_workspace_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 workspace_ids={requested_workspace_id},
@@ -850,28 +586,24 @@ async def list_conversations(
                 limit=limit,
                 offset=offset,
             )
-            total = await _count_workspace_conversations(
-                db,
+            total = await conversation_collection.service.count_workspace_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 workspace_id=requested_workspace_id,
                 status=conv_status,
             )
         else:
-            container = get_container_with_db(request, db)
-            llm = await create_llm_client(tenant_id)
-            use_case = container.list_conversations_use_case(llm)
-            conversations = await use_case.execute(
+            conversations = await conversation_collection.service.list_conversations(
                 project_id=project_id,
-                user_id=current_user.id,
+                tenant_id=tenant_id,
                 limit=limit,
                 offset=offset,
                 status=conv_status,
             )
 
-            total = await use_case.count(
+            total = await conversation_collection.service.count_conversations(
                 project_id=project_id,
-                user_id=current_user.id,
+                tenant_id=tenant_id,
                 status=conv_status,
             )
 
@@ -888,13 +620,15 @@ async def list_conversations(
                     project_id=project_id,
                     workspace_ids=workspace_ids,
                 )
-                workspace_conversations = await _list_workspace_conversations(
-                    db,
-                    project_id=project_id,
-                    tenant_id=tenant_id,
-                    workspace_ids=workspace_ids,
-                    status=conv_status,
-                    limit=_workspace_group_expansion_limit(limit),
+                workspace_conversations = (
+                    await conversation_collection.service.list_workspace_conversations(
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        workspace_ids=workspace_ids,
+                        status=conv_status,
+                        limit=_workspace_group_expansion_limit(limit),
+                        offset=0,
+                    )
                 )
                 conversations = _merge_workspace_groups(conversations, workspace_conversations)
 
@@ -938,21 +672,23 @@ async def get_conversation(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
+        conversation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Get a conversation by ID."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
-            db,
+        await _ensure_project_access(
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        use_case = container.get_conversation_use_case(llm)
-
-        conversation = await use_case.execute(
+        conversation = await conversation_http.service.get_conversation(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
@@ -977,7 +713,12 @@ async def get_context_status(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_context_status: ConversationContextStatusHttpApplicationAuthorityV2 = Depends(
+        conversation_context_status_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get context window status for a conversation.
 
@@ -987,53 +728,23 @@ async def get_context_status(
     """
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
-            db,
+        authorized_tenant_id = await _ensure_project_access(
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        use_case = container.get_conversation_use_case(llm)
-
-        conversation = await use_case.execute(
+        if authorized_tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail=_("Access denied"))
+        context_status = await conversation_context_status.service.get_context_status(
             conversation_id=conversation_id,
             project_id=project_id,
-            user_id=current_user.id,
+            tenant_id=authorized_tenant_id,
+            user_id=str(current_user.id),
         )
-        if not conversation:
+        if context_status is None:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        # Load cached context summary from conversation meta
-        adapter = container.context_summary_adapter()
-        summary = await adapter.get_summary(conversation_id)
-
-        result: dict[str, Any] = {
-            "conversation_id": conversation_id,
-            "message_count": conversation.message_count,
-            "has_summary": summary is not None,
-        }
-
-        if summary:
-            result.update(
-                {
-                    "summary_tokens": summary.summary_tokens,
-                    "messages_in_summary": summary.messages_covered_count,
-                    "compression_level": summary.compression_level,
-                    "from_cache": True,
-                }
-            )
-        else:
-            result.update(
-                {
-                    "summary_tokens": 0,
-                    "messages_in_summary": 0,
-                    "compression_level": "none",
-                    "from_cache": False,
-                }
-            )
-
-        return result
+        return context_status.to_dict()
 
     except HTTPException:
         raise
@@ -1049,39 +760,37 @@ async def delete_conversation(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
+        conversation_http_application_authority_dependency_v2
+    ),
 ) -> None:
     """Delete a conversation and all its messages."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
-            db,
+        await _ensure_project_access(
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        deleted = await conversation_http.service.delete_conversation(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
         )
-
-        if not conversation:
+        if not deleted:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        await agent_service.delete_conversation(
-            conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
-        )
-        await db.commit()
+        await conversation_http.db.commit()
+        await conversation_http.service.cache.invalidate(project_id)
 
     except HTTPException:
+        await conversation_http.db.rollback()
         raise
     except Exception as exc:
+        await conversation_http.db.rollback()
         logger.exception("Error deleting conversation")
         raise HTTPException(status_code=500, detail=_("Failed to delete conversation")) from exc
 
@@ -1094,42 +803,39 @@ async def update_conversation_title(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
+        conversation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Update conversation title."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
-            db,
+        await _ensure_project_access(
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
-            conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
-        )
-
-        if not conversation:
-            raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        updated_conversation = await agent_service.update_conversation_title(
+        updated_conversation = await conversation_http.service.update_conversation_title(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
             title=data.title,
         )
-
-        assert updated_conversation is not None
+        if updated_conversation is None:
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
+        await conversation_http.db.commit()
+        await conversation_http.service.cache.invalidate(project_id)
         return ConversationResponse.from_domain(updated_conversation)
 
     except HTTPException:
+        await conversation_http.db.rollback()
         raise
     except Exception as exc:
+        await conversation_http.db.rollback()
         logger.exception("Error updating conversation title")
         raise HTTPException(
             status_code=500, detail=_("Failed to update conversation title")
@@ -1144,61 +850,55 @@ async def update_conversation_config(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_config: ConversationConfigHttpApplicationAuthorityV2 = Depends(
+        conversation_config_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Update conversation-level LLM configuration (model override, LLM params)."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
-            db,
+        authorized_tenant_id = await _ensure_project_access(
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        fields = data.model_fields_set
+        conversation = await conversation_config.service.update_conversation_config(
             conversation_id=conversation_id,
             project_id=project_id,
-            user_id=current_user.id,
+            tenant_id=authorized_tenant_id,
+            user_id=str(current_user.id),
+            patch=ConversationConfigPatchV2(
+                selected_agent_id_present="selected_agent_id" in fields,
+                selected_agent_id=data.selected_agent_id,
+                llm_model_override_present="llm_model_override" in fields,
+                llm_model_override=data.llm_model_override,
+                llm_overrides_present="llm_overrides" in fields,
+                llm_overrides=data.llm_overrides,
+            ),
         )
-        if not conversation:
+        if conversation is None:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        config_patch: dict[str, Any] = {}
-        fields = data.model_fields_set
-        if "selected_agent_id" in fields:
-            selected_agent_id = data.selected_agent_id.strip() if data.selected_agent_id else ""
-            selected_agent_config = (
-                {"selected_agent_id": selected_agent_id} if selected_agent_id else {}
-            )
-            await _ensure_selected_agent_access(
-                selected_agent_config,
-                container=container,
-                tenant_id=tenant_id,
-                project_id=project_id,
-            )
-            config_patch["selected_agent_id"] = selected_agent_id or None
-        if "llm_model_override" in fields:
-            cleaned = data.llm_model_override.strip() if data.llm_model_override else ""
-            config_patch["llm_model_override"] = cleaned or None
-        if "llm_overrides" in fields:
-            cleaned_overrides = {
-                key: value for key, value in (data.llm_overrides or {}).items() if value is not None
-            }
-            config_patch["llm_overrides"] = cleaned_overrides or None
-
-        conversation.update_agent_config(config_patch)
-        await agent_service._conversation_repo.save(conversation)
-        await db.commit()
+        await conversation_config.db.commit()
+        await conversation_config.service.after_update_committed(project_id)
 
         return ConversationResponse.from_domain(conversation)
 
+    except InvalidConversationAgentSelectionV2 as exc:
+        await conversation_config.db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid agent selection"),
+        ) from exc
     except HTTPException:
+        await conversation_config.db.rollback()
         raise
     except Exception as exc:
-        await db.rollback()
+        await conversation_config.db.rollback()
         logger.exception("Error updating conversation config")
         raise HTTPException(
             status_code=500, detail=_("Failed to update conversation config")
@@ -1213,7 +913,12 @@ async def update_conversation_mode(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
+        conversation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Update a conversation's mode override.
 
@@ -1227,15 +932,12 @@ async def update_conversation_mode(
     try:
         assert request is not None
         tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        conversation = await conversation_http.service.get_conversation(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
@@ -1245,7 +947,6 @@ async def update_conversation_mode(
 
         fields = data.model_fields_set
         await _ensure_workspace_linkage_access(
-            db,
             request=request,
             conversation=conversation,
             data=data,
@@ -1283,20 +984,28 @@ async def update_conversation_mode(
         )
 
         conversation.updated_at = datetime.now(UTC)
-        await agent_service._conversation_repo.save(conversation)
-        await db.commit()
+        updated_conversation = await conversation_http.service.save_scoped_conversation(
+            conversation=conversation,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=current_user.id,
+        )
+        if updated_conversation is None:
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
+        await conversation_http.db.commit()
+        await conversation_http.service.cache.invalidate(project_id)
 
-        return ConversationResponse.from_domain(conversation)
+        return ConversationResponse.from_domain(updated_conversation)
 
     except HTTPException:
-        await db.rollback()
+        await conversation_http.db.rollback()
         raise
     except ValueError as e:
-        await db.rollback()
+        await conversation_http.db.rollback()
         logger.warning(f"Invalid conversation mode update for {conversation_id}: {e}")
         raise HTTPException(status_code=422, detail=_("Invalid conversation mode update")) from e
     except Exception as exc:
-        await db.rollback()
+        await conversation_http.db.rollback()
         logger.exception("Error updating conversation mode")
         raise HTTPException(
             status_code=500, detail=_("Failed to update conversation mode")
@@ -1314,7 +1023,12 @@ async def generate_conversation_title(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_generation: ConversationGenerationHttpApplicationAuthorityV2 = Depends(
+        conversation_generation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """
     Generate and update a friendly conversation title based on the first user message.
@@ -1324,64 +1038,34 @@ async def generate_conversation_title(
     """
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
-            db,
+        authorized_tenant_id = await _ensure_project_access(
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        if authorized_tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail=_("Access denied"))
+        conversation = await conversation_generation.service.generate_title(
             conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
         )
-
-        if not conversation:
+        if conversation is None:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
+        await conversation_generation.db.commit()
+        await conversation_generation.service.after_update_committed()
+        return ConversationResponse.from_domain(conversation)
 
-        message_events = await agent_service.get_conversation_messages(
-            conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
-            limit=10,
-        )
-
-        first_user_message = None
-        for event in message_events:
-            if event.event_type == "user_message":
-                first_user_message = event.event_data.get("content", "")
-                break
-
-        if not first_user_message:
-            raise HTTPException(
-                status_code=400, detail=_("No user message found to generate title from")
-            )
-
-        # Use DB provider config (same as ReActAgent) for title generation
-        title_llm = await agent_service.get_title_llm()
-        generated_title = await agent_service.generate_conversation_title(
-            first_message=first_user_message,
-            llm=title_llm,
-        )
-
-        updated_conversation = await agent_service.update_conversation_title(
-            conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
-            title=generated_title,
-        )
-
-        if not updated_conversation:
-            raise HTTPException(status_code=500, detail=_("Failed to update conversation title"))
-
-        return ConversationResponse.from_domain(updated_conversation)
-
+    except ConversationGenerationSourceMissingV2 as exc:
+        await conversation_generation.db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=_("No user message found to generate title from"),
+        ) from exc
     except HTTPException:
+        await conversation_generation.db.rollback()
         raise
     except Exception as exc:
+        await conversation_generation.db.rollback()
         logger.exception("Error generating conversation title")
         raise HTTPException(
             status_code=500, detail=_("Failed to generate conversation title")
@@ -1398,79 +1082,44 @@ async def generate_summary(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
+    conversation_generation: ConversationGenerationHttpApplicationAuthorityV2 = Depends(
+        conversation_generation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Generate an AI summary of the conversation."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
-            db,
+        authorized_tenant_id = await _ensure_project_access(
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        if authorized_tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail=_("Access denied"))
+        conversation = await conversation_generation.service.generate_summary(
             conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
         )
-        if not conversation:
+        if conversation is None:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        message_events = await agent_service.get_conversation_messages(
-            conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
-            limit=50,
-        )
-
-        messages_text = ""
-        for event in message_events:
-            role = event.event_type.replace("_message", "")
-            content = event.event_data.get("content", "")
-            if content:
-                messages_text += f"{role}: {content[:500]}\n"
-
-        if not messages_text.strip():
-            raise HTTPException(
-                status_code=400,
-                detail=_("No messages found to generate summary from"),
-            )
-
-        title_llm = await agent_service.get_title_llm()
-        from src.domain.llm_providers.llm_types import Message as LLMMessage
-
-        prompt = (
-            "Summarize this conversation in 1-2 concise sentences. "
-            "Focus on the main topic and key outcomes.\n\n"
-            f"Messages:\n{messages_text[:3000]}\n\nSummary:"
-        )
-        response = await title_llm.ainvoke(
-            [
-                LLMMessage.system(
-                    "You are a helpful assistant that generates concise conversation summaries."
-                ),
-                LLMMessage.user(prompt),
-            ]
-        )
-        summary = response.content.strip()
-        if len(summary) > 500:
-            summary = summary[:497] + "..."
-
-        conversation.summary = summary
-        from datetime import datetime
-
-        conversation.updated_at = datetime.now(UTC)
-        await agent_service._conversation_repo.save_and_commit(conversation)  # type: ignore[attr-defined]
-
+        await conversation_generation.db.commit()
+        await conversation_generation.service.after_update_committed()
         return ConversationResponse.from_domain(conversation)
 
+    except ConversationGenerationSourceMissingV2 as exc:
+        await conversation_generation.db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=_("No messages found to generate summary from"),
+        ) from exc
     except HTTPException:
+        await conversation_generation.db.rollback()
         raise
     except Exception as exc:
+        await conversation_generation.db.rollback()
         logger.exception("Error generating conversation summary")
         raise HTTPException(
             status_code=500,
@@ -1484,66 +1133,42 @@ async def fork_conversation(
     message_id: str = Query(..., description="Message ID to fork from"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    conversation_revision: ConversationRevisionHttpApplicationAuthorityV2 = Depends(
+        conversation_revision_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Fork a conversation from a specific message point."""
     try:
-        original = await _load_owned_conversation_row(
-            db,
+        fork = await conversation_revision.service.fork_conversation(
             conversation_id=conversation_id,
-            current_user=current_user,
+            branch_message_id=message_id,
             tenant_id=tenant_id,
+            user_id=str(current_user.id),
         )
+        await conversation_revision.db.commit()
+        await conversation_revision.service.after_mutation_committed(fork.project_id)
+        return fork.to_dict()
 
-        new_id = str(uuid.uuid4())
-        new_conv = ConversationModel(
-            id=new_id,
-            project_id=original.project_id,
-            tenant_id=original.tenant_id,
-            user_id=current_user.id,
-            title=f"{original.title} (fork)",
-            status="active",
-            parent_conversation_id=conversation_id,
-            branch_point_message_id=message_id,
-        )
-        db.add(new_conv)
-
-        query = (
-            select(MessageModel)
-            .where(MessageModel.conversation_id == conversation_id)
-            .order_by(MessageModel.created_at)
-        )
-        result = await db.execute(refresh_select_statement(query))
-        messages = result.scalars().all()
-
-        copied = 0
-        for msg in messages:
-            new_msg = MessageModel(
-                id=str(uuid.uuid4()),
-                conversation_id=new_id,
-                role=msg.role,
-                content=msg.content,
-                message_type=msg.message_type,
-                created_at=msg.created_at,
-            )
-            db.add(new_msg)
-            copied += 1
-            if msg.id == message_id:
-                break
-
-        new_conv.message_count = copied
-        await db.commit()
-
-        return {
-            "id": new_conv.id,
-            "title": new_conv.title,
-            "parent_id": conversation_id,
-        }
-
-    except HTTPException:
-        raise
+    except ConversationRevisionConversationNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from exc
+    except ConversationRevisionAccessDeniedV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=403, detail=_("Access denied")) from exc
+    except ConversationRevisionMessageNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Message not found")) from exc
+    except RuntimeV2Error as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Conversation revision authority is unavailable"),
+            },
+        ) from exc
     except Exception as exc:
-        await db.rollback()
+        await conversation_revision.db.rollback()
         logger.exception("Error forking conversation")
         raise HTTPException(
             status_code=500,
@@ -1558,38 +1183,49 @@ async def edit_message(
     data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    conversation_revision: ConversationRevisionHttpApplicationAuthorityV2 = Depends(
+        conversation_revision_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Edit a message and increment version."""
     try:
-        await _load_owned_conversation_row(
-            db,
+        content = data.get("content")
+        if content is not None and not isinstance(content, str):
+            raise HTTPException(status_code=422, detail=_("Invalid message content"))
+        edited = await conversation_revision.service.edit_message(
             conversation_id=conversation_id,
-            current_user=current_user,
+            message_id=message_id,
+            content=content,
             tenant_id=tenant_id,
+            user_id=str(current_user.id),
         )
-        msg = await db.get(MessageModel, message_id)
-        if not msg or msg.conversation_id != conversation_id:
-            raise HTTPException(status_code=404, detail=_("Message not found"))
+        await conversation_revision.db.commit()
+        await conversation_revision.service.after_mutation_committed(edited.project_id)
+        return edited.to_dict()
 
-        if msg.original_content is None:
-            msg.original_content = msg.content
-        msg.content = data.get("content", msg.content)
-        msg.version = (msg.version or 1) + 1
-        msg.edited_at = datetime.now(UTC)
-
-        await db.commit()
-        return {
-            "id": msg.id,
-            "content": msg.content,
-            "version": msg.version,
-            "edited_at": str(msg.edited_at),
-        }
-
+    except ConversationRevisionConversationNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from exc
+    except ConversationRevisionAccessDeniedV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=403, detail=_("Access denied")) from exc
+    except ConversationRevisionMessageNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Message not found")) from exc
+    except RuntimeV2Error as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Conversation revision authority is unavailable"),
+            },
+        ) from exc
     except HTTPException:
+        await conversation_revision.db.rollback()
         raise
     except Exception as exc:
-        await db.rollback()
+        await conversation_revision.db.rollback()
         logger.exception("Error editing message")
         raise HTTPException(
             status_code=500,
@@ -1603,7 +1239,9 @@ async def request_tool_undo(
     execution_id: str,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    conversation_revision: ConversationRevisionHttpApplicationAuthorityV2 = Depends(
+        conversation_revision_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Request undo of a tool execution.
 
@@ -1611,42 +1249,36 @@ async def request_tool_undo(
     the specified tool execution.
     """
     try:
-        await _load_owned_conversation_row(
-            db,
+        undo = await conversation_revision.service.request_tool_undo(
             conversation_id=conversation_id,
-            current_user=current_user,
+            execution_id=execution_id,
             tenant_id=tenant_id,
+            user_id=str(current_user.id),
         )
-        exec_record = await db.get(ToolExecutionRecord, execution_id)
-        if not exec_record:
-            raise HTTPException(status_code=404, detail=_("Tool execution not found"))
+        await conversation_revision.db.commit()
+        await conversation_revision.service.after_mutation_committed(undo.project_id)
+        return undo.to_dict()
 
-        if exec_record.conversation_id != conversation_id:
-            raise HTTPException(status_code=404, detail=_("Tool execution not found"))
-
-        undo_msg = MessageModel(
-            id=str(uuid.uuid4()),
-            conversation_id=conversation_id,
-            role="user",
-            content=(
-                f"Please undo the previous tool execution: {exec_record.tool_name}. "
-                "Revert any changes made."
-            ),
-            created_at=datetime.now(UTC),
-        )
-        db.add(undo_msg)
-        await db.commit()
-
-        return {
-            "status": "undo_requested",
-            "message_id": undo_msg.id,
-            "tool_name": exec_record.tool_name,
-        }
-
-    except HTTPException:
-        raise
+    except ConversationRevisionConversationNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from exc
+    except ConversationRevisionAccessDeniedV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=403, detail=_("Access denied")) from exc
+    except ConversationRevisionToolExecutionNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Tool execution not found")) from exc
+    except RuntimeV2Error as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Conversation revision authority is unavailable"),
+            },
+        ) from exc
     except Exception as exc:
-        await db.rollback()
+        await conversation_revision.db.rollback()
         logger.exception("Error requesting tool undo")
         raise HTTPException(
             status_code=500,

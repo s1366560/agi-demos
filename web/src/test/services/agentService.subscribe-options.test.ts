@@ -8,6 +8,8 @@ describe('agentService subscribe recovery options', () => {
   const service = agentService as any;
 
   beforeEach(() => {
+    const context = { check: () => {}, signal: new AbortController().signal };
+    vi.spyOn(agentService, 'getOperationContext').mockReturnValue(context as any);
     if (service.idleDisconnectTimeout) {
       clearTimeout(service.idleDisconnectTimeout);
       service.idleDisconnectTimeout = null;
@@ -132,7 +134,7 @@ describe('agentService subscribe recovery options', () => {
   it('disconnects after the last realtime subscription is removed', () => {
     vi.useFakeTimers();
     const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
-    const disconnectSpy = vi.spyOn(agentService, 'disconnect').mockImplementation(() => {});
+    const disconnectSpy = vi.spyOn(agentService, 'disconnect').mockResolvedValue(undefined);
     vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
     service.subscriptions.add('conv-idle');
 
@@ -154,7 +156,7 @@ describe('agentService subscribe recovery options', () => {
   it('keeps the connection open when a new subscription arrives during the idle grace window', () => {
     vi.useFakeTimers();
     vi.spyOn(service, 'send').mockReturnValue(true);
-    const disconnectSpy = vi.spyOn(agentService, 'disconnect').mockImplementation(() => {});
+    const disconnectSpy = vi.spyOn(agentService, 'disconnect').mockResolvedValue(undefined);
     vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
     service.subscriptions.add('conv-old');
 

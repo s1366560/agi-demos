@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent.state.agent_session_pool import generation_cache_key_v2
 from src.infrastructure.agent.tools.custom_tool_loader import (
     CustomToolDiagnostic,
     CustomToolLoader,
@@ -357,6 +359,7 @@ class TestRescanCacheMiss:
         assert len(mock_diags["proj1"]) == 1
         assert mock_diags["proj1"][0].code == "tools_loaded"
 
+    @patch(f"{_STATE_MODULE}.resolve_generation_cache_descriptor_v2")
     @patch(f"{_LOADER_MODULE}.load_custom_tools")
     @patch(f"{_STATE_MODULE}.resolve_project_base_path")
     @patch(f"{_STATE_MODULE}._custom_tool_diagnostics", new_callable=dict)
@@ -367,25 +370,39 @@ class TestRescanCacheMiss:
         mock_diags: dict[str, list[Any]],
         mock_resolve: MagicMock,
         mock_load: MagicMock,
+        mock_generation: MagicMock,
     ) -> None:
         """With cache entry: diagnostics are stored AND tools merged."""
         from src.infrastructure.agent.state.agent_worker_state import (
             rescan_custom_tools_for_project,
         )
 
-        # Arrange -- cache has an existing entry
-        mock_cache["proj1"] = {"existing_tool": MagicMock()}
+        # Arrange -- the pinned generation has an existing cache entry.
+        descriptor = PluginGenerationDescriptorV2(
+            profile_id="test-profile-v2",
+            generation=1,
+            digest="a" * 64,
+        )
+        cache_key = generation_cache_key_v2(
+            "proj1",
+            generation_descriptor=descriptor,
+        )
+        mock_generation.return_value = descriptor
+        mock_cache[cache_key] = {"existing_tool": MagicMock()}
         diag = CustomToolDiagnostic("t.py", "tools_loaded", "ok", "info")
         mock_resolve.return_value = Path("/fake")
         tool_mock = MagicMock(spec=ToolInfo)
         mock_load.return_value = ({"new_tool": tool_mock}, [diag])
 
         # Act
-        count = rescan_custom_tools_for_project("proj1")
+        count = rescan_custom_tools_for_project(
+            "proj1",
+            generation_descriptor=descriptor,
+        )
 
         # Assert
         assert count == 1
         assert "proj1" in mock_diags
         assert mock_diags["proj1"][0].code == "tools_loaded"
         # Verify tool was merged into cache
-        assert "new_tool" in mock_cache["proj1"]
+        assert "new_tool" in mock_cache[cache_key]

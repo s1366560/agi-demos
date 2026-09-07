@@ -5,9 +5,8 @@ Endpoints for listing tools and tool compositions.
 
 import logging
 from collections import Counter
-from collections.abc import Mapping
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.tool_policy_debug_service import ToolPolicyDebugService
@@ -20,6 +19,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 from .schemas import (
     CapabilityDomainSummary,
@@ -38,30 +38,36 @@ from .schemas import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_CORE_TOOL_DEFINITIONS: tuple[tuple[str, str], ...] = (
+_CORE_TOOL_DEFINITIONS: tuple[tuple[str, str, str], ...] = (
     (
         "memory_search",
         "Search through stored memories and knowledge in the graph.",
+        "memory",
     ),
     (
         "entity_lookup",
         "Look up specific entities and their relationships.",
+        "memory",
     ),
     (
         "episode_retrieval",
         "Retrieve historical episodes and conversations.",
+        "memory",
     ),
     (
         "memory_create",
         "Create a new memory entry in the knowledge graph.",
+        "memory",
     ),
     (
         "graph_query",
         "Execute a custom Cypher query on the knowledge graph.",
+        "graph",
     ),
     (
         "summary",
         "Generate a concise summary of provided information.",
+        "reasoning",
     ),
 )
 
@@ -69,61 +75,22 @@ _MEMORY_TOOL_NAMES = frozenset({"memory_search", "memory_create"})
 
 
 async def _memory_tools_available(*, tenant_id: str | None) -> bool:
+    _ = tenant_id
     settings = get_settings()
-    if settings.agent_memory_runtime_mode == "disabled":
-        return False
-    if settings.agent_memory_tool_provider_mode == "disabled":
-        return False
-
-    from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
-
-    runtime_manager = get_plugin_runtime_manager()
-    _runtime_loaded = await runtime_manager.ensure_loaded()
-    return runtime_manager.is_plugin_enabled("memory-runtime", tenant_id=tenant_id)
+    return (
+        settings.agent_memory_runtime_mode != "disabled"
+        and settings.agent_memory_tool_provider_mode != "disabled"
+    )
 
 
 async def _build_core_tools(*, tenant_id: str | None) -> list[ToolInfo]:
     memory_tools_available = await _memory_tools_available(tenant_id=tenant_id)
     definitions = [
         (name, description)
-        for name, description in _CORE_TOOL_DEFINITIONS
+        for name, description, _domain in _CORE_TOOL_DEFINITIONS
         if memory_tools_available or name not in _MEMORY_TOOL_NAMES
     ]
     return [ToolInfo(name=name, description=description) for name, description in definitions]
-
-
-def _count_effective_tool_factories(
-    *,
-    plugin_records: list[dict[str, object]],
-    registered_factories: Mapping[str, object],
-    memory_tools_available: bool,
-) -> int:
-    enabled_plugins = {
-        str(plugin["name"])
-        for plugin in plugin_records
-        if plugin.get("enabled") and plugin.get("name") is not None
-    }
-    effective_count = 0
-    for plugin_name in registered_factories:
-        if plugin_name not in enabled_plugins:
-            continue
-        if plugin_name == "memory-runtime" and not memory_tools_available:
-            continue
-        effective_count += 1
-    return effective_count
-
-
-def _classify_domain(tool_name: str) -> str:
-    normalized = tool_name.lower()
-    if normalized.startswith("memory_") or "entity" in normalized or "episode" in normalized:
-        return "memory"
-    if "graph" in normalized:
-        return "graph"
-    if "search" in normalized:
-        return "search"
-    if "summary" in normalized:
-        return "reasoning"
-    return "general"
 
 
 @router.get("/tools", response_model=ToolsListResponse)
@@ -141,35 +108,30 @@ async def get_tool_capabilities(
 ) -> CapabilitySummaryResponse:
     """Get aggregated capability catalog summary for agent tools and plugin runtime."""
     try:
-        from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
-        from src.infrastructure.agent.plugins.registry import get_plugin_registry
+        from src.infrastructure.plugins.v2.agent_tool_capability_projection import (
+            project_agent_tool_capabilities_v2,
+        )
+        from src.infrastructure.plugins.v2.boundary import current_generation_v2
 
-        runtime_manager = get_plugin_runtime_manager()
-        _runtime_loaded = await runtime_manager.ensure_loaded()
         tenant_id = getattr(current_user, "tenant_id", None)
-        plugin_records, _plugin_diagnostics = runtime_manager.list_plugins(tenant_id=tenant_id)
-        registry = get_plugin_registry()
-
-        memory_tools_available = await _memory_tools_available(tenant_id=tenant_id)
+        projection = project_agent_tool_capabilities_v2(current_generation_v2())
         core_tools = await _build_core_tools(tenant_id=tenant_id)
-        domain_counter = Counter(_classify_domain(tool.name) for tool in core_tools)
-
-        hook_handlers = registry.list_hooks()
-        registered_tool_factories = registry.list_tool_factories()
+        active_tool_names = {tool.name for tool in core_tools}
+        domain_counter = Counter(
+            domain
+            for name, _description, domain in _CORE_TOOL_DEFINITIONS
+            if name in active_tool_names
+        )
         plugin_runtime = PluginRuntimeCapabilitySummary(
-            plugins_total=len(plugin_records),
-            plugins_enabled=sum(1 for plugin in plugin_records if bool(plugin.get("enabled"))),
-            tool_factories=_count_effective_tool_factories(
-                plugin_records=plugin_records,
-                registered_factories=registered_tool_factories,
-                memory_tools_available=memory_tools_available,
-            ),
-            registered_tool_factories=len(registered_tool_factories),
-            channel_types=len(registry.list_channel_type_metadata()),
-            hook_handlers=sum(len(handlers) for handlers in hook_handlers.values()),
-            commands=len(registry.list_commands()),
-            services=len(registry.list_services()),
-            providers=len(registry.list_providers()),
+            plugins_total=projection.plugins_total,
+            plugins_enabled=projection.plugins_enabled,
+            tool_factories=projection.tool_contributions,
+            registered_tool_factories=projection.tool_contributions,
+            channel_types=projection.channel_types,
+            hook_handlers=projection.hook_handlers,
+            commands=projection.commands,
+            services=projection.services,
+            providers=projection.service_provider_effects,
         )
         domain_breakdown = [
             CapabilityDomainSummary(domain=domain, tool_count=count)
@@ -181,11 +143,18 @@ async def get_tool_capabilities(
             domain_breakdown=domain_breakdown,
             plugin_runtime=plugin_runtime,
         )
+    except RuntimeV2Error as exc:
+        logger.warning("Pinned V2 tool capability projection failed: code=%s", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Plugin generation capability catalog is unavailable"),
+            },
+        ) from exc
     except Exception as exc:
         logger.exception("Error getting tool capabilities")
-        raise HTTPException(
-            status_code=500, detail=_("Failed to get tool capabilities")
-        ) from exc
+        raise HTTPException(status_code=500, detail=_("Failed to get tool capabilities")) from exc
 
 
 @router.get("/tools/compositions", response_model=ToolCompositionsListResponse)
@@ -233,9 +202,7 @@ async def list_tool_compositions(
 
     except Exception as exc:
         logger.exception("Error listing tool compositions")
-        raise HTTPException(
-            status_code=500, detail=_("Failed to list tool compositions")
-        ) from exc
+        raise HTTPException(status_code=500, detail=_("Failed to list tool compositions")) from exc
 
 
 @router.get("/tools/compositions/{composition_id}", response_model=ToolCompositionResponse)
@@ -276,9 +243,7 @@ async def get_tool_composition(
         raise
     except Exception as exc:
         logger.exception("Error getting tool composition")
-        raise HTTPException(
-            status_code=500, detail=_("Failed to get tool composition")
-        ) from exc
+        raise HTTPException(status_code=500, detail=_("Failed to get tool composition")) from exc
 
 
 @router.post("/debug/tool-policy", response_model=ToolPolicyDebugResponse)

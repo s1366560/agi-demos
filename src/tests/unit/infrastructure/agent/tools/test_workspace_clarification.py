@@ -45,12 +45,11 @@ def _make_ctx(role: str = "worker") -> Any:
 
 
 @pytest.fixture
-def mock_orchestrator():
+def mock_orchestrator(monkeypatch: pytest.MonkeyPatch):
     orch = MagicMock()
     orch.send_message = AsyncMock()
-    clar.configure_workspace_clarification(orch)
+    monkeypatch.setattr(clar, "_current_agent_orchestrator_v2", lambda: orch)
     yield orch
-    clar._orchestrator = None  # type: ignore[attr-defined]
     clar._pending_clarifications.clear()
 
 

@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Dialog, Select, TextArea, TextField } from '@radix-ui/themes';
 import { Cross2Icon, FileTextIcon } from '@radix-ui/react-icons';
 
-import { DesktopApiError } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type { PromptTemplateRecord } from '../../types';
 import type { ComposerCatalogClient } from './composerCatalogModel';
+import { promptTemplateHttpStatus } from './promptTemplateHttpStatus';
 import {
   promptTemplatePreview,
   promptTemplateRequestMatches,
@@ -79,11 +79,6 @@ export function SavePromptTemplateDialog({
       }
       return;
     }
-    if (!api.createPromptTemplate) {
-      setSaveErrorKey('chat.templates.unavailable');
-      return;
-    }
-
     const controller = new AbortController();
     saveRequestRef.current?.abort();
     saveRequestRef.current = controller;
@@ -129,7 +124,7 @@ export function SavePromptTemplateDialog({
       saveLockRef.current = false;
       setSaving(false);
       setSaveErrorKey(
-        promptTemplateSaveErrorKey(error instanceof DesktopApiError ? error.status : undefined),
+        promptTemplateSaveErrorKey(promptTemplateHttpStatus(error)),
       );
     }
   }, [api, category, onClose, onSaved, scopeKey, target.content, target.tenantId, title]);

@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { createTenantAgentDashboardHttpClient } =
-  await import('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantAgentDashboardHttpClient.js');
+const {
+  applyDesktopTenantAgentDashboardAuthorityV2,
+  createDesktopTenantAgentDashboardOperationsV2,
+} = await import(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.js'
+);
 
 const originalFetch = globalThis.fetch;
 
@@ -30,7 +34,10 @@ test('Cloud Agent Dashboard loads revisioned config, hooks and tenant traces', a
     throw new Error(`Unexpected request: ${path}`);
   };
 
-  const snapshot = await createTenantAgentDashboardHttpClient(runtimeConfig()).load(scope());
+  const snapshot = await dashboardOperations().loadTenantAgentDashboard({
+    config: runtimeConfig(),
+    scope: scope(),
+  });
 
   assert.equal(snapshot.availability, 'available');
   assert.equal(snapshot.serviceVersion, '0.1.0');
@@ -81,11 +88,12 @@ test('Cloud Agent Dashboard update and trace inspection preserve authority ident
       total: 1,
     });
   };
-  const client = createTenantAgentDashboardHttpClient(runtimeConfig());
+  const operations = dashboardOperations();
 
-  const updated = await client.updateConfig(
-    scope(),
-    {
+  const updated = await operations.updateTenantAgentDashboardConfig({
+    config: runtimeConfig(),
+    scope: scope(),
+    input: {
       llmModel: 'claude-sonnet',
       llmTemperature: 0.4,
       patternLearningEnabled: true,
@@ -96,9 +104,14 @@ test('Cloud Agent Dashboard update and trace inspection preserve authority ident
       disabledTools: ['terminal'],
       runtimeHooks: [runtimeHook()],
     },
-    7,
-  );
-  const trace = await client.inspectTrace(scope(), 'conversation-1', 'trace-1');
+    expectedRevision: 7,
+  });
+  const trace = await operations.inspectTenantAgentDashboardTrace({
+    config: runtimeConfig(),
+    scope: scope(),
+    conversationId: 'conversation-1',
+    traceId: 'trace-1',
+  });
 
   assert.equal(updated.authorityRevision, 8);
   assert.equal(trace.runs[0].runId, 'run-1');
@@ -139,13 +152,14 @@ test('Local Agent Dashboard returns stable unavailable authority without network
   globalThis.fetch = async () => {
     throw new Error('Local unavailable authority must not fetch');
   };
-  const snapshot = await createTenantAgentDashboardHttpClient(
-    runtimeConfig({
+  const snapshot = await dashboardOperations().loadTenantAgentDashboard({
+    config: runtimeConfig({
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:43121',
       tenantId: 'tenant-local',
     }),
-  ).load({ authority: 'local', tenantId: 'tenant-local' });
+    scope: { authority: 'local', tenantId: 'tenant-local' },
+  });
 
   assert.equal(snapshot.availability, 'unavailable');
   assert.equal(snapshot.reasonCode, 'local_agent_dashboard_authority_unavailable');
@@ -153,6 +167,114 @@ test('Local Agent Dashboard returns stable unavailable authority without network
   assert.equal(snapshot.config, null);
   assert.equal(snapshot.runtimeInfo, null);
   assert.deepEqual(snapshot.runs, []);
+});
+
+test('Local dashboard mutations and trace inspection fail closed without network access', async () => {
+  globalThis.fetch = async () => {
+    throw new Error('Local unavailable authority must not fetch');
+  };
+  const localConfig = runtimeConfig({
+    mode: 'local',
+    apiBaseUrl: 'http://127.0.0.1:43121',
+    tenantId: 'tenant-local',
+  });
+  const localScope = { authority: 'local', tenantId: 'tenant-local' };
+  const operations = dashboardOperations();
+
+  await assert.rejects(
+    operations.updateTenantAgentDashboardConfig({
+      config: localConfig,
+      scope: localScope,
+      input: {
+        llmModel: 'gpt-5.6',
+        llmTemperature: 0.2,
+        patternLearningEnabled: true,
+        multiLevelThinkingEnabled: false,
+        maxWorkPlanSteps: 10,
+        toolTimeoutSeconds: 60,
+        enabledTools: [],
+        disabledTools: [],
+        runtimeHooks: [],
+      },
+      expectedRevision: 1,
+    }),
+    (error) => error?.message === 'local_agent_dashboard_authority_unavailable',
+  );
+  await assert.rejects(
+    operations.inspectTenantAgentDashboardTrace({
+      config: localConfig,
+      scope: localScope,
+      conversationId: 'conversation-local',
+      traceId: 'trace-local',
+    }),
+    (error) => error?.message === 'local_agent_dashboard_authority_unavailable',
+  );
+});
+
+test('malformed Cloud load, update and trace responses fail closed', async () => {
+  let scenario = 'load';
+  globalThis.fetch = async (url) => {
+    const path = new URL(String(url)).pathname;
+    if (scenario === 'load') {
+      if (path === '/api/v1/system/info') return jsonResponse(systemInfo());
+      if (path === '/api/v1/agent/config') {
+        return jsonResponse(config({ tenant_id: 'tenant-drift' }));
+      }
+      if (path.endsWith('/can-modify')) return jsonResponse({ can_modify: false });
+      if (path.endsWith('/active/count')) {
+        return jsonResponse({ tenant_id: 'tenant-1', active_count: 0 });
+      }
+      if (path.endsWith('/tenant/tenant-1')) {
+        return jsonResponse({ tenant_id: 'tenant-1', runs: [], total: 0 });
+      }
+    }
+    if (scenario === 'update') {
+      return jsonResponse(config({ tenant_id: 'tenant-drift' }));
+    }
+    return jsonResponse({
+      trace_id: 'trace-drift',
+      conversation_id: 'conversation-1',
+      runs: [],
+      total: 0,
+    });
+  };
+  const operations = dashboardOperations();
+
+  await assert.rejects(
+    operations.loadTenantAgentDashboard({ config: runtimeConfig(), scope: scope() }),
+    (error) => error?.message === 'cloud_tenant_agent_dashboard_contract_invalid',
+  );
+  scenario = 'update';
+  await assert.rejects(
+    operations.updateTenantAgentDashboardConfig({
+      config: runtimeConfig(),
+      scope: scope(),
+      input: {
+        llmModel: 'gpt-5.6',
+        llmTemperature: 0.2,
+        patternLearningEnabled: true,
+        multiLevelThinkingEnabled: false,
+        maxWorkPlanSteps: 10,
+        toolTimeoutSeconds: 60,
+        enabledTools: [],
+        disabledTools: [],
+        runtimeHooks: [],
+      },
+      expectedRevision: 7,
+    }),
+    (error) => error?.message === 'cloud_tenant_agent_dashboard_contract_invalid',
+  );
+  scenario = 'trace';
+  await assert.rejects(
+    operations.inspectTenantAgentDashboardTrace({
+      config: runtimeConfig(),
+      scope: scope(),
+      conversationId: 'conversation-1',
+      traceId: 'trace-1',
+    }),
+    (error) =>
+      error?.message === 'cloud_tenant_agent_dashboard_trace_contract_invalid',
+  );
 });
 
 function runtimeConfig(overrides = {}) {
@@ -168,6 +290,34 @@ function runtimeConfig(overrides = {}) {
     workspaceRoot: '',
     ...overrides,
   };
+}
+
+function dashboardOperations() {
+  let service = null;
+  applyDesktopTenantAgentDashboardAuthorityV2(
+    {
+      provide(_serviceKey, candidate) {
+        service = candidate;
+      },
+    },
+    { strategy: 'desktop-api-fetch' },
+  );
+  return createDesktopTenantAgentDashboardOperationsV2(() => ({
+    async acquireServiceOperationLease() {
+      let released = false;
+      return {
+        status: 'accepted',
+        digest: 'tenant-agent-dashboard-test',
+        useService(operation) {
+          if (released) throw new Error('lease_released');
+          return operation(service);
+        },
+        async release() {
+          released = true;
+        },
+      };
+    },
+  }));
 }
 
 function scope() {

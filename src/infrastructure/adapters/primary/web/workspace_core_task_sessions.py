@@ -20,6 +20,9 @@ from src.infrastructure.adapters.primary.web.routers.task_sessions import Create
 from src.infrastructure.adapters.primary.web.workspace_authority import (
     workspace_core_unavailable_error,
 )
+from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
+    workspace_core_client_v2_from_request,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -30,7 +33,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.workspace_core.client import (
-    WorkspaceCoreClient,
     WorkspaceCoreClientError,
     WorkspaceCoreConflictError,
     WorkspaceCoreForbiddenError,
@@ -72,9 +74,10 @@ async def create_avernet_task_session(
 ) -> dict[str, Any] | JSONResponse:
     """Commit Core state first, then recoverably correlate the platform Conversation."""
     project_membership_role = await _require_project_access(db, current_user, tenant_id, project_id)
-    client = getattr(request.app.state, "workspace_core_client", None)
-    if not isinstance(client, WorkspaceCoreClient):
-        raise workspace_core_unavailable_error()
+    try:
+        client = workspace_core_client_v2_from_request(request)
+    except (RuntimeError, TypeError) as exc:
+        raise workspace_core_unavailable_error() from exc
 
     actor_id = str(current_user.id)
     payload_hash = _payload_hash(body)
@@ -566,7 +569,9 @@ def _validate_conversation_saga(
     payload_hash: str,
     receipt_id: str,
 ) -> None:
-    saga = conversation.meta.get("task_session_saga") if isinstance(conversation.meta, dict) else None
+    saga = (
+        conversation.meta.get("task_session_saga") if isinstance(conversation.meta, dict) else None
+    )
     if (
         conversation.tenant_id != tenant_id
         or conversation.project_id != project_id

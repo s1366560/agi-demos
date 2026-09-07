@@ -1,5 +1,6 @@
 """Unit tests for sandbox token routes."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -11,7 +12,21 @@ from src.infrastructure.adapters.primary.web.routers.sandbox import (
     tokens as tokens_router,
     utils as sandbox_utils,
 )
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.plugins.v2.boundary import pin_generation_v2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.security.sandbox_token_service import SandboxTokenService
+
+_ROOT = Path(__file__).resolve().parents[4]
+
+
+class _TokenSandboxAdapter(MCPSandboxAdapter):
+    async def sync_from_docker(self) -> int:
+        return 0
+
+    async def close(self) -> None:
+        return None
 
 
 @pytest.fixture
@@ -125,22 +140,34 @@ def test_generate_sandbox_token_does_not_put_token_in_websocket_hint(
 
 
 @pytest.mark.unit
-def test_sandbox_token_service_uses_configured_secret_key(
+async def test_sandbox_token_service_uses_configured_secret_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SECRET_KEY", "test-secret")
     get_settings.cache_clear()
-    sandbox_utils._sandbox_token_service = None
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            sandbox_runtime_factory=_TokenSandboxAdapter,
+        )
+    )
 
     try:
-        token_service = sandbox_utils.get_sandbox_token_service()
-        access_token = token_service.generate_token(
-            project_id="project-1",
-            user_id="user-1",
-            tenant_id="tenant-1",
+        publication = await host.bootstrap(
+            profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+            generation=77,
+            version=77,
         )
+        assert publication.accepted is True
+        async with pin_generation_v2(host):
+            token_service = sandbox_utils.get_sandbox_token_service()
+            access_token = token_service.generate_token(
+                project_id="project-1",
+                user_id="user-1",
+                tenant_id="tenant-1",
+            )
     finally:
-        sandbox_utils._sandbox_token_service = None
+        await host.close()
         get_settings.cache_clear()
 
     assert token_service.validate_token(access_token.token).valid is True

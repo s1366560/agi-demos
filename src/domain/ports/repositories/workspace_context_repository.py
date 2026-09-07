@@ -5,6 +5,8 @@ from datetime import datetime
 
 from src.domain.model.auth.workspace_context import (
     WorkspaceContextAccess,
+    WorkspaceContextCandidate,
+    WorkspaceContextSnapshot,
     WorkspaceContextSwitchOutcome,
     WorkspaceContextSwitchRequest,
 )
@@ -12,12 +14,26 @@ from src.domain.model.auth.workspace_context import (
 
 class WorkspaceContextRepository(ABC):
     @abstractmethod
-    async def get_or_initialize(
+    async def get_accessible(self, user_id: str) -> WorkspaceContextAccess | None:
+        """Return the current context only when it remains accessible."""
+
+    @abstractmethod
+    async def get_current(self, user_id: str) -> WorkspaceContextSnapshot | None:
+        """Return the persisted context as continuity evidence, accessible or not."""
+
+    @abstractmethod
+    async def list_candidates(self, user_id: str) -> tuple[WorkspaceContextCandidate, ...]:
+        """Enumerate every structurally accessible scope without selecting one."""
+
+    @abstractmethod
+    async def initialize(
         self,
         user_id: str,
+        *,
+        candidate: WorkspaceContextCandidate,
         observed_at: datetime,
     ) -> WorkspaceContextAccess:
-        """Load the current accessible context or initialize its deterministic default."""
+        """Persist one explicitly selected accessible candidate under a revision fence."""
 
     @abstractmethod
     async def switch(

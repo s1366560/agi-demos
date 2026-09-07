@@ -29,7 +29,6 @@ from src.infrastructure.agent.hitl.hitl_strategies import (
     PermissionStrategy,
 )
 from src.infrastructure.agent.hitl.utils import build_stable_hitl_request_id
-from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -719,8 +718,11 @@ async def _publish_to_unified_event_bus(
         from src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus import (
             RedisUnifiedEventBusAdapter,
         )
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_worker_redis_client_v2,
+        )
 
-        redis_client = await get_redis_client()
+        redis_client = current_agent_worker_redis_client_v2()
         if redis_client:
             event_bus = RedisUnifiedEventBusAdapter(redis_client)
             envelope = EventEnvelope(

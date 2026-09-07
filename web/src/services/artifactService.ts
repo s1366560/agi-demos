@@ -1,3 +1,5 @@
+import type { WebOperationContextV2 } from '@/plugins/webOperationAdmissionV2';
+import { runWebFetchV2 } from './client/webFetchV2';
 /**
  * Artifact Service - API client for artifact management
  */
@@ -122,14 +124,20 @@ export function getArtifactDownloadUrl(artifactId: string): string {
  * Authorization can break CORS. Local API artifact paths go through apiFetch so
  * expired sessions clear auth state consistently.
  */
-export async function fetchArtifactResource(
+export async function fetchArtifactResource<T>(
   url: string,
-  options?: RequestInit
-): Promise<Response> {
+  consume: (response: Response, operation: WebOperationContextV2) => T | Promise<T>,
+  options?: RequestInit & { parent?: WebOperationContextV2 }
+): Promise<T> {
   if (url.startsWith('/api/v1/') || url.startsWith('/artifacts/')) {
-    return apiFetch.get(url, options);
+    return apiFetch.get(url, consume, options);
   }
-  return fetch(url, options);
+  return runWebFetchV2(
+    url,
+    options ?? {},
+    consume,
+    options?.parent ? { parent: options.parent } : {}
+  );
 }
 
 /**

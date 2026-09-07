@@ -1,4 +1,5 @@
 import { apiFetch } from '@/services/client/urlUtils';
+import type { WebOperationContextV2 } from '@/plugins/webOperationAdmissionV2';
 
 export interface DeployProgressSseEvent {
   type: string;
@@ -7,6 +8,7 @@ export interface DeployProgressSseEvent {
 }
 
 interface DeployProgressStreamOptions {
+  parent?: WebOperationContextV2;
   deployId: string;
   signal: AbortSignal;
   onEvent: (event: DeployProgressSseEvent) => void;
@@ -66,56 +68,72 @@ export async function streamDeployProgress({
   deployId,
   signal,
   onEvent,
+  parent,
 }: DeployProgressStreamOptions): Promise<void> {
-  const response = await apiFetch.get(`/deploys/${encodeURIComponent(deployId)}/progress`, {
-    headers: {
-      Accept: 'text/event-stream',
-    },
-    signal,
-  });
+  return apiFetch.get(
+    `/deploys/${encodeURIComponent(deployId)}/progress`,
+    async (response, operation) => {
+      operation.check();
 
-  if (!response.body) {
-    throw new Error('Deploy progress stream response has no body');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  const consumeEvent = async (rawEvent: string): Promise<boolean> => {
-    const event = parseDeployProgressSseEvent(rawEvent);
-    if (!event) {
-      return false;
-    }
-
-    onEvent(event);
-    if (event.type === 'done') {
-      await reader.cancel().catch(() => undefined);
-      return true;
-    }
-    return false;
-  };
-
-  while (!signal.aborted) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    let separator = findEventSeparator(buffer);
-    while (separator) {
-      const rawEvent = buffer.slice(0, separator.index);
-      buffer = buffer.slice(separator.index + separator.length);
-      if (await consumeEvent(rawEvent)) {
-        return;
+      if (!response.body) {
+        throw new Error('Deploy progress stream response has no body');
       }
-      separator = findEventSeparator(buffer);
-    }
-  }
 
-  buffer += decoder.decode();
-  if (buffer.trim()) {
-    await consumeEvent(buffer);
-  }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const consumeEvent = async (rawEvent: string): Promise<boolean> => {
+        operation.check();
+        const event = parseDeployProgressSseEvent(rawEvent);
+        if (!event) {
+          return false;
+        }
+
+        onEvent(event);
+        if (event.type === 'done') {
+          await reader.cancel().catch(() => undefined);
+          return true;
+        }
+        return false;
+      };
+
+      try {
+        while (!operation.signal.aborted) {
+          const { done, value } = await reader.read();
+          operation.check();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          let separator = findEventSeparator(buffer);
+          while (separator) {
+            const rawEvent = buffer.slice(0, separator.index);
+            buffer = buffer.slice(separator.index + separator.length);
+            if (await consumeEvent(rawEvent)) {
+              return;
+            }
+            separator = findEventSeparator(buffer);
+          }
+        }
+
+        operation.check();
+        buffer += decoder.decode();
+        if (buffer.trim()) {
+          await consumeEvent(buffer);
+        }
+      } finally {
+        await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
+    },
+    {
+      headers: {
+        Accept: 'text/event-stream',
+      },
+      signal,
+      ...(parent ? { parent } : {}),
+    }
+  );
 }

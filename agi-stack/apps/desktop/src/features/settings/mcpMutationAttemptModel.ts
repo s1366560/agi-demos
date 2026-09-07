@@ -11,8 +11,11 @@ export function mcpServerRevision(server: DesktopMCPServerSummary): number {
 export function mcpToggleAttemptIdentity(
   contextKey: string,
   server: DesktopMCPServerSummary,
+  authority: 'cloud' | 'local' = 'local',
 ): string {
-  return JSON.stringify([contextKey, server.id, mcpServerRevision(server), !server.enabled]);
+  return authority === 'local'
+    ? JSON.stringify([contextKey, server.id, mcpServerRevision(server), !server.enabled])
+    : JSON.stringify([contextKey, 'cloud', server.id, !server.enabled]);
 }
 
 export function resolveMCPMutationAttemptKey(
@@ -31,11 +34,12 @@ export function retainCurrentMCPToggleAttempts(
   attempts: Map<string, string>,
   contextKey: string,
   servers: readonly DesktopMCPServerSummary[],
+  authority: 'cloud' | 'local' = 'local',
 ): void {
   const currentIdentities = new Set<string>();
   for (const server of servers) {
     try {
-      currentIdentities.add(mcpToggleAttemptIdentity(contextKey, server));
+      currentIdentities.add(mcpToggleAttemptIdentity(contextKey, server, authority));
     } catch {
       // A malformed server cannot be mutated and must not retain retry authority.
     }

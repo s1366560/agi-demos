@@ -29,6 +29,7 @@ from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, cast, runtime_checkable
 
 from src.domain.events.agent_events import (
@@ -61,12 +62,14 @@ from src.domain.events.agent_events import (
     SubAgentKilledEvent,
     SubAgentSteeredEvent,
 )
+from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.commands.types import CommandResult
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
+    from src.infrastructure.plugins.v2.agent_loop import AgentLoopSelectionV2
 
 from src.domain.model.agent.hitl_types import HITLType
 from src.domain.ports.agent.control_channel_port import ControlChannelPort
@@ -178,10 +181,8 @@ class ProcessorConfig:
     # LLM Client (optional, provides circuit breaker + rate limiter)
     llm_client: Any | None = None
 
-    # Plugin registry (optional, for hook notifications)
-    plugin_registry: Any | None = None
+    # Generation-owned plugin event dispatcher for hook notifications.
     plugin_event_dispatcher: Any | None = None
-    runtime_hook_overrides: list[dict[str, Any]] = field(default_factory=list)
     runtime_context: dict[str, Any] = field(default_factory=dict)
 
     # Tool refresh callback (optional, enables dynamic tool loading)
@@ -208,9 +209,8 @@ class ProcessorConfig:
     # Multi-agent: run identifier for this SubAgent execution (used as control channel key)
     run_id: str | None = None
 
-    # Pluggable agent loop seam (P2/I2): when a resolver and provider_id are
-    # present, each turn resolves its loop by (provider, model); the builtin
-    # ReAct path is the fallback and the default when no resolver is set.
+    # Required v2 agent-loop seam: every turn resolves by (provider, model).
+    # The native ReAct path is selected only by an explicit builtin selection.
     provider_id: str = ""
     loop_resolver: Any | None = None
 
@@ -323,21 +323,6 @@ def _consume_tool_pending_events(tool_def: "ToolDefinition") -> list[Any]:
 ProcessorEvent = AgentDomainEvent | dict[str, Any]
 
 
-def _create_event_dispatcher(
-    plugin_registry: Any | None,
-    runtime_hook_overrides: list[dict[str, Any]],
-) -> Any:
-    """Create the always-on typed event dispatcher for agent hooks."""
-    from src.infrastructure.plugins.agent_events import (
-        create_agent_plugin_event_dispatcher,
-    )
-
-    return create_agent_plugin_event_dispatcher(
-        plugin_registry,
-        runtime_hook_overrides,
-    )
-
-
 class SessionProcessor:
     """
     Core ReAct agent processing loop.
@@ -363,12 +348,6 @@ class SessionProcessor:
         "producing another text-only reply."
     )
     _GOAL_PENDING_REASON_PREFIX = "[GOAL CHECK FEEDBACK]"
-    # Canonical text lives in plugins/prompt_sections.py (I2 capability seam);
-    # the class attribute stays as the backward-compatible alias.
-    from src.infrastructure.plugins.prompt_sections import (
-        NATIVE_TOOL_PROTOCOL_GUIDANCE as _NATIVE_TOOL_PROTOCOL_GUIDANCE,
-    )
-
     _WORKSPACE_DELEGATION_RECOVERY_HINT = (
         "[RECOVERY HINT] Workspace delegation failed because workspace_task_id was missing. "
         "Call todoread, choose the target child task's workspace_task_id, then retry "
@@ -449,12 +428,9 @@ class SessionProcessor:
         self._tool_pipeline = tool_pipeline
         # LLM client for streaming (with circuit breaker + rate limiter)
         self._llm_client = config.llm_client
-        # Plugin registry for hook notifications (optional)
-        self._plugin_registry = config.plugin_registry
-        self._plugin_event_dispatcher = config.plugin_event_dispatcher or _create_event_dispatcher(
-            config.plugin_registry,
-            config.runtime_hook_overrides,
-        )
+        # Generation-owned lifecycle dispatcher. Production factories resolve
+        # this from the operation's pinned V2 service set.
+        self._plugin_event_dispatcher = config.plugin_event_dispatcher
 
         # Session state
         self._state = ProcessorState.IDLE
@@ -537,18 +513,11 @@ class SessionProcessor:
     ) -> dict[str, Any]:
         """Fire a plugin hook, log diagnostics, and return the resulting payload."""
         effective_payload = dict(payload or {})
-        if self._plugin_registry is None:
-            return effective_payload
         if self._plugin_event_dispatcher is not None:
-            try:
-                result = await self._plugin_event_dispatcher.dispatch(
-                    hook_name,
-                    payload=effective_payload,
-                    runtime_hook_overrides=self.config.runtime_hook_overrides,
-                )
-            except Exception:
-                logger.warning("Typed plugin event %r failed", hook_name, exc_info=True)
-                return effective_payload
+            result = await self._plugin_event_dispatcher.dispatch(
+                hook_name,
+                payload=effective_payload,
+            )
             for diagnostic in result.diagnostics:
                 diagnostic_message = getattr(diagnostic, "message", str(diagnostic))
                 diagnostic_plugin = getattr(diagnostic, "plugin_name", "unknown")
@@ -609,25 +578,6 @@ class SessionProcessor:
                 if item and item not in target:
                     target.append(item)
 
-    def _merge_prompt_sections(self) -> None:
-        """Merge registry-provided system_prompt_section capabilities (I2).
-
-        Sections arrive through the platform capability registry; when the
-        control plane is not active the collection is empty and the turn is
-        byte-identical to the pre-seam behavior.
-        """
-        try:
-            from src.infrastructure.plugins.prompt_sections import collect_prompt_sections
-            from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
-
-            sections = collect_prompt_sections(get_platform_plugin_runtime_host().capabilities)
-        except Exception:
-            logger.debug("prompt section collection unavailable", exc_info=True)
-            return
-        for section in sections:
-            if section not in self._session_instructions:
-                self._session_instructions.append(section)
-
     async def add_runtime_guidance(self, text: str) -> bool:
         """Append a runtime guidance block to the session-level instructions.
 
@@ -657,6 +607,26 @@ class SessionProcessor:
         instructions = [*self._session_instructions, *self._response_instructions]
         if not instructions:
             return None
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+        from src.infrastructure.plugins.v2.system_prompt import (
+            SYSTEM_PROMPT_SECTIONS_SERVICE_V2,
+            SystemPromptSectionsProtocolV2,
+        )
+
+        operation = current_operation_context_v2()
+        provider = operation.require(SYSTEM_PROMPT_SECTIONS_SERVICE_V2)
+        if not isinstance(provider, SystemPromptSectionsProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_service_implementation",
+                "v2 system-prompt sections service has an invalid implementation",
+            )
+        runtime_sections = provider.sections
+        if not runtime_sections or any(not section.strip() for section in runtime_sections):
+            raise RuntimeV2Error(
+                "invalid_service_implementation",
+                "v2 system-prompt sections service returned invalid sections",
+            )
         policy_intro = " ".join(
             (
                 "The following items are system-level execution policy.",
@@ -668,11 +638,7 @@ class SessionProcessor:
             "[Runtime Guidance]",
             policy_intro,
         ]
-        # The builtin native-tool-protocol guidance ships as a
-        # system_prompt_section capability (I2); when the registry already
-        # supplied it, do not render the hardcoded copy a second time.
-        if self._NATIVE_TOOL_PROTOCOL_GUIDANCE not in instructions:
-            lines.append(self._NATIVE_TOOL_PROTOCOL_GUIDANCE)
+        lines.extend(section for section in runtime_sections if section not in instructions)
         for index, item in enumerate(instructions, start=1):
             lines.extend(
                 [
@@ -1430,7 +1396,7 @@ class SessionProcessor:
 
         return ui_metadata
 
-    async def process(  # noqa: PLR0912,PLR0915
+    async def process(
         self,
         session_id: str,
         messages: list[dict[str, Any]],
@@ -1468,6 +1434,10 @@ class SessionProcessor:
                 conversation_id=(langfuse_context or {}).get("conversation_id"),
             )
 
+        from src.infrastructure.plugins.v2.boundary import attach_current_generation_v2
+
+        attach_current_generation_v2(run_ctx)
+
         effective_langfuse_context = run_ctx.langfuse_context
         if run_ctx.conversation_id:
             if effective_langfuse_context is None:
@@ -1483,7 +1453,6 @@ class SessionProcessor:
         self._no_progress_steps = 0
         self._session_instructions = []
         self._response_instructions = []
-        self._merge_prompt_sections()
         self._tool_reminder_issued_for_streak = False
         self._langfuse_context = effective_langfuse_context
         self._artifact_handler.set_langfuse_context(self._langfuse_context)
@@ -1496,19 +1465,23 @@ class SessionProcessor:
         # runs cannot see each other's state.
         set_current_run_context(run_ctx)
 
-        # Pluggable agent loop seam (P2/I2): resolve this turn's loop by
-        # (provider, model). A non-builtin selection takes over the turn;
-        # anything else falls through to the builtin ReAct path below.
+        # Every selected loop, including builtin ReAct, executes through the
+        # same generation-owned implementation contract.
         self._loop_selection = self._resolve_agent_loop()
-        if self._loop_selection is not None and self._loop_selection.scope != "builtin":
-            async for loop_event in self._dispatch_external_loop(
-                self._loop_selection, session_id, messages, run_ctx
-            ):
-                yield loop_event
-            return
+        async for loop_event in self._dispatch_external_loop(
+            self._loop_selection,
+            session_id,
+            messages,
+            run_ctx,
+        ):
+            yield loop_event
 
-        # Emit start event
-        yield AgentStartEvent()
+    async def _run_native_loop(  # noqa: PLR0912
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Execute the repository builtin ReAct driver selected by the V2 loop plugin."""
         self._state = ProcessorState.THINKING
 
         await self._notify_plugin_hook(
@@ -2046,14 +2019,14 @@ class SessionProcessor:
             return
         self._last_process_result = ProcessorResult.CONTINUE
 
-    def _append_tool_results_to_messages(self, messages: list[dict[str, Any]]) -> None:
-        """Append current message and tool results to the message list."""
+    def _current_step_model_messages(self) -> list[dict[str, Any]]:
+        """Return the exact ordered messages exposed to the next model step."""
         if not self._current_message:
-            return
-        messages.append(cast(dict[str, Any], self._current_message.to_llm_format()))
+            return []
+        model_messages = [cast(dict[str, Any], self._current_message.to_llm_format())]
         for part in self._current_message.get_tool_parts():
             if part.status == ToolState.COMPLETED:
-                messages.append(
+                model_messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": part.call_id,
@@ -2061,13 +2034,26 @@ class SessionProcessor:
                     }
                 )
             elif part.status == ToolState.ERROR:
-                messages.append(
+                model_messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": part.call_id,
                         "content": f"Error: {part.error}",
                     }
                 )
+        return model_messages
+
+    @staticmethod
+    def _model_message_committed_event(model_message: Mapping[str, Any]) -> dict[str, Any]:
+        """Wrap one model-visible message in the authoritative V2 event shape."""
+        return {
+            "type": MODEL_MESSAGE_COMMITTED_EVENT_V2,
+            "data": {"model_message": dict(model_message)},
+        }
+
+    def _append_tool_results_to_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Append current message and tool results to the message list."""
+        messages.extend(self._current_step_model_messages())
 
     async def _emit_completion_events(
         self,
@@ -2153,28 +2139,43 @@ class SessionProcessor:
             }
         return summary
 
-    def _resolve_agent_loop(self) -> Any | None:
-        """Resolve this turn's agent loop by (provider, model).
+    def _resolve_agent_loop(self) -> Any:
+        """Resolve the required v2 agent-loop selection for this turn."""
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-        Returns ``None`` when the seam is unconfigured or resolution fails;
-        both mean "use the builtin ReAct path" and never fail the turn.
-        """
         resolver = self.config.loop_resolver
         provider_id = self.config.provider_id
-        if resolver is None or not provider_id or not self.config.model:
-            return None
-        from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolutionError
+        if resolver is None:
+            raise RuntimeV2Error(
+                "agent_loop_resolver_missing",
+                "agent loop resolver is required for every processor turn",
+            )
+        resolve = getattr(resolver, "resolve", None)
+        if not callable(resolve):
+            raise RuntimeV2Error(
+                "agent_loop_resolver_invalid",
+                "agent loop resolver has no callable resolve method",
+            )
+        if not provider_id.strip():
+            raise RuntimeV2Error(
+                "agent_loop_provider_missing",
+                "agent loop provider_id is required for every processor turn",
+            )
+        if not self.config.model.strip():
+            raise RuntimeV2Error(
+                "agent_loop_model_missing",
+                "agent loop model is required for every processor turn",
+            )
 
         try:
-            selection = resolver.resolve(provider_id, self.config.model)
-        except AgentLoopResolutionError as exc:
-            logger.warning(
-                "agent loop resolution failed for %s/%s; using builtin ReAct loop: %s",
-                provider_id,
-                self.config.model,
-                exc,
-            )
-            return None
+            selection = cast("AgentLoopSelectionV2", resolve(provider_id, self.config.model))
+        except RuntimeV2Error:
+            raise
+        except Exception as exc:
+            raise RuntimeV2Error(
+                "agent_loop_resolution_failed",
+                f"agent loop resolution failed for {provider_id}/{self.config.model}: {exc}",
+            ) from exc
         logger.info(
             "agent loop resolved: scope=%s loop=%s plugin=%s provider=%s model=%s",
             selection.scope,
@@ -2192,23 +2193,27 @@ class SessionProcessor:
         messages: list[dict[str, Any]],
         run_ctx: RunContext,
     ) -> AsyncIterator[Any]:
-        """Run one turn through a resolved non-builtin agent loop capability.
+        """Run one turn through the generation-selected agent loop implementation.
 
         The driver contract is structural (callable ``run``); its outcome may
         be an async iterator of events, an awaitable resolving to one, or a
         single event/value.
         """
-        from src.infrastructure.plugins.agent_loop_runtime import validate_loop_implementation
+        from src.infrastructure.plugins.v2.agent_loop import (
+            AgentLoopRunContextV2,
+            validate_loop_implementation,
+        )
 
         validate_loop_implementation(selection.implementation)
         yield AgentStartEvent()
-        context = {
-            "session_id": session_id,
-            "messages": messages,
-            "run_ctx": run_ctx,
-            "config": self.config,
-            "tools": self.tools,
-        }
+        context = AgentLoopRunContextV2(
+            session_id=session_id,
+            messages=messages,
+            run_context=run_ctx,
+            config=self.config,
+            tools=MappingProxyType(dict(self.tools)),
+            run_native=lambda: self._run_native_loop(session_id, messages),
+        )
         outcome = selection.implementation.run(context)
         if inspect.isawaitable(outcome):
             outcome = await outcome
@@ -2236,17 +2241,16 @@ class SessionProcessor:
 
     def _build_command_context(self) -> dict[str, Any]:
         """Build context dict for command handlers."""
-        # Prefer live skills from module-level cache (dynamically updated)
-        # over stale self.config.skill_names (set once at init time).
+        # A bound loader roster is authoritative even when it is empty: an
+        # explicit empty contribution must not fall back to stale config.
         skills: list[str] = list(self.config.skill_names)
-        if self.tools.get("skill_loader") is not None:
-            from src.infrastructure.agent.tools.skill_loader import (
-                get_available_skills,
-            )
+        skill_loader = self.tools.get("skill_loader")
+        if skill_loader is not None:
+            from src.infrastructure.agent.tools.skill_loader import skill_availability_for_tool
 
-            live_skills = get_available_skills()
-            if live_skills:
-                skills = live_skills
+            availability = skill_availability_for_tool(skill_loader)
+            if availability is not None:
+                skills = list(availability.snapshot())
         allowed_skills = self.config.runtime_context.get("allowed_skills")
         if isinstance(allowed_skills, list) and allowed_skills:
             normalized_allowed = {
@@ -2561,17 +2565,6 @@ class SessionProcessor:
         """
         logger.debug(f"[Processor] _process_step: session={session_id}, step={self._step_count}")
 
-        # Create new assistant message
-        self._current_message = Message(
-            session_id=session_id,
-            role=MessageRole.ASSISTANT,
-        )
-        self._goal_evaluator.set_current_message(self._current_message)
-
-        # Reset pending tool calls
-        self._pending_tool_calls = {}
-        self._pending_tool_args = {}
-
         base_step_messages = list(messages)
 
         # Inject skill reminder for multi-step forced skill execution
@@ -2622,10 +2615,10 @@ class SessionProcessor:
         # Create LLM stream with optional client (provides circuit breaker + rate limiter)
         llm_stream = LLMStream(stream_config, llm_client=self._llm_client)
 
-        # Track state for this step
+        # Successful-attempt state used after the retry loop.
         text_buffer = ""
         reasoning_buffer = ""
-        tool_calls_completed: list[str] = []
+        sequential_tool_calls: list[tuple[str, str, str, dict[str, Any]]] = []
         deferred_tool_calls: list[tuple[str, str, str, dict[str, Any]]] = []
         step_tokens = TokenUsage()
         step_cost = 0.0
@@ -2634,6 +2627,23 @@ class SessionProcessor:
         # Process LLM stream with retry
         attempt = 0
         while True:
+            # An unsuccessful stream attempt is never model-visible. Rebuild all
+            # message construction state so partial text/tool calls cannot leak
+            # into a later successful attempt or be executed twice.
+            self._current_message = Message(
+                session_id=session_id,
+                role=MessageRole.ASSISTANT,
+            )
+            self._goal_evaluator.set_current_message(self._current_message)
+            self._pending_tool_calls = {}
+            self._pending_tool_args = {}
+            text_buffer = ""
+            reasoning_buffer = ""
+            sequential_tool_calls = []
+            deferred_tool_calls = []
+            step_tokens = TokenUsage()
+            step_cost = 0.0
+            finish_reason = "stop"
             try:
                 step_messages = list(base_step_messages)
                 runtime_guidance = self._build_runtime_guidance_message()
@@ -2830,20 +2840,16 @@ class SessionProcessor:
                                 display=tool_display,
                             )
 
-                            # Execute tool: check parallel mode
+                            # Execute tools only after the complete LLM response
+                            # has been committed. This prevents failed stream
+                            # attempts from replaying tool side effects and makes
+                            # HITL waits recoverable from the assistant tool call.
                             _is_hitl = self._check_hitl_dispatch(tool_name)
                             if not self.config.enable_parallel_tool_execution or _is_hitl:
-                                # Sequential: execute immediately
-                                async for tool_event in self._execute_tool(
-                                    session_id,
-                                    call_id,
-                                    tool_name,
-                                    arguments,
-                                ):
-                                    yield tool_event
-                                tool_calls_completed.append(call_id)
+                                sequential_tool_calls.append(
+                                    (session_id, call_id, tool_name, arguments)
+                                )
                             else:
-                                # Parallel: defer execution
                                 deferred_tool_calls.append(
                                     (session_id, call_id, tool_name, arguments)
                                 )
@@ -2911,7 +2917,7 @@ class SessionProcessor:
                         "session_id": session_id,
                         "step_count": self._step_count,
                         "response_text": text_buffer,
-                        "tool_call_count": len(tool_calls_completed) + len(deferred_tool_calls),
+                        "tool_call_count": len(sequential_tool_calls) + len(deferred_tool_calls),
                     },
                 )
                 if reminder_injected and not reminder_consumed:
@@ -2940,6 +2946,21 @@ class SessionProcessor:
                 else:
                     # Not retryable or max retries exceeded
                     raise
+
+        # Commit the complete assistant response before any tool execution.
+        # Actor persistence treats this event as an immediate durability
+        # boundary, so an interactive wait cannot lose its tool-call context.
+        assistant_message = self._current_step_model_messages()[0]
+        yield self._model_message_committed_event(assistant_message)
+
+        for sid, cid, tool_name, arguments in sequential_tool_calls:
+            async for tool_event in self._execute_tool(
+                sid,
+                cid,
+                tool_name,
+                arguments,
+            ):
+                yield tool_event
 
         # After stream completes, execute deferred tool calls in parallel
         if deferred_tool_calls:
@@ -2980,7 +3001,9 @@ class SessionProcessor:
                     cid, events = result
                     for ev in events:
                         yield ev
-                    tool_calls_completed.append(cid)
+        for model_message in self._current_step_model_messages()[1:]:
+            yield self._model_message_committed_event(model_message)
+
         # Update message tokens and cost
         self._current_message.tokens = {
             "input": step_tokens.input,

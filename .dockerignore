@@ -69,8 +69,6 @@ logs
 .memstack/workspace
 .memstack/worktrees
 .memstack/git-remotes
-.memstack/plugins/mutation_ledger.json
-.memstack/plugins/mutation_ledger.json.lock
 
 # IDE and OS metadata
 .idea

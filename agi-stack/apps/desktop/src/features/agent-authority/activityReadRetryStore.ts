@@ -6,7 +6,7 @@ import type {
 
 type LocalStoragePort = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-const STORAGE_PREFIX = 'memstack.activity.authority-retry.v1';
+const STORAGE_PREFIX = 'memstack.activity.authority-retry.v2';
 
 export function createLocalStorageActivityReadRetryStore(
   storage: LocalStoragePort = requireLocalStorage(),
@@ -28,11 +28,30 @@ export function createLocalStorageActivityReadRetryStore(
     },
     save(scope, entries) {
       const merged = mergeActivityReadEntries(this.load(scope), entries);
+      if (merged.length > 500) {
+        throw new Error('activity_read_retry_capacity_exceeded');
+      }
       if (merged.length === 0) {
         storage.removeItem(storageKey(scope));
         return;
       }
       storage.setItem(storageKey(scope), JSON.stringify(merged));
+    },
+    acknowledge(scope, submittedEntries) {
+      const submitted = new Map(
+        mergeActivityReadEntries([], submittedEntries).map((entry) => [entry.entry_id, entry]),
+      );
+      const remaining = this.load(scope).filter((entry) => {
+        const receipt = submitted.get(entry.entry_id);
+        return (
+          !receipt ||
+          entry.entry_revision > receipt.entry_revision ||
+          Date.parse(entry.read_at) > Date.parse(receipt.read_at)
+        );
+      });
+      const key = storageKey(scope);
+      if (remaining.length === 0) storage.removeItem(key);
+      else storage.setItem(key, JSON.stringify(remaining));
     },
     clear(scope) {
       storage.removeItem(storageKey(scope));
@@ -75,10 +94,14 @@ function requireLocalStorage(): LocalStoragePort {
 }
 
 function storageKey(scope: ActivityAuthorityScope): string {
+  if (scope.authority !== 'cloud' && scope.authority !== 'local') {
+    throw new Error('activity_read_retry_authority_invalid');
+  }
+  const authority = scope.authority;
   const principalId = encodeURIComponent(scope.principalId);
   const tenantId = encodeURIComponent(scope.tenantId);
   const projectId = encodeURIComponent(scope.projectId);
-  return `${STORAGE_PREFIX}:${principalId}:${tenantId}:${projectId}`;
+  return `${STORAGE_PREFIX}:${authority}:${principalId}:${tenantId}:${projectId}`;
 }
 
 function parseEntries(value: unknown): readonly ActivityReadEntry[] | null {

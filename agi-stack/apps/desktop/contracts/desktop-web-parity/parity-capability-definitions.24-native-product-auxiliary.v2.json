@@ -41,12 +41,19 @@
         "agi-stack/apps/desktop/src/features/backend-stores/BackendStoresPage.tsx",
         "agi-stack/apps/desktop/src/features/backend-stores/backendStoresClient.ts",
         "agi-stack/apps/desktop/src/features/backend-stores/backendStoresController.ts",
-        "agi-stack/apps/desktop/src/features/backend-stores/backendStoresRouteModule.tsx"
+        "agi-stack/apps/desktop/src/features/backend-stores/backendStoresRouteModule.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopBackendStoresAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopBackendStoresHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopBackendStoresOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
-      "local_reason_code": "local_backend_stores_cloud_only",
-      "local_deviation": "Local-online projects the Cloud store authority through the native broker. Local-offline keeps the route discoverable but cannot manage tenant Cloud stores and does not duplicate store credentials or governance in the sidecar.",
+      "local_reason_code": "local_backend_stores_cloud_authority_unavailable",
+      "local_deviation": "Local Desktop keeps the route discoverable but the V2 projection opens no Cloud transport and returns a structured not-applicable result; no sidecar store authority or fabricated credential governance is introduced.",
       "api_contracts": [
         {
           "surface": "web",
@@ -297,8 +304,8 @@
         "scope-switch",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop and Local-online natively manage graph and retrieval stores with the same tenant-scoped Cloud authority, secret-once behavior, test results, and structured errors as Web. Local-offline keeps the route discoverable and returns a stable not-applicable result without exposing credentials.",
-      "judgment_rationale": "BackendStores owns legacy and tenant-ID production routes but is absent from the canonical navigation inventory. Desktop now registers the tenant route and implements the graph and retrieval store list, create, edit, delete, and test lifecycle through the vault-bound Cloud request broker, typed client, controller, and native route module. Local-online projects that Cloud authority; Local-offline does not duplicate tenant store authority or secrets in the sidecar."
+      "expected_observable_result": "Cloud Desktop preserves tenant-scoped Backend Stores view, list, create, update, delete, and test behavior through V2 Cloud authority. Local Desktop keeps the route discoverable and returns a stable not-applicable result without opening Cloud transport.",
+      "judgment_rationale": "At e539d5bcc, Backend Stores removes the static createBackendStoresClient production transport factory. Route CRUD/test and the workbench capability probe now require generated-catalog root Provider service:desktop-renderer.backend-stores-authority@1.0.0. Every operation freezes its input and obtains one immutable tenant-scoped generation lease; Cloud continues through the application vault-bound request broker, while Local returns a structured zero-network not-applicable projection. This is an authority and lifecycle cutover inside the renderer, not a product-capability expansion: Cloud status, permissions, actions, and backend API contracts remain unchanged, and Local gains no Cloud or sidecar store authority."
     },
     {
       "id": "project-support",
@@ -337,16 +344,20 @@
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportCapability.ts",
-        "agi-stack/apps/desktop/src/features/project-support/projectSupportClient.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportController.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportTypes.ts",
         "agi-stack/apps/desktop/src/features/project-support/ProjectSupportPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-support/projectSupportRuntime.ts"
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
@@ -467,7 +478,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop natively lists, creates, and closes the caller's tenant-scoped support tickets from the project route with scoped errors and retry behavior. Local Desktop keeps the native route and returns a stable not-applicable result.",
-      "judgment_rationale": "Support is a project production route without a canonical navigation target. Cloud Desktop owns a native list/create/close page backed by the hosted tenant-scoped caller-owned ticket authority, but workbenchCapabilityClient still wraps projectSupportCapability with declared renderer provenance. Snapshot v4 therefore closes every Cloud action to renderer_capability_authority_unobserved despite the real loader, typed client/controller, App binding, and hosted API contracts. The hosted support-ticket service remains intentionally not duplicated for Local mode."
+      "judgment_rationale": "Support is a project production route without a canonical navigation target. Cloud Desktop now routes list/create/close through the generated-catalog V2 root Provider service:desktop-renderer.project-support-authority@1.0.0 under an immutable project-scoped operation lease, and the static projectSupportClient/projectSupportRuntime transport path was removed. The lease is only a renderer execution boundary: the hosted ticket authority remains tenant-scoped, workbenchCapabilityClient still wraps projectSupportCapability with declared renderer provenance, and hosted responses expose authorityRevision=null. Snapshot v4 therefore keeps every Cloud action closed to renderer_capability_authority_unobserved. The hosted support-ticket service remains intentionally not duplicated for Local mode."
     },
     {
       "id": "project-playbooks",
@@ -507,12 +518,20 @@
         "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksClient.ts",
         "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksController.ts",
         "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksEventSource.ts",
-        "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksRouteModule.tsx"
+        "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksRouteModule.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsSocketProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_project_playbooks_cloud_only",
-      "local_deviation": "Local-online projects the Cloud project playbook authority. Local-offline keeps the project route discoverable but cannot fabricate playbooks or reflection verdicts without Cloud authority.",
+      "local_deviation": "Local Desktop keeps the project route discoverable but does not project the Cloud playbooks event stream or fabricate playbooks and reflection verdicts without Cloud authority.",
       "api_contracts": [
         {
           "surface": "web",
@@ -602,8 +621,18 @@
         "scope-switch",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop and Local-online natively present project playbooks and reflection verdicts from Cloud authority with the same project scope, refresh behavior, and structured states as Web. Local-offline keeps the route discoverable and returns a stable not-applicable result.",
-      "judgment_rationale": "PlaybookLibrary is a read-only project production route absent from the canonical navigation inventory. Desktop now registers the project-scoped route and loads playbooks and reflection verdicts through the vault-bound Cloud request broker, typed client, controller, and native route module, including refresh after reflection-complete events. Local-online projects that Cloud authority; Local-offline does not fabricate playbook or verdict data in the sidecar."
+      "expected_observable_result": "Cloud Desktop natively presents project playbooks and reflection verdicts from Cloud authority with the same project scope, refresh behavior, and structured states as Web. Local Desktop keeps the route discoverable and returns a stable not-applicable result without opening Cloud transport.",
+      "judgment_rationale": "At 8f8393582, Project Playbooks removes the static createCloudProjectPlaybooksEventSource production factory. Route construction now requires createDesktopProjectPlaybooksEventSourceV2 backed by generated-catalog root Provider service:desktop-renderer.project-playbooks-events-authority@1.0.0. Every Cloud subscription acquires one immutable project-scoped generation lease and retains it until unsubscribe; the socket projection continues to use the projected Cloud session and authenticated Electron socket broker, while the retained pure parser filters reflection_complete events and triggers refresh. This is an authority and lifecycle cutover inside the renderer, not a product-capability expansion: the read APIs, permissions, actions, and existing Cloud availability remain unchanged. Local remains cloud-only not applicable with no transport and no fabricated authority.",
+      "reviewed_production_dependencies": [
+        {
+          "routed_source_entry": "web/src/pages/project/PlaybookLibrary.tsx",
+          "source_entry": "web/src/services/unifiedEventService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/project/PlaybookLibrary.tsx",
+          "source_entry": "web/src/services/unifiedEventConnectionV2.ts"
+        }
+      ]
     },
     {
       "id": "not-found",
@@ -752,7 +781,7 @@
       "production-route-path-tenant-tenantid-project-projectid-playbooks"
     ],
     "not-found": [
-      "production-route-path-root-191e558e7b0f"
+      "production-route-path-root-9cb6cd19aa9f"
     ]
   }
 }

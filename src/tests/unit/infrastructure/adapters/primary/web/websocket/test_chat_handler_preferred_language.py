@@ -3,23 +3,51 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
+import src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler as chat_handler_module
 from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler import (
     StopSessionHandler,
     _append_external_acp_update_event,
+    _build_external_acp_prompt_text,
     _ExternalACPExecutionState,
     _format_external_acp_prompt_with_history,
     _persist_external_acp_completion,
     _text_from_external_acp_content,
     stream_agent_to_websocket,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit
+
+
+@asynccontextmanager
+async def _noop_agent_turn_operation(_reservation: object, **_kwargs: object) -> AsyncIterator[None]:
+    yield None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_language_tests_from_generation_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Language behavior is isolated from admission; real scoped leases are tested separately.
+    monkeypatch.setattr(
+        chat_handler_module,
+        "acquire_scoped_chat_turn_v2",
+        AsyncMock(return_value=object()),
+    )
+    monkeypatch.setattr(
+        chat_handler_module,
+        "pin_scoped_agent_turn_operation_v2",
+        _noop_agent_turn_operation,
+    )
 
 
 def test_format_external_acp_prompt_with_history_includes_recent_turns() -> None:
@@ -38,10 +66,51 @@ def test_format_external_acp_prompt_with_history_includes_recent_turns() -> None
 
 
 def test_format_external_acp_prompt_without_history_returns_user_message() -> None:
-    assert (
-        _format_external_acp_prompt_with_history(user_message="hello", history=[])
-        == "hello"
+    assert _format_external_acp_prompt_with_history(user_message="hello", history=[]) == "hello"
+
+
+async def test_external_acp_history_includes_typed_v2_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_event_types: set[str] | None = None
+
+    class _TypedHistoryRepository:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        async def get_events(self, **kwargs: Any) -> list[Any]:
+            nonlocal captured_event_types
+            captured_event_types = kwargs["event_types"]
+            return [
+                SimpleNamespace(
+                    event_type="turn_admitted",
+                    event_data={"role": "user", "content": "remember V2-HISTORY-42"},
+                ),
+                SimpleNamespace(
+                    event_type="assistant_message",
+                    event_data={"role": "assistant", "content": "stored V2-HISTORY-42"},
+                ),
+            ]
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence."
+        "sql_agent_execution_event_repository.SqlAgentExecutionEventRepository",
+        _TypedHistoryRepository,
     )
+
+    prompt = await _build_external_acp_prompt_text(
+        SimpleNamespace(db=object()),  # type: ignore[arg-type]
+        conversation_id="conversation-1",
+        user_message="what was the marker?",
+    )
+
+    assert captured_event_types == {
+        "assistant_message",
+        "turn_admitted",
+        "user_message",
+    }
+    assert "User: remember V2-HISTORY-42" in prompt
+    assert "Assistant: stored V2-HISTORY-42" in prompt
 
 
 def test_text_from_external_acp_content_extracts_nested_list_blocks() -> None:
@@ -155,6 +224,7 @@ class FakeMessageContext:
     user_id = "user-1"
     tenant_id = "tenant-1"
     api_key = "ms_sk_" + ("a" * 64)
+    db = object()
 
     def __init__(self) -> None:
         self.connection_manager = FakeConnectionManager()
@@ -187,7 +257,9 @@ async def test_external_acp_completion_does_not_emit_empty_execution_summary() -
 
     saved_events = event_repo.saved_batches[0]
     complete_event = next(event for event in saved_events if event.event_type == "complete")
-    assistant_event = next(event for event in saved_events if event.event_type == "assistant_message")
+    assistant_event = next(
+        event for event in saved_events if event.event_type == "assistant_message"
+    )
     assert "execution_summary" not in complete_event.event_data
     assert assistant_event.event_data["metadata"] == {
         "source": "acp_external",
@@ -204,6 +276,7 @@ class StopConnectionManager:
 class StopContext:
     session_id = "session-1"
     tenant_id = "tenant-1"
+    user_id = "user-1"
     db = object()
 
     def __init__(self, task: asyncio.Task[None]) -> None:
@@ -242,6 +315,7 @@ class FakeConversationRepository:
             id=conversation_id,
             tenant_id="tenant-1",
             project_id="project-1",
+            user_id="user-1",
         )
 
 
@@ -254,12 +328,18 @@ class FakeCancelMethod:
         return False
 
 
-async def test_stream_agent_to_websocket_passes_preferred_language() -> None:
+async def test_stream_agent_to_websocket_passes_preferred_language(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     agent_service = FakeAgentService()
     context = FakeMessageContext()
+    monkeypatch.setattr(
+        chat_handler_module,
+        "current_agent_turn_service_v2",
+        AsyncMock(return_value=agent_service),
+    )
 
     await stream_agent_to_websocket(
-        agent_service=agent_service,  # type: ignore[arg-type]
         context=context,  # type: ignore[arg-type]
         conversation_id="conv-1",
         user_message="你好",
@@ -273,12 +353,18 @@ async def test_stream_agent_to_websocket_passes_preferred_language() -> None:
     assert context.connection_manager.broadcasts[0][0] == "conv-1"
 
 
-async def test_stream_agent_to_websocket_strips_client_workspace_runtime_context() -> None:
+async def test_stream_agent_to_websocket_strips_client_workspace_runtime_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     agent_service = FakeAgentService()
     context = FakeMessageContext()
+    monkeypatch.setattr(
+        chat_handler_module,
+        "current_agent_turn_service_v2",
+        AsyncMock(return_value=agent_service),
+    )
 
     await stream_agent_to_websocket(
-        agent_service=agent_service,  # type: ignore[arg-type]
         context=context,  # type: ignore[arg-type]
         conversation_id="conv-1",
         user_message="hello",
@@ -317,11 +403,25 @@ async def test_stop_session_cancels_local_worker_when_ray_actor_exists(monkeypat
         return True
 
     import src.application.services.agent.runtime_bootstrapper as runtime_bootstrapper
-    import src.infrastructure.adapters.secondary.persistence.sql_conversation_repository as conv_repo
     import src.infrastructure.adapters.secondary.ray.client as ray_client
     import src.infrastructure.agent.actor.actor_manager as actor_manager
 
-    monkeypatch.setattr(conv_repo, "SqlConversationRepository", FakeConversationRepository)
+    @asynccontextmanager
+    async def fake_conversation_access_authority(
+        _context: StopContext,
+        *,
+        conversation_id: str,
+    ) -> AsyncIterator[Any]:
+        yield SimpleNamespace(
+            operation=object(),
+            service=FakeConversationRepository(object()),
+        )
+
+    monkeypatch.setattr(
+        chat_handler_module,
+        "conversation_access_application_authority_v2",
+        fake_conversation_access_authority,
+    )
     monkeypatch.setattr(actor_manager, "get_actor_if_exists", fake_get_actor_if_exists)
     monkeypatch.setattr(ray_client, "await_ray", fake_await_ray)
     monkeypatch.setattr(
@@ -342,3 +442,117 @@ async def test_stop_session_cancels_local_worker_when_ray_actor_exists(monkeypat
     assert fake_cancel.conversation_ids == ["conv-1"]
     assert local_cancelled == ["conv-1"]
     assert context.sent == [{"type": "ack", "action": "stop_session", "conversation_id": "conv-1"}]
+
+
+@pytest.mark.parametrize(
+    ("conversation_tenant_id", "conversation_user_id"),
+    [
+        ("other-tenant", "user-1"),
+        ("tenant-1", "other-user"),
+    ],
+)
+async def test_stop_session_rejects_wrong_scope_before_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+    conversation_tenant_id: str,
+    conversation_user_id: str,
+) -> None:
+    async def bridge_task() -> None:
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(bridge_task())
+
+    service = SimpleNamespace(
+        find_by_id=AsyncMock(
+            return_value=SimpleNamespace(
+                id="conv-1",
+                tenant_id=conversation_tenant_id,
+                project_id="project-1",
+                user_id=conversation_user_id,
+            )
+        )
+    )
+
+    @asynccontextmanager
+    async def authority_with_wrong_scope(
+        _context: StopContext,
+        *,
+        conversation_id: str,
+    ) -> AsyncIterator[Any]:
+        assert conversation_id == "conv-1"
+        yield SimpleNamespace(operation=object(), service=service)
+
+    monkeypatch.setattr(
+        chat_handler_module,
+        "conversation_access_application_authority_v2",
+        authority_with_wrong_scope,
+    )
+    context = StopContext(task)
+
+    try:
+        await StopSessionHandler().handle(context, {"conversation_id": "conv-1"})  # type: ignore[arg-type]
+
+        assert not task.done()
+        assert context.connection_manager.bridge_tasks == {"session-1": {"conv-1": task}}
+        assert context.sent == [
+            {
+                "type": "error",
+                "data": {"message": "Access denied", "code": None},
+                "conversation_id": "conv-1",
+            }
+        ]
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_stop_session_reports_v2_authority_error_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def bridge_task() -> None:
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(bridge_task())
+
+    @asynccontextmanager
+    async def missing_conversation_access_authority(
+        *_args: object,
+        **_kwargs: object,
+    ) -> AsyncIterator[Any]:
+        if _kwargs.get("conversation_id") == "conv-1":
+            raise RuntimeV2Error(
+                "missing_service_provider",
+                "conversation access service is unavailable",
+            )
+        yield SimpleNamespace(operation=object(), service=object())
+
+    monkeypatch.setattr(
+        chat_handler_module,
+        "conversation_access_application_authority_v2",
+        missing_conversation_access_authority,
+    )
+    context = StopContext(task)
+
+    try:
+        await StopSessionHandler().handle(context, {"conversation_id": "conv-1"})  # type: ignore[arg-type]
+
+        assert not task.done()
+        assert context.sent == [
+            {
+                "type": "error",
+                "data": {
+                    "message": "conversation access service is unavailable",
+                    "code": "missing_service_provider",
+                },
+                "conversation_id": "conv-1",
+            }
+        ]
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+def test_stop_session_conversation_lookup_has_no_static_sql_fallback() -> None:
+    source = inspect.getsource(StopSessionHandler.handle)
+
+    assert "conversation_access_application_authority_v2" in source
+    assert "SqlConversationRepository" not in source

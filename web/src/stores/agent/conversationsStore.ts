@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../../plugins/webOperationAdmissionV2';
 /**
  * Conversations Store - Split from monolithic agent store.
  *
@@ -516,9 +517,11 @@ export const useConversationsStore = create<ConversationsState>()(
        * @param projectId - The project ID
        */
       deleteConversation: async (conversationId: string, projectId: string) => {
+        const owner = getWebOperationAvailabilityV2().owner;
         set({ conversationsLoading: true, conversationsError: null });
         try {
           await agentService.deleteConversation(conversationId, projectId);
+          if (getWebOperationAvailabilityV2().owner !== owner) return;
           const { conversations, currentConversation } = get();
           set({
             conversations: conversations.filter((c) => c.id !== conversationId),
@@ -528,6 +531,7 @@ export const useConversationsStore = create<ConversationsState>()(
           });
           // Note: Conversation state cleanup is handled by the main agent store
         } catch (error: unknown) {
+          if (getWebOperationAvailabilityV2().owner !== owner) throw error;
           const err = error as {
             response?: { data?: { detail?: string | undefined } | undefined } | undefined;
             message?: string | undefined;

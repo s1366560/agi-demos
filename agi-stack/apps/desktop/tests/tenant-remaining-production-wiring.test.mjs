@@ -1,7 +1,35 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
+import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
+import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
+import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
+import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 require.extensions['.css'] = () => {};
@@ -9,7 +37,31 @@ const {
   createDesktopWorkbenchCapabilityClient,
 } = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
 
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const routeRuntimeSource = readFileSync(
+  new URL('../src/features/tenant-admin/tenantRemainingRouteRuntime.ts', import.meta.url),
+  'utf8',
+);
+const capabilitySource = readFileSync(
+  new URL('../src/features/tenant-admin/tenantRemainingCapabilityClient.ts', import.meta.url),
+  'utf8',
+);
+const organizationSettingsTypesSource = readFileSync(
+  new URL('../src/features/tenant-admin/tenantOrganizationSettingsClient.ts', import.meta.url),
+  'utf8',
+);
+const genesTypesSource = readFileSync(
+  new URL('../src/features/tenant-admin/tenantGenesClient.ts', import.meta.url),
+  'utf8',
+);
+const workbenchSource = readFileSync(
+  new URL('../src/features/runtime/workbenchCapabilityClient.ts', import.meta.url),
+  'utf8',
+);
 const routeIds = Object.freeze([
   'tenant-tenant-patterns',
   'tenant-tenant-acp',
@@ -37,7 +89,7 @@ const cloudConfig = Object.freeze({
   workspaceRoot: '',
 });
 
-test('remaining Tenant routes bind their typed runtime authorities in App', () => {
+test('remaining Tenant routes bind their typed runtime authorities in the production registry', () => {
   for (const symbol of [
     'createTenantPatternsRouteBindingForRuntime',
     'createTenantAcpRouteBindingForRuntime',
@@ -49,8 +101,35 @@ test('remaining Tenant routes bind their typed runtime authorities in App', () =
     'createTenantSettingsRouteBindingForRuntime',
     'readTenantDecisionRecordsRouteQuery',
   ]) {
-    assert.match(appSource, new RegExp(symbol, 'u'), symbol);
+    assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
   }
+});
+
+test('Tenant Organization Settings production consumers require the V2 operation authority', () => {
+  assert.match(appSource, /createDesktopTenantOrganizationSettingsOperationsV2/u);
+  assert.match(registrySource, /tenantOrganizationSettingsOperationsV2/u);
+  assert.match(routeRuntimeSource, /createDesktopTenantOrganizationSettingsClientV2/u);
+  assert.match(workbenchSource, /tenantOrganizationSettingsOperationsV2/u);
+
+  for (const source of [routeRuntimeSource, capabilitySource, organizationSettingsTypesSource]) {
+    assert.doesNotMatch(source, /createTenantOrganizationSettingsClient/u);
+  }
+  assert.doesNotMatch(
+    capabilitySource,
+    /organizationSettings:\s*dependencies\.organizationSettings\s*\?\?/u,
+  );
+});
+
+test('Tenant Genes production consumers require the complete V2 operation authority', () => {
+  assert.match(appSource, /createDesktopTenantGenesOperationsV2/u);
+  assert.match(registrySource, /tenantGenesOperationsV2/u);
+  assert.match(routeRuntimeSource, /createDesktopTenantGenesClientV2/u);
+  assert.match(workbenchSource, /tenantGenesOperationsV2/u);
+
+  for (const source of [routeRuntimeSource, capabilitySource, genesTypesSource]) {
+    assert.doesNotMatch(source, /createTenantGenesClient/u);
+  }
+  assert.doesNotMatch(capabilitySource, /genes:\s*dependencies\.genes\s*\?\?/u);
 });
 
 test('Workbench preserves observed Cloud and mixed Local provenance for remaining Tenant routes', async () => {
@@ -96,6 +175,85 @@ async function loadSnapshot(config, capabilities) {
       },
       config,
       {
+        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+        projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+        projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+        projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+        projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+        projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+        runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+        runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+        runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        deadLetterQueueOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        backendStoresOperationsV2: {
+          async probeBackendStores({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  authorityRevision: 23,
+                };
+          },
+        },
+        projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+        tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         tenantRemainingCapabilityClient: {
           async load() {
             return capabilities;
@@ -124,8 +282,7 @@ function projection(mode) {
             scope: Object.freeze({
               tenant_id: 'tenant-1',
               project_id: null,
-              workspace_id:
-                routeId === 'tenant-tenant-decision-records' ? 'workspace-1' : null,
+              workspace_id: routeId === 'tenant-tenant-decision-records' ? 'workspace-1' : null,
               instance_id: null,
             }),
             authority_revision: observed ? 41 : null,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TenantAgentConfigEditor } from '../../../components/agent/TenantAgentConfigEditor';
@@ -223,8 +223,11 @@ describe('TenantAgentConfigEditor runtime rollout', () => {
     fireEvent.change(modelInput, { target: { value: 'anthropic/claude-sonnet-4.5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
 
+    const editorDialog = await screen.findByRole('dialog');
     expect(
-      await screen.findByText('Configuration changed elsewhere. Your edits are preserved.')
+      await within(editorDialog).findByText(
+        'Configuration changed elsewhere. Your edits are preserved.'
+      )
     ).toBeInTheDocument();
     expect(modelInput).toHaveValue('anthropic/claude-sonnet-4.5');
     expect(onClose).not.toHaveBeenCalled();

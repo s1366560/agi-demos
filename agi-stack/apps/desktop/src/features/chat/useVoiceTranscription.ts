@@ -1,28 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-import {
-  CLOUD_SOCKET_OPEN,
-  createCloudSocketBridge,
-  desktopCloudSocketTransport,
-} from '../../api/cloudSocketBridge';
-
+import { useRef, useState } from 'react';
+import type { DesktopRuntimeConfig } from '../../types';
+import type { DesktopVoiceSessionOperationsV2 } from '../../plugins/desktopVoiceSessionAuthorityModuleV2';
 import type {
   VoiceTranscriptionConnection,
   VoiceTranscriptionFailureCode,
 } from './voiceTranscriptionModel';
 import {
   VoiceTranscriptionController,
-  type VoiceAudioContext,
-  type VoiceMediaStream,
-  type VoiceSocket,
-  type VoiceTranscriptionRuntime,
   type VoiceTranscriptionState,
-  type VoiceWorkletNode,
 } from './voiceTranscriptionRuntime';
+import { useVoiceSessionLeaseV2 } from './useVoiceSessionLeaseV2';
 
 type UseVoiceTranscriptionOptions = {
+  config: DesktopRuntimeConfig | null;
+  operations: DesktopVoiceSessionOperationsV2;
   connection: VoiceTranscriptionConnection;
-  runtime?: VoiceTranscriptionRuntime;
   onInterim: (text: string) => void;
   onFinal: (text: string) => void;
 };
@@ -35,8 +27,9 @@ type UseVoiceTranscriptionResult = {
 };
 
 export function useVoiceTranscription({
+  config,
+  operations,
   connection,
-  runtime,
   onInterim,
   onFinal,
 }: UseVoiceTranscriptionOptions): UseVoiceTranscriptionResult {
@@ -44,98 +37,69 @@ export function useVoiceTranscription({
   const [errorCode, setErrorCode] = useState<VoiceTranscriptionFailureCode | null>(null);
   const callbacksRef = useRef({ onInterim, onFinal });
   callbacksRef.current = { onInterim, onFinal };
-  const activeScopeRef = useRef(
-    connection.availability === 'available' ? connection.scopeKey : null,
+  const session = useVoiceSessionLeaseV2<VoiceTranscriptionController>(
+    config,
+    connection,
+    operations,
+    () => {
+      setState('idle');
+      setErrorCode(null);
+    },
   );
-  activeScopeRef.current = connection.availability === 'available' ? connection.scopeKey : null;
-  const resolvedRuntime = useMemo(
-    () => runtime ?? createVoiceTranscriptionRuntime(connection),
-    [connection, runtime],
-  );
-  const controller = useMemo(
-    () =>
-      new VoiceTranscriptionController(resolvedRuntime, {
-        onState: setState,
-        onInterim: (text, scopeKey) => {
-          if (activeScopeRef.current === scopeKey) callbacksRef.current.onInterim(text);
-        },
-        onFinal: (text, scopeKey) => {
-          if (activeScopeRef.current === scopeKey) callbacksRef.current.onFinal(text);
-        },
-        onError: (code, scopeKey) => {
-          if (activeScopeRef.current === scopeKey) setErrorCode(code);
-        },
-      }),
-    [resolvedRuntime],
-  );
-
-  const scopeKey =
-    connection.availability === 'available' ? connection.scopeKey : connection.availability;
-  useEffect(() => {
-    controller.stop();
+  const stop = () => {
+    if (!session.isContextCurrent()) return;
+    void session.stop();
+    setState('idle');
     setErrorCode(null);
-  }, [controller, scopeKey]);
-  useEffect(() => () => controller.stop(), [controller]);
-
-  const stop = useCallback(() => {
-    controller.stop();
-    setErrorCode(null);
-  }, [controller]);
-  const toggle = useCallback(async () => {
-    if (state === 'connecting' || state === 'listening') {
+  };
+  const toggle = async () => {
+    if (!session.isContextCurrent()) return false;
+    if (session.current()) {
       stop();
       return true;
     }
-    if (connection.availability !== 'available') return false;
+    if (!config || connection.availability !== 'available') return false;
+    const requestConfig = Object.freeze({ ...config });
+    const requestConnection = structuredClone(connection);
     setErrorCode(null);
-    return controller.start(connection);
-  }, [connection, controller, state, stop]);
-
-  return { state, errorCode, toggle, stop };
-}
-
-function createVoiceTranscriptionRuntime(
-  connection: VoiceTranscriptionConnection,
-): VoiceTranscriptionRuntime {
-  const nativeTransport =
-    connection.availability === 'available' && connection.transport === 'electron'
-      ? desktopCloudSocketTransport()
-      : null;
-  return {
-    createSocket: (url, protocols) =>
-      nativeTransport && connection.availability === 'available'
-        ? (createCloudSocketBridge(
-            {
-              kind: 'voice',
-              url,
-              scope: connection.scope,
+    setState('connecting');
+    try {
+      return await session.start(
+        (signal) =>
+          operations.acquireTranscription({
+            config: requestConfig,
+            connection: requestConnection,
+            signal,
+          }),
+        (runtime, guard) =>
+          new VoiceTranscriptionController(runtime, {
+            onState: (next) => {
+              if (guard.isActive()) {
+                setState(next);
+                if (next === 'error') guard.finish();
+              }
             },
-            nativeTransport,
-          ) as unknown as VoiceSocket)
-        : (new WebSocket(url, protocols) as unknown as VoiceSocket),
-    createAudioContext: () => new AudioContext() as unknown as VoiceAudioContext,
-    createWorkletNode: (context) =>
-      new AudioWorkletNode(
-        context as unknown as BaseAudioContext,
-        'audio-processor',
-      ) as unknown as VoiceWorkletNode,
-    getUserMedia: () =>
-      navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      }) as unknown as Promise<VoiceMediaStream>,
-    requestMicrophoneAccess: requestNativeMicrophoneAccess,
-    workletModuleUrl: new URL('audio-processor.js', document.baseURI).toString(),
-    socketOpenState: CLOUD_SOCKET_OPEN,
+            onInterim: (text, scopeKey) => {
+              if (guard.isActive() && scopeKey === requestConnection.scopeKey)
+                callbacksRef.current.onInterim(text);
+            },
+            onFinal: (text, scopeKey) => {
+              if (guard.isActive() && scopeKey === requestConnection.scopeKey)
+                callbacksRef.current.onFinal(text);
+            },
+            onError: (code, scopeKey) => {
+              if (guard.isActive() && scopeKey === requestConnection.scopeKey) setErrorCode(code);
+            },
+          }),
+        (controller) => controller.start(requestConnection),
+      );
+    } catch {
+      if (session.isContextCurrent()) {
+        setState('error');
+        setErrorCode('connection_failed');
+      }
+      return false;
+    }
   };
-}
-
-async function requestNativeMicrophoneAccess(): Promise<boolean> {
-  const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
-  if (!invoke) return true;
-  const result = (await invoke('request_microphone_access')) as unknown;
-  return result === true;
+  return { state, errorCode, toggle, stop };
 }

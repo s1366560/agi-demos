@@ -72,7 +72,7 @@ function MessageIdentityQa() {
         <div className="message-scroll">
           <div className="message-stack" data-testid="message-identity-fixture">
             {messages.map((message) => (
-              <WorkspaceTranscriptMessage key={message.id} message={message} />
+              <WorkspaceTranscriptMessage imagePreviewClient={null} key={message.id} message={message} />
             ))}
             <NarrativeMessageFrame
               kind="agent"

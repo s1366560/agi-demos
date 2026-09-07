@@ -52,8 +52,8 @@ def test_decide_execution_path_respects_forced_subagent() -> None:
 
 
 @pytest.mark.unit
-def test_get_current_tools_applies_selection_pipeline_budget() -> None:
-    """Selection pipeline should reduce tool count under configured max budget."""
+def test_get_current_tools_preserves_complete_set_without_agent_ranker() -> None:
+    """A budget trigger cannot replace an Agent tool-selection verdict."""
     tools = {f"mcp__srv__tool_{idx}": _MockTool(f"mcp__srv__tool_{idx}") for idx in range(20)}
     tools["read"] = _MockTool("read")
     tools["write"] = _MockTool("write")
@@ -69,12 +69,29 @@ def test_get_current_tools_applies_selection_pipeline_budget() -> None:
     selected_tools, selected_defs = agent._get_current_tools(selection_context=selection_context)
     selected_mcp_tools = [name for name in selected_tools if name.startswith("mcp__")]
 
-    assert len(selected_tools) <= agent._tool_selection_max_tools
-    assert len(selected_defs) <= agent._tool_selection_max_tools
-    assert len(selected_mcp_tools) <= agent._tool_selection_max_tools - 2
+    assert selected_tools == tools
+    assert len(selected_defs) == len(tools)
+    assert len(selected_mcp_tools) == 20
     assert "read" in selected_tools
     assert "write" in selected_tools
-    assert any(step.stage == "semantic_ranker_stage" for step in agent._last_tool_selection_trace)
+    semantic_trace = next(
+        step for step in agent._last_tool_selection_trace if step.stage == "semantic_ranker_stage"
+    )
+    assert semantic_trace.explain.get("semantic_backend_effective") == "unfiltered"
+
+
+@pytest.mark.unit
+def test_tool_selection_backend_normalizes_to_agent_decision() -> None:
+    """Legacy local semantic backend names cannot reactivate heuristic pruning."""
+    default_agent = ReActAgent(model="test-model", tools={"read": _MockTool("read")})
+    legacy_agent = ReActAgent(
+        model="test-model",
+        tools={"read": _MockTool("read")},
+        tool_selection_semantic_backend="embedding_vector",
+    )
+
+    assert default_agent._tool_selection_semantic_backend == "agent_decision"
+    assert legacy_agent._tool_selection_semantic_backend == "agent_decision"
 
 
 @pytest.mark.unit

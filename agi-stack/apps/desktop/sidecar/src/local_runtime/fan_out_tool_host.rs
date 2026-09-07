@@ -26,6 +26,13 @@ impl FanOutToolHost {
 
 #[async_trait]
 impl ToolHost for FanOutToolHost {
+    fn tool_definition(&self, name: &str) -> Option<agistack_core::ports::ToolDefinition> {
+        self.hosts
+            .iter()
+            .find(|host| host.can_dispatch(name))
+            .and_then(|host| host.tool_definition(name))
+    }
+
     fn list_tools(&self) -> Vec<String> {
         let mut tools = Vec::new();
         for host in &self.hosts {

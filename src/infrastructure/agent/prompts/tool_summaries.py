@@ -69,7 +69,6 @@ TOOL_SUMMARIES: dict[str, str] = {
     ),
     "decision": ("Present options to the user and request a decision before proceeding."),
     # --- Skill & Plugin ---
-    "skill": ("Load a specific skill by name to gain specialized knowledge and instructions."),
     "skill_loader": ("List available skills or load a skill's full content for reference."),
     "skill_installer": (
         "Install a skill from a remote source (e.g. GitHub) into the local skill directory."
@@ -104,12 +103,6 @@ TOOL_SUMMARIES: dict[str, str] = {
     "check_env_vars": ("Check availability of environment variables required by specific tools."),
     # --- MCP ---
     "register_mcp_server": ("Install, start, or discover tools from an MCP server in the sandbox."),
-    "debug_mcp_server": (
-        "Inspect MCP server status, logs, and available tools for troubleshooting."
-    ),
-    "create_mcp_server_from_template": (
-        "Generate a new MCP server project from a built-in template."
-    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -166,7 +159,6 @@ TOOL_ORDER: list[str] = [
     "peer_sessions_history",
     "peer_sessions_send",
     # Skills & plugins
-    "skill",
     "skill_loader",
     "skill_installer",
     "plugin_manager",
@@ -176,8 +168,6 @@ TOOL_ORDER: list[str] = [
     "check_env_vars",
     # MCP
     "register_mcp_server",
-    "debug_mcp_server",
-    "create_mcp_server_from_template",
 ]
 
 

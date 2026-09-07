@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/services/client/httpClient', () => ({
-  httpClient: {
+vi.mock('@/services/client/kernelHttpClient', () => ({
+  kernelHttpClient: {
     get: vi.fn(),
     post: vi.fn(),
   },
 }));
 
-import { httpClient } from '@/services/client/httpClient';
+import { kernelHttpClient } from '@/services/client/kernelHttpClient';
 import { ApiError, ApiErrorType } from '@/services/client/ApiError';
 import { oauthLoginService, oauthReasonCode } from '@/services/oauthLoginService';
 
@@ -17,18 +17,18 @@ describe('oauthLoginService', () => {
   });
 
   it('lists only providers exposed by the server authority', async () => {
-    (httpClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (kernelHttpClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       providers: [{ id: 'google', display_name: 'Google' }],
     });
 
     const providers = await oauthLoginService.listProviders();
 
-    expect(httpClient.get).toHaveBeenCalledWith('/auth/oauth/providers');
+    expect(kernelHttpClient.get).toHaveBeenCalledWith('/auth/oauth/providers');
     expect(providers).toEqual([{ id: 'google', display_name: 'Google' }]);
   });
 
   it('requests an authorization URL without placing credentials in the browser', async () => {
-    (httpClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (kernelHttpClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
       provider: 'google',
       authorization_url: 'https://accounts.google.com/o/oauth2/v2/auth?state=opaque',
       expires_in: 600,
@@ -36,7 +36,7 @@ describe('oauthLoginService', () => {
 
     const result = await oauthLoginService.beginAuthorization('google', '/tenant/t-1/overview');
 
-    expect(httpClient.post).toHaveBeenCalledWith('/auth/oauth/google/authorize', {
+    expect(kernelHttpClient.post).toHaveBeenCalledWith('/auth/oauth/google/authorize', {
       redirect_to: '/tenant/t-1/overview',
     });
     expect(result.authorization_url).toContain('accounts.google.com');
@@ -46,11 +46,11 @@ describe('oauthLoginService', () => {
     await expect(
       oauthLoginService.beginAuthorization('google', '//attacker.example/path')
     ).rejects.toThrow('OAuth redirect target must be a same-origin path');
-    expect(httpClient.post).not.toHaveBeenCalled();
+    expect(kernelHttpClient.post).not.toHaveBeenCalled();
   });
 
   it('completes authorization through the server-owned callback contract', async () => {
-    (httpClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (kernelHttpClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
       access_token: 'opaque-session-token',
       token_type: 'bearer',
       redirect_to: '/tenant/tenant-1/overview',
@@ -66,7 +66,7 @@ describe('oauthLoginService', () => {
 
     const result = await oauthLoginService.completeAuthorization('google', 'code-1', 'state-1');
 
-    expect(httpClient.post).toHaveBeenCalledWith('/auth/oauth/google/callback', {
+    expect(kernelHttpClient.post).toHaveBeenCalledWith('/auth/oauth/google/callback', {
       code: 'code-1',
       state: 'state-1',
     });
@@ -74,7 +74,7 @@ describe('oauthLoginService', () => {
   });
 
   it('rejects an unsafe redirect returned by the callback authority', async () => {
-    (httpClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (kernelHttpClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
       access_token: 'opaque-session-token',
       token_type: 'bearer',
       redirect_to: '//attacker.example/path',

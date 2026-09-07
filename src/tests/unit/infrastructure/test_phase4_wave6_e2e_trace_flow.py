@@ -461,16 +461,8 @@ def mock_registry():
 
 
 @pytest.fixture
-def mock_container(mock_registry: MagicMock):
-    container = MagicMock()
-    container.subagent_run_registry.return_value = mock_registry
-    return container
-
-
-@pytest.fixture
-def app(mock_container: MagicMock):
+def app():
     test_app = FastAPI()
-    test_app.state.container = mock_container
 
     mock_user = SimpleNamespace(id="user-1", email="test@test.com", tenant_id="t-1")
     mock_db = AsyncMock()
@@ -488,15 +480,18 @@ def client(app: FastAPI):
 
 
 @pytest.fixture(autouse=True)
-def _patch_container_helper(mock_container: MagicMock):
+def _patch_container_helper(mock_registry: MagicMock):
     with (
         patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.trace_router.get_container_with_db",
-            return_value=mock_container,
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router."
+            "current_subagent_run_registry_v2",
+            return_value=mock_registry,
         ),
         patch(
             "src.infrastructure.adapters.primary.web.routers.agent.trace_router._get_accessible_conversation",
-            AsyncMock(return_value=SimpleNamespace(id="conv-e2e", tenant_id="t-1", user_id="user-1")),
+            AsyncMock(
+                return_value=SimpleNamespace(id="conv-e2e", tenant_id="t-1", user_id="user-1")
+            ),
         ),
     ):
         yield

@@ -5010,3 +5010,14 @@
     align-items: flex-start;
   }
 }
+
+.platform-plugin-conversation-slots {
+  display: grid;
+  min-width: 0;
+}
+
+.platform-plugin-conversation-frame {
+  width: 100%;
+  border: 0;
+  background: transparent;
+}

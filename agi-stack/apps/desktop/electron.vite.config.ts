@@ -54,7 +54,20 @@ export default defineConfig(({ command }) => ({
     root: desktopRoot,
     base: './',
     plugins: [react()],
+    resolve: {
+      alias: {
+        '@agistack/plugin-runtime': resolve(
+          desktopRoot,
+          '../../packages/plugin-runtime/src/index.ts',
+        ),
+        '@agistack/plugin-slots': resolve(
+          desktopRoot,
+          '../../packages/plugin-slots/src/index.ts',
+        ),
+      },
+    },
     server: {
+      host: '127.0.0.1',
       watch: {
         ignored: generatedOutputWatchIgnores,
       },

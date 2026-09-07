@@ -342,7 +342,7 @@ test('canonical Agent Workspace fails closed instead of auto-sending through com
     chatPanelSource,
     /Boolean\(composeAheadScope\) &&\s+composeAheadFallbackAllowed &&\s+runInputDeliveryOptions\.length === 0/,
   );
-  assert.match(appSource, /composeAheadFallbackAllowed=\{false\}/);
+  assert.match(appSource, /composeAheadFallbackAllowed:\s*false/);
 });
 
 test('canonical terminal run authority overrides stale streaming signals', () => {
@@ -353,16 +353,20 @@ test('canonical terminal run authority overrides stale streaming signals', () =>
   );
   assert.match(
     appSource,
-    /canonicalRunStatus=\{currentArtifactRun\?\.status \?\? null\}/,
+    /canonicalRunStatus:\s*currentArtifactRun\?\.status \?\? null/,
   );
 });
 
-test('canonical Cloud run inputs are available for every active Agent Workspace mode', () => {
+test('canonical run inputs use structured session capability in every Agent Workspace mode', () => {
   assert.doesNotMatch(
     runInputEligibilitySource,
     /sessionDetailViewModel\?\.capabilityMode !== 'code'/,
   );
-  assert.match(runInputEligibilitySource, /currentArtifactRun\.status === 'running'/);
+  assert.doesNotMatch(runInputEligibilitySource, /currentArtifactRun\.status === 'running'/);
+  assert.match(runInputEligibilitySource, /sessionProjection\?\.capabilities\.canSteerNow/);
+  assert.match(runInputEligibilitySource, /allowedActions\.includes\('steer_now'\)/);
+  assert.match(runInputEligibilitySource, /sessionProjection\?\.capabilities\.canQueueNext/);
+  assert.match(runInputEligibilitySource, /allowedActions\.includes\('queue_next'\)/);
   assert.match(runInputEligibilitySource, /options\.push\('steer_now'\)/);
   assert.match(runInputEligibilitySource, /options\.push\('queue_next'\)/);
 });

@@ -10,86 +10,94 @@ class TestToolContextRegistration:
     """Verify tool setup helpers actually expose configured tools to context."""
 
     def test_add_todo_tools_adds_todoread_and_todowrite(self, monkeypatch: pytest.MonkeyPatch):
-        """Todo helper should configure and inject todoread/todowrite into tools dict."""
+        """Todo helper should inject operation-bound todoread/todowrite definitions."""
         from src.infrastructure.agent.state import agent_worker_state as worker_state
 
         fake_session_factory = object()
-        registry = {
+        bound_tools = {
             "todoread": SimpleNamespace(name="todoread"),
             "todowrite": SimpleNamespace(name="todowrite"),
         }
-        configured: dict[str, object] = {}
+        captured: dict[str, object] = {}
 
-        def _fake_configure_todoread(*, session_factory: object) -> None:
-            configured["todoread_session_factory"] = session_factory
+        def _fake_make_todo_tools(*, session_factory: object) -> dict[str, object]:
+            captured["session_factory"] = session_factory
+            return bound_tools
 
-        def _fake_configure_todowrite(*, session_factory: object) -> None:
-            configured["todowrite_session_factory"] = session_factory
+        def _forbidden(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("worker todo tools must not use global configuration or registry")
 
         monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             fake_session_factory,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.tools.todo_tools.configure_todoread",
-            _fake_configure_todoread,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.agent.tools.todo_tools.configure_todowrite",
-            _fake_configure_todowrite,
+            "src.infrastructure.agent.tools.todo_tools.make_todo_tools",
+            _fake_make_todo_tools,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
-            lambda: registry,
+            _forbidden,
         )
 
         tools: dict[str, object] = {}
         worker_state._add_todo_tools(tools, project_id="project-1")
 
-        assert configured["todoread_session_factory"] is fake_session_factory
-        assert configured["todowrite_session_factory"] is fake_session_factory
-        assert tools["todoread"] is registry["todoread"]
-        assert tools["todowrite"] is registry["todowrite"]
+        assert captured["session_factory"] is fake_session_factory
+        assert tools == bound_tools
 
     def test_add_register_mcp_server_tool_adds_tool_to_context(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """register_mcp_server helper should configure and inject tool into tools dict."""
+        """register_mcp_server helper should bind and inject one generation's tool."""
         from src.infrastructure.agent.state import agent_worker_state as worker_state
+        from src.infrastructure.agent.tools.register_mcp_server import register_mcp_server_tool
 
         fake_session_factory = object()
         fake_sandbox_adapter = object()
-        registry = {"register_mcp_server": SimpleNamespace(name="register_mcp_server")}
-        configured: dict[str, object] = {}
+        bound_tool = SimpleNamespace(name="register_mcp_server")
+        captured: dict[str, object] = {}
 
-        def _fake_configure_register_mcp_server_tool(
+        def _fake_make_register_mcp_server_tool(
             *,
+            template: object,
             session_factory: object,
             tenant_id: str,
             project_id: str,
             sandbox_adapter: object,
             sandbox_id: str | None,
-        ) -> None:
-            configured["session_factory"] = session_factory
-            configured["tenant_id"] = tenant_id
-            configured["project_id"] = project_id
-            configured["sandbox_adapter"] = sandbox_adapter
-            configured["sandbox_id"] = sandbox_id
+        ) -> object:
+            captured["template"] = template
+            captured["session_factory"] = session_factory
+            captured["tenant_id"] = tenant_id
+            captured["project_id"] = project_id
+            captured["sandbox_adapter"] = sandbox_adapter
+            captured["sandbox_id"] = sandbox_id
+            return bound_tool
+
+        def _forbidden(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError(
+                "worker register_mcp_server must not use global configuration or registry"
+            )
 
         monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             fake_session_factory,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.tools.register_mcp_server.configure_register_mcp_server_tool",
-            _fake_configure_register_mcp_server_tool,
+            "src.infrastructure.agent.tools.register_mcp_server_runtime.make_register_mcp_server_tool",
+            _fake_make_register_mcp_server_tool,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
-            lambda: registry,
+            _forbidden,
         )
-        monkeypatch.setattr(worker_state, "_mcp_sandbox_adapter", fake_sandbox_adapter)
+        monkeypatch.setattr(
+            worker_state,
+            "current_mcp_sandbox_adapter_v2",
+            lambda: fake_sandbox_adapter,
+        )
 
         tools: dict[str, object] = {}
         worker_state._add_register_mcp_server_tool(
@@ -98,12 +106,13 @@ class TestToolContextRegistration:
             project_id="project-1",
         )
 
-        assert configured["session_factory"] is fake_session_factory
-        assert configured["tenant_id"] == "tenant-1"
-        assert configured["project_id"] == "project-1"
-        assert configured["sandbox_adapter"] is fake_sandbox_adapter
-        assert configured["sandbox_id"] is None
-        assert tools["register_mcp_server"] is registry["register_mcp_server"]
+        assert captured["session_factory"] is fake_session_factory
+        assert captured["template"] is register_mcp_server_tool
+        assert captured["tenant_id"] == "tenant-1"
+        assert captured["project_id"] == "project-1"
+        assert captured["sandbox_adapter"] is fake_sandbox_adapter
+        assert captured["sandbox_id"] is None
+        assert tools["register_mcp_server"] is bound_tool
 
     def test_add_register_mcp_server_tool_uses_private_sandbox_id_attr(
         self,
@@ -114,36 +123,35 @@ class TestToolContextRegistration:
 
         fake_session_factory = object()
         fake_sandbox_adapter = object()
-        registry = {"register_mcp_server": SimpleNamespace(name="register_mcp_server")}
-        configured: dict[str, object] = {}
+        bound_tool = SimpleNamespace(name="register_mcp_server")
+        captured: dict[str, object] = {}
 
-        def _fake_configure_register_mcp_server_tool(
-            *,
-            session_factory: object,
-            tenant_id: str,
-            project_id: str,
-            sandbox_adapter: object,
-            sandbox_id: str | None,
-        ) -> None:
-            configured["session_factory"] = session_factory
-            configured["tenant_id"] = tenant_id
-            configured["project_id"] = project_id
-            configured["sandbox_adapter"] = sandbox_adapter
-            configured["sandbox_id"] = sandbox_id
+        def _fake_make_register_mcp_server_tool(**kwargs: object) -> object:
+            captured.update(kwargs)
+            return bound_tool
+
+        def _forbidden(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError(
+                "worker register_mcp_server must not use global configuration or registry"
+            )
 
         monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             fake_session_factory,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.tools.register_mcp_server.configure_register_mcp_server_tool",
-            _fake_configure_register_mcp_server_tool,
+            "src.infrastructure.agent.tools.register_mcp_server_runtime.make_register_mcp_server_tool",
+            _fake_make_register_mcp_server_tool,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
-            lambda: registry,
+            _forbidden,
         )
-        monkeypatch.setattr(worker_state, "_mcp_sandbox_adapter", fake_sandbox_adapter)
+        monkeypatch.setattr(
+            worker_state,
+            "current_mcp_sandbox_adapter_v2",
+            lambda: fake_sandbox_adapter,
+        )
 
         tools: dict[str, object] = {
             "bash": SimpleNamespace(_sandbox_id="sandbox-private-1"),
@@ -154,7 +162,8 @@ class TestToolContextRegistration:
             project_id="project-1",
         )
 
-        assert configured["sandbox_id"] == "sandbox-private-1"
+        assert captured["sandbox_id"] == "sandbox-private-1"
+        assert tools["register_mcp_server"] is bound_tool
 
     def test_add_register_mcp_server_tool_falls_back_to_active_sandbox_by_project(
         self,
@@ -164,22 +173,17 @@ class TestToolContextRegistration:
         from src.infrastructure.agent.state import agent_worker_state as worker_state
 
         fake_session_factory = object()
-        registry = {"register_mcp_server": SimpleNamespace(name="register_mcp_server")}
-        configured: dict[str, object] = {}
+        bound_tool = SimpleNamespace(name="register_mcp_server")
+        captured: dict[str, object] = {}
 
-        def _fake_configure_register_mcp_server_tool(
-            *,
-            session_factory: object,
-            tenant_id: str,
-            project_id: str,
-            sandbox_adapter: object,
-            sandbox_id: str | None,
-        ) -> None:
-            configured["session_factory"] = session_factory
-            configured["tenant_id"] = tenant_id
-            configured["project_id"] = project_id
-            configured["sandbox_adapter"] = sandbox_adapter
-            configured["sandbox_id"] = sandbox_id
+        def _fake_make_register_mcp_server_tool(**kwargs: object) -> object:
+            captured.update(kwargs)
+            return bound_tool
+
+        def _forbidden(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError(
+                "worker register_mcp_server must not use global configuration or registry"
+            )
 
         fake_active_adapter = SimpleNamespace(
             _active_sandboxes={
@@ -192,14 +196,18 @@ class TestToolContextRegistration:
             fake_session_factory,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.tools.register_mcp_server.configure_register_mcp_server_tool",
-            _fake_configure_register_mcp_server_tool,
+            "src.infrastructure.agent.tools.register_mcp_server_runtime.make_register_mcp_server_tool",
+            _fake_make_register_mcp_server_tool,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
-            lambda: registry,
+            _forbidden,
         )
-        monkeypatch.setattr(worker_state, "_mcp_sandbox_adapter", fake_active_adapter)
+        monkeypatch.setattr(
+            worker_state,
+            "current_mcp_sandbox_adapter_v2",
+            lambda: fake_active_adapter,
+        )
 
         tools: dict[str, object] = {}
         worker_state._add_register_mcp_server_tool(
@@ -208,7 +216,8 @@ class TestToolContextRegistration:
             project_id="project-1",
         )
 
-        assert configured["sandbox_id"] == "sandbox-active-1"
+        assert captured["sandbox_id"] == "sandbox-active-1"
+        assert tools["register_mcp_server"] is bound_tool
 
     def test_add_register_mcp_server_tool_prefers_running_connected_sandbox(
         self,
@@ -218,22 +227,17 @@ class TestToolContextRegistration:
         from src.infrastructure.agent.state import agent_worker_state as worker_state
 
         fake_session_factory = object()
-        registry = {"register_mcp_server": SimpleNamespace(name="register_mcp_server")}
-        configured: dict[str, object] = {}
+        bound_tool = SimpleNamespace(name="register_mcp_server")
+        captured: dict[str, object] = {}
 
-        def _fake_configure_register_mcp_server_tool(
-            *,
-            session_factory: object,
-            tenant_id: str,
-            project_id: str,
-            sandbox_adapter: object,
-            sandbox_id: str | None,
-        ) -> None:
-            configured["session_factory"] = session_factory
-            configured["tenant_id"] = tenant_id
-            configured["project_id"] = project_id
-            configured["sandbox_adapter"] = sandbox_adapter
-            configured["sandbox_id"] = sandbox_id
+        def _fake_make_register_mcp_server_tool(**kwargs: object) -> object:
+            captured.update(kwargs)
+            return bound_tool
+
+        def _forbidden(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError(
+                "worker register_mcp_server must not use global configuration or registry"
+            )
 
         fake_active_adapter = SimpleNamespace(
             _active_sandboxes={
@@ -255,14 +259,18 @@ class TestToolContextRegistration:
             fake_session_factory,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.tools.register_mcp_server.configure_register_mcp_server_tool",
-            _fake_configure_register_mcp_server_tool,
+            "src.infrastructure.agent.tools.register_mcp_server_runtime.make_register_mcp_server_tool",
+            _fake_make_register_mcp_server_tool,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
-            lambda: registry,
+            _forbidden,
         )
-        monkeypatch.setattr(worker_state, "_mcp_sandbox_adapter", fake_active_adapter)
+        monkeypatch.setattr(
+            worker_state,
+            "current_mcp_sandbox_adapter_v2",
+            lambda: fake_active_adapter,
+        )
 
         worker_state._add_register_mcp_server_tool(
             tools={},
@@ -270,4 +278,4 @@ class TestToolContextRegistration:
             project_id="project-1",
         )
 
-        assert configured["sandbox_id"] == "sandbox-running"
+        assert captured["sandbox_id"] == "sandbox-running"

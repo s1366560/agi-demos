@@ -1,3 +1,13 @@
+const ownerFixture = vi.hoisted(() => {
+  const owner = {};
+  return {
+    availability: { owner, available: true },
+    operation: { owner, signal: new AbortController().signal, check: () => {} },
+  };
+});
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => ownerFixture.availability,
+}));
 /**
  * Tests for agentV3 store timeline field
  *
@@ -22,6 +32,8 @@ import type { TimelineEvent } from '../../types/agent';
 // Mock the services
 vi.mock('../../services/agentService', () => ({
   agentService: {
+    connectSession: vi.fn(async () => ownerFixture.operation),
+    assertSession: vi.fn(),
     getConversations: vi.fn(() => Promise.resolve([])),
     getConversationMessages: vi.fn(() =>
       Promise.resolve({

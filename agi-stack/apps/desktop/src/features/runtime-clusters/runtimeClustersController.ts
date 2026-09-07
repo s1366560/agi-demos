@@ -1,8 +1,9 @@
 import { DesktopApiError } from '../../api/client';
 import {
   RUNTIME_CLUSTERS_CLOUD_ACTIONS,
-} from './runtimeClustersCapability';
-import { RuntimeClustersUnavailableError } from './runtimeClustersClient';
+  RUNTIME_CLUSTERS_CLOUD_REASON,
+  RuntimeClustersUnavailableError,
+} from './runtimeClustersContract';
 import type {
   RuntimeClusterSummary,
   RuntimeClustersAuthority,
@@ -423,5 +424,5 @@ function freezeScope(scope: RuntimeClustersScope): RuntimeClustersScope {
 }
 
 function cloudReasonCode(): string {
-  return 'runtime_clusters_detail_and_mutations_partial';
+  return RUNTIME_CLUSTERS_CLOUD_REASON;
 }

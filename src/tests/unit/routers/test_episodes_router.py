@@ -1,16 +1,22 @@
 """Unit tests for episodes router."""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import FastAPI, HTTPException, status
 
 from src.infrastructure.adapters.primary.web.routers.episodes import (
     delete_episode,
     get_episode,
     list_episodes,
+)
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
 
@@ -36,6 +42,33 @@ def _episode_props(uuid: str = "ep_123", name: str = "Test Episode") -> dict:
         "user_id": "user_123",
         "status": "completed",
     }
+
+
+def _application(db: object, graph_store: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        services=SimpleNamespace(graph_store=graph_store),
+    )
+
+
+@pytest.fixture(autouse=True)
+async def initialize_episodes_route_generation(
+    test_app: FastAPI,
+    mock_graphiti_client: object,
+) -> AsyncIterator[None]:
+    """Run HTTP cases through the production V2 route and graph authorities."""
+
+    async def graph_runtime_factory() -> object:
+        return mock_graphiti_client
+
+    await initialize_plugin_runtime_v2(
+        test_app,
+        graph_runtime_factory=graph_runtime_factory,
+    )
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 class _Neo4jDateTimeLike:
@@ -266,9 +299,7 @@ class TestEpisodesRouter:
         test_project_db,
     ):
         """Test episode listing forwards filters to the store."""
-        mock_graphiti_client.list_episodes = AsyncMock(
-            return_value={"episodes": [], "total": 5}
-        )
+        mock_graphiti_client.list_episodes = AsyncMock(return_value={"episodes": [], "total": 5})
 
         response = client.get(
             "/api/v1/episodes/"
@@ -322,8 +353,7 @@ class TestEpisodesRouter:
         response = await delete_episode(
             "Test Episode",
             current_user=test_user,
-            db=test_db,
-            graph_store=mock_graphiti_client,
+            graph_application=_application(test_db, mock_graphiti_client),
         )
 
         assert response["status"] == "success"
@@ -347,8 +377,7 @@ class TestEpisodesRouter:
             await get_episode(
                 "Test Episode",
                 current_user=test_user,
-                db=test_db,
-                graph_store=mock_graphiti_client,
+                graph_application=_application(test_db, mock_graphiti_client),
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -376,8 +405,7 @@ class TestEpisodesRouter:
                 sort_by="created_at",
                 sort_desc=True,
                 current_user=test_user,
-                db=test_db,
-                graph_store=mock_graphiti_client,
+                graph_application=_application(test_db, mock_graphiti_client),
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -400,8 +428,7 @@ class TestEpisodesRouter:
             await delete_episode(
                 "Test Episode",
                 current_user=test_user,
-                db=test_db,
-                graph_store=mock_graphiti_client,
+                graph_application=_application(test_db, mock_graphiti_client),
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

@@ -1,15 +1,64 @@
 """Unit tests for support ticket API endpoints."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers import support as support_router
 from src.infrastructure.adapters.primary.web.routers.support import (
     create_support_ticket,
     list_support_tickets,
 )
+from src.infrastructure.adapters.primary.web.support_ticket_application_authority_v2 import (
+    support_ticket_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import SupportTicket
+from src.infrastructure.plugins.v2.support_ticket_services import (
+    SqlSupportTicketPersistenceV2,
+    SupportTicketApplicationServicesV2,
+)
+
+
+@pytest.fixture
+def client(test_engine, test_user) -> TestClient:
+    """Exercise both public aliases with the real V2 support application service."""
+    app = FastAPI()
+    app.include_router(support_router.router)
+    app.include_router(support_router.router, prefix="/api/v1")
+    session_factory = async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def override_get_db():
+        async with session_factory() as session:
+            yield session
+
+    async def override_get_current_user():
+        return test_user
+
+    async def override_support_application(
+        db: AsyncSession = Depends(get_db),
+    ):
+        yield SimpleNamespace(
+            services=SupportTicketApplicationServicesV2(
+                persistence=SqlSupportTicketPersistenceV2(_session=db)
+            )
+        )
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[support_ticket_application_authority_dependency_v2] = (
+        override_support_application
+    )
+    return TestClient(app)
 
 
 class TestCreateSupportTicket:
@@ -71,7 +120,15 @@ class TestCreateSupportTicket:
         }
 
         with pytest.raises(HTTPException) as exc_info:
-            await create_support_ticket(ticket_data, current_user=test_user, db=test_db)
+            await create_support_ticket(
+                ticket_data,
+                current_user=test_user,
+                support_application=SimpleNamespace(
+                    services=SupportTicketApplicationServicesV2(
+                        persistence=SqlSupportTicketPersistenceV2(_session=test_db)
+                    )
+                ),
+            )
 
         assert exc_info.value.status_code == 403
 
@@ -215,7 +272,11 @@ class TestListSupportTickets:
                 limit=25,
                 offset=0,
                 current_user=test_user,
-                db=test_db,
+                support_application=SimpleNamespace(
+                    services=SupportTicketApplicationServicesV2(
+                        persistence=SqlSupportTicketPersistenceV2(_session=test_db)
+                    )
+                ),
             )
 
         assert exc_info.value.status_code == 403

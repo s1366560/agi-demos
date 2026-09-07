@@ -1,18 +1,35 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.di_container import DIContainer
+from src.application.services.gene_service import GeneService
 from src.domain.model.gene.enums import ContentVisibility, EvolutionEventType, InstanceGeneStatus
+from src.domain.ports.repositories.instance_gene_repository import InstanceGeneRepository
 from src.infrastructure.adapters.secondary.persistence.models import (
     InstanceModel,
     Project,
     Tenant,
     User,
 )
+from src.infrastructure.plugins.v2.gene_services import SqlGeneServiceFactoryV2
+from src.infrastructure.plugins.v2.runtime import OperationContextV2
+
+
+def _gene_service(db: AsyncSession) -> GeneService:
+    operation = cast(
+        OperationContextV2,
+        SimpleNamespace(require=lambda _service: db),
+    )
+    return SqlGeneServiceFactoryV2().build(operation).genes
+
+
+def _instance_gene_repository(db: AsyncSession) -> InstanceGeneRepository:
+    return _gene_service(db)._instance_gene_repo
 
 
 def _slug(prefix: str) -> str:
@@ -46,7 +63,7 @@ async def test_list_genes_with_total_filters_before_pagination(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     await service.create_gene(
         name="Other Gene",
@@ -88,7 +105,7 @@ async def test_list_genes_with_total_filters_by_search_and_visibility(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     await service.create_gene(
         name="Needle Public Gene",
@@ -132,7 +149,7 @@ async def test_list_genes_with_total_rejects_invalid_visibility_filter(
     test_db: AsyncSession,
     test_project_db: Project,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     with pytest.raises(ValueError, match="Invalid visibility filter"):
         await service.list_genes_with_total(
@@ -149,7 +166,7 @@ async def test_list_genes_with_total_accepts_visibility_enum_filter(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     gene = await service.create_gene(
         name="Enum Visibility Gene",
@@ -176,7 +193,7 @@ async def test_list_genes_with_total_filters_by_exact_slugs_before_pagination(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     first = await service.create_gene(
         name="First Included Gene",
@@ -215,7 +232,7 @@ async def test_list_genes_with_total_excludes_installed_instance_genes_before_pa
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     await _create_instance(
         test_db,
         instance_id="instance-installable",
@@ -253,7 +270,7 @@ async def test_list_genes_with_total_defaults_to_global_scope(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     global_gene = await service.create_gene(
         name="Global Listed Gene",
@@ -282,7 +299,7 @@ async def test_list_genes_with_total_can_include_public_globals_for_tenant_scope
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     tenant_gene = await service.create_gene(
         name="Tenant Listed Gene",
@@ -322,7 +339,7 @@ async def test_list_genes_with_total_prefers_tenant_slug_over_global_shadow(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     shared_slug = _slug("shadowed-gene")
     tenant_gene = await service.create_gene(
         name="Tenant Shadow Gene",
@@ -362,7 +379,7 @@ async def test_list_genomes_with_total_filters_before_pagination(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     unpublished = await service.create_genome(
         name="Unpublished Genome",
@@ -404,7 +421,7 @@ async def test_list_genomes_with_total_filters_by_search_and_visibility(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     public_match = await service.create_genome(
         name="Needle Public Genome",
@@ -448,7 +465,7 @@ async def test_list_genomes_with_total_rejects_invalid_visibility_filter(
     test_db: AsyncSession,
     test_project_db: Project,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     with pytest.raises(ValueError, match="Invalid visibility filter"):
         await service.list_genomes_with_total(
@@ -465,7 +482,7 @@ async def test_unpublish_genome_removes_it_from_published_results(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     genome = await service.create_genome(
         name="Publish Toggle Genome",
         slug=_slug("publish-toggle-genome"),
@@ -503,7 +520,7 @@ async def test_list_genomes_with_total_can_include_public_globals_for_tenant_sco
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     tenant_genome = await service.create_genome(
         name="Tenant Listed Genome",
@@ -541,7 +558,7 @@ async def test_list_genomes_with_total_can_include_public_globals_for_tenant_sco
 async def test_list_evolution_events_with_total_filters_before_pagination(
     test_db: AsyncSession,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
 
     await service.create_evolution_event(
         "instance-1",
@@ -577,7 +594,7 @@ async def test_list_evolution_events_with_total_filters_by_tenant_scope(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     foreign_tenant = Tenant(
         id="foreign-service-event-tenant",
         name="Foreign Service Event Tenant",
@@ -629,7 +646,7 @@ async def test_install_gene_reactivates_soft_deleted_instance_gene(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     await _create_instance(
         test_db,
         instance_id="instance-reinstall",
@@ -682,7 +699,7 @@ async def test_install_genome_installs_all_member_genes_with_genome_context(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     await _create_instance(
         test_db,
         instance_id="instance-install-genome",
@@ -732,7 +749,7 @@ async def test_install_genome_prefers_tenant_gene_when_slug_shadows_global(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     await _create_instance(
         test_db,
         instance_id="instance-install-shadowed-genome",
@@ -782,7 +799,7 @@ async def test_install_genome_rejects_already_installed_member_before_partial_in
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     await _create_instance(
         test_db,
         instance_id="instance-install-genome-duplicate",
@@ -836,7 +853,7 @@ async def test_list_instance_genes_with_summary_filters_deleted_before_paginatio
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     await _create_instance(
         test_db,
         instance_id="instance-list",
@@ -853,7 +870,7 @@ async def test_list_instance_genes_with_summary_filters_deleted_before_paginatio
         for index in range(4)
     ]
     installed = [await service.install_gene("instance-list", gene.id) for gene in genes]
-    instance_gene_repo = DIContainer().with_db(test_db).instance_gene_repository()
+    instance_gene_repo = _instance_gene_repository(test_db)
     installed[1].usage_count = 5
     installed[2].usage_count = 7
     await instance_gene_repo.save(installed[1])
@@ -879,7 +896,7 @@ async def test_list_instance_genes_with_summary_searches_metadata_before_paginat
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     await _create_instance(
         test_db,
         instance_id="instance-search-installed",
@@ -923,7 +940,7 @@ async def test_list_instance_genes_with_summary_searches_global_public_metadata(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     await _create_instance(
         test_db,
         instance_id="instance-search-global-installed",
@@ -949,7 +966,7 @@ async def test_list_instance_genes_with_summary_searches_global_public_metadata(
     )
     global_install = await service.install_gene("instance-search-global-installed", global_gene.id)
     await service.install_gene("instance-search-global-installed", tenant_gene.id)
-    instance_gene_repo = DIContainer().with_db(test_db).instance_gene_repository()
+    instance_gene_repo = _instance_gene_repository(test_db)
     global_install.usage_count = 9
     await instance_gene_repo.save(global_install)
 

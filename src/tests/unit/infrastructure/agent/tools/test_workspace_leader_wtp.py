@@ -15,6 +15,10 @@ from src.infrastructure.agent.orchestration.send_denied import (
     SendDeniedCode,
 )
 from src.infrastructure.agent.tools import workspace_leader_wtp as lwtp
+from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
+    bind_workspace_wtp_publisher_v2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit
 
@@ -62,12 +66,14 @@ def _worker_ctx() -> Any:
 
 
 @pytest.fixture
-def mock_orchestrator():
+def mock_orchestrator(monkeypatch: pytest.MonkeyPatch):
     orch = MagicMock()
     orch.send_message = AsyncMock()
-    lwtp.configure_workspace_leader_wtp(orch)
-    yield orch
-    lwtp._orchestrator = None  # type: ignore[attr-defined]
+    publisher = MagicMock()
+    publisher.publish = AsyncMock(return_value="supervisor-stream-1")
+    monkeypatch.setattr(lwtp, "_current_agent_orchestrator_v2", lambda: orch)
+    with bind_workspace_wtp_publisher_v2(publisher):
+        yield orch
 
 
 def _ok_send() -> SendResult:
@@ -121,16 +127,15 @@ class TestAssignTask:
         assert "leader-as-worker" in json.loads(result.output)["error"]
         mock_orchestrator.send_message.assert_not_awaited()
 
-    async def test_missing_orchestrator_denies(self):
-        lwtp._orchestrator = None  # type: ignore[attr-defined]
-        result = await lwtp.workspace_assign_task_tool.execute(
-            _leader_ctx(),
-            task_id="t1",
-            worker_agent_id="worker-agent-id",
-            title="T",
-            description="D",
-        )
-        assert result.is_error is True
+    async def test_missing_orchestrator_fails_structurally(self):
+        with pytest.raises(RuntimeV2Error):
+            await lwtp.workspace_assign_task_tool.execute(
+                _leader_ctx(),
+                task_id="t1",
+                worker_agent_id="worker-agent-id",
+                title="T",
+                description="D",
+            )
 
     async def test_successful_assign_publishes_envelope(self, mock_orchestrator):
         mock_orchestrator.send_message.return_value = _ok_send()
@@ -143,8 +148,7 @@ class TestAssignTask:
 
         # Stub downstream launcher + service lookup.
         with patch(
-            "src.application.services.workspace_task_service."
-            "WorkspaceTaskService.get_task",
+            "src.application.services.workspace_task_service.WorkspaceTaskService.get_task",
             new=AsyncMock(return_value=None),  # returns None → launch skipped
         ):
             result = await lwtp.workspace_assign_task_tool.execute(

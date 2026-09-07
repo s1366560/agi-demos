@@ -1,3 +1,7 @@
+import {
+  isCloudSandboxDownloadPath,
+  requireCloudSandboxFileAuthority,
+} from './cloudSandboxDownloadAuthority';
 import { DesktopApiError } from './client';
 import type { DesktopRuntimeConfig } from '../types';
 
@@ -123,7 +127,7 @@ export async function desktopApiFetch(
   });
   if (responsePolicy && result.status >= 200 && result.status < 300) {
     return responsePolicy.kind === 'binary'
-      ? binaryResponse(result.status, result.body, responsePolicy.max_bytes)
+      ? binaryResponse(result.status, result.body, responsePolicy.max_bytes, path)
       : eventStreamResponse(result.status, result.body, responsePolicy.max_bytes);
   }
   const responseBody = result.status === 204 || result.body === null
@@ -228,10 +232,14 @@ function binaryResponsePolicy(
   return Object.freeze({ kind: options.responseType, max_bytes: maxBytes });
 }
 
-function binaryResponse(status: number, input: unknown, maxBytes: number): Response {
+function binaryResponse(status: number, input: unknown, maxBytes: number, path: string): Response {
+  const sandboxDownload = isCloudSandboxDownloadPath(path);
   const record = exactRecord(
     input,
-    new Set(['kind', 'bytes_base64', 'size_bytes', 'mime_type', 'filename']),
+    new Set([
+      'kind', 'bytes_base64', 'size_bytes', 'mime_type', 'filename',
+      ...(sandboxDownload ? ['file_authority'] : []),
+    ]),
     'cloud_binary_response_contract_invalid',
   );
   if (
@@ -253,12 +261,22 @@ function binaryResponse(status: number, input: unknown, maxBytes: number): Respo
   }
   const responseBody = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(responseBody).set(bytes);
+  const fileAuthority = sandboxDownload
+    ? requireCloudSandboxFileAuthority(record.file_authority)
+    : null;
   return new Response(responseBody, {
     status,
     headers: {
       'Content-Type': record.mime_type,
       'Content-Disposition': `attachment; filename="${record.filename}"`,
       'Content-Length': String(bytes.byteLength),
+      ...(fileAuthority
+        ? {
+            'X-MemStack-File-Contract-Version': String(fileAuthority.contract_version),
+            'X-MemStack-File-Authority': fileAuthority.authority,
+            'X-MemStack-File-Isolation': fileAuthority.isolation,
+          }
+        : {}),
     },
   });
 }
@@ -384,7 +402,7 @@ function mutationAuthority(headersInit: HeadersInit | undefined): VaultBoundClou
 function validIdempotencyKey(value: string | null): value is string {
   return (
     value !== null &&
-    value.length >= 16 &&
+    value.length >= 8 &&
     value.length <= 256 &&
     value === value.trim()
   );

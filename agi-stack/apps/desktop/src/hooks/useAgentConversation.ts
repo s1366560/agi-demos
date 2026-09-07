@@ -5,14 +5,10 @@ import {
 } from 'react';
 
 import { useAgentSocket } from './useAgentSocket';
-import { createDesktopAgentAuthorityAdapter } from '../features/agent-authority/cloudAgentAuthorityClient';
-import type { CloudAgentAuthorityScope } from '../features/agent-authority/agentAuthorityTypes';
 import type { ConversationSessionProjection } from '../features/session/sessionProjectionTypes';
 import { normalizeSessionTaskListPlan } from '../features/session/sessionPlanApprovalModel';
 import { useWorkspaceAgentPolicy } from '../features/settings/useWorkspaceAgentPolicy';
-import {
-  DesktopApiClient,
-} from '../api/client';
+import type { DesktopConversationMessagingOperationsV2 } from '../plugins/desktopConversationMessagingAuthorityModuleV2';
 import {
   type PermissionPreset,
 } from '../features/chat/permissionPresetModel';
@@ -20,6 +16,10 @@ import type { AgentTaskSignal } from '../features/chat/agentTaskSignalModel';
 import {
   type NewTaskResumeDraft,
 } from '../features/task/NewTaskFlow';
+import type {
+  DesktopNewThreadCreationOperationsV2,
+} from '../plugins/desktopNewThreadCreationAuthorityModuleV2';
+import type { DesktopSessionRunInputOperationsV2 } from '../plugins/desktopSessionRunInputAuthorityModuleV2';
 import {
   type NewTaskAgentTurnOutcome,
 } from '../features/task/newTaskPlanModel';
@@ -67,10 +67,10 @@ export type AgentConversationParams = {
   configuredNewThreadWorkspaceId: string;
   localRuntimeMode: boolean;
   canManageWorkspacePolicy: boolean;
-  api: DesktopApiClient;
+  messagingOperationsV2: DesktopConversationMessagingOperationsV2;
+  newThreadCreationClientV2: DesktopNewThreadCreationOperationsV2;
+  sessionRunInputOperationsV2: DesktopSessionRunInputOperationsV2;
   socket: ReturnType<typeof useAgentSocket>;
-  activityAuthorityAdapter: ReturnType<typeof createDesktopAgentAuthorityAdapter>;
-  activityAuthorityScope: CloudAgentAuthorityScope | undefined;
   workspaceAgentPolicy: ReturnType<typeof useWorkspaceAgentPolicy>;
   setLoginModalOpen: Dispatch<SetStateAction<boolean>>;
   setCommandPaletteOpen: Dispatch<SetStateAction<boolean>>;

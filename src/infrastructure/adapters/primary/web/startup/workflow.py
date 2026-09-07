@@ -1,18 +1,32 @@
 """Workflow engine initialization for startup."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any, cast
 
 from sqlalchemy import select
 
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, TaskLog
 from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
+from src.infrastructure.plugins.v2.boundary import (
+    current_process_generation_host_v2,
+    pin_generation_v2,
+)
+from src.infrastructure.plugins.v2.graph_runtime import (
+    GRAPH_RUNTIME_SERVICE_V2,
+    GraphRuntimeServiceV2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
+
+GraphWorkflowHandler = Callable[[dict[str, Any], object], Awaitable[dict[str, object]]]
 
 
 async def _update_episode_processing_records(
@@ -380,36 +394,51 @@ async def _run_incremental_refresh_workflow(
         raise
 
 
-async def initialize_workflow_engine(
-    graph_service: object | None = None,
-) -> WorkflowEnginePort | None:
-    """Initialize the asyncio-based workflow engine.
+async def _run_with_graph_runtime_v2(
+    handler: GraphWorkflowHandler,
+    payload: dict[str, Any],
+) -> dict[str, object]:
+    """Run one background workflow against its own immutable generation lease."""
+    host = current_process_generation_host_v2()
+    async with pin_generation_v2(host) as generation:
+        runtime = generation.resolve(
+            GRAPH_RUNTIME_SERVICE_V2,
+            ScopeV2(kind=ScopeKindV2.ROOT),
+        )
+        if not isinstance(runtime, GraphRuntimeServiceV2):
+            raise RuntimeV2Error(
+                "invalid_graph_runtime",
+                "workflow generation has an invalid graph runtime service",
+            )
+        return await handler(payload, runtime.require())
 
-    Returns:
-        WorkflowEnginePort instance.
-    """
+
+def register_workflow_handlers_v2(
+    workflow_engine: AsyncioWorkflowEngine,
+) -> AsyncioWorkflowEngine:
+    """Register the builtin handlers selected by the explicit V2 workflow module."""
+    workflow_engine.register_handler(
+        "episode_processing",
+        partial(_run_with_graph_runtime_v2, _run_episode_processing_workflow),
+    )
+    workflow_engine.register_handler(
+        "incremental_refresh",
+        partial(_run_with_graph_runtime_v2, _run_incremental_refresh_workflow),
+    )
+    workflow_engine.register_handler(
+        "rebuild_communities",
+        partial(_run_with_graph_runtime_v2, _run_rebuild_communities_workflow),
+    )
+    logger.info(
+        "Registered generation-leased workflow handlers: episode_processing, "
+        "incremental_refresh, rebuild_communities"
+    )
+    return workflow_engine
+
+
+def build_asyncio_workflow_engine_v2(*, manager: TaskManager) -> AsyncioWorkflowEngine:
+    """Build the local workflow engine activated by the V2 Provider effect."""
     logger.info("Initializing Asyncio Workflow Engine...")
-    workflow_engine = AsyncioWorkflowEngine()
-    if graph_service is not None:
-        workflow_engine.register_handler(
-            "episode_processing",
-            lambda payload: _run_episode_processing_workflow(payload, graph_service),
-        )
-        workflow_engine.register_handler(
-            "incremental_refresh",
-            lambda payload: _run_incremental_refresh_workflow(payload, graph_service),
-        )
-        workflow_engine.register_handler(
-            "rebuild_communities",
-            lambda payload: _run_rebuild_communities_workflow(payload, graph_service),
-        )
-        logger.info(
-            "Registered workflow handlers: episode_processing, incremental_refresh, "
-            "rebuild_communities"
-        )
-    else:
-        logger.warning(
-            "Graph service unavailable; episode_processing workflow handler not registered"
-        )
+    workflow_engine = register_workflow_handlers_v2(AsyncioWorkflowEngine(manager=manager))
     logger.info("Asyncio Workflow Engine initialized")
     return workflow_engine

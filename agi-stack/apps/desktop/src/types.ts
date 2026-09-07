@@ -18,8 +18,6 @@ export type CredentialKind =
 export type WorkbenchSection =
   | 'workspace'
   | 'home'
-  | 'automations'
-  | 'search'
   | 'chat'
   | 'board'
   | 'activity'
@@ -1093,7 +1091,13 @@ export type BrowserSiteCredentialInput = {
   password: string;
 };
 
-export type BrowserAuditOutcome = 'ok' | 'consent' | 'error';
+export type BrowserAuditOutcome =
+  | 'ok'
+  | 'consent'
+  | 'error'
+  | 'denied'
+  | 'consent_required'
+  | 'declined';
 
 export type BrowserAuditEntry = {
   id: string;
@@ -1246,7 +1250,7 @@ export type ManagedSkillVersionList = {
 };
 
 export type ManagedSkillVersionDetail = ManagedSkillVersion & {
-  skill_md_content: string;
+  skill_md_content: string | null;
   resource_files: Record<string, unknown> | null;
 };
 
@@ -1346,128 +1350,40 @@ export type ManagedSkillContent = {
   is_system_skill: boolean;
 };
 
-export type ManagedPlugin = {
+export type MarketplacePluginCatalogEntry = {
+  plugin_id: string;
+  version: string;
+  publisher: string;
+  artifact_digest: string;
+  artifact_registry: string;
+  artifact_repository: string;
+  oci_manifest_digest: string;
+  install_status: string;
+  manifest: Record<string, unknown>;
+  signature: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  security_scan_status: string;
+  revoked: boolean;
+  revocation_reason?: string | null;
+};
+
+export type ManagedPlugin = MarketplacePluginCatalogEntry & {
   id: string;
   name: string;
-  source: string;
-  package?: string;
-  version?: string;
-  kind?: string;
+  source: 'marketplace-v2';
+  package: string;
+  kind: 'bundle-v2';
   enabled: boolean;
   discovered: boolean;
-  providers?: string[];
-  skills?: string[];
-  channel_types?: string[];
-  tool_definitions?: Array<Record<string, unknown>>;
-  [key: string]: unknown;
+  targets: string[];
 };
 
-export type PluginDiagnostic = {
-  plugin_name: string;
-  code: string;
-  message: string;
-  level: string;
-};
-
-export type ManagedPluginRuntime = {
-  items: ManagedPlugin[];
-  diagnostics: PluginDiagnostic[];
-};
-
-export type PlatformPluginApplyState = {
-  requested_version: number;
-  requested_nonce: string;
-  requested_digest: string;
-  applied_version: number;
-  applied_digest: string | null;
-  status: 'pending' | 'ack' | 'nack';
-  error_message: string | null;
-  has_last_good: boolean;
-  active_plugins?: PlatformPluginActivationRecord[];
-  quota_usage?: PlatformPluginQuotaUsage[];
-};
-
-export type PlatformPluginQuotaUsage = {
+export type MarketplacePluginUninstallResponse = {
   plugin_id: string;
-  call_charge_usd_micros: number;
-  monthly_period: string | null;
-  monthly_usd_micros_used: number;
-  monthly_usd_micros_limit: number | null;
-  artifact_storage_bytes: number;
-  artifact_storage_bytes_limit: number | null;
-};
-
-export type PlatformPluginActivationRecord = {
-  plugin_id: string;
-  plugin_version: string;
-  runtime: string;
-  trust: string;
-  capabilities: Record<string, unknown>[];
-  config: Record<string, unknown>;
-};
-
-export type PlatformPluginFrontendModule = {
-  plugin_id: string;
-  digest: string;
-  trust: 'builtin' | 'signed';
-  html: string;
-  slots: unknown[];
-};
-
-export type PlatformPluginSnapshotCapability = {
-  kind: string;
-  id: string;
-  contract: string;
-  permissions: string[];
-};
-
-export type PlatformPluginSnapshotRow = {
-  schema_version: number;
-  id: string;
   version: string;
-  runtime: string;
-  trust: string;
-  provides: PlatformPluginSnapshotCapability[];
-  config: Record<string, unknown>;
-};
-
-export type PlatformPluginSnapshot = {
-  version?: number;
-  profile_id?: string;
-  digest?: string;
-  plugins: PlatformPluginSnapshotRow[];
-};
-
-export type PluginCapabilityCounts = {
-  channel_types: number;
-  tool_factories: number;
-  registered_tool_factories: number;
-  hooks: number;
-  commands: number;
-  services: number;
-  providers: number;
-};
-
-export type PluginControlPlaneTrace = {
-  trace_id: string;
-  action: string;
-  plugin_name?: string | null;
-  tenant_id?: string | null;
-  timestamp: string;
-  capability_counts: PluginCapabilityCounts;
-};
-
-export type PluginActionDetails = {
-  diagnostics?: PluginDiagnostic[];
-  control_plane_trace?: PluginControlPlaneTrace;
-  channel_reload_plan?: Record<string, number>;
-  [key: string]: unknown;
-};
-
-export type PluginActionResponse = {
-  success: boolean;
-  message: string;
-  details?: PluginActionDetails | null;
+  status: 'uninstalled';
+  desired_removed: boolean;
+  revoked_permissions: number;
 };
 
 export type PluginConfigSchemaProperty = {
@@ -1485,41 +1401,6 @@ export type PluginConfigUiHint = {
   placeholder?: string;
   sensitive?: boolean;
   advanced?: boolean;
-};
-
-export type PluginConfigSchema = {
-  plugin_name: string;
-  source?: string | null;
-  package?: string | null;
-  version?: string | null;
-  kind?: string | null;
-  manifest_id?: string | null;
-  providers: string[];
-  skills: string[];
-  enabled: boolean;
-  discovered: boolean;
-  schema_supported: boolean;
-  config_schema?: {
-    type?: string;
-    properties?: Record<string, PluginConfigSchemaProperty>;
-    required?: string[];
-  } | null;
-  config_ui_hints?: Record<string, PluginConfigUiHint> | null;
-  defaults?: Record<string, unknown> | null;
-  secret_paths: string[];
-};
-
-export type PluginConfigRecord = {
-  id?: string | null;
-  tenant_id: string;
-  plugin_name: string;
-  config: Record<string, unknown>;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
-export type UpdatePluginConfigRequest = {
-  config: Record<string, unknown>;
 };
 
 export type ManagedChannelPluginCatalogItem = {

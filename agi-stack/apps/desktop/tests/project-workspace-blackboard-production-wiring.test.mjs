@@ -1,7 +1,34 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
+import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
+import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
+import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const compiledNavigationDirectory = '/tmp/agistack-desktop-test-dist/src/features/navigation';
@@ -37,6 +64,18 @@ const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8
 const registrySource = readFileSync(
   new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
   'utf8',
+);
+const workbenchSource = readFileSync(
+  new URL('../src/features/runtime/workbenchCapabilityClient.ts', import.meta.url),
+  'utf8',
+);
+const providerSource = readFileSync(
+  new URL('../src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts', import.meta.url),
+  'utf8',
+);
+const legacyProjectWorkspacesClientPath = new URL(
+  '../src/features/project-workspaces/projectWorkspacesHttpClient.ts',
+  import.meta.url,
 );
 
 const cloudConfig = Object.freeze({
@@ -178,6 +217,100 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
         },
         config,
         {
+          projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+          tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
+          tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
+          tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+          projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+          projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+          projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+          projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+          projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+          projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+          projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+          projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+          projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+          projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture({
+            async probeProjectBlackboard({ scope }) {
+              assert.deepEqual(scope, blackboardScope);
+              return {
+                scope,
+                authority: mode,
+                availability: mode === 'cloud' ? 'available' : 'degraded',
+                reasonCode: mode === 'cloud' ? null : 'local_workspace_plan_read_only',
+                initialSurface: mode === 'cloud' ? 'goals' : 'status',
+                allowedActions:
+                  mode === 'cloud'
+                    ? ['view', 'read-surfaces', 'mutate-surfaces']
+                    : ['view', 'review-plan'],
+                authorityRevision: null,
+              };
+            },
+          }),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+          runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
+            },
+          },
+          backendStoresOperationsV2: {
+            async probeBackendStores({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
+            },
+          },
           projectWorkspacesClient: {
             async list(scope) {
               assert.deepEqual(scope, workspaceScope);
@@ -194,23 +327,6 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
                     ? ['view', 'list', 'create', 'open-blackboard']
                     : ['view', 'list', 'open-blackboard'],
                 workspaces: [],
-              };
-            },
-          },
-          projectBlackboardClient: {
-            async probe(scope) {
-              assert.deepEqual(scope, blackboardScope);
-              return {
-                scope,
-                authority: mode,
-                availability: mode === 'cloud' ? 'available' : 'degraded',
-                reasonCode: mode === 'cloud' ? null : 'local_workspace_plan_read_only',
-                initialSurface: mode === 'cloud' ? 'goals' : 'status',
-                allowedActions:
-                  mode === 'cloud'
-                    ? ['view', 'read-surfaces', 'mutate-surfaces']
-                    : ['view', 'review-plan'],
-                collaborationClient: inertCollaborationClient,
               };
             },
           },
@@ -255,15 +371,92 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
       },
       config,
       {
+        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+        projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+        projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+        projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+        projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+        projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture({
+          async probeProjectBlackboard() {
+            blackboardProbeCount += 1;
+            throw new Error('must not probe without workspace scope');
+          },
+        }),
+        runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+        runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+        runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+        tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        deadLetterQueueOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
+          },
+        },
+        backendStoresOperationsV2: {
+          async probeBackendStores({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  authorityRevision: 23,
+                };
+          },
+        },
         projectWorkspacesClient: {
           async list() {
             throw new Error('workspace authority unavailable');
-          },
-        },
-        projectBlackboardClient: {
-          async probe() {
-            blackboardProbeCount += 1;
-            throw new Error('must not probe without workspace scope');
           },
         },
       },
@@ -306,9 +499,26 @@ test('App binds both typed route modules without browser handoff or DesktopApiCl
     registrySource,
     /\[PROJECT_BLACKBOARD_ROUTE_ID\]:\s*createProjectBlackboardRouteModuleLoader\(/,
   );
-  assert.match(registrySource, /createProjectWorkspacesHttpClient\(/);
-  assert.match(registrySource, /createProjectBlackboardCloudClient\(/);
-  assert.match(registrySource, /createProjectBlackboardLocalClient\(/);
+  assert.match(registrySource, /createProjectWorkspacesV2Client\(/);
+  assert.match(registrySource, /desktopWorkspaceCatalogOperationsV2/u);
+  assert.match(registrySource, /desktopWorkspaceLifecycleOperationsV2/u);
+  assert.doesNotMatch(registrySource, /createProjectWorkspacesHttpClient\(/u);
+  const snapshotDependencies = readFileSync(
+    new URL('../src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(providerSource, /operations\.loadSnapshot\(/u);
+  assert.doesNotMatch(providerSource, /createProjectWorkspacesV2Client/u);
+  assert.match(snapshotDependencies, /createProjectWorkspacesV2Client\(config,\s*\{/u);
+  assert.match(snapshotDependencies, /catalogOperations: desktopWorkspaceCatalogOperationsV2/u);
+  assert.match(snapshotDependencies, /lifecycleOperations: desktopWorkspaceLifecycleOperationsV2/u);
+  assert.match(workbenchSource, /projectWorkspacesClient:\s*Pick<ProjectWorkspacesClient/u);
+  assert.doesNotMatch(workbenchSource, /projectWorkspacesClient\?\s*:/u);
+  assert.doesNotMatch(workbenchSource, /createProjectWorkspacesHttpClient/u);
+  assert.equal(existsSync(legacyProjectWorkspacesClientPath), false);
+  assert.match(registrySource, /createProjectBlackboardV2Client\(/);
+  assert.match(registrySource, /projectBlackboardOperationsV2/u);
+  assert.doesNotMatch(registrySource, /createProjectBlackboard(?:Cloud|Local)Client\(/u);
   assert.match(registrySource, /buildProjectBlackboardCanonicalPath\(/);
   assert.doesNotMatch(
     registrySource,
@@ -358,15 +568,3 @@ function capabilityScope(config, workspace) {
     instance_id: null,
   };
 }
-
-const inertCollaborationClient = Object.freeze({
-  async getSurface() {
-    throw new Error('unused');
-  },
-  async refetchAuthority() {
-    throw new Error('unused');
-  },
-  async mutateSurface() {
-    throw new Error('unused');
-  },
-});

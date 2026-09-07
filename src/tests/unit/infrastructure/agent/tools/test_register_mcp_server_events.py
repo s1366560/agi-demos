@@ -88,6 +88,9 @@ class TestRegisterMCPServerToolEvents:
         from src.infrastructure.agent.tools.register_mcp_server import (
             register_mcp_server_tool,
         )
+        from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+            make_register_mcp_server_tool,
+        )
 
         _MOD = "src.infrastructure.agent.tools.register_mcp_server"
 
@@ -123,15 +126,15 @@ class TestRegisterMCPServerToolEvents:
 
         mock_adapter.call_tool = mock_call_tool
 
-        monkeypatch.setattr(f"{_MOD}._register_mcp_sandbox_adapter", mock_adapter)
-        monkeypatch.setattr(f"{_MOD}._register_mcp_sandbox_id", "sandbox-1")
-        monkeypatch.setattr(f"{_MOD}._register_mcp_tenant_id", "tenant-1")
-        monkeypatch.setattr(f"{_MOD}._register_mcp_project_id", "proj-1")
-        monkeypatch.setattr(f"{_MOD}._register_mcp_session_factory", None)
-        # Stub persist to avoid DB
-        monkeypatch.setattr(
-            f"{_MOD}._register_mcp_persist_server", AsyncMock(return_value=None)
+        bound_tool = make_register_mcp_server_tool(
+            template=register_mcp_server_tool,
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            sandbox_adapter=mock_adapter,
+            sandbox_id="sandbox-1",
         )
+        # Stub persist to avoid DB
+        monkeypatch.setattr(f"{_MOD}._register_mcp_persist_server", AsyncMock(return_value=None))
         # Stub SelfModifyingLifecycleOrchestrator.run_post_change
         _LIFECYCLE = (
             "src.infrastructure.agent.tools.self_modifying_lifecycle"
@@ -145,7 +148,7 @@ class TestRegisterMCPServerToolEvents:
         )
 
         ctx = _make_ctx()
-        result = await register_mcp_server_tool.execute(
+        result = await bound_tool.execute(
             ctx,
             server_name="test-server",
             server_type="stdio",
@@ -182,6 +185,9 @@ class TestRegisterMCPServerToolEvents:
         from src.infrastructure.agent.tools.register_mcp_server import (
             register_mcp_server_tool,
         )
+        from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+            make_register_mcp_server_tool,
+        )
 
         _MOD = "src.infrastructure.agent.tools.register_mcp_server"
 
@@ -204,31 +210,34 @@ class TestRegisterMCPServerToolEvents:
             call_count += 1
             if call_count <= 2:
                 return {"content": [{"type": "text", "text": '{"success": true}'}]}
-            tools_json = json.dumps([
-                {"name": "regular_tool", "_meta": {}},
-                {
-                    "name": "ui_tool",
-                    "_meta": {
-                        "ui": {
-                            "resourceUri": "app://ui-tool",
-                            "title": "UI Tool",
-                        }
+            tools_json = json.dumps(
+                [
+                    {"name": "regular_tool", "_meta": {}},
+                    {
+                        "name": "ui_tool",
+                        "_meta": {
+                            "ui": {
+                                "resourceUri": "app://ui-tool",
+                                "title": "UI Tool",
+                            }
+                        },
                     },
-                },
-            ])
+                ]
+            )
             return {"content": [{"type": "text", "text": tools_json}]}
 
         mock_adapter.call_tool = mock_call_tool
 
-        monkeypatch.setattr(f"{_MOD}._register_mcp_sandbox_adapter", mock_adapter)
-        monkeypatch.setattr(f"{_MOD}._register_mcp_sandbox_id", "sandbox-1")
-        monkeypatch.setattr(f"{_MOD}._register_mcp_tenant_id", "tenant-1")
-        monkeypatch.setattr(f"{_MOD}._register_mcp_project_id", "proj-1")
-        monkeypatch.setattr(f"{_MOD}._register_mcp_session_factory", AsyncMock())
-        # Stub persist helpers to avoid DB
-        monkeypatch.setattr(
-            f"{_MOD}._register_mcp_persist_server", AsyncMock(return_value=None)
+        bound_tool = make_register_mcp_server_tool(
+            template=register_mcp_server_tool,
+            session_factory=AsyncMock(),
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            sandbox_adapter=mock_adapter,
+            sandbox_id="sandbox-1",
         )
+        # Stub persist helpers to avoid DB
+        monkeypatch.setattr(f"{_MOD}._register_mcp_persist_server", AsyncMock(return_value=None))
         monkeypatch.setattr(
             f"{_MOD}._register_mcp_persist_app", AsyncMock(return_value="test-app-id")
         )
@@ -245,7 +254,7 @@ class TestRegisterMCPServerToolEvents:
         )
 
         ctx = _make_ctx()
-        await register_mcp_server_tool.execute(
+        await bound_tool.execute(
             ctx,
             server_name="app-server",
             server_type="stdio",
@@ -262,6 +271,7 @@ class TestRegisterMCPServerToolEvents:
 
         # Check that all tools are included
         assert len(event.tool_names) == 2
+
 
 class TestToolsUpdatedEventIntegration:
     """Integration tests for tools updated event handling."""

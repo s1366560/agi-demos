@@ -27,7 +27,7 @@ from .schemas import (
     ToolCallResponse,
     ToolInfo,
 )
-from .utils import assert_caller_owns_sandbox, get_sandbox_adapter
+from .utils import assert_caller_owns_sandbox, get_sandbox_adapter, get_sandbox_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +114,8 @@ async def list_agent_tools(
     await assert_caller_owns_sandbox(
         sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
     )
-    from src.configuration.di_container import DIContainer
-
     try:
-        container = DIContainer()
-        tool_registry = container.sandbox_tool_registry()
+        tool_registry = get_sandbox_tool_registry()
 
         # Get registered tool names
         tool_names = await tool_registry.get_sandbox_tools(sandbox_id)

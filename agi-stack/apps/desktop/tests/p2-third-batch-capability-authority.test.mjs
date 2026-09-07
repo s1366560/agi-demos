@@ -1,13 +1,40 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
+import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
+import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
+import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
+import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const root = '/tmp/agistack-desktop-test-dist/src/features/settings-routes';
-const {
-  P2_THIRD_BATCH_CAPABILITY_IDS,
-  createP2ThirdBatchCapabilityClient,
-} = require(`${root}/p2ThirdBatchCapabilityClient.js`);
+const { P2_THIRD_BATCH_CAPABILITY_IDS, createP2ThirdBatchCapabilityClient } = require(
+  `${root}/p2ThirdBatchCapabilityClient.js`,
+);
 const { NativeRouteClientError } = require(`${root}/nativeRouteHttpClient.js`);
 const {
   createDesktopWorkbenchCapabilityClient,
@@ -87,10 +114,7 @@ test('P2 third-batch Local policy distinguishes N/A, observed unavailable, and r
     channels: {
       async observe() {
         channelCalls += 1;
-        throw new NativeRouteClientError(
-          'local_channel_runtime_not_applicable',
-          501,
-        );
+        throw new NativeRouteClientError('local_channel_runtime_not_applicable', 501);
       },
     },
     templates: rejecting('local_subagent_registry_unavailable'),
@@ -174,17 +198,92 @@ test('workbench Snapshot v4 keeps unversioned P2 observations unavailable', asyn
       headers: { 'content-type': 'application/json' },
     });
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
-      unavailableAutomation,
-      cloudConfig,
-      {
-        p2ThirdBatchCapabilityClient: {
-          async load() {
-            return projectionSet();
-          },
+    const client = createDesktopWorkbenchCapabilityClient(unavailableAutomation, cloudConfig, {
+      projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
+      tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
+      tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+      projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+      projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+      projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+      projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+      projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+      projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+      projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+      projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+      projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+      projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+      projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+      projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+      runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+      runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+      runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+      runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+      instanceTemplatesOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'local_instance_template_authority_unavailable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                authorityRevision: null,
+              };
         },
       },
-    );
+      deadLetterQueueOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: null,
+                allowedActions: ['view', 'list'],
+                authorityRevision: null,
+              };
+        },
+      },
+      backendStoresOperationsV2: {
+        async probeBackendStores({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: null,
+                allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                authorityRevision: 23,
+              };
+        },
+      },
+      projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+      tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+      tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+      tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+      tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+      tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      p2ThirdBatchCapabilityClient: {
+        async load() {
+          return projectionSet();
+        },
+      },
+    });
     const snapshot = await client.loadSnapshot();
     for (const id of P2_THIRD_BATCH_CAPABILITY_IDS) {
       assert.equal(snapshot.capabilities[id].provenance, 'observed', id);
@@ -202,12 +301,7 @@ test('workbench Snapshot v4 keeps unversioned P2 observations unavailable', asyn
   }
 });
 
-function probe({
-  scope,
-  availability = 'available',
-  reasonCode = null,
-  allowedActions,
-}) {
+function probe({ scope, availability = 'available', reasonCode = null, allowedActions }) {
   return {
     async observe() {
       return {

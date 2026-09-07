@@ -35,7 +35,7 @@ Tools inherited from a two-level class hierarchy (the legacy path, still support
 ```
 AgentToolBase (domain port, ABC)
   -> AgentTool (infrastructure, adds truncation)
-    -> ConcreteTools (terminal_tool, todo_tools, etc.)
+    -> ConcreteTools (todo_tools, etc.)
 ```
 
 Each tool must implement:
@@ -644,12 +644,11 @@ class ToolRegistry:
 
 ## 9. Skills as Tools
 
-> **Status: Implemented.** The `skill` tool in `src/infrastructure/agent/tools/skill_tool.py`
-> is a `@tool_define`-declared first-class tool that loads skill content via an injected
-> `SkillLoaderProtocol` and returns a `ToolResult`. A request-scoped allowlist
-> (`ctx.runtime_context["allowed_skills"]`) gates which skills an agent profile may load.
-> `SkillOrchestrator` still handles trigger matching, but skill *invocation* now flows through
-> the standard tool pipeline.
+> **Status: Superseded by V2.** The process-global `skill` tool was retired. Skill loading now
+> uses the generation-bound `skill_loader` contribution in
+> `src/infrastructure/agent/tools/skill_loader.py`; install and sync are separate explicit V2
+> contributions. A request-scoped allowlist (`ctx.runtime_context["allowed_skills"]`) still gates
+> which skills an agent profile may load.
 
 ### Current State (MemStack)
 
@@ -1370,7 +1369,7 @@ MemStack (proposed):
 | `src/infrastructure/agent/permission/manager.py` | Add pattern matching, persistent approvals |
 | `src/infrastructure/agent/tools/tool_registry.py` | Add model-aware selection, hook registration |
 | `src/infrastructure/agent/tools/truncation.py` | Enhance with disk persistence, direction awareness |
-| All tool files (`todo_tools.py`, `terminal_tool.py`, etc.) | Migrate from class to `@tool_define` (Phase 2-3) |
+| Remaining tool files (`todo_tools.py`, etc.) | Migrate from class to `@tool_define` (Phase 2-3) |
 | `src/infrastructure/mcp/sandbox_tool_adapter.py` | Remove HTML caching; use unified adapter |
 | `src/infrastructure/agent/mcp/adapter.py` | Standardize naming, add Pydantic validation |
 | `src/infrastructure/adapters/secondary/sandbox/mcp_sandbox_adapter.py` | Add abort signal propagation support |
@@ -1398,7 +1397,7 @@ Last checked against code: 2026-06-23.
 | 6 | ToolContext | Implemented | `src/infrastructure/agent/tools/context.py` (`emit`, `metadata`, `ask`, `race`, `consume_pending_events`) |
 | 7 | Abort/Cancel Signal Propagation | Implemented | `ToolContext.race()` + `ToolAbortedError` in `context.py`; pipeline emits `ToolEvent.aborted` |
 | 8 | Model-Aware Tool Selection | Partial | `ToolRegistry.get_tools(model=...)` filters via `model_filter`; per-model schema/tool substitution (`_adapt_for_model`) not implemented |
-| 9 | Skills as Tools | Implemented | `src/infrastructure/agent/tools/skill_tool.py` (`@tool_define`-based `skill` tool, `SkillLoaderProtocol`) |
+| 9 | Skills as Tools | Superseded by V2 | `src/infrastructure/agent/tools/skill_loader.py` (generation-bound `skill_loader` contribution) |
 | 10 | Unified MCP Tool Adapter | Implemented | `src/infrastructure/mcp/tool_info.py` (`MCPToolInfo`, `MCPToolExecutorPort`, `mcp_tool_to_info`); naming unified to `mcp__{server}__{tool}` |
 | 11 | MCP Tools as First-Class Pipeline Citizens | Implemented | `src/infrastructure/mcp/pipeline_executor.py` (`PipelineMCPExecutor`, `MCPErrorHandler`); legacy `SandboxMCPServerToolAdapter` retained |
 | 12 | SRP: Resource/UI Concerns Separation | Implemented | `src/infrastructure/mcp/resource_cache.py` (`MCPResourceCache`); injected into `SandboxMCPServerToolAdapter` (inline fallback retained) |

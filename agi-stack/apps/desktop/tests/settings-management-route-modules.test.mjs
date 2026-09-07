@@ -1,3 +1,4 @@
+import { createTenantProvidersHttpOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -12,8 +13,8 @@ const {
   createProviderRouteClient,
 } = require(`${featureRoot}/providerRouteClient.js`);
 const {
-  createAgentDefinitionsRouteClient,
-} = require(`${featureRoot}/agentDefinitionsRouteClient.js`);
+  createDesktopTenantAgentDefinitionsRouteClientV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAgentDefinitionsAuthorityModuleV2.js');
 const {
   createSkillsRouteClient,
 } = require(`${featureRoot}/skillsRouteClient.js`);
@@ -163,7 +164,8 @@ test('each route owns a typed authority adapter and validates its runtime scope'
   const cases = [
     [
       createProviderRouteClient(config(), {
-        listLlmProviders: async () => {
+        listLlmProviders: async (input) => {
+          assert.deepEqual(input.scope, { authority: scope.authority, tenantId: scope.tenantId });
           calls.push('providers');
           return [{ id: 'provider-1' }];
         },
@@ -172,17 +174,24 @@ test('each route owns a typed authority adapter and validates its runtime scope'
       1,
     ],
     [
-      createAgentDefinitionsRouteClient(config(), {
-        listManagedAgents: async () => {
+      createDesktopTenantAgentDefinitionsRouteClientV2({
+        loadTenantAgentDefinitions: async ({ scope: operationScope }) => {
+          if (
+            operationScope.tenantId !== scope.tenantId ||
+            operationScope.projectId !== scope.projectId
+          ) {
+            throw new Error('management_route_runtime_scope_mismatch');
+          }
           calls.push('agents');
           return [{ id: 'agent-1' }, { id: 'agent-2' }];
         },
-      }),
+      }, config()),
       2,
     ],
     [
       createSkillsRouteClient(config(), {
-        listManagedSkills: async () => {
+        loadTenantSkillDefinitions: async ({ scope: operationScope }) => {
+          assert.deepEqual(operationScope, scope);
           calls.push('skills');
           return [];
         },
@@ -191,16 +200,18 @@ test('each route owns a typed authority adapter and validates its runtime scope'
     ],
     [
       createPluginsRouteClient(config(), {
-        listManagedPlugins: async () => {
+        projectMarketplacePlugins: async (_config, _signal, project) => {
           calls.push('plugins');
-          return [{ id: 'plugin-1' }];
+          return project([{ id: 'plugin-1' }]);
         },
       }),
       1,
     ],
     [
       createMcpServersRouteClient(config(), {
-        listMCPServers: async (projectId) => {
+        listMCPServers: async ({ config: requestConfig, scope: requestScope, args: [projectId] }) => {
+          assert.equal(requestConfig.tenantId, requestScope.tenantId);
+          assert.equal(projectId, requestScope.projectId);
           calls.push(`mcp:${projectId}`);
           return [{ id: 'mcp-1' }];
         },
@@ -249,14 +260,14 @@ test('local provider management observes the sidecar without invoking cloud_requ
   };
 
   try {
-    const localConfig = { ...config('local'), apiKey: '' };
+    const localConfig = { ...config('local'), apiKey: 'provider-route-trusted-session' };
     const scope = {
       authority: 'local',
       tenantId: localConfig.tenantId,
       projectId: localConfig.projectId,
     };
 
-    assert.deepEqual(await createProviderRouteClient(localConfig).observe(scope), {
+    assert.deepEqual(await createProviderRouteClient(localConfig, createTenantProvidersHttpOperationsV2Fixture()).observe(scope), {
       scope,
       itemCount: 0,
     });
@@ -331,4 +342,44 @@ test('registry and App bind all five routes without Web escape or DesktopApiClie
     `${appSource}\n${registrySource}`,
     /settings-routes[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
   );
+});
+
+
+test('skills route forwards the scoped V2 observation and rejects without a fallback', async () => {
+  const runtime = config();
+  const scope = { authority: runtime.mode, tenantId: runtime.tenantId, projectId: runtime.projectId };
+  const controller = new AbortController();
+  const calls = [];
+  const failure = new Error('missing_service_provider');
+  const client = createSkillsRouteClient(runtime, {
+    async loadTenantSkillDefinitions(input) {
+      calls.push(input);
+      throw failure;
+    },
+  });
+  await assert.rejects(client.observe(scope, { signal: controller.signal }), (error) => error === failure);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], { config: runtime, scope, signal: controller.signal });
+  await assert.rejects(client.observe({ ...scope, tenantId: 'another-tenant' }), /management_route_runtime_scope_mismatch/u);
+  assert.equal(calls.length, 1);
+});
+
+
+test('provider route forwards V2 tenant scope and signal without retrying a rejected authority', async () => {
+  const runtime = config();
+  const scope = { authority: runtime.mode, tenantId: runtime.tenantId, projectId: runtime.projectId };
+  const signal = new AbortController().signal;
+  const inputs = [];
+  const rejected = new Error('missing_service_provider');
+  const client = createProviderRouteClient(runtime, {
+    async listLlmProviders(input) { inputs.push(input); throw rejected; },
+    async listLlmProviderTypes(input) { inputs.push(input); return []; },
+  });
+  await assert.rejects(client.observe(scope, { signal }), (error) => error === rejected);
+  assert.equal(inputs.length, 2);
+  for (const input of inputs) assert.deepEqual(input, {
+    config: runtime, args: [], scope: { authority: scope.authority, tenantId: scope.tenantId }, signal,
+  });
+  await assert.rejects(client.observe({ ...scope, tenantId: 'another-tenant' }), /management_route_runtime_scope_mismatch/u);
+  assert.equal(inputs.length, 2);
 });

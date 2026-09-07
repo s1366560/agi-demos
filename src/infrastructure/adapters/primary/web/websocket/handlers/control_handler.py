@@ -6,23 +6,44 @@ import hashlib
 import json
 from typing import Any, Literal
 
+import redis.asyncio as redis
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import exists, select
 
 from src.domain.model.agent.tool_policy import ControlMessageType
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.agent.control_channel_port import ControlMessage
+from src.infrastructure.adapters.primary.web.startup.scoped_profile_runtime_v2 import (
+    ScopedProfileRuntimeV2,
+)
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.adapters.primary.web.websocket.scoped_session_admission_v2 import (
+    authorize_existing_scoped_session_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
     Conversation,
+    Project,
     UserProject,
     UserTenant,
 )
 from src.infrastructure.agent.subagent.control_channel import RedisControlChannel
+from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    current_agent_worker_redis_client_v2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.scoped_boundary import pin_scoped_agent_turn_operation_v2
+from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeReservationV2
 
 _ACTIVE_RUN_STATUSES = frozenset({"queued", "running"})
 _ACTIVE_SUBAGENT_STATUSES = frozenset({"pending", "running"})
@@ -82,6 +103,30 @@ def _decode_json(raw: Any) -> dict[str, Any] | None:  # noqa: ANN401
     return decoded if isinstance(decoded, dict) else None
 
 
+async def _acquire_control_reservation_v2(
+    context: MessageContext, conversation: Conversation
+) -> ScopedRuntimeReservationV2:
+    runtime = context.scoped_profile_runtime_v2
+    if not isinstance(runtime, ScopedProfileRuntimeV2):
+        raise RuntimeV2Error("scoped_runtime_missing", _("Scoped control runtime is unavailable"))
+    reservation = await runtime.acquire(
+        ScopeV2(
+            kind=ScopeKindV2.SESSION,
+            tenant_id=context.tenant_id,
+            project_id=conversation.project_id,
+            session_id=conversation.id,
+        )
+    )
+    try:
+        _authorized_scope = await authorize_existing_scoped_session_v2(
+            context, conversation_id=conversation.id, project_id=conversation.project_id
+        )
+    except BaseException:
+        await reservation.lease.release()
+        raise
+    return reservation
+
+
 class _SubAgentControlHandler(WebSocketMessageHandler):
     command_type: Literal["kill_run", "steer"]
 
@@ -102,6 +147,12 @@ class _SubAgentControlHandler(WebSocketMessageHandler):
                     Conversation.user_id == context.user_id,
                     Conversation.tenant_id == context.tenant_id,
                     exists(
+                        select(Project.id).where(
+                            Project.id == Conversation.project_id,
+                            Project.tenant_id == context.tenant_id,
+                        )
+                    ),
+                    exists(
                         select(UserProject.id).where(
                             UserProject.project_id == Conversation.project_id,
                             UserProject.user_id == context.user_id,
@@ -121,7 +172,45 @@ class _SubAgentControlHandler(WebSocketMessageHandler):
             await self._reject(context, message, "control_scope_denied")
             return
 
-        await self._handle_scoped_command(context, message, command, conversation)
+        try:
+            reservation = await _acquire_control_reservation_v2(context, conversation)
+            async with pin_scoped_agent_turn_operation_v2(
+                reservation,
+                operation_id=f"agent-control:{command.type}:{_payload_hash(command)}",
+                tenant_id=context.tenant_id,
+                project_id=conversation.project_id,
+                session_id=conversation.id,
+                services={
+                    OPERATION_DB_SESSION_SERVICE_V2: context.db,
+                    OPERATION_IDENTITY_SERVICE_V2: {
+                        "tenant_id": context.tenant_id,
+                        "user_id": context.user_id,
+                        "project_id": conversation.project_id,
+                    },
+                    OPERATION_METADATA_SERVICE_V2: {
+                        "kind": "agent-control",
+                        "channel": "websocket",
+                        "command_type": command.type,
+                        "conversation_id": conversation.id,
+                        "run_id": command.run_id,
+                    },
+                },
+            ):
+                redis_client = current_agent_worker_redis_client_v2()
+                await self._handle_scoped_command(
+                    context,
+                    message,
+                    command,
+                    conversation,
+                    redis=redis_client,
+                )
+        except RuntimeV2Error:
+            await self._reject(
+                context,
+                message,
+                "control_authority_unavailable",
+                project_id=conversation.project_id,
+            )
 
     async def _handle_scoped_command(
         self,
@@ -129,6 +218,8 @@ class _SubAgentControlHandler(WebSocketMessageHandler):
         message: dict[str, Any],
         command: _ControlCommand,
         conversation: Conversation,
+        *,
+        redis: redis.Redis,
     ) -> None:
         """Validate mutable run/SubAgent authority after conversation scope is established."""
 
@@ -146,7 +237,9 @@ class _SubAgentControlHandler(WebSocketMessageHandler):
         )
         parent_run = run_result.scalar_one_or_none()
         if parent_run is None:
-            await self._reject(context, message, "no_active_run", project_id=conversation.project_id)
+            await self._reject(
+                context, message, "no_active_run", project_id=conversation.project_id
+            )
             return
         if parent_run.revision != command.expected_run_revision:
             await self._reject(
@@ -167,13 +260,7 @@ class _SubAgentControlHandler(WebSocketMessageHandler):
             )
             return
 
-        redis = context.container.redis_client
-        if redis is None:
-            await self._reject(context, message, "control_authority_unavailable")
-            return
-        state = _decode_json(
-            await redis.get(f"subagent:state:{conversation.id}:{command.run_id}")
-        )
+        state = _decode_json(await redis.get(f"subagent:state:{conversation.id}:{command.run_id}"))
         if not self._state_is_authorized(state, command, conversation):
             await self._reject(
                 context,
@@ -191,6 +278,7 @@ class _SubAgentControlHandler(WebSocketMessageHandler):
             state,
             project_id=conversation.project_id,
             authority_revision=parent_run.revision,
+            redis=redis,
         )
 
     def _validate(self, message: dict[str, Any]) -> _ControlCommand | None:
@@ -224,9 +312,8 @@ class _SubAgentControlHandler(WebSocketMessageHandler):
         *,
         project_id: str,
         authority_revision: int,
+        redis: redis.Redis,
     ) -> None:
-        redis = context.container.redis_client
-        assert redis is not None
         key = _receipt_key(context.user_id, command.idempotency_key)
         digest = _payload_hash(command)
         existing = _decode_json(await redis.get(key))

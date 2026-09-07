@@ -272,5 +272,162 @@ async fn runtime_shutdown_joins_the_poll_loop() {
 
     tokio::time::timeout(Duration::from_secs(1), runtime.shutdown())
         .await
-        .expect("runtime shutdown must not hang");
+        .expect("runtime shutdown must not hang")
+        .expect("runtime stopped successfully");
+}
+
+struct BlockingRuntimeDriver {
+    events: Arc<Mutex<Vec<String>>>,
+    entered: tokio::sync::Notify,
+    resume: tokio::sync::Notify,
+    panic_after_resume: bool,
+}
+
+#[async_trait]
+impl CronSchedulerDriver for BlockingRuntimeDriver {
+    async fn list_work_scopes(
+        &self,
+        _authority: &CronSchedulerLease,
+        after: Option<&CronControlScope>,
+        _limit: i64,
+        _observed_at: DateTime<Utc>,
+    ) -> CoreResult<Vec<CronControlScope>> {
+        Ok(if after.is_none() {
+            vec![scope("a"), scope("b")]
+        } else {
+            Vec::new()
+        })
+    }
+
+    async fn drive_control_scope(
+        &self,
+        _authority: &CronSchedulerLease,
+        _scope: &CronControlScope,
+    ) -> CoreResult<CronScopeControlReport> {
+        Ok(CronScopeControlReport::default())
+    }
+
+    async fn drive_runtime_scope(&self, scope: &CronControlScope) -> CoreResult<()> {
+        self.events
+            .lock()
+            .expect("events lock")
+            .push(format!("started:{}", scope.project_id));
+        self.entered.notify_one();
+        self.resume.notified().await;
+        assert!(!self.panic_after_resume, "injected cron driver panic");
+        self.events
+            .lock()
+            .expect("events lock")
+            .push(format!("settled:{}", scope.project_id));
+        Ok(())
+    }
+}
+
+fn blocking_runtime(
+    panic_after_resume: bool,
+) -> (CronSchedulerRuntime, Arc<BlockingRuntimeDriver>) {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let driver = Arc::new(BlockingRuntimeDriver {
+        events: Arc::clone(&events),
+        entered: tokio::sync::Notify::new(),
+        resume: tokio::sync::Notify::new(),
+        panic_after_resume,
+    });
+    let scheduler = Arc::new(CronScheduler::new(
+        Arc::new(FakeOwnership {
+            events,
+            acquire: Some(lease(1)),
+            renewed: Some(lease(2)),
+            released: true,
+        }),
+        driver.clone(),
+        Arc::new(FixedClock(observed_at())),
+        enabled_config(),
+    ));
+    (
+        scheduler.spawn_if_enabled().expect("enabled runtime"),
+        driver,
+    )
+}
+
+#[tokio::test]
+async fn shutdown_settles_started_scope_without_starting_next_scope() {
+    let (runtime, driver) = blocking_runtime(false);
+    tokio::time::timeout(Duration::from_secs(1), driver.entered.notified())
+        .await
+        .expect("runtime scope started");
+    runtime.request_stop();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), runtime.shutdown())
+            .await
+            .is_err()
+    );
+    assert!(!driver
+        .events
+        .lock()
+        .expect("events lock")
+        .contains(&"settled:a".to_string()));
+    driver.resume.notify_one();
+    tokio::time::timeout(Duration::from_secs(1), runtime.shutdown())
+        .await
+        .expect("runtime drain finished")
+        .expect("runtime drained");
+    runtime.shutdown().await.expect("repeated drain succeeds");
+    let events = driver.events.lock().expect("events lock");
+    assert!(events.contains(&"settled:a".to_string()));
+    assert!(!events.contains(&"started:b".to_string()));
+}
+
+#[tokio::test]
+async fn shutdown_reports_driver_panic_on_every_observation() {
+    let (runtime, driver) = blocking_runtime(true);
+    tokio::time::timeout(Duration::from_secs(1), driver.entered.notified())
+        .await
+        .expect("runtime scope started");
+    runtime.request_stop();
+    driver.resume.notify_one();
+    let first = tokio::time::timeout(Duration::from_secs(1), runtime.shutdown())
+        .await
+        .expect("panic drain finished")
+        .expect_err("panic remains observable");
+    let second = runtime
+        .shutdown()
+        .await
+        .expect_err("repeated drain retains panic");
+    assert_eq!(first, second);
+    assert!(!driver
+        .events
+        .lock()
+        .expect("events lock")
+        .contains(&"started:b".to_string()));
+}
+
+#[tokio::test]
+async fn dropping_runtime_stops_admission_but_does_not_abort_started_scope() {
+    let (runtime, driver) = blocking_runtime(false);
+    tokio::time::timeout(Duration::from_secs(1), driver.entered.notified())
+        .await
+        .expect("runtime scope started");
+    drop(runtime);
+    driver.resume.notify_one();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if driver
+                .events
+                .lock()
+                .expect("events lock")
+                .contains(&"settled:a".to_string())
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("dropped runtime still settles its active scope");
+    assert!(!driver
+        .events
+        .lock()
+        .expect("events lock")
+        .contains(&"started:b".to_string()));
 }

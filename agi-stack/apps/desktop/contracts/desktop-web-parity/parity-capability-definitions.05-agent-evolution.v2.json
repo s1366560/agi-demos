@@ -241,9 +241,11 @@
       "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/settings-routes/evolutionRouteClient.ts",
         "agi-stack/apps/desktop/src/features/settings-routes/evolutionRouteController.ts",
@@ -273,7 +275,12 @@
         "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx",
         "agi-stack/apps/desktop/src/features/settings/useSkillPackageManagement.ts",
-        "agi-stack/apps/desktop/src/api/managedResourcesClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEvolutionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEvolutionOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEvolutionHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionHttpProjectionV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
       "judgment_rationale": "Web and Cloud Desktop now both bind the tenant Evolution overview, configuration, run, apply and reject contracts; tenant reads require membership and tenant mutations require administration. Desktop has a real canonical loader, typed client/controller/presentation model, App binding and native page, while the per-skill dialog remains an adjacent native entry. The observed P2 Snapshot projection does not yet carry a valid authority revision, so Cloud must stay capability_authority_revision_unavailable despite the completed renderer path. Local calls the same sidecar route family and remains observed unavailable under local_skill_evolution_authority_unavailable until a real revision-bound evolution authority exists."
@@ -448,7 +455,12 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts"
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -456,9 +468,11 @@
       "local_deviation": "Local keeps the native Workflow Patterns route and probes its private sidecar endpoints, which fail closed until a revision-bound local pattern store exists.",
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/TenantPatternsPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsClient.ts",
@@ -467,9 +481,14 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
-      "judgment_rationale": "WorkflowPatterns lists and inspects patterns, but it unconditionally supplies the delete callback to tenant members while the DELETE authority requires tenant administration; Web therefore remains partial until that affordance is role-gated. Desktop has a real canonical loader, App binding, typed client/controller/presentation model and role-gated native list/delete page. Its Cloud load now observes the tenant management scope before and after the resource read and returns the stable scope revision, so view, list and administrator delete are available without treating the scope revision as a resource version. Local reaches the private sidecar and returns local_workflow_patterns_authority_unavailable instead of fabricating a pattern store."
+      "judgment_rationale": "WorkflowPatterns lists and inspects patterns, but it unconditionally supplies the delete callback to tenant members while the DELETE authority requires tenant administration; Web therefore remains partial until that affordance is role-gated. Desktop now resolves route and workbench reads plus role-gated delete through one Tenant Patterns V2 Provider, with each operation pinned to a tenant generation. The Cloud projection preserves stable before-and-after scope observation without treating the scope revision as a resource version. Local uses the same generation authority but reaches only the authenticated private sidecar and returns local_workflow_patterns_authority_unavailable instead of fabricating a pattern store."
     }
   ],
   "source_ownership": {

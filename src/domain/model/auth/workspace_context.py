@@ -48,6 +48,15 @@ class WorkspaceContextAccess:
 
 
 @dataclass(frozen=True, kw_only=True)
+class WorkspaceContextCandidate:
+    """One structurally accessible tenant/project scope awaiting explicit selection."""
+
+    tenant_id: str
+    project_id: str
+    membership_role: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class WorkspaceContextSwitchRequest:
     tenant_id: str
     project_id: str

@@ -2,6 +2,29 @@ from uuid import uuid4
 
 import pytest
 
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
+
+
+@pytest.fixture(autouse=True)
+async def _tenant_project_v2_runtime(test_app):
+    async def graph_runtime_factory():
+        return test_app.state.graph_service
+
+    await initialize_plugin_runtime_v2(
+        test_app,
+        graph_runtime_factory=graph_runtime_factory,
+    )
+    owned = test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    assert "tenants" in owned
+    assert "projects" in owned
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+
 
 async def _get_or_create_tenant(ac) -> str:
     """Get or create a tenant and return its ID."""

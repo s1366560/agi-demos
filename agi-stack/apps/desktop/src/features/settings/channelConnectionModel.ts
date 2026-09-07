@@ -56,38 +56,6 @@ export type ChannelConnectionErrorCode =
   | 'invalid_option';
 export type ChannelConnectionErrors = Record<string, ChannelConnectionErrorCode>;
 
-export function legacyChannelConfigSchema(
-  channelType: string,
-): ManagedChannelPluginConfigSchema {
-  return {
-    channel_type: channelType,
-    plugin_name: channelType,
-    source: 'legacy',
-    schema_supported: false,
-    config_schema: {
-      type: 'object',
-      properties: {
-        connection_mode: { type: 'string', enum: ['websocket', 'webhook'] },
-        app_id: { type: 'string' },
-        app_secret: { type: 'string' },
-        encrypt_key: { type: 'string' },
-        verification_token: { type: 'string' },
-        webhook_url: { type: 'string' },
-        webhook_port: { type: 'integer', minimum: 1, maximum: 65535 },
-        webhook_path: { type: 'string' },
-        domain: { type: 'string' },
-      },
-    },
-    config_ui_hints: {
-      app_secret: { sensitive: true },
-      encrypt_key: { sensitive: true },
-      verification_token: { sensitive: true },
-    },
-    defaults: { connection_mode: 'websocket' },
-    secret_paths: ['app_secret', 'encrypt_key', 'verification_token'],
-  };
-}
-
 export function channelConnectionFields(
   schema: ManagedChannelPluginConfigSchema,
 ): ChannelConnectionField[] {

@@ -64,10 +64,10 @@ class TestProjectMemoryCapabilityInit:
 @pytest.mark.unit
 class TestMemoryToolWiring:
     @pytest.mark.asyncio
-    async def test_get_or_create_tools_uses_plugin_path_for_memory_tools(self) -> None:
-        plugin_tools_adder = AsyncMock(
+    async def test_get_or_create_tools_uses_builtin_memory_source(self) -> None:
+        memory_tools_adder = MagicMock(
             side_effect=lambda tools, tenant_id, project_id, **kwargs: tools.update(
-                {"memory_search": "plugin-memory-search"}
+                {"memory_search": "v2-owned-memory-search"}
             )
         )
 
@@ -113,12 +113,8 @@ class TestMemoryToolWiring:
                 MagicMock(),
             ),
             patch(
-                "src.infrastructure.agent.state.agent_worker_state._add_plugin_tools",
-                plugin_tools_adder,
-            ),
-            patch(
-                "src.infrastructure.agent.state.agent_worker_state._add_sandbox_plugin_tools",
-                AsyncMock(return_value=None),
+                "src.infrastructure.agent.state.agent_worker_state._add_memory_tools",
+                memory_tools_adder,
             ),
             patch(
                 "src.infrastructure.agent.state.agent_worker_state._add_custom_tools",
@@ -140,14 +136,6 @@ class TestMemoryToolWiring:
                 "src.infrastructure.agent.state.agent_worker_state._add_canvas_tools",
                 MagicMock(),
             ),
-            patch(
-                "src.infrastructure.agent.state.agent_worker_state._add_agent_tools",
-                MagicMock(),
-            ),
-            patch(
-                "src.infrastructure.agent.state.agent_worker_state._add_workspace_chat_tools",
-                AsyncMock(return_value=None),
-            ),
         ):
             from src.infrastructure.agent.state.agent_worker_state import get_or_create_tools
 
@@ -158,5 +146,5 @@ class TestMemoryToolWiring:
                 redis_client=None,
             )
 
-        assert tools["memory_search"] == "plugin-memory-search"
-        plugin_tools_adder.assert_awaited_once()
+        assert tools["memory_search"] == "v2-owned-memory-search"
+        memory_tools_adder.assert_called_once()

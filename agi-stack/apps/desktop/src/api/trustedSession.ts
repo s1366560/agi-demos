@@ -69,6 +69,11 @@ export function decodeNativeTrustedSession(value: unknown): NativeTrustedSession
   };
 }
 
+export async function selectPlatformPluginAuthorityV2(mode: RuntimeMode): Promise<void> {
+  const invoke = requireDesktopInvoke();
+  await invoke('platform_plugin_authority_select_v2', { mode });
+}
+
 export async function clearNativeTrustedSession(): Promise<void> {
   const invoke = requireDesktopInvoke();
   await invoke('trusted_session_clear');

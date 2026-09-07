@@ -1,3 +1,13 @@
+import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
+import {
+  createDesktopBrowserIntegrationClientV2,
+  type DesktopBrowserIntegrationOperationsV2,
+} from '../../plugins/desktopBrowserIntegrationAuthorityModuleV2';
+import { createDesktopProjectMcpServersClientV2, type DesktopProjectMcpServersOperationsV2 } from '../../plugins/desktopProjectMcpServersAuthorityModuleV2';
+import { createDesktopTenantProvidersClientV2, type DesktopTenantProvidersOperationsV2 } from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
+import { createDesktopTenantSkillDefinitionsClientV2, type DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
+import { createDesktopTenantSkillPackagesClientV2, type DesktopTenantSkillPackagesOperationsV2 } from '../../plugins/desktopTenantSkillPackagesAuthorityModuleV2';
+import { createDesktopTenantSkillEvolutionClientV2, type DesktopTenantSkillEvolutionOperationsV2 } from '../../plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Theme } from '@radix-ui/themes';
@@ -7,9 +17,8 @@ import {
   MagnifyingGlassIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient } from '../../api/client';
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import { useI18n } from '../../i18n';
+import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import type {
   AuthState,
   ConnectionState,
@@ -20,9 +29,22 @@ import type {
   ManagedSubAgent,
   AgentWsEvent,
 } from '../../types';
-import type { DesktopRouteModuleLoader } from '../navigation/desktopRouteModule';
+import type { DesktopRouteModule } from '../navigation/desktopRouteModule';
+import type { DesktopRouteRegistry } from '../navigation/desktopRouteRegistry';
+import type { DesktopPluginMarketplaceOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type { DesktopTenantTemplatesOperationsV2 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
+import type { DesktopProjectChannelsOperationsV2 } from '../../plugins/desktopProjectChannelsAuthorityModuleV2';
+import {
+  createDesktopTenantAgentDefinitionsClientV2,
+  type DesktopTenantAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
+import {
+  createDesktopTenantSubAgentDefinitionsClientV2,
+  type DesktopTenantSubAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
+import { PROFILE_ROUTE_ID } from '../settings-routes/profileRoutePresentationModel';
 import { AccountSessionSecurityPage } from './AccountSessionSecurityPage';
 import { BrowserIntegrationSettingsPage } from './BrowserIntegrationSettingsPage';
 import {
@@ -85,7 +107,20 @@ type SettingsWindowProps = {
   wsError: string | null;
   runtimeDisabledReason: string | null;
   agentDefinitionEvent: AgentWsEvent | null;
-  profileRouteLoader?: DesktopRouteModuleLoader;
+  rendererRouteRegistry?: DesktopRouteRegistry<DesktopRouteModule>;
+  pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
+  tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
+  tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  browserIntegrationOperationsV2: DesktopBrowserIntegrationOperationsV2;
+  browserBridgeManagementClientV2: DesktopBrowserBridgeManagementClientV2;
+  projectMcpServersOperationsV2: DesktopProjectMcpServersOperationsV2;
+  tenantProvidersOperationsV2: DesktopTenantProvidersOperationsV2;
+  tenantSkillDefinitionsOperationsV2: DesktopTenantSkillDefinitionsOperationsV2;
+  tenantSkillPackagesOperationsV2: DesktopTenantSkillPackagesOperationsV2;
+  tenantSkillEvolutionOperationsV2: DesktopTenantSkillEvolutionOperationsV2;
+  projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
+  tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
+  tenantSubAgentDefinitionsOperationsV2: DesktopTenantSubAgentDefinitionsOperationsV2;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -104,7 +139,20 @@ export function SettingsWindow({
   wsError,
   runtimeDisabledReason,
   agentDefinitionEvent,
-  profileRouteLoader,
+  rendererRouteRegistry,
+  pluginMarketplaceOperationsV2,
+  tenantTemplatesOperationsV2,
+  tenantEvolutionOperationsV2,
+  browserIntegrationOperationsV2,
+  browserBridgeManagementClientV2,
+  projectMcpServersOperationsV2,
+  tenantProvidersOperationsV2,
+  tenantSkillDefinitionsOperationsV2,
+  tenantSkillPackagesOperationsV2,
+  tenantSkillEvolutionOperationsV2,
+  projectChannelsOperationsV2,
+  tenantAgentDefinitionsOperationsV2,
+  tenantSubAgentDefinitionsOperationsV2,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -126,6 +174,7 @@ export function SettingsWindow({
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const resourceRequestId = useRef(0);
+  const resourceActionRequestId = useRef(0);
   const agentDefinitionEventRef = useRef<AgentWsEvent | null>(null);
   const agentDefinitionEventsReadyRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -134,6 +183,44 @@ export function SettingsWindow({
   const resourceContextKeyRef = useRef(resourceContextKey);
   activeSectionRef.current = section;
   resourceContextKeyRef.current = resourceContextKey;
+  const browserIntegrationClientV2 = useMemo(
+    () => createDesktopBrowserIntegrationClientV2(browserIntegrationOperationsV2, config),
+    [config, browserIntegrationOperationsV2],
+  );
+  const projectMcpServersClientV2 = useMemo(
+    () => createDesktopProjectMcpServersClientV2(projectMcpServersOperationsV2, config),
+    [config, projectMcpServersOperationsV2],
+  );
+  const tenantProvidersClientV2 = useMemo(
+    () => createDesktopTenantProvidersClientV2(tenantProvidersOperationsV2, config),
+    [config, tenantProvidersOperationsV2],
+  );
+  const tenantSkillDefinitionsClientV2 = useMemo(
+    () => createDesktopTenantSkillDefinitionsClientV2(tenantSkillDefinitionsOperationsV2, config),
+    [config, tenantSkillDefinitionsOperationsV2],
+  );
+  const tenantSkillPackagesClientV2 = useMemo(
+    () => createDesktopTenantSkillPackagesClientV2(tenantSkillPackagesOperationsV2, config),
+    [config, tenantSkillPackagesOperationsV2],
+  );
+  const tenantSkillEvolutionClientV2 = useMemo(
+    () => createDesktopTenantSkillEvolutionClientV2(tenantSkillEvolutionOperationsV2, config),
+    [config, tenantSkillEvolutionOperationsV2],
+  );
+  const tenantSubAgentDefinitionsClientV2 = useMemo(
+    () => createDesktopTenantSubAgentDefinitionsClientV2(
+      tenantSubAgentDefinitionsOperationsV2, config,
+    ),
+    [config, tenantSubAgentDefinitionsOperationsV2],
+  );
+  const tenantAgentDefinitionsClientV2 = useMemo(
+    () =>
+      createDesktopTenantAgentDefinitionsClientV2(
+        tenantAgentDefinitionsOperationsV2,
+        config,
+      ),
+    [config, tenantAgentDefinitionsOperationsV2],
+  );
   const [resourceCounts, setResourceCounts] = useState<SettingsResourceCounts>({
     models: null,
     mcp: null,
@@ -145,6 +232,7 @@ export function SettingsWindow({
 
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId) ?? null;
   const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
+  const profileRouteLoader = rendererRouteRegistry?.byId.get(PROFILE_ROUTE_ID)?.loader;
   const hasAvailableProjects = auth.projects.some(
     (project) => project.tenant_id === config.tenantId,
   );
@@ -206,15 +294,14 @@ export function SettingsWindow({
       setResourceLoading(true);
       setResourceError(null);
       try {
-        const managedResources = new ManagedResourcesClient(config);
         const items =
           resourceSection === 'skills'
-            ? await managedResources.listManagedSkills(signal)
+            ? await tenantSkillDefinitionsClientV2.listManagedSkills(signal)
             : resourceSection === 'plugins'
-              ? await new DesktopApiClient(config).listManagedPlugins(signal)
+              ? await pluginMarketplaceOperationsV2.listMarketplacePlugins(config, signal)
               : resourceSection === 'agents'
-                ? await managedResources.listManagedAgents(signal)
-                : await managedResources.listManagedSubAgents(signal);
+                ? await tenantAgentDefinitionsClientV2.listManagedAgents(signal)
+                : await tenantSubAgentDefinitionsClientV2.listManagedSubAgents(signal);
         if (requestId !== resourceRequestId.current) return;
         setResourceItems(items);
         setLoadedResourceSection(resourceSection);
@@ -239,7 +326,7 @@ export function SettingsWindow({
         if (requestId === resourceRequestId.current) setResourceLoading(false);
       }
     },
-    [config, resourceContextKey]
+    [config, pluginMarketplaceOperationsV2, resourceContextKey, tenantAgentDefinitionsClientV2, tenantSubAgentDefinitionsClientV2, tenantSkillDefinitionsClientV2]
   );
   const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
   const reloadSkillResources = useCallback(() => loadResources('skills'), [loadResources]);
@@ -255,6 +342,7 @@ export function SettingsWindow({
   const pluginManagement = usePluginManagement({
     active: open,
     config,
+    pluginMarketplaceOperationsV2,
     contextKey: resourceContextKey,
     canManage: canManagePluginControlPlane,
     onReload: reloadPluginResources,
@@ -262,15 +350,16 @@ export function SettingsWindow({
   });
   const platformPluginUiSlots = usePlatformPluginUiSlots({
     active: open && section === 'plugins',
-    config,
   });
   const channelManagement = useChannelConnectionManagement({
     active: open,
     config,
     contextKey: resourceContextKey,
     canManage: canManagePluginControlPlane,
+    projectChannelsOperationsV2,
   });
   const mcpServerManagement = useMCPServerManagement({
+    client: projectMcpServersClientV2,
     active: open && section === 'mcp',
     config,
     contextKey: resourceContextKey,
@@ -278,7 +367,7 @@ export function SettingsWindow({
   });
   const skillManagement = useSkillManagement({
     active: open,
-    config,
+    client: tenantSkillDefinitionsClientV2,
     contextKey: resourceContextKey,
     canCreate: canCreateSkills,
     onReload: reloadSkillResources,
@@ -288,6 +377,9 @@ export function SettingsWindow({
   const skillPackageManagement = useSkillPackageManagement({
     active: open,
     config,
+    packagesClient: tenantSkillPackagesClientV2,
+    evolutionClient: tenantSkillEvolutionClientV2,
+    tenantEvolutionOperationsV2,
     contextKey: resourceContextKey,
     canImport: canCreateSkills,
     onReload: reloadSkillResources,
@@ -295,7 +387,7 @@ export function SettingsWindow({
   });
   const agentManagement = useAgentDefinitionManagement({
     active: open,
-    config,
+    client: tenantAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
     onReload: reloadAgentResources,
@@ -305,13 +397,15 @@ export function SettingsWindow({
   const subAgentLibrary = useSubAgentLibraryManagement({
     active: open,
     config,
+    client: tenantSubAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
+    tenantTemplatesOperationsV2,
     onReload: reloadSubAgentResources,
   });
   const subAgentDefinitions = useSubAgentDefinitionManagement({
     active: open,
-    config,
+    client: tenantSubAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
     onReload: reloadSubAgentResources,
@@ -320,6 +414,8 @@ export function SettingsWindow({
   useEffect(() => {
     if (!open || !isResourceSection) return;
     const controller = new AbortController();
+    resourceActionRequestId.current += 1;
+    setActionBusyId(null);
     setResourceQuery('');
     setResourceFilter('all');
     setResourceActionError(null);
@@ -459,59 +555,45 @@ export function SettingsWindow({
     );
     const action = managedResourceAction(section, item, canManageResource, config.mode);
     if (!action) return;
+    const mutationRequestId = ++resourceActionRequestId.current;
+    const mutationIsCurrent = () =>
+      resourceActionRequestId.current === mutationRequestId &&
+      activeSectionRef.current === mutationSection &&
+      resourceContextKeyRef.current === mutationContextKey;
     setActionBusyId(item.id);
     setResourceActionError(null);
     try {
-      const managedResources = new ManagedResourcesClient(config);
       if (action.kind === 'set_skill_status') {
         const skill = item as ManagedSkill;
-        await managedResources.setManagedSkillStatus(
+        await tenantSkillDefinitionsClientV2.setManagedSkillStatus(
           skill.id,
           action.nextActive ? 'active' : 'disabled',
           skill.revision,
         );
-      } else if (action.kind === 'set_plugin_enabled') {
-        const plugin = item as ManagedPlugin;
-        const response = await new DesktopApiClient(config).setManagedPluginEnabled(
-          plugin.id,
-          action.nextActive,
-        );
-        if (
-          activeSectionRef.current === mutationSection &&
-          resourceContextKeyRef.current === mutationContextKey
-        ) {
-          pluginManagement.recordAction(response, action.nextActive ? 'enable' : 'disable');
-        }
       } else if (action.kind === 'set_subagent_enabled') {
         const subagent = item as ManagedSubAgent;
-        await managedResources.setManagedSubAgentEnabled(
+        await tenantSubAgentDefinitionsClientV2.setManagedSubAgentEnabled(
           subagent.id,
           action.nextActive,
           subagent.revision,
         );
       } else {
         const agent = item as ManagedAgentDefinition;
-        await managedResources.setManagedAgentEnabled(
+        await tenantAgentDefinitionsClientV2.setManagedAgentEnabled(
           agent.id,
           action.nextActive,
           agent.revision,
         );
       }
-      if (
-        activeSectionRef.current === mutationSection &&
-        resourceContextKeyRef.current === mutationContextKey
-      ) {
+      if (mutationIsCurrent()) {
         await loadResources(mutationSection);
       }
     } catch (error) {
-      if (
-        activeSectionRef.current === mutationSection &&
-        resourceContextKeyRef.current === mutationContextKey
-      ) {
+      if (mutationIsCurrent()) {
         setResourceActionError(error instanceof Error ? error.message : String(error));
       }
     } finally {
-      setActionBusyId(null);
+      if (mutationIsCurrent()) setActionBusyId(null);
     }
   };
 
@@ -522,7 +604,6 @@ export function SettingsWindow({
       skillPackageManagement.versionsDialog ||
       skillPackageManagement.evolutionDialog ||
       pluginManagement.dialog ||
-      pluginManagement.activityOpen ||
       channelManagement.open ||
       channelManagement.editor ||
       mcpServerManagement.dialog ||
@@ -667,7 +748,13 @@ export function SettingsWindow({
                 <PreferenceSummaryPage section={section} />
               ) : null}
               {section === 'shortcuts' ? <ShortcutSettingsPage /> : null}
-              {section === 'browser' ? <BrowserIntegrationSettingsPage config={config} /> : null}
+              {section === 'browser' ? (
+                <BrowserIntegrationSettingsPage
+                  config={config}
+                  browserIntegrationClientV2={browserIntegrationClientV2}
+                  browserBridgeManagementClientV2={browserBridgeManagementClientV2}
+                />
+              ) : null}
 
               {section === 'connection' ? (
                 <SettingsPage
@@ -688,6 +775,7 @@ export function SettingsWindow({
               ) : null}
               {section === 'models' ? (
                 <ModelProviderWorkspace
+                  client={tenantProvidersClientV2}
                   key={`${config.mode}|${config.apiBaseUrl}|${config.tenantId}|${config.projectId}|${config.workspaceId}`}
                   config={config}
                   canManage={canManageProviders}
@@ -708,7 +796,6 @@ export function SettingsWindow({
                       slots={platformPluginUiSlots.slots}
                       error={platformPluginUiSlots.error}
                       loading={platformPluginUiSlots.loading}
-                      config={config}
                     />
                   ) : null}
                   <ManagedResourceWorkspace
@@ -720,13 +807,12 @@ export function SettingsWindow({
                   loading={resourceLoading}
                   error={resourceError}
                   actionError={
-                    resourceActionError ?? pluginManagement.reloadError ??
-                    skillPackageManagement.packageActionError ?? subAgentLibrary.error ??
+                    resourceActionError ?? skillPackageManagement.packageActionError ??
+                    subAgentLibrary.error ??
                     subAgentDefinitions.error
                   }
                   busy={
                     actionBusyId !== null ||
-                    pluginManagement.reloadBusy ||
                     skillPackageManagement.importBusy ||
                     skillPackageManagement.exportBusyId !== null ||
                     subAgentLibrary.importBusyId !== null ||
@@ -764,16 +850,12 @@ export function SettingsWindow({
                   onAction={(item) => void toggleResource(item)}
                   onCreate={() => {
                     if (section === 'skills') void skillManagement.open(null);
-                    if (section === 'plugins') pluginManagement.openInstall();
                     if (section === 'agents') agentManagement.open(null);
                     if (section === 'subagents') subAgentDefinitions.open(null);
                   }}
                   onImport={skillPackageManagement.openImport}
                   onEdit={(item) => {
                     if (section === 'skills') void skillManagement.open(item as ManagedSkill);
-                    if (section === 'plugins') {
-                      void pluginManagement.openConfig(item as ManagedPlugin);
-                    }
                     if (section === 'agents') agentManagement.open(item as ManagedAgentDefinition);
                     if (section === 'subagents') {
                       subAgentDefinitions.open(item as ManagedSubAgent);
@@ -802,11 +884,10 @@ export function SettingsWindow({
                     void subAgentLibrary.importFilesystem(item as ManagedSubAgent)
                   }
                   onChannels={channelManagement.launch}
-                  onPluginActivity={pluginManagement.openActivity}
-                  onReload={() => void pluginManagement.reload()}
+                  onReload={() => void reloadPluginResources()}
                   onRemove={(item) => {
                     if (section === 'plugins') {
-                      void pluginManagement.openConfig(item as ManagedPlugin, true);
+                      pluginManagement.openUninstall(item as ManagedPlugin);
                     }
                   }}
                   />

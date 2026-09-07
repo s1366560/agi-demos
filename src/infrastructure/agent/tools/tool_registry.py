@@ -523,38 +523,3 @@ class ToolExecutor:
                 )
 
         return cast(list[ToolExecutionResult], results)
-
-
-# Global tool registry
-_global_registry: ToolRegistry | None = None
-
-
-def get_tool_registry() -> ToolRegistry:
-    """Get the global tool registry.
-
-    Returns:
-        The global ToolRegistry instance
-    """
-    global _global_registry
-    if _global_registry is None:
-        _global_registry = ToolRegistry()
-    return _global_registry
-
-
-def set_tool_registry(registry: ToolRegistry) -> None:
-    """Set the global tool registry.
-
-    Args:
-        registry: The tool registry to use globally
-    """
-    global _global_registry
-    _global_registry = registry
-
-
-def get_tool_executor() -> ToolExecutor:
-    """Get the global tool executor.
-
-    Returns:
-        A ToolExecutor using the global registry
-    """
-    return ToolExecutor(get_tool_registry())

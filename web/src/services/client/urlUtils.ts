@@ -14,6 +14,8 @@
 import { getAuthToken, clearAuthState } from '@/utils/tokenResolver';
 
 import { parseResponseError } from './ApiError';
+import { runWebFetchV2, type WebFetchConsumerV2 } from './webFetchV2';
+import { runWebOperationV2, type WebOperationContextV2 } from '@/plugins/webOperationAdmissionV2';
 
 /**
  * Retry configuration for apiFetch
@@ -253,6 +255,7 @@ export function createWebSocketAuthProtocols(token: string): string[] {
  * Fetch request options with retry support
  */
 export interface FetchOptions extends RequestInit {
+  parent?: WebOperationContextV2;
   /** Enable retry for this request (default: false) */
   retry?: FetchRetryConfig | boolean | undefined;
 }
@@ -266,85 +269,108 @@ export interface FetchOptions extends RequestInit {
  * Throws ApiError on any error for consistent error handling.
  */
 
-async function handleResponse(response: Response): Promise<Response> {
-  if (response.status === 401) {
+async function handleResponse(
+  response: Response,
+  operation: WebOperationContextV2,
+  authorization: string | null
+): Promise<void> {
+  if (response.ok) return;
+  const error = await parseResponseError(response);
+  operation.check();
+  const currentToken = getAuthToken();
+  if (response.status === 401 && currentToken && authorization === `Bearer ${currentToken}`) {
     handleUnauthorized();
   }
-  // Throw ApiError for non-success responses
-  if (!response.ok) {
-    throw await parseResponseError(response);
-  }
-  return response;
+  throw error;
 }
 
 /**
  * Wrap fetch with retry logic if enabled
  */
-async function fetchWithRetryWrapper(
-  input: RequestInfo | URL,
-  init?: FetchOptions
-): Promise<Response> {
-  const retryOption = init?.retry;
-
-  // No retry - execute directly
-  if (!retryOption) {
-    return fetch(input, init);
-  }
-
-  // Build retry config
-  const retryConfig: FetchRetryConfig = typeof retryOption === 'boolean' ? {} : retryOption;
-
-  // Execute with retry
-  return fetchWithRetry(() => fetch(input, init), retryConfig);
+async function fetchWithRetryWrapper<T>(
+  url: string,
+  options: FetchOptions,
+  consume: WebFetchConsumerV2<T>
+): Promise<T> {
+  const { retry, parent, ...init } = options;
+  return runWebOperationV2(
+    async (operation) => {
+      let receivedResponse = false;
+      const request = async () => {
+        operation.check();
+        const headers = mergeHeaders(init.headers);
+        const authorization = new Headers(headers).get('Authorization');
+        return runWebFetchV2(
+          createApiUrl(url),
+          {
+            ...init,
+            headers,
+          },
+          async (response, child) => {
+            receivedResponse = true;
+            await handleResponse(response, child, authorization);
+            child.check();
+            return consume(response, child);
+          },
+          { parent: operation }
+        );
+      };
+      const retryConfig = typeof retry === 'object' ? retry : {};
+      return retry
+        ? fetchWithRetry(request, {
+            ...retryConfig,
+            isRetryable: (error) =>
+              !receivedResponse &&
+              !operation.signal.aborted &&
+              (retryConfig.isRetryable ?? isFetchErrorRetryable)(error),
+          })
+        : request();
+    },
+    { ...(init.signal ? { signal: init.signal } : {}), ...(parent ? { parent } : {}) }
+  );
 }
 
 export const apiFetch = {
-  get: async (url: string, options: FetchOptions = {}): Promise<Response> => {
-    const response = await fetchWithRetryWrapper(createApiUrl(url), {
-      ...options,
-      headers: mergeHeaders(options.headers),
-    });
-    return handleResponse(response);
-  },
-
-  post: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
-    const response = await fetchWithRetryWrapper(createApiUrl(url), {
-      ...options,
-      method: 'POST',
-      headers: mergeHeaders(options.headers),
-      body: data !== undefined ? JSON.stringify(data) : null,
-    });
-    return handleResponse(response);
-  },
-
-  put: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
-    const response = await fetchWithRetryWrapper(createApiUrl(url), {
-      ...options,
-      method: 'PUT',
-      headers: mergeHeaders(options.headers),
-      body: data !== undefined ? JSON.stringify(data) : null,
-    });
-    return handleResponse(response);
-  },
-
-  patch: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
-    const response = await fetchWithRetryWrapper(createApiUrl(url), {
-      ...options,
-      method: 'PATCH',
-      headers: mergeHeaders(options.headers),
-      body: data !== undefined ? JSON.stringify(data) : null,
-    });
-    return handleResponse(response);
-  },
-
-  delete: async (url: string, options: FetchOptions = {}): Promise<Response> => {
-    const response = await fetchWithRetryWrapper(createApiUrl(url), {
-      ...options,
-      method: 'DELETE',
-      headers: mergeHeaders(options.headers),
-    });
-    return handleResponse(response);
-  },
+  get: <T>(url: string, consume: WebFetchConsumerV2<T>, options: FetchOptions = {}): Promise<T> =>
+    fetchWithRetryWrapper(url, options, consume),
+  post: <T>(
+    url: string,
+    data: unknown,
+    consume: WebFetchConsumerV2<T>,
+    options: FetchOptions = {}
+  ): Promise<T> =>
+    fetchWithRetryWrapper(
+      url,
+      { ...options, method: 'POST', body: data !== undefined ? JSON.stringify(data) : null },
+      consume
+    ),
+  put: <T>(
+    url: string,
+    data: unknown,
+    consume: WebFetchConsumerV2<T>,
+    options: FetchOptions = {}
+  ): Promise<T> =>
+    fetchWithRetryWrapper(
+      url,
+      { ...options, method: 'PUT', body: data !== undefined ? JSON.stringify(data) : null },
+      consume
+    ),
+  patch: <T>(
+    url: string,
+    data: unknown,
+    consume: WebFetchConsumerV2<T>,
+    options: FetchOptions = {}
+  ): Promise<T> =>
+    fetchWithRetryWrapper(
+      url,
+      { ...options, method: 'PATCH', body: data !== undefined ? JSON.stringify(data) : null },
+      consume
+    ),
+  delete: <T>(
+    url: string,
+    consume: WebFetchConsumerV2<T>,
+    options: FetchOptions = {}
+  ): Promise<T> => fetchWithRetryWrapper(url, { ...options, method: 'DELETE' }, consume),
 };
 
 /**

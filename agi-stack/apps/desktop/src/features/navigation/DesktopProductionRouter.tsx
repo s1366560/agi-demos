@@ -45,6 +45,7 @@ export type DesktopProductionRouterViewProps = Readonly<{
 }>;
 
 export function DesktopProductionRouter({
+  acquireOperationLease,
   authenticationPassthroughRouteIds,
   children,
   forceLegacyChildren,
@@ -61,6 +62,7 @@ export function DesktopProductionRouter({
 }: DesktopProductionRouterProps) {
   const hostOptions = useMemo<DesktopHashRouteHostOptions<DesktopRouteModule>>(
     () => ({
+      acquireOperationLease,
       location,
       mode,
       permissions,
@@ -71,6 +73,7 @@ export function DesktopProductionRouter({
       switchScope,
     }),
     [
+      acquireOperationLease,
       location,
       mode,
       permissions,

@@ -12,6 +12,7 @@ import {
   extractLazyPageEntries,
   extractProductionRoutes,
 } from './web-route-extractors.mjs';
+import { createRouteComponentProjection } from './web-route-component-projection.mjs';
 import { discoverRoutedProductionDependencies } from './web-production-dependency-graph.mjs';
 import { resolveRouteRegistrationMounts } from './web-route-mounts.mjs';
 import { discoverReachableWebRouteSources } from './web-route-source-graph.mjs';
@@ -254,18 +255,31 @@ export function buildWebRouteInventoryFromSources({
     repositoryRoot,
   });
   const routeRegistrationMounts = resolveRouteRegistrationMounts(sourceGraph, repositoryRoot);
+  const routeRegistrationSources = sourceGraph.route_registration_sources.filter((source) =>
+    routeRegistrationMounts.has(source.source_entry)
+  );
+  const routeComponentProjection =
+    repositoryRoot && sourceGraph.route_artifact_sources.length > 0
+      ? createRouteComponentProjection({ repositoryRoot, sourceGraph })
+      : null;
   const lazyPageEntries = [];
   const eagerRouteEntries = [];
   const unkeyedProductionRoutes = [];
-  for (const routeSource of sourceGraph.route_registration_sources) {
+  for (const routeSource of routeRegistrationSources) {
     const extractionOptions = {
       repositoryRoot,
       sourceEntry: routeSource.source_entry,
     };
-    const sourceLazyEntries = extractLazyPageEntries(routeSource.source, extractionOptions);
-    const sourceEagerEntries = extractEagerRouteEntries(routeSource.source, extractionOptions);
-    lazyPageEntries.push(...sourceLazyEntries);
-    eagerRouteEntries.push(...sourceEagerEntries);
+    const sourceLazyEntries = routeComponentProjection
+      ? []
+      : extractLazyPageEntries(routeSource.source, extractionOptions);
+    const sourceEagerEntries = routeComponentProjection
+      ? []
+      : extractEagerRouteEntries(routeSource.source, extractionOptions);
+    if (!routeComponentProjection) {
+      lazyPageEntries.push(...sourceLazyEntries);
+      eagerRouteEntries.push(...sourceEagerEntries);
+    }
     const mountPaths = routeRegistrationMounts.get(routeSource.source_entry);
     if (!mountPaths || mountPaths.length === 0) {
       throw new Error(`Route registration source is unreachable: ${routeSource.source_entry}`);
@@ -279,10 +293,19 @@ export function buildWebRouteInventoryFromSources({
             sourceEntry: routeSource.source_entry,
             addRouteKeys: false,
             parentRoutePath,
+            resolveComponentEntries: routeComponentProjection
+              ? (component) =>
+                  routeComponentProjection.resolveForRoute(routeSource.source_entry, component)
+              : undefined,
           }
         )
       );
     }
+  }
+  if (routeComponentProjection) {
+    const projectedEntries = routeComponentProjection.entries();
+    lazyPageEntries.push(...projectedEntries.lazy);
+    eagerRouteEntries.push(...projectedEntries.eager);
   }
   lazyPageEntries.sort(compareSourceEntries);
   eagerRouteEntries.sort(compareSourceEntries);
@@ -297,11 +320,11 @@ export function buildWebRouteInventoryFromSources({
     productionEntrySources: productionDependencies.entry_sources,
     productionDependencySources: productionDependencies.dependency_sources,
     reachableSources: sourceGraph.reachable_sources,
-    routeRegistrationSources: sourceGraph.route_registration_sources,
+    routeRegistrationSources,
     routedSourceEntries,
     repositoryRoot,
   });
-  const routeRegistrationSources = sourceGraph.route_registration_sources.map(
+  const routeRegistrationSourceEntries = routeRegistrationSources.map(
     (source) => source.source_entry
   );
 
@@ -320,7 +343,7 @@ export function buildWebRouteInventoryFromSources({
       production_dependency_sources: productionDependencies.dependency_sources.length,
       production_entry_sources: productionDependencies.production_entry_sources.length,
       production_routes: productionRoutes.length,
-      route_registration_sources: routeRegistrationSources.length,
+      route_registration_sources: routeRegistrationSourceEntries.length,
     },
     audited_sources: auditedSources,
     canonical_navigation_targets: canonicalNavigationTargets,
@@ -333,7 +356,7 @@ export function buildWebRouteInventoryFromSources({
       (source) => source.source_entry
     ),
     production_entry_sources: productionDependencies.production_entry_sources,
-    route_registration_sources: routeRegistrationSources,
+    route_registration_sources: routeRegistrationSourceEntries,
   };
 }
 

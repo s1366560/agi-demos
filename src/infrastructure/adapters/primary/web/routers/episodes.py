@@ -11,17 +11,18 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.episode import Episode, SourceType
-from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 # Use Cases & DI Container
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_graph_store,
-    get_workflow_engine,
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.graph_application_authority_v2 import (
+    GraphApplicationAuthorityV2,
+    graph_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+    workflow_engine_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     User,
@@ -183,9 +184,10 @@ async def create_episode(
         False, description="Process in background (returns task_id for SSE streaming)"
     ),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> EpisodeResponse:
     """
     Create a new episode and ingest it into the knowledge graph.
@@ -199,6 +201,8 @@ async def create_episode(
 
     Set background=true for SSE streaming of task progress.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         # Auto-generate name if missing
         if not episode.name:
@@ -340,12 +344,15 @@ async def create_episode(
 async def get_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> EpisodeDetail:
     """
     Get episode details by name.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
@@ -398,12 +405,15 @@ async def list_episodes(
     sort_by: str = Query("created_at", description="Sort field"),
     sort_desc: bool = Query(True, description="Sort descending if True"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     List episodes with filtering and pagination.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if sort_by not in EPISODE_SORT_FIELDS:
             raise HTTPException(
@@ -492,8 +502,9 @@ async def list_episodes(
 async def delete_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Delete an episode and its relationships.
@@ -501,6 +512,8 @@ async def delete_episode(
     Warning: This will permanently delete the episode and all
     associated relationships. Entities will be preserved.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
@@ -535,11 +548,14 @@ async def delete_episode(
 @router.get("/health", response_model=dict)
 async def health_check(
     current_user: User = Depends(get_current_user),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Health check endpoint for episode service.
     """
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None or not await graph_store.health_probe():
             raise HTTPException(status_code=503, detail=_("Service unhealthy"))

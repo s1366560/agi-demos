@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -57,7 +58,11 @@ async def test_get_tenant_stats_returns_real_cumulative_memory_history(
     )
     await test_db.commit()
 
-    stats = await get_tenant_stats(test_tenant_db.id, current_user=test_user, db=test_db)
+    stats = await get_tenant_stats(
+        test_tenant_db.id,
+        current_user=test_user,
+        project_tenant=SimpleNamespace(db=test_db),
+    )
 
     history = stats["memory_history"]
     assert len(history) == 30
@@ -140,7 +145,7 @@ async def test_get_tenant_stats_returns_top_projects_by_memory_usage(
     stats = await get_tenant_stats(
         test_tenant_db.id,
         current_user=test_user,
-        db=test_db,
+        project_tenant=SimpleNamespace(db=test_db),
     )
 
     assert stats["projects"]["active"] == 3
@@ -182,7 +187,11 @@ async def test_get_tenant_stats_does_not_treat_owner_id_without_membership_as_pr
     )
     await test_db.commit()
 
-    stats = await get_tenant_stats(test_tenant_db.id, current_user=test_user, db=test_db)
+    stats = await get_tenant_stats(
+        test_tenant_db.id,
+        current_user=test_user,
+        project_tenant=SimpleNamespace(db=test_db),
+    )
 
     project_ids = [item["id"] for item in stats["projects"]["list"]]
     assert test_project_db.id in project_ids
@@ -248,7 +257,11 @@ async def test_get_tenant_stats_scopes_member_project_list_to_accessible_project
     )
     await test_db.commit()
 
-    stats = await get_tenant_stats(test_tenant_db.id, current_user=another_user, db=test_db)
+    stats = await get_tenant_stats(
+        test_tenant_db.id,
+        current_user=another_user,
+        project_tenant=SimpleNamespace(db=test_db),
+    )
 
     assert stats["projects"]["active"] == 1
     assert stats["storage"]["used"] == 1024
@@ -315,7 +328,11 @@ async def test_get_tenant_stats_does_not_treat_tenant_admin_role_as_project_acce
     )
     await test_db.commit()
 
-    stats = await get_tenant_stats(test_tenant_db.id, current_user=another_user, db=test_db)
+    stats = await get_tenant_stats(
+        test_tenant_db.id,
+        current_user=another_user,
+        project_tenant=SimpleNamespace(db=test_db),
+    )
 
     assert stats["projects"]["active"] == 1
     assert stats["storage"]["used"] == 512
@@ -369,7 +386,7 @@ async def test_get_tenant_analytics_returns_project_storage_and_summary(
     analytics = await get_tenant_analytics(
         test_tenant_db.id,
         current_user=test_user,
-        db=test_db,
+        project_tenant=SimpleNamespace(db=test_db),
     )
 
     project_storage = {item["name"]: item for item in analytics["projectStorage"]}
@@ -446,7 +463,7 @@ async def test_get_tenant_analytics_scopes_project_metrics_to_accessible_project
     analytics = await get_tenant_analytics(
         test_tenant_db.id,
         current_user=another_user,
-        db=test_db,
+        project_tenant=SimpleNamespace(db=test_db),
     )
 
     assert analytics["projectStorage"] == [
@@ -509,7 +526,7 @@ async def test_get_tenant_analytics_limits_project_storage_without_truncating_su
         test_tenant_db.id,
         project_storage_limit=1,
         current_user=test_user,
-        db=test_db,
+        project_tenant=SimpleNamespace(db=test_db),
     )
 
     assert analytics["projectStorage"] == [

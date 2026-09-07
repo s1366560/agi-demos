@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterable, AsyncIterator, Mapping, Sequence
+from datetime import datetime
 from typing import Any, Literal, cast
 from urllib.parse import quote
 
@@ -30,6 +31,15 @@ class WorkspaceCoreForbiddenError(WorkspaceCoreClientError):
 
 class WorkspaceCoreConflictError(WorkspaceCoreClientError):
     """Workspace Core rejected an idempotency or revision precondition."""
+
+
+class WorkspaceContractActorResolutionError(WorkspaceCoreConflictError):
+    """Workspace Core rejected an audited contract-actor resolution."""
+
+    def __init__(self, *, code: str, detail: str) -> None:
+        super().__init__(f"{code}: {detail}")
+        self.code = code
+        self.detail = detail
 
 
 class WorkspaceCoreCompatibilityError(WorkspaceCoreClientError):
@@ -151,6 +161,7 @@ class WorkspaceCoreAgent(BaseModel):
     workspace_id: str
     agent_id: str
     display_name: str | None = None
+    description: str | None = None
     label: str | None = None
     status: str = "idle"
     is_active: bool = True
@@ -162,6 +173,94 @@ class WorkspaceCoreTask(BaseModel):
     id: str
     workspace_id: str
     title: str
+    description: str | None = None
+    created_by: str = ""
+    assignee_user_id: str | None = None
+    assignee_agent_id: str | None = None
+    workspace_agent_id: str | None = None
+    current_attempt_id: str | None = None
+    current_attempt_number: int | None = None
+    current_attempt_conversation_id: str | None = None
+    current_attempt_worker_binding_id: str | None = None
+    current_attempt_worker_agent_id: str | None = None
+    last_attempt_status: str | None = None
+    pending_leader_adjudication: bool = False
+    last_worker_report_type: str | None = None
+    last_worker_report_summary: str | None = None
+    last_worker_report_artifacts: list[str] = Field(default_factory=list)
+    last_worker_report_verifications: list[str] = Field(default_factory=list)
+    status: str = "todo"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    priority: str | None = None
+    estimated_effort: str | None = None
+    blocker_reason: str | None = None
+    completed_at: datetime | None = None
+    archived_at: datetime | None = None
+
+
+class WorkspaceCoreMessage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    workspace_id: str
+    sender_id: str
+    sender_type: Literal["agent", "human"]
+    content: str
+    mentions: list[str] = Field(default_factory=list)
+    parent_message_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class WorkspaceCoreBlackboardPost(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    workspace_id: str
+    author_id: str
+    title: str
+    content: str
+    status: Literal["archived", "open"]
+    is_pinned: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class WorkspaceCoreCyberObjective(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    workspace_id: str
+    title: str
+    description: str | None = None
+    obj_type: Literal["key_result", "objective"]
+    parent_id: str | None = None
+    progress: float = Field(ge=0.0, le=1.0)
+    created_by: str
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class _WorkspaceCoreMessageList(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[WorkspaceCoreMessage]
+
+
+class _WorkspaceCoreBlackboardPostList(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[WorkspaceCoreBlackboardPost]
+
+
+class _WorkspaceCoreCyberObjectiveList(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[WorkspaceCoreCyberObjective]
+    total: NonNegativeInt
 
 
 class WorkspaceAuthorityActor(BaseModel):
@@ -212,6 +311,40 @@ class WorkspaceAuthorityQueryResponse(BaseModel):
 
     profiles: list[WorkspaceAuthorityQueryProfile]
     task_links: list[WorkspaceAuthorityTaskLink]
+
+
+type WorkspaceContractActorPurpose = Literal[
+    "planner_turn",
+    "supervisor_turn",
+    "verifier_turn",
+    "worktree_turn",
+    "iteration_review_turn",
+]
+
+
+class WorkspaceContractActorResolveRequest(BaseModel):
+    """Strict caller-safe scope for server-owned Workspace actor resolution."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    tenant_id: str = Field(min_length=1, max_length=128)
+    project_id: str = Field(min_length=1, max_length=128)
+    workspace_id: str = Field(min_length=1, max_length=128)
+    purpose: WorkspaceContractActorPurpose
+    operation_id: str = Field(min_length=1, max_length=256)
+
+
+class WorkspaceContractActorResolveResponse(BaseModel):
+    """Immutable audited actor identity selected by Workspace Core authority."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["2.0.0"]
+    actor_user_id: str = Field(min_length=1)
+    participant_actor_id: str = Field(min_length=1)
+    authority_revision: NonNegativeInt
+    policy_version: Literal["workspace-contract-actor-owner.v1"]
+    duplicate: StrictBool
 
 
 class WorkspaceCoreTaskSessionRequest(BaseModel):
@@ -542,6 +675,94 @@ class WorkspaceCoreClient:
                 f"Workspace Core returned invalid agents for GET {path}"
             ) from exc
 
+    async def list_workspace_messages(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        workspace_id: str,
+        user_id: str,
+        limit: int,
+        is_superuser: bool = False,
+    ) -> list[WorkspaceCoreMessage]:
+        """Read recent messages for one exact Workspace prompt scope."""
+        path = (
+            f"/api/v1/tenants/{_path_segment(tenant_id)}/projects/{_path_segment(project_id)}"
+            f"/workspaces/{_path_segment(workspace_id)}/messages"
+        )
+        payload = await self._get(
+            path,
+            headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
+            params={"limit": str(limit)},
+        )
+        return self._validate(_WorkspaceCoreMessageList, payload, path=path).items
+
+    async def list_workspace_blackboard_posts(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        workspace_id: str,
+        user_id: str,
+        limit: int,
+        is_superuser: bool = False,
+    ) -> list[WorkspaceCoreBlackboardPost]:
+        """Read recent blackboard posts for one exact Workspace prompt scope."""
+        path = (
+            f"/api/v1/tenants/{_path_segment(tenant_id)}/projects/{_path_segment(project_id)}"
+            f"/workspaces/{_path_segment(workspace_id)}/blackboard/posts"
+        )
+        payload = await self._get(
+            path,
+            headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
+            params={"limit": str(limit), "offset": "0"},
+        )
+        return self._validate(_WorkspaceCoreBlackboardPostList, payload, path=path).items
+
+    async def list_workspace_tasks(
+        self,
+        *,
+        workspace_id: str,
+        user_id: str,
+        limit: int,
+        is_superuser: bool = False,
+    ) -> list[WorkspaceCoreTask]:
+        """Read current tasks for one exact Workspace prompt scope."""
+        path = f"/api/v1/workspaces/{_path_segment(workspace_id)}/tasks"
+        payload = await self._get_json(
+            path,
+            headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
+            params={"limit": str(limit), "offset": "0"},
+        )
+        try:
+            return [WorkspaceCoreTask.model_validate(item) for item in payload]
+        except ValidationError as exc:
+            raise WorkspaceCoreClientError(
+                f"Workspace Core returned invalid tasks for GET {path}"
+            ) from exc
+
+    async def list_workspace_objectives(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        workspace_id: str,
+        user_id: str,
+        limit: int,
+        is_superuser: bool = False,
+    ) -> list[WorkspaceCoreCyberObjective]:
+        """Read current objectives for one exact Workspace prompt scope."""
+        path = (
+            f"/api/v1/tenants/{_path_segment(tenant_id)}/projects/{_path_segment(project_id)}"
+            f"/workspaces/{_path_segment(workspace_id)}/objectives"
+        )
+        payload = await self._get(
+            path,
+            headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
+            params={"limit": str(limit), "offset": "0"},
+        )
+        return self._validate(_WorkspaceCoreCyberObjectiveList, payload, path=path).items
+
     async def read_workspace_task(
         self,
         *,
@@ -550,9 +771,7 @@ class WorkspaceCoreClient:
         user_id: str,
         is_superuser: bool = False,
     ) -> WorkspaceCoreTask:
-        path = (
-            f"/api/v1/workspaces/{_path_segment(workspace_id)}/tasks/{_path_segment(task_id)}"
-        )
+        path = f"/api/v1/workspaces/{_path_segment(workspace_id)}/tasks/{_path_segment(task_id)}"
         payload = await self._get(
             path,
             headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
@@ -572,6 +791,45 @@ class WorkspaceCoreClient:
         )
         return self._validate(
             WorkspaceAuthorityQueryResponse,
+            payload,
+            path=path,
+            method="POST",
+        )
+
+    async def resolve_contract_actor(
+        self,
+        request: WorkspaceContractActorResolveRequest,
+    ) -> WorkspaceContractActorResolveResponse:
+        """Resolve one audited Workspace actor without accepting caller identity hints."""
+        path = "/internal/v2/workspace-authority/contract-actor:resolve"
+        try:
+            payload = await self._post(
+                path,
+                headers={},
+                json_body=request.model_dump(mode="json"),
+            )
+        except WorkspaceCoreConflictError as exc:
+            cause = exc.__cause__
+            if not isinstance(cause, httpx.HTTPStatusError):
+                raise
+            try:
+                error_payload = cause.response.json()
+            except ValueError:
+                raise
+            if not isinstance(error_payload, Mapping):
+                raise
+            code = error_payload.get("code")
+            detail = error_payload.get("detail")
+            if not isinstance(code, str) or not code.strip():
+                raise
+            if not isinstance(detail, str) or not detail.strip():
+                raise
+            raise WorkspaceContractActorResolutionError(
+                code=code.strip(),
+                detail=detail.strip(),
+            ) from exc
+        return self._validate(
+            WorkspaceContractActorResolveResponse,
             payload,
             path=path,
             method="POST",
@@ -862,17 +1120,28 @@ __all__ = [
     "WorkspaceAuthorityQueryRequest",
     "WorkspaceAuthorityQueryResponse",
     "WorkspaceAuthorityTaskRef",
+    "WorkspaceContractActorPurpose",
+    "WorkspaceContractActorResolutionError",
+    "WorkspaceContractActorResolveRequest",
+    "WorkspaceContractActorResolveResponse",
+    "WorkspaceCoreAgent",
+    "WorkspaceCoreBlackboardPost",
     "WorkspaceCoreClient",
     "WorkspaceCoreClientError",
     "WorkspaceCoreCompatibilityError",
     "WorkspaceCoreConflictError",
+    "WorkspaceCoreCyberObjective",
     "WorkspaceCoreForbiddenError",
     "WorkspaceCoreHealth",
+    "WorkspaceCoreMember",
+    "WorkspaceCoreMessage",
     "WorkspaceCoreNotFoundError",
+    "WorkspaceCoreProfile",
     "WorkspaceCoreProxyResponse",
     "WorkspaceCorePublicApiCapabilities",
     "WorkspaceCorePublicRoute",
     "WorkspaceCoreSnapshot",
+    "WorkspaceCoreTask",
     "WorkspaceCoreTaskSessionRequest",
     "WorkspaceCoreTaskSessionResponse",
     "WorkspaceRuntimeCorrelationRequest",

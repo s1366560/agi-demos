@@ -13,17 +13,31 @@ from src.domain.model.agent.conversation.conversation import (
     Conversation,
     ConversationStatus,
 )
+from src.infrastructure.agent.tools import session_status as session_status_module
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.session_status import (
     _build_status_card,
     _format_duration,
-    configure_session_status,
     session_status_tool,
 )
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _bind_template_runtime_for_unit_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Adapt direct template tests without restoring a production fallback."""
+    monkeypatch.setattr(session_status_module, "_conversation_repo", None, raising=False)
+
+    def current_repository() -> AsyncMock:
+        repository = session_status_module._conversation_repo
+        if repository is None:
+            raise RuntimeError("session_status requires a generation-bound runtime")
+        return repository
+
+    monkeypatch.setattr(session_status_module, "_repo", current_repository)
 
 
 def _make_conversation(
@@ -72,8 +86,8 @@ def _make_ctx(
 
 
 def _configure_repo(conv_repo: AsyncMock) -> None:
-    """Inject a mock conversation repository into the module-level DI."""
-    configure_session_status(conversation_repo=conv_repo)
+    """Inject a mock conversation repository into the test-only runtime harness."""
+    session_status_module._conversation_repo = conv_repo
 
 
 # ---------------------------------------------------------------------------

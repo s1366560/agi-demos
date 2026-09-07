@@ -145,21 +145,27 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_cluster_control_not_applicable",
       "local_deviation": "Cluster and ACP runner-pool administration remain visible as a native route contract in Local mode but require Cloud authority; registration tokens are never synthesized or cached by the renderer.",
-      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. Cloud Desktop has a real native loader, App binding, typed client and controller for paginated list reads, current-page search, filtering, refresh and health inspection, but workbenchCapabilityClient still wraps runtimeClustersCapability with declared renderer provenance. Snapshot v4 therefore closes Cloud to renderer_capability_authority_unobserved and promotes no action. Local Desktop keeps the native route shell but returns the stable not-applicable authority instead of simulating a cluster topology.",
+      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. At fc8ad4442, the production Desktop route and workbench consumer resolve `service:desktop-renderer.runtime-clusters-authority@1.0.0` through tenant-scoped generation leases. List, health and probe operations freeze config, scope, query, cluster identity and signal before admission, validate exact response contracts, revoke escaped authorities after release, and preserve the primary operation error if release fails. Cloud transport remains vault-bound through desktopApiFetch, but its observed capability has no authority revision, so Snapshot v4 must fail closed to capability_authority_revision_unavailable and promote no action. Local Desktop is cloud-only, returns the stable not-applicable authority without network access, and does not simulate cluster topology. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement.",
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersCapability.ts",
-        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersContract.ts",
         "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersController.ts",
         "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/runtime-clusters/RuntimeClustersPage.tsx"
+        "agi-stack/apps/desktop/src/features/runtime-clusters/RuntimeClustersPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "cloud_reason_code": "renderer_capability_authority_unobserved"
+      "cloud_reason_code": "capability_authority_revision_unavailable"
     },
     {
       "id": "tenant-tenant-deploy",
@@ -168,6 +174,16 @@
       "domain": "runtime-infrastructure",
       "scope": ["tenant", "instance"],
       "web_route_ids": ["tenant-tenant-deploy"],
+      "reviewed_production_dependencies": [
+        {
+          "routed_source_entry": "web/src/pages/tenant/DeployProgress.tsx",
+          "source_entry": "web/src/pages/tenant/deployProgressStream.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/DeployProgress.tsx",
+          "source_entry": "web/src/services/client/webFetchV2.ts"
+        }
+      ],
       "api_method": "GET",
       "api_path": "/api/v1/deploys/",
       "api_contracts": [
@@ -302,21 +318,27 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_deployment_authority_not_applicable",
       "local_deviation": "Local Desktop may run supervised local work but does not expose the Cloud deployment authority. It must render a stable cloud-only state instead of launching an external control plane.",
-      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. The routed Web page calls list, create, detail, progress, success, failed, and cancel, but not getLatestForInstance. Web stays degraded because the backend list field deploys is read as deployments, finished_at and message are rendered as completed_at and error_message, success sends no required body, failed supplies no required non-empty message, and the running status is tested as in_progress for cancellation. Desktop has a real native loader, App binding, typed Cloud client, controller and read-oriented deployment page, but workbenchCapabilityClient still wraps runtimeDeploymentsCapability with declared renderer provenance. Snapshot v4 closes every declared active capability to renderer_capability_authority_unobserved, so no Cloud deployment action is currently route-reachable. Local remains a declared cloud-only not-applicable surface and never calls a simulated deployment authority.",
+      "judgment_rationale": "At e24e4d158, Desktop Runtime Deployments replaces the deleted static capability and client with service:desktop-renderer.runtime-deployments-authority@1.0.0, a root V2 Provider and tenant-scoped immutable generation leases for list, get, progress streaming and probe. Cloud transport remains vault-bound through desktopApiFetch and now reports observed cloud_service provenance, but the backend supplies no authority revision, so Snapshot v4 must fail closed with no promoted actions. Local performs no deployment transport and remains cloud-only not applicable; its observed sidecar snapshot source records the local execution context, not a Local deployment authority. Web remains partial because the backend list field deploys is read as deployments, finished_at and message are rendered as completed_at and error_message, mutation bodies remain mismatched, and the running status is tested as in_progress for cancellation.",
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsCapability.ts",
-        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsContract.ts",
         "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsController.ts",
         "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/runtime-deployments/RuntimeDeploymentsPage.tsx"
+        "agi-stack/apps/desktop/src/features/runtime-deployments/RuntimeDeploymentsPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "cloud_reason_code": "renderer_capability_authority_unobserved"
+      "cloud_reason_code": "capability_authority_revision_unavailable"
     },
     {
       "id": "tenant-tenant-instance-templates",
@@ -510,33 +532,43 @@
       "local_reason_code": "local_instance_template_authority_unavailable",
       "local_authority": "none",
       "local_deviation": "Local Desktop keeps the native route and stable zero-network unavailable state until a sidecar template authority can safely describe only supported resources and keep imported files within the workspace root and declared size and MIME limits.",
-      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership. Desktop has a real native loader, App binding, typed client, controller and lifecycle page, but workbenchCapabilityClient still wraps instanceTemplatesCapability with declared renderer provenance. Snapshot v4 therefore closes the active Cloud declaration to renderer_capability_authority_unobserved and exposes no route-reachable actions. Local renders the stable local_instance_template_authority_unavailable terminal state from the same declared renderer boundary; it has no observed sidecar template authority.",
+      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership. Desktop now resolves the typed instance-template service through a tenant-scoped generation lease and routes every Cloud operation through the V2 authority. The Cloud probe remains unavailable because the service response has no authority revision, so Snapshot v4 fails closed with capability_authority_revision_unavailable instead of exposing route actions. Local retains the zero-network local_instance_template_authority_unavailable result because no sidecar template authority exists.",
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesCapability.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesClient.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesController.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx"
+        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
-      "cloud_reason_code": "renderer_capability_authority_unobserved",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesCapability.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesClient.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesController.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx"
+        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ]
     }
   ],

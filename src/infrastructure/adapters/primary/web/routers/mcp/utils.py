@@ -1,42 +1,14 @@
-"""Shared utilities for MCP API.
+"""HTTP adapters for generation-owned MCP authorization services."""
 
-Contains dependency functions and helper utilities.
-"""
-
-import logging
 from collections.abc import Collection
-from typing import Any
 
-from fastapi import HTTPException, Request, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException, status
 
-from src.configuration.di_container import DIContainer
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
+from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
+    MCPApplicationAuthorityV2,
+)
 from src.infrastructure.i18n import gettext as _
-
-logger = logging.getLogger(__name__)
-
-MCP_PROJECT_WRITE_ROLES = ("owner", "admin", "member")
-
-
-def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
-    """
-    Get DI container with database session for the current request.
-    """
-    app_container: DIContainer = request.app.state.container
-    return app_container.with_db(db)
-
-
-async def get_sandbox_mcp_server_manager(request: Request, db: AsyncSession) -> Any:
-    """Get SandboxMCPServerManager from DI container.
-
-    Creates a fresh container with the current DB session to ensure
-    proper transaction scoping.
-    """
-    container = get_container_with_db(request, db)
-    return container.sandbox_mcp_server_manager()
+from src.infrastructure.plugins.v2.mcp_services import MCPProjectAccessDeniedV2
 
 
 def _access_denied() -> HTTPException:
@@ -47,99 +19,54 @@ def _access_denied() -> HTTPException:
 
 
 async def list_accessible_project_ids(
-    db: AsyncSession,
-    tenant_id: str,
-    user_id: str,
+    authority: MCPApplicationAuthorityV2,
 ) -> set[str]:
-    """Return project IDs in this tenant that the user is a direct member of."""
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject.project_id)
-            .join(Project, UserProject.project_id == Project.id)
-            .where(
-                Project.tenant_id == tenant_id,
-                UserProject.user_id == user_id,
-            )
-        )
+    """Return direct project memberships through the operation-owned Provider."""
+    return await authority.services.access.list_accessible_project_ids(
+        tenant_id=authority.tenant_id,
+        user_id=authority.user_id,
     )
-    return set(result.scalars().all())
 
 
 async def resolve_project_tenant_id_for_access(
-    db: AsyncSession,
+    authority: MCPApplicationAuthorityV2,
     project_id: str,
-    user_id: str,
     required_roles: Collection[str] | None = None,
 ) -> str:
-    """Return the project's tenant when the user is allowed to access the project."""
-    allowed_roles = list(required_roles) if required_roles is not None else None
-    if allowed_roles is not None and not allowed_roles:
-        raise _access_denied()
-
-    query = (
-        select(Project.tenant_id)
-        .join(UserProject, UserProject.project_id == Project.id)
-        .where(
-            Project.id == project_id,
-            UserProject.user_id == user_id,
-            UserProject.project_id == project_id,
+    """Resolve a project tenant through the operation-owned authorization seam."""
+    try:
+        return await authority.services.access.resolve_project_tenant_id(
+            project_id=project_id,
+            tenant_id=authority.tenant_id,
+            user_id=authority.user_id,
+            required_roles=required_roles,
         )
-    )
-    if allowed_roles is not None:
-        query = query.where(UserProject.role.in_(allowed_roles))
-
-    result = await db.execute(refresh_select_statement(query))
-    tenant_id = result.scalar_one_or_none()
-    if tenant_id is None:
-        raise _access_denied()
-    return str(tenant_id)
+    except MCPProjectAccessDeniedV2 as exc:
+        raise _access_denied() from exc
 
 
 async def ensure_project_access(
-    db: AsyncSession,
+    authority: MCPApplicationAuthorityV2,
     project_id: str,
     tenant_id: str,
-    user_id: str | None = None,
     required_roles: Collection[str] | None = None,
 ) -> None:
-    """Ensure project belongs to the tenant and, when provided, the user is a member.
-
-    NOTE (M12 audit): This single-field existence check uses raw SQLAlchemy
-    deliberately.  It lives in the infrastructure/router layer (not domain or
-    application) and mirrors identical patterns in projects.py and memories.py.
-    Creating a dedicated repository method for a one-off access guard would
-    add unnecessary abstraction.
-    """
-    if user_id is not None:
-        allowed_roles = list(required_roles) if required_roles is not None else None
-        if allowed_roles is not None and not allowed_roles:
-            raise _access_denied()
-
-        query = (
-            select(UserProject.id)
-            .join(Project, UserProject.project_id == Project.id)
-            .where(
-                Project.id == project_id,
-                Project.tenant_id == tenant_id,
-                UserProject.user_id == user_id,
-                UserProject.project_id == project_id,
-            )
-        )
-        if allowed_roles is not None:
-            query = query.where(UserProject.role.in_(allowed_roles))
-
-        result = await db.execute(refresh_select_statement(query))
-        if result.scalar_one_or_none() is None:
-            raise _access_denied()
-        return
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(Project.id).where(
-                Project.id == project_id,
-                Project.tenant_id == tenant_id,
-            )
-        )
-    )
-    if result.scalar_one_or_none() is None:
+    """Enforce tenant membership through the operation-owned authorization seam."""
+    if tenant_id != authority.tenant_id:
         raise _access_denied()
+    try:
+        await authority.services.access.ensure_project_access(
+            project_id=project_id,
+            tenant_id=authority.tenant_id,
+            user_id=authority.user_id,
+            required_roles=required_roles,
+        )
+    except MCPProjectAccessDeniedV2 as exc:
+        raise _access_denied() from exc
+
+
+__all__ = [
+    "ensure_project_access",
+    "list_accessible_project_ids",
+    "resolve_project_tenant_id_for_access",
+]

@@ -27,7 +27,14 @@ const sandboxRuntimeHookSource = readFileSync(
   'utf8'
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-const reviewPanelSource = readFileSync(new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url), 'utf8');
+const reviewPanelSource = readFileSync(
+  new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url),
+  'utf8',
+);
+const sessionCanvasSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopSessionCanvasSurfaceV2.tsx', import.meta.url),
+  'utf8'
+);
 
 test('Desktop interactive terminal uses xterm, Fit, and WebLinks', () => {
   assert.match(interactiveTerminalSource, /from '@xterm\/xterm'/);
@@ -45,7 +52,10 @@ test('terminal canvas gates xterm and retains the history fallback', () => {
     sessionTerminalSource,
     /sandboxRuntime\?\.capabilities\?\.terminal_interactive/
   );
-  assert.match(sessionTerminalSource, /declaredInteractiveCapability\.availability === 'available'/);
+  assert.match(
+    sessionTerminalSource,
+    /declaredInteractiveCapability\.availability === 'available'/,
+  );
   assert.match(
     sessionTerminalSource,
     /const canStart =[\s\S]*declaredInteractiveCapability\.availability === 'available'/
@@ -53,8 +63,17 @@ test('terminal canvas gates xterm and retains the history fallback', () => {
   assert.match(sessionTerminalSource, /<InteractiveTerminal/);
   assert.match(sessionTerminalSource, /<pre[\s\S]*className="terminal-preview"/);
   assert.match(reviewPanelSource, /interactiveCapability=\{terminalInteractiveCapability\}/);
-  assert.match(appSource, /onTerminalInput=\{terminalProxy\.sendInput\}/);
-  assert.match(appSource, /onTerminalResize=\{terminalProxy\.resize\}/);
+  assert.match(appSource, /onTerminalInput: terminalProxy\.sendInput/);
+  assert.match(appSource, /onTerminalResize: terminalProxy\.resize/);
+  assert.match(appSource, /meta: \{[\s\S]*sandboxRuntime,[\s\S]*terminalInteractiveCapability,/);
+  assert.match(sessionCanvasSurfaceSource, /'onTerminalInput'/);
+  assert.match(sessionCanvasSurfaceSource, /'onTerminalResize'/);
+  assert.match(sessionCanvasSurfaceSource, /'sandboxRuntime'/);
+  assert.match(sessionCanvasSurfaceSource, /'terminalInteractiveCapability'/);
+  assert.match(
+    sessionCanvasSurfaceSource,
+    /<WorkspaceReviewPanel[\s\S]*\{\.\.\.input\.meta\}[\s\S]*\{\.\.\.input\.actions\}/
+  );
 });
 
 test('sandbox file browser uses structured sandbox authority operations', () => {
@@ -98,42 +117,46 @@ test('remote desktop iframe is credential-free and reconnectable', () => {
 
 test('runtime hook consumes capabilities without inference', () => {
   assert.match(sandboxRuntimeHookSource, /client\s*\.loadCapabilities/);
-  assert.match(sandboxRuntimeHookSource, /createSandboxRuntimeClient\(config, capabilities\)/);
+  assert.match(sandboxRuntimeHookSource, /client: DesktopProjectSandboxSurfaceClientV2/);
+  for (const operation of ['listFiles', 'readFile', 'downloadFile']) {
+    assert.match(sandboxRuntimeHookSource, new RegExp(`client\\.${operation}\\(capabilities, request, linked\\)`));
+  }
+  assert.doesNotMatch(sandboxRuntimeHookSource, /createSandboxRuntimeClient|createSandboxRuntimeSurfaceClient/);
   assert.match(sandboxRuntimeHookSource, /runtimeClient/);
   assert.match(sandboxRuntimeHookSource, /capabilityLoadReason/);
   assert.doesNotMatch(
     sandboxRuntimeHookSource,
-    /config\.mode\s*===|status\s*===\s*404|message\.includes|error\.message/iu
+    /status\s*===\s*404|message\.includes|error\.message/iu
   );
 });
 
-test('cloud terminal start uses the narrow runtime client without probing the legacy route', () => {
+test('terminal start acquires one generation-pinned lifecycle authority', () => {
   assert.match(
     appSource,
-    /config\.mode === 'cloud'[\s\S]*runtimeClient\.createTerminalSession/
+    /acquireDesktopTerminalLifecycleAuthorityV2\([\s\S]*capabilities: sandboxRuntime\.capabilities/
   );
-  assert.match(
+  assert.match(appSource, /terminalLifecycleRef\.current = lifecycle/);
+  assert.match(appSource, /setTerminalLifecycle\(lifecycle\)/);
+  assert.doesNotMatch(
     appSource,
-    /terminal_session_v2_canonical_run_authority_unavailable/
-  );
-  assert.match(
-    appSource,
-    /result\.reason_code ===[\s\S]*terminal_session_v2_canonical_run_authority_unavailable/
-  );
-  assert.match(appSource, /session\.terminalCapabilityUnavailable/);
-  assert.match(
-    appSource,
-    /config\.mode !== 'local'[\s\S]*api\.seedProxyAuthCookie\(\)[\s\S]*api\.startTerminal/
+    /runtimeClient\.createTerminalSession|api\.seedProxyAuthCookie|api\.startTerminal/
   );
 });
 
 test('terminal authority is cleared at project, auth, and canonical run boundaries', () => {
   assert.match(
     appSource,
-    /const resetProjectScopedState = \(\) => \{[\s\S]*setTerminal\(null\);[\s\S]*setTerminalV2\(null\);/
+    /const resetProjectScopedState = \(\) => \{[\s\S]*terminalLifecycleRef\.current = null;[\s\S]*setTerminal\(null\);[\s\S]*setTerminalLifecycle\(null\);/,
   );
   assert.match(
     appSource,
-    /useEffect\(\(\) => \{[\s\S]*terminalRunScopeKeyRef\.current === currentTerminalRunScopeKey[\s\S]*terminalStartGenerationRef\.current \+= 1;[\s\S]*setTerminal\(null\);[\s\S]*setTerminalV2\(null\);[\s\S]*\}, \[currentTerminalRunScopeKey\]\);/
+    new RegExp(
+      String.raw`useEffect\(\(\) => \{[\s\S]*` +
+        String.raw`terminalRunScopeKeyRef\.current === currentTerminalRunScopeKey[\s\S]*` +
+        String.raw`terminalStartGenerationRef\.current \+= 1;[\s\S]*` +
+        String.raw`terminalLifecycleRef\.current = null;[\s\S]*` +
+        String.raw`setTerminal\(null\);[\s\S]*setTerminalLifecycle\(null\);[\s\S]*` +
+        String.raw`\}, \[currentTerminalRunScopeKey\]\);`,
+    ),
   );
 });

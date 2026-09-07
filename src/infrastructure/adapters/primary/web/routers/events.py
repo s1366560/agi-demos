@@ -7,15 +7,21 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.event_log_service import EventLogService
 from src.configuration.features import require_feature
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.event_log_application_authority_v2 import (
+    EventLogApplicationAuthorityV2,
+    event_log_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
+from src.infrastructure.plugins.v2.event_log_services import (
+    EventLogQueryApplicationServicesV2,
+)
 
 router = APIRouter(
     prefix="/api/v1/events", tags=["events"], dependencies=[require_feature("events")]
@@ -40,13 +46,11 @@ class EventLogListResponse(BaseModel):
 
 
 async def get_event_service(
-    db: Any = Depends(get_db),  # noqa: ANN401
-) -> EventLogService:
-    from src.infrastructure.adapters.secondary.persistence.sql_event_log_repository import (
-        SqlEventLogRepository,
-    )
-
-    return EventLogService(SqlEventLogRepository(db))
+    event_log_application: EventLogApplicationAuthorityV2 = Depends(
+        event_log_application_authority_dependency_v2
+    ),
+) -> EventLogQueryApplicationServicesV2:
+    return event_log_application.services
 
 
 async def get_selected_event_tenant(
@@ -74,7 +78,7 @@ async def list_events(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     tenant_id: str = Depends(get_selected_event_tenant),
-    service: EventLogService = Depends(get_event_service),
+    service: EventLogQueryApplicationServicesV2 = Depends(get_event_service),
 ) -> EventLogListResponse:
     items, total = await service.list_events(
         tenant_id=tenant_id,
@@ -106,6 +110,6 @@ async def list_events(
 @router.get("/types", response_model=list[str])
 async def list_event_types(
     tenant_id: str = Depends(get_selected_event_tenant),
-    service: EventLogService = Depends(get_event_service),
+    service: EventLogQueryApplicationServicesV2 = Depends(get_event_service),
 ) -> list[str]:
-    return await service.get_event_types(tenant_id)
+    return await service.get_event_types(tenant_id=tenant_id)

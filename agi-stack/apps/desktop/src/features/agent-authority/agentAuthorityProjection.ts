@@ -1,17 +1,5 @@
-import type { ChangeSnapshot, DesktopRunInput } from '../../types';
-import type { CloudRunInputReceipt, RunChanges } from './agentAuthorityTypes';
-
-export function desktopRunInputFromCloud(
-  input: CloudRunInputReceipt,
-): DesktopRunInput {
-  return {
-    ...input,
-    references: input.references.map((reference) => ({ ...reference })),
-    context_items: input.context_items.map(({ metadata, ...item }) =>
-      metadata === null ? item : { ...item, metadata: { ...metadata } },
-    ),
-  };
-}
+import type { ChangeSnapshot } from '../../types';
+import type { RunChanges } from './agentAuthorityTypes';
 
 export function desktopChangeSnapshotFromCloud(
   snapshot: RunChanges,

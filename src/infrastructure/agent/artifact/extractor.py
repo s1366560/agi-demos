@@ -640,24 +640,3 @@ class ArtifactExtractor:
             return ArtifactExtractionResult()
 
         return self._extract_from_result(result, tool_name)
-
-
-# ============================================================
-# Module-level Singleton
-# ============================================================
-
-_default_extractor: ArtifactExtractor | None = None
-
-
-def get_artifact_extractor() -> ArtifactExtractor:
-    """Get the default artifact extractor singleton."""
-    global _default_extractor
-    if _default_extractor is None:
-        _default_extractor = ArtifactExtractor()
-    return _default_extractor
-
-
-def set_artifact_extractor(extractor: ArtifactExtractor) -> None:
-    """Set the default artifact extractor singleton."""
-    global _default_extractor
-    _default_extractor = extractor

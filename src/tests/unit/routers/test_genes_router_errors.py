@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from typing import cast
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.gene_schemas import (
     GeneCreate,
@@ -17,7 +20,16 @@ from src.application.schemas.gene_schemas import (
     GenomeCreate,
 )
 from src.domain.model.gene.enums import EvolutionEventType, InstanceGeneStatus
+from src.infrastructure.adapters.primary.web.gene_application_authority_v2 import (
+    GeneApplicationAuthorityV2,
+)
 from src.infrastructure.adapters.primary.web.routers import genes
+from src.infrastructure.adapters.secondary.persistence.models import (
+    InstanceModel,
+    Project,
+    User,
+)
+from src.infrastructure.plugins.v2.gene_services import GeneResourceDirectoryV2
 
 
 class _FailingGeneService:
@@ -58,21 +70,9 @@ class _FailingGeneService:
         raise PermissionError("review secret denied")
 
 
-class _InstanceService:
-    async def get_instance(self, instance_id: str) -> object | None:
-        if instance_id == "missing-instance":
-            return None
-        deleted_at = datetime(2026, 1, 2, tzinfo=UTC) if instance_id == "deleted-instance" else None
-        tenant_id = "tenant-2" if instance_id == "foreign-instance" else "tenant-1"
-        return SimpleNamespace(id=instance_id, tenant_id=tenant_id, deleted_at=deleted_at)
-
-
 class _Container:
     def gene_service(self) -> _FailingGeneService:
         return _FailingGeneService()
-
-    def instance_service(self) -> _InstanceService:
-        return _InstanceService()
 
 
 def _gene_entity(
@@ -411,14 +411,99 @@ class _UpdateValidationContainer(_Container):
         return _UpdateValidationGeneService()
 
 
-@pytest.fixture(autouse=True)
-def patch_container(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(genes, "get_container_with_db", lambda _request, _db: _Container())
+def _authority(
+    container: _Container | None = None,
+    *,
+    db: object | None = None,
+    resources: object | None = None,
+) -> GeneApplicationAuthorityV2:
+    selected_db = db if db is not None else SimpleNamespace(commit=AsyncMock())
+    selected_resources = resources or SimpleNamespace(
+        contains_instance=AsyncMock(return_value=True),
+        get_gene_metadata=AsyncMock(return_value={}),
+    )
+    selected_container = container or _Container()
+    return cast(
+        GeneApplicationAuthorityV2,
+        SimpleNamespace(
+            db=selected_db,
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            services=SimpleNamespace(
+                genes=selected_container.gene_service(),
+                resources=selected_resources,
+            ),
+        ),
+    )
 
 
-def _tenant_dependency(handler: object) -> object:
-    default = inspect.signature(handler).parameters["tenant_id"].default
+@pytest.fixture
+def _patch_instance_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def ensure_instance_access(
+        _resources: object,
+        *,
+        instance_id: str,
+        tenant_id: str,
+        not_found_error: Callable[[], HTTPException] = genes._instance_not_found_error,
+    ) -> None:
+        assert tenant_id == "tenant-1"
+        if instance_id in {"deleted-instance", "foreign-instance", "missing-instance"}:
+            raise not_found_error()
+
+    monkeypatch.setattr(genes, "_ensure_instance_tenant_access", ensure_instance_access)
+
+
+def _authority_dependency(handler: object) -> object:
+    default = inspect.signature(handler).parameters["authority"].default
     return getattr(default, "dependency", None)
+
+
+@pytest.mark.unit
+async def test_instance_tenant_access_filters_tenant_and_deleted_rows(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    active = InstanceModel(
+        id="gene-access-active-instance",
+        name="Active Instance",
+        slug="gene-access-active-instance",
+        tenant_id=test_project_db.tenant_id,
+        service_type="ClusterIP",
+        created_by=test_user.id,
+    )
+    deleted = InstanceModel(
+        id="gene-access-deleted-instance",
+        name="Deleted Instance",
+        slug="gene-access-deleted-instance",
+        tenant_id=test_project_db.tenant_id,
+        service_type="ClusterIP",
+        created_by=test_user.id,
+        deleted_at=datetime.now(UTC),
+    )
+    test_db.add_all([active, deleted])
+    await test_db.commit()
+    resources = GeneResourceDirectoryV2(_db=test_db)
+
+    await genes._ensure_instance_tenant_access(
+        resources,
+        instance_id=active.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    for instance_id, tenant_id in (
+        (active.id, "foreign-tenant"),
+        (deleted.id, test_project_db.tenant_id),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await genes._ensure_instance_tenant_access(
+                resources,
+                instance_id=instance_id,
+                tenant_id=tenant_id,
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Instance not found"
 
 
 @pytest.mark.unit
@@ -442,8 +527,12 @@ def _tenant_dependency(handler: object) -> object:
     ],
 )
 def test_gene_write_routes_require_admin_tenant_dependency(handler_name: str) -> None:
+    dependency = _authority_dependency(getattr(genes, handler_name))
+
+    assert dependency is genes.gene_admin_application_authority_dependency_v2
     assert (
-        _tenant_dependency(getattr(genes, handler_name)) is genes._get_selected_gene_admin_tenant_id
+        inspect.signature(dependency).parameters["tenant_id"].default.dependency
+        is genes._get_selected_gene_admin_tenant_id
     )
 
 
@@ -469,7 +558,13 @@ def test_gene_write_routes_require_admin_tenant_dependency(handler_name: str) ->
     ],
 )
 def test_gene_member_routes_keep_member_tenant_dependency(handler_name: str) -> None:
-    assert _tenant_dependency(getattr(genes, handler_name)) is genes._get_selected_gene_tenant_id
+    dependency = _authority_dependency(getattr(genes, handler_name))
+
+    assert dependency is genes.gene_application_authority_dependency_v2
+    assert (
+        inspect.signature(dependency).parameters["tenant_id"].default.dependency
+        is genes._get_selected_gene_tenant_id
+    )
 
 
 @pytest.mark.unit
@@ -566,11 +661,8 @@ async def test_selected_gene_member_tenant_keeps_member_access_for_selected_tena
 async def test_create_gene_sanitizes_value_errors() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.create_gene(
-            request=SimpleNamespace(),
             data=GeneCreate(name="Gene", slug="secret-gene"),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
-            db=SimpleNamespace(commit=None),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 400
@@ -582,11 +674,8 @@ async def test_create_gene_sanitizes_value_errors() -> None:
 async def test_create_gene_rejects_mismatched_payload_tenant() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.create_gene(
-            request=SimpleNamespace(),
             data=GeneCreate(name="Gene", slug="gene", tenant_id="tenant-2"),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
-            db=SimpleNamespace(commit=None),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 403
@@ -597,11 +686,9 @@ async def test_create_gene_rejects_mismatched_payload_tenant() -> None:
 async def test_update_gene_sanitizes_missing_gene_id() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.update_gene(
-            request=SimpleNamespace(),
             gene_id="gene-secret",
             data=GeneUpdate(name="Updated"),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=None),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 404
@@ -610,22 +697,12 @@ async def test_update_gene_sanitizes_missing_gene_id() -> None:
 
 
 @pytest.mark.unit
-async def test_update_gene_reports_validation_errors_as_bad_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _UpdateValidationContainer(),
-    )
-
+async def test_update_gene_reports_validation_errors_as_bad_request() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.update_gene(
-            request=SimpleNamespace(),
             gene_id="gene-1",
             data=GeneUpdate(slug="secret-slug"),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=None),
+            authority=_authority(_UpdateValidationContainer()),
         )
 
     assert exc_info.value.status_code == 400
@@ -637,10 +714,8 @@ async def test_update_gene_reports_validation_errors_as_bad_request(
 async def test_get_gene_sanitizes_missing_gene_id() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_gene(
-            request=SimpleNamespace(),
             gene_id="gene-secret",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 404
@@ -648,19 +723,11 @@ async def test_get_gene_sanitizes_missing_gene_id() -> None:
 
 
 @pytest.mark.unit
-async def test_get_gene_hides_foreign_gene(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
+async def test_get_gene_hides_foreign_gene() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_gene(
-            request=SimpleNamespace(),
             gene_id="foreign-gene",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -668,18 +735,10 @@ async def test_get_gene_hides_foreign_gene(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.unit
-async def test_get_gene_allows_published_global_gene(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
+async def test_get_gene_allows_published_global_gene() -> None:
     response = await genes.get_gene(
-        request=SimpleNamespace(),
         gene_id="global-gene",
-        tenant_id="tenant-1",
-        db=SimpleNamespace(),
+        authority=_authority(_EvolutionAccessContainer()),
     )
 
     assert response.id == "global-gene"
@@ -687,19 +746,11 @@ async def test_get_gene_allows_published_global_gene(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
-async def test_get_gene_hides_unpublished_global_gene(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
+async def test_get_gene_hides_unpublished_global_gene() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_gene(
-            request=SimpleNamespace(),
             gene_id="global-draft-gene",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -707,22 +758,12 @@ async def test_get_gene_hides_unpublished_global_gene(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
-async def test_update_gene_hides_global_gene_from_tenant_write(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
+async def test_update_gene_hides_global_gene_from_tenant_write() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.update_gene(
-            request=SimpleNamespace(),
             gene_id="global-gene",
             data=GeneUpdate(name="Updated"),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=AsyncMock()),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -730,17 +771,8 @@ async def test_update_gene_hides_global_gene_from_tenant_write(
 
 
 @pytest.mark.unit
-async def test_list_genes_splits_comma_separated_slug_filter(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _GeneListContainer(),
-    )
-
+async def test_list_genes_splits_comma_separated_slug_filter() -> None:
     response = await genes.list_genes(
-        request=SimpleNamespace(),
         page=1,
         page_size=20,
         category=None,
@@ -749,8 +781,7 @@ async def test_list_genes_splits_comma_separated_slug_filter(
         visibility=None,
         is_published=None,
         exclude_installed_instance_id=None,
-        tenant_id="tenant-1",
-        db=SimpleNamespace(),
+        authority=_authority(_GeneListContainer()),
     )
 
     assert response.total == 1
@@ -758,18 +789,9 @@ async def test_list_genes_splits_comma_separated_slug_filter(
 
 
 @pytest.mark.unit
-async def test_list_genes_sanitizes_invalid_visibility_filter(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _InvalidVisibilityListContainer(),
-    )
-
+async def test_list_genes_sanitizes_invalid_visibility_filter() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.list_genes(
-            request=SimpleNamespace(),
             page=1,
             page_size=20,
             category=None,
@@ -778,8 +800,7 @@ async def test_list_genes_sanitizes_invalid_visibility_filter(
             visibility="not-a-visibility",
             is_published=None,
             exclude_installed_instance_id=None,
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_InvalidVisibilityListContainer()),
         )
 
     assert exc_info.value.status_code == 400
@@ -787,24 +808,14 @@ async def test_list_genes_sanitizes_invalid_visibility_filter(
 
 
 @pytest.mark.unit
-async def test_list_genomes_passes_global_inclusion_to_service(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _GenomeListContainer(),
-    )
-
+async def test_list_genomes_passes_global_inclusion_to_service() -> None:
     response = await genes.list_genomes(
-        request=SimpleNamespace(),
         page=1,
         page_size=20,
         search="review",
         visibility="public",
         is_published=True,
-        tenant_id="tenant-1",
-        db=SimpleNamespace(),
+        authority=_authority(_GenomeListContainer()),
     )
 
     assert response.total == 1
@@ -813,21 +824,17 @@ async def test_list_genomes_passes_global_inclusion_to_service(
 
 @pytest.mark.unit
 async def test_install_gene_includes_access_checked_gene_metadata(
-    monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     commit = AsyncMock()
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _GeneInstallContainer(),
-    )
 
     response = await genes.install_gene(
-        request=SimpleNamespace(),
         instance_id="instance-1",
         data=genes.InstallGeneRequest(gene_id="gene-1", config={"mode": "strict"}),
-        tenant_id="tenant-1",
-        db=SimpleNamespace(commit=commit),
+        authority=_authority(
+            _GeneInstallContainer(),
+            db=SimpleNamespace(commit=commit),
+        ),
     )
 
     assert response.gene_id == "gene-1"
@@ -838,25 +845,15 @@ async def test_install_gene_includes_access_checked_gene_metadata(
 
 
 @pytest.mark.unit
-async def test_list_genomes_sanitizes_invalid_visibility_filter(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _InvalidVisibilityListContainer(),
-    )
-
+async def test_list_genomes_sanitizes_invalid_visibility_filter() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.list_genomes(
-            request=SimpleNamespace(),
             page=1,
             page_size=20,
             search=None,
             visibility="not-a-visibility",
             is_published=None,
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_InvalidVisibilityListContainer()),
         )
 
     assert exc_info.value.status_code == 400
@@ -865,25 +862,31 @@ async def test_list_genomes_sanitizes_invalid_visibility_filter(
 
 @pytest.mark.unit
 async def test_install_genome_allows_published_global_genome(
-    monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     commit = AsyncMock()
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _GenomeInstallContainer(),
+    resources = SimpleNamespace(
+        contains_instance=AsyncMock(return_value=True),
+        get_gene_metadata=AsyncMock(
+            return_value={
+                "gene-1": {
+                    "name": "Code Review",
+                    "description": "Reviews code changes",
+                    "category": "tool",
+                }
+            }
+        ),
     )
-    metadata_result = Mock()
-    metadata_result.all.return_value = [("gene-1", "Code Review", "Reviews code changes", "tool")]
-    db = SimpleNamespace(commit=commit, execute=AsyncMock(return_value=metadata_result))
 
     response = await genes.install_genome(
-        request=SimpleNamespace(),
         instance_id="instance-1",
         genome_id="global-genome",
         data=genes.InstallGenomeRequest(config={"code-review": {"mode": "strict"}}),
-        tenant_id="tenant-1",
-        db=db,
+        authority=_authority(
+            _GenomeInstallContainer(),
+            db=SimpleNamespace(commit=commit),
+            resources=resources,
+        ),
     )
 
     assert response.instance_id == "instance-1"
@@ -893,7 +896,10 @@ async def test_install_genome_allows_published_global_genome(
     assert response.items[0].gene_name == "Code Review"
     assert response.items[0].gene_description == "Reviews code changes"
     assert response.items[0].gene_category == "tool"
-    db.execute.assert_awaited_once()
+    resources.get_gene_metadata.assert_awaited_once_with(
+        gene_ids={"gene-1"},
+        tenant_id="tenant-1",
+    )
     commit.assert_awaited_once()
 
 
@@ -901,11 +907,8 @@ async def test_install_genome_allows_published_global_genome(
 async def test_create_genome_sanitizes_value_errors() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.create_genome(
-            request=SimpleNamespace(),
             data=GenomeCreate(name="Genome", slug="secret-genome"),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
-            db=SimpleNamespace(commit=None),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 400
@@ -917,10 +920,8 @@ async def test_create_genome_sanitizes_value_errors() -> None:
 async def test_get_genome_sanitizes_missing_genome_id() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_genome(
-            request=SimpleNamespace(),
             genome_id="genome-secret",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 404
@@ -928,20 +929,10 @@ async def test_get_genome_sanitizes_missing_genome_id() -> None:
 
 
 @pytest.mark.unit
-async def test_get_genome_allows_published_global_genome(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
+async def test_get_genome_allows_published_global_genome() -> None:
     response = await genes.get_genome(
-        request=SimpleNamespace(),
         genome_id="global-genome",
-        tenant_id="tenant-1",
-        db=SimpleNamespace(),
+        authority=_authority(_EvolutionAccessContainer()),
     )
 
     assert response.id == "global-genome"
@@ -949,21 +940,11 @@ async def test_get_genome_allows_published_global_genome(
 
 
 @pytest.mark.unit
-async def test_get_genome_hides_unpublished_global_genome(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
+async def test_get_genome_hides_unpublished_global_genome() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_genome(
-            request=SimpleNamespace(),
             genome_id="global-draft-genome",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -974,10 +955,8 @@ async def test_get_genome_hides_unpublished_global_genome(
 async def test_unpublish_genome_sanitizes_missing_genome_id() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.unpublish_genome(
-            request=SimpleNamespace(),
             genome_id="genome-secret",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=None),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 404
@@ -985,22 +964,12 @@ async def test_unpublish_genome_sanitizes_missing_genome_id() -> None:
 
 
 @pytest.mark.unit
-async def test_update_genome_hides_global_genome_from_tenant_write(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
+async def test_update_genome_hides_global_genome_from_tenant_write() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.update_genome(
-            request=SimpleNamespace(),
             genome_id="global-genome",
             data=genes.GenomeUpdate(name="Updated"),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=AsyncMock()),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -1008,22 +977,12 @@ async def test_update_genome_hides_global_genome_from_tenant_write(
 
 
 @pytest.mark.unit
-async def test_update_genome_reports_validation_errors_as_bad_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _UpdateValidationContainer(),
-    )
-
+async def test_update_genome_reports_validation_errors_as_bad_request() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.update_genome(
-            request=SimpleNamespace(),
             genome_id="genome-1",
             data=genes.GenomeUpdate(slug="secret-slug"),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=None),
+            authority=_authority(_UpdateValidationContainer()),
         )
 
     assert exc_info.value.status_code == 400
@@ -1032,14 +991,14 @@ async def test_update_genome_reports_validation_errors_as_bad_request(
 
 
 @pytest.mark.unit
-async def test_get_instance_gene_sanitizes_missing_instance_gene_id() -> None:
+async def test_get_instance_gene_sanitizes_missing_instance_gene_id(
+    _patch_instance_access: None,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_instance_gene(
-            request=SimpleNamespace(),
             instance_id="instance-1",
             instance_gene_id="instance-gene-secret",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 404
@@ -1048,21 +1007,13 @@ async def test_get_instance_gene_sanitizes_missing_instance_gene_id() -> None:
 
 @pytest.mark.unit
 async def test_get_instance_gene_hides_deleted_instance_gene(
-    monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _DeletedInstanceGeneContainer(),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_instance_gene(
-            request=SimpleNamespace(),
             instance_id="instance-1",
             instance_gene_id="instance-gene-deleted",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_DeletedInstanceGeneContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -1070,14 +1021,14 @@ async def test_get_instance_gene_hides_deleted_instance_gene(
 
 
 @pytest.mark.unit
-async def test_get_instance_gene_hides_missing_instance_as_instance_gene_not_found() -> None:
+async def test_get_instance_gene_hides_missing_instance_as_instance_gene_not_found(
+    _patch_instance_access: None,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_instance_gene(
-            request=SimpleNamespace(),
             instance_id="missing-instance",
             instance_gene_id="instance-gene-secret",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 404
@@ -1086,28 +1037,32 @@ async def test_get_instance_gene_hides_missing_instance_as_instance_gene_not_fou
 
 @pytest.mark.unit
 async def test_list_instance_genes_enriches_gene_display_metadata(
-    monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _InstanceGeneListContainer(),
+    resources = SimpleNamespace(
+        contains_instance=AsyncMock(return_value=True),
+        get_gene_metadata=AsyncMock(
+            return_value={
+                "gene-1": {
+                    "name": "Code Review",
+                    "description": "Reviews code changes",
+                    "category": "tool",
+                },
+                "global-gene": {
+                    "name": "Global Review",
+                    "description": "Official shared gene",
+                    "category": "official",
+                },
+            }
+        ),
     )
-    metadata_result = Mock()
-    metadata_result.all.return_value = [
-        ("gene-1", "Code Review", "Reviews code changes", "tool"),
-        ("global-gene", "Global Review", "Official shared gene", "official"),
-    ]
-    db = SimpleNamespace(execute=AsyncMock(return_value=metadata_result))
 
     response = await genes.list_instance_genes(
-        request=SimpleNamespace(),
         instance_id="instance-1",
         limit=25,
         offset=0,
         search=None,
-        tenant_id="tenant-1",
-        db=db,
+        authority=_authority(_InstanceGeneListContainer(), resources=resources),
     )
 
     assert response.total == 3
@@ -1124,24 +1079,23 @@ async def test_list_instance_genes_enriches_gene_display_metadata(
     global_item = response.items[1]
     assert global_item.gene_id == "global-gene"
     assert global_item.gene_name == "Global Review"
-    db.execute.assert_awaited_once()
-    metadata_statement = db.execute.await_args.args[0]
-    compiled_statement = str(metadata_statement.compile(compile_kwargs={"literal_binds": True}))
-    assert "gene_market.tenant_id = 'tenant-1'" in compiled_statement
-    assert "gene_market.tenant_id IS NULL" in compiled_statement
+    resources.get_gene_metadata.assert_awaited_once_with(
+        gene_ids={"gene-1", "global-gene"},
+        tenant_id="tenant-1",
+    )
 
 
 @pytest.mark.unit
-async def test_list_instance_genes_hides_deleted_instance() -> None:
+async def test_list_instance_genes_hides_deleted_instance(
+    _patch_instance_access: None,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.list_instance_genes(
-            request=SimpleNamespace(),
             instance_id="deleted-instance",
             limit=25,
             offset=0,
             search=None,
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 404
@@ -1149,17 +1103,17 @@ async def test_list_instance_genes_hides_deleted_instance() -> None:
 
 
 @pytest.mark.unit
-async def test_list_evolution_events_sanitizes_value_errors() -> None:
+async def test_list_evolution_events_sanitizes_value_errors(
+    _patch_instance_access: None,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.list_evolution_events(
-            request=SimpleNamespace(),
             instance_id="secret-instance",
             gene_id=None,
             event_type=None,
             page=1,
             page_size=20,
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 400
@@ -1169,24 +1123,16 @@ async def test_list_evolution_events_sanitizes_value_errors() -> None:
 
 @pytest.mark.unit
 async def test_list_evolution_events_hides_foreign_instance(
-    monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await genes.list_evolution_events(
-            request=SimpleNamespace(),
             instance_id="foreign-instance",
             gene_id=None,
             event_type=None,
             page=1,
             page_size=20,
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -1194,25 +1140,15 @@ async def test_list_evolution_events_hides_foreign_instance(
 
 
 @pytest.mark.unit
-async def test_list_evolution_events_hides_foreign_gene(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
+async def test_list_evolution_events_hides_foreign_gene() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.list_evolution_events(
-            request=SimpleNamespace(),
             instance_id=None,
             gene_id="foreign-gene",
             event_type=None,
             page=1,
             page_size=20,
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -1221,23 +1157,15 @@ async def test_list_evolution_events_hides_foreign_gene(
 
 @pytest.mark.unit
 async def test_create_evolution_event_hides_foreign_instance(
-    monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await genes.create_evolution_event(
-            request=SimpleNamespace(),
             data=genes.EvolutionEventCreateRequest(
                 instance_id="foreign-instance",
                 event_type=EvolutionEventType.learned,
             ),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=None),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -1248,10 +1176,8 @@ async def test_create_evolution_event_hides_foreign_instance(
 async def test_get_evolution_event_sanitizes_missing_event_id() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_evolution_event(
-            request=SimpleNamespace(),
             event_id="event-secret",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == 404
@@ -1260,20 +1186,12 @@ async def test_get_evolution_event_sanitizes_missing_event_id() -> None:
 
 @pytest.mark.unit
 async def test_get_evolution_event_hides_foreign_instance(
-    monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _EvolutionAccessContainer(),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_evolution_event(
-            request=SimpleNamespace(),
             event_id="foreign-event",
-            tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            authority=_authority(_EvolutionAccessContainer()),
         )
 
     assert exc_info.value.status_code == 404
@@ -1281,22 +1199,12 @@ async def test_get_evolution_event_hides_foreign_instance(
 
 
 @pytest.mark.unit
-async def test_create_gene_review_sanitizes_value_errors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _ReviewFailingContainer(),
-    )
+async def test_create_gene_review_sanitizes_value_errors() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.create_gene_review(
-            request=SimpleNamespace(),
             gene_id="gene-secret",
             data=GeneReviewCreate(rating=5, content="solid"),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
-            db=SimpleNamespace(commit=None),
+            authority=_authority(_ReviewFailingContainer()),
         )
 
     assert exc_info.value.status_code == 400
@@ -1304,22 +1212,12 @@ async def test_create_gene_review_sanitizes_value_errors(
 
 
 @pytest.mark.unit
-async def test_delete_gene_review_sanitizes_permission_errors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        genes,
-        "get_container_with_db",
-        lambda _request, _db: _ReviewFailingContainer(),
-    )
+async def test_delete_gene_review_sanitizes_permission_errors() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.delete_gene_review(
-            request=SimpleNamespace(),
             gene_id="gene-secret",
             review_id="review-secret",
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
-            db=SimpleNamespace(commit=None),
+            authority=_authority(_ReviewFailingContainer()),
         )
 
     assert exc_info.value.status_code == 403

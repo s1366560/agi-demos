@@ -1,5 +1,8 @@
 import type { DesktopRuntimeConfig } from '../../types';
-import { createAgentDefinitionsRouteClient } from './agentDefinitionsRouteClient';
+import {
+  createDesktopTenantAgentDefinitionsRouteClientV2,
+  type DesktopTenantAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import { createManagementRouteController } from './managementRouteController';
 import type {
   ManagementRouteBinding,
@@ -11,27 +14,26 @@ import type {
   ManagementRouteContent,
 } from './managementRouteTypes';
 import { managementRouteScopeForRuntime } from './managementRouteTypes';
-import { createMcpServersRouteClient } from './mcpServersRouteClient';
-import { createPluginsRouteClient } from './pluginsRouteClient';
-import { createProviderRouteClient } from './providerRouteClient';
-import { createSkillsRouteClient } from './skillsRouteClient';
-
-type ManagementRouteRuntimeDependencies = Readonly<{
-  createClient?: (config: DesktopRuntimeConfig) => ManagementRouteClient;
-}>;
+import { createMcpServersRouteClient, type McpServersRouteAuthority } from './mcpServersRouteClient';
+import {
+  createPluginsRouteClient,
+  type PluginsRouteAuthority,
+} from './pluginsRouteClient';
+import { createProviderRouteClient, type ProviderRouteAuthority } from './providerRouteClient';
+import { createSkillsRouteClient, type SkillsRouteAuthority } from './skillsRouteClient';
 
 export function createProvidersRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  operations: ProviderRouteAuthority,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-providers',
     config,
     context,
     Content,
-    dependencies.createClient ?? createProviderRouteClient,
+    (runtimeConfig) => createProviderRouteClient(runtimeConfig, operations),
   );
 }
 
@@ -39,14 +41,15 @@ export function createAgentDefinitionsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  operations: DesktopTenantAgentDefinitionsOperationsV2,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-agent-definitions',
     config,
     context,
     Content,
-    dependencies.createClient ?? createAgentDefinitionsRouteClient,
+    (runtimeConfig) =>
+      createDesktopTenantAgentDefinitionsRouteClientV2(operations, runtimeConfig),
   );
 }
 
@@ -54,14 +57,14 @@ export function createSkillsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  operations: SkillsRouteAuthority,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-skills',
     config,
     context,
     Content,
-    dependencies.createClient ?? createSkillsRouteClient,
+    (runtimeConfig) => createSkillsRouteClient(runtimeConfig, operations),
   );
 }
 
@@ -69,14 +72,15 @@ export function createPluginsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  pluginMarketplaceOperationsV2: PluginsRouteAuthority,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-plugins',
     config,
     context,
     Content,
-    dependencies.createClient ?? createPluginsRouteClient,
+    (runtimeConfig) =>
+      createPluginsRouteClient(runtimeConfig, pluginMarketplaceOperationsV2),
   );
 }
 
@@ -84,14 +88,15 @@ export function createMcpServersRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  projectMcpServersOperationsV2: McpServersRouteAuthority,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-mcp-servers',
     config,
     context,
     Content,
-    dependencies.createClient ?? createMcpServersRouteClient,
+    (runtimeConfig) =>
+      createMcpServersRouteClient(runtimeConfig, projectMcpServersOperationsV2),
   );
 }
 

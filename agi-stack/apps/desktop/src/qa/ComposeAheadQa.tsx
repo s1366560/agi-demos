@@ -1,3 +1,4 @@
+import { unavailableVoiceSessionOperationsQa } from './voiceSessionOperationsQa';
 import '@radix-ui/themes/styles.css';
 import React, { useCallback, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -27,8 +28,13 @@ const qaApi: ComposerCatalogClient = {
   listWorkspaceAgents: async () => [],
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
-  listManagedPlugins: async () => [],
+  listMarketplacePlugins: async () => [],
   listManagedSubAgents: async () => [],
+  listPromptTemplates: async () => [],
+  createPromptTemplate: async () => {
+    throw new Error('qa_prompt_templates_unavailable');
+  },
+  deletePromptTemplate: async () => {},
 };
 
 const conversation: AgentConversation = {
@@ -241,6 +247,8 @@ function ComposeAheadQa() {
           </header>
           <div className="session-steering-qa-content compose-ahead-qa-content">
             <ChatPanel
+              voiceSessionOperations={unavailableVoiceSessionOperationsQa}
+              imagePreviewClient={null}
               composeAheadFallbackAllowed
               api={qaApi}
               conversations={[conversation]}

@@ -1,3 +1,10 @@
+import { createBrowserBridgeManagementClientQaV2 } from './browserBridgeManagementClientQaV2';
+import { createDesktopBrowserIntegrationQaOperationsV2 } from './desktopBrowserIntegrationAuthorityQaV2';
+import { createDesktopProjectMcpServersQaOperationsV2 } from './desktopProjectMcpServersAuthorityQaV2';
+import { createDesktopTenantProvidersQaOperationsV2 } from './desktopTenantProvidersAuthorityQaV2';
+import { createDesktopTenantSkillDefinitionsQaOperationsV2 } from './desktopTenantSkillDefinitionsAuthorityQaV2';
+import { createDesktopTenantSkillPackagesQaOperationsV2 } from './desktopTenantSkillPackagesAuthorityQaV2';
+import { createDesktopTenantSkillEvolutionQaOperationsV2 } from './desktopTenantSkillEvolutionAuthorityQaV2';
 import '@radix-ui/themes/styles.css';
 import React, { useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -8,6 +15,10 @@ import { SettingsWindow, type SettingsSection } from '../features/settings/Setti
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { I18nProvider, useI18n } from '../i18n';
+import {
+  DesktopPluginMarketplaceAuthorityUnavailableErrorV2,
+  type DesktopPluginMarketplaceOperationsV2,
+} from '../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type {
   AuthState,
   DesktopRuntimeConfig,
@@ -16,6 +27,12 @@ import type {
   WorkspaceAuthorityCollection,
   WorkspaceSummary,
 } from '../types';
+import { createDesktopNewTaskFlowQaOperationsV2 } from './desktopNewTaskFlowAuthorityQaV2';
+import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
+import { createDesktopTenantEvolutionQaOperationsV2 } from './desktopTenantEvolutionAuthorityQaV2';
+import { createDesktopTenantAgentDefinitionsQaOperationsV2 } from './desktopTenantAgentDefinitionsAuthorityQaV2';
+import { createDesktopTenantSubAgentDefinitionsQaOperationsV2 } from './desktopTenantSubAgentDefinitionsAuthorityQaV2';
+import { createDesktopProjectChannelsQaOperationsV2 } from './desktopProjectChannelsAuthorityQaV2';
 import '../styles/global.css';
 
 declare global {
@@ -24,6 +41,20 @@ declare global {
 
 const QA_API_ORIGIN = 'https://no-project.qa.memstack.invalid';
 const NOW = '2026-07-18T08:00:00.000Z';
+const browserIntegrationOperationsV2 = createDesktopBrowserIntegrationQaOperationsV2();
+const browserBridgeManagementClientV2 = createBrowserBridgeManagementClientQaV2();
+const projectMcpServersOperationsV2 = createDesktopProjectMcpServersQaOperationsV2();
+const tenantProvidersOperationsV2 = createDesktopTenantProvidersQaOperationsV2();
+const tenantSkillDefinitionsOperationsV2 = createDesktopTenantSkillDefinitionsQaOperationsV2();
+const tenantSkillPackagesOperationsV2 = createDesktopTenantSkillPackagesQaOperationsV2();
+const tenantSkillEvolutionOperationsV2 = createDesktopTenantSkillEvolutionQaOperationsV2();
+const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2();
+const tenantEvolutionOperationsV2 = createDesktopTenantEvolutionQaOperationsV2();
+const projectChannelsOperationsV2 = createDesktopProjectChannelsQaOperationsV2();
+const tenantAgentDefinitionsOperationsV2 =
+  createDesktopTenantAgentDefinitionsQaOperationsV2();
+const tenantSubAgentDefinitionsOperationsV2 =
+  createDesktopTenantSubAgentDefinitionsQaOperationsV2();
 const qaSearchParams = new URLSearchParams(window.location.search);
 const qaScenario = qaSearchParams.get('scenario');
 const qaWindowState = qaSearchParams.get('state');
@@ -88,6 +119,17 @@ const initialConfig: DesktopRuntimeConfig = {
   workspaceRoot: '',
 };
 
+const noProjectPluginMarketplaceOperationsV2 =
+  Object.freeze<DesktopPluginMarketplaceOperationsV2>({
+    listMarketplacePlugins: async () => [],
+    projectMarketplacePlugins: async (_config, _signal, project) => project([]),
+    uninstallMarketplacePlugin: async () => {
+      throw new DesktopPluginMarketplaceAuthorityUnavailableErrorV2('management', {
+        reasonCode: 'desktop_renderer_generation_actions_unavailable',
+      });
+    },
+  });
+
 const initialAuth: AuthState = {
   status: 'signed_in',
   credentialKind: 'cloud_session',
@@ -147,6 +189,7 @@ try {
 
 function NoProjectEntryQa() {
   const { t } = useI18n();
+  const desktopNewTaskFlowClientV2 = useMemo(createDesktopNewTaskFlowQaOperationsV2, []);
   const [auth, setAuth] = useState<AuthState>(() =>
     qaScenario === 'empty-workspaces'
       ? {
@@ -279,6 +322,7 @@ function NoProjectEntryQa() {
           open={newTaskOpen}
           config={config}
           actorId={auth.user?.user_id}
+          newTaskFlowClientV2={desktopNewTaskFlowClientV2}
           workspaceAuthority={workspaceAuthority}
           preferredWorkspaceId=""
           preferredKind={mode === 'code' ? 'programming' : 'general'}
@@ -301,6 +345,19 @@ function NoProjectEntryQa() {
           wsError={null}
           runtimeDisabledReason={newTaskDisabledReason}
           agentDefinitionEvent={null}
+          pluginMarketplaceOperationsV2={noProjectPluginMarketplaceOperationsV2}
+          tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
+          tenantEvolutionOperationsV2={tenantEvolutionOperationsV2}
+          browserIntegrationOperationsV2={browserIntegrationOperationsV2}
+          browserBridgeManagementClientV2={browserBridgeManagementClientV2}
+          projectMcpServersOperationsV2={projectMcpServersOperationsV2}
+          tenantProvidersOperationsV2={tenantProvidersOperationsV2}
+          tenantSkillDefinitionsOperationsV2={tenantSkillDefinitionsOperationsV2}
+          tenantSkillPackagesOperationsV2={tenantSkillPackagesOperationsV2}
+          tenantSkillEvolutionOperationsV2={tenantSkillEvolutionOperationsV2}
+          projectChannelsOperationsV2={projectChannelsOperationsV2}
+          tenantAgentDefinitionsOperationsV2={tenantAgentDefinitionsOperationsV2}
+          tenantSubAgentDefinitionsOperationsV2={tenantSubAgentDefinitionsOperationsV2}
           onClose={() => setSettingsOpen(false)}
           onConfigChange={setConfig}
           onRuntimeStatusRefresh={async () => undefined}

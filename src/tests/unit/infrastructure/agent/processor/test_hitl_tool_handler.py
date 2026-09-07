@@ -2,7 +2,8 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock
+from contextvars import ContextVar
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -20,7 +21,6 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.hitl_types import HITLType
 from src.infrastructure.agent.canvas.manager import CanvasManager
-from src.infrastructure.agent.canvas.tools import configure_canvas
 from src.infrastructure.agent.core.message import ToolPart, ToolState
 from src.infrastructure.agent.processor.hitl_tool_handler import (
     handle_a2ui_action_tool,
@@ -28,10 +28,44 @@ from src.infrastructure.agent.processor.hitl_tool_handler import (
     handle_decision_tool,
     handle_env_var_tool,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.tests.unit.agent.canvas.a2ui_contract_fixtures import (
     contract_case_jsonl,
     get_a2ui_contract_case,
 )
+
+_TEST_CANVAS_MANAGER: ContextVar[CanvasManager | None] = ContextVar(
+    "test_hitl_canvas_manager",
+    default=None,
+)
+
+
+def configure_canvas(manager: CanvasManager | None) -> None:
+    """Set the manager returned by the test-only V2 projection."""
+    _TEST_CANVAS_MANAGER.set(manager)
+
+
+def _current_canvas_manager_v2() -> CanvasManager:
+    manager = _TEST_CANVAS_MANAGER.get()
+    if manager is None:
+        raise RuntimeV2Error(
+            "operation_context_not_pinned",
+            "test A2UI Canvas projection requires a pinned operation",
+        )
+    return manager
+
+
+@pytest.fixture(autouse=True)
+def _canvas_runtime_projection() -> object:
+    token = _TEST_CANVAS_MANAGER.set(None)
+    try:
+        with patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_canvas_manager_v2",
+            side_effect=_current_canvas_manager_v2,
+        ):
+            yield
+    finally:
+        _TEST_CANVAS_MANAGER.reset(token)
 
 
 def _make_tool_part(call_id: str, tool_name: str) -> ToolPart:

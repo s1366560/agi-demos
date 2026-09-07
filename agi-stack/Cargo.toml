@@ -25,6 +25,7 @@ members = [
     "apps/gateway",
     "apps/bench",
     "apps/desktop/sidecar",
+    "tools/plugin-contract-completeness-v2",
 ]
 
 [workspace.package]
@@ -49,6 +50,8 @@ arc-swap = "1"
 # data so a Skill ships to the edge and compiles there. `sync` makes its types
 # Send+Sync to live alongside the Send+Sync registry. Builds on wasm32.
 rhai = { version = "1", features = ["sync"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+syn = { version = "2", features = ["full", "visit"] }
 
 # Release profile tuned for the WASM / mobile size budgets in 05-roadmap.md §3.
 [profile.release]

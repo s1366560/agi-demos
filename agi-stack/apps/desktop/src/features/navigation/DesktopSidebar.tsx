@@ -7,10 +7,8 @@ import {
   DashboardIcon,
   GearIcon,
   GridIcon,
-  MagnifyingGlassIcon,
   PersonIcon,
   PlusIcon,
-  RocketIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -25,7 +23,7 @@ import { WorkspaceDock } from '../workspace/WorkspaceDock';
 import type { WorkspaceTreeSelectionMode } from '../workspace/workspaceTreeModel';
 import './DesktopSidebar.css';
 
-type DesktopSidebarSection = 'home' | 'my-work' | 'automations' | 'search' | 'activity';
+type DesktopSidebarSection = 'home' | 'my-work' | 'activity';
 
 type DesktopSidebarProps = {
   activeSection: DesktopSidebarSection | null;
@@ -79,8 +77,6 @@ type DesktopSidebarProps = {
 
 const primaryItems = [
   { id: 'my-work', labelKey: 'nav.myWork', icon: DashboardIcon },
-  { id: 'automations', labelKey: 'nav.automations', icon: RocketIcon },
-  { id: 'search', labelKey: 'nav.search', icon: MagnifyingGlassIcon },
   { id: 'activity', labelKey: 'sidebar.activity', icon: BellIcon },
 ] as const;
 

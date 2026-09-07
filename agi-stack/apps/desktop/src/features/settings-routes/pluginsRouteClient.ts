@@ -1,4 +1,4 @@
-import { DesktopApiClient } from '../../api/client';
+import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   managementRouteObservation,
@@ -7,13 +7,13 @@ import {
 } from './managementRouteTypes';
 
 export type PluginsRouteAuthority = Pick<
-  DesktopApiClient,
-  'listManagedPlugins'
+  DesktopPluginMarketplaceCatalogOperationsV2,
+  'projectMarketplacePlugins'
 >;
 
 export function createPluginsRouteClient(
   config: DesktopRuntimeConfig,
-  authority: PluginsRouteAuthority = new DesktopApiClient(config),
+  pluginMarketplaceOperationsV2: PluginsRouteAuthority,
 ): ManagementRouteClient {
   const runtimeConfig = Object.freeze({ ...config });
   const client: ManagementRouteClient = {
@@ -22,8 +22,11 @@ export function createPluginsRouteClient(
         runtimeConfig,
         scope,
       );
-      const plugins = await authority.listManagedPlugins(options?.signal);
-      return managementRouteObservation(currentScope, plugins.length);
+      return pluginMarketplaceOperationsV2.projectMarketplacePlugins(
+        runtimeConfig,
+        options?.signal,
+        (plugins) => managementRouteObservation(currentScope, plugins.length),
+      );
     },
   };
   return Object.freeze(client);

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from inspect import getsource
 from typing import Any
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.cicd_pipeline_service import (
@@ -18,6 +20,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     CicdPipelineStageRunModel,
     Conversation as ConversationModel,
     PluginConfigModel,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_cicd_pipeline import (
+    SqlCicdPipelineRepository,
 )
 from src.infrastructure.agent.core.react_agent_tool_policy import (
     filter_non_workspace_conversation_tools,
@@ -45,6 +50,28 @@ class _FakeDroneProvider:
     async def run(self, contract: Any) -> PipelineRunResult:
         self.contracts.append(contract)
         return self._result
+
+
+class _PluginConfigRepository:
+    def __init__(
+        self,
+        row: PluginConfigModel | None = None,
+        *,
+        error: Exception | None = None,
+    ) -> None:
+        self._row = row
+        self._error = error
+        self.calls: list[tuple[str, str]] = []
+
+    async def get_by_tenant_and_plugin(
+        self,
+        tenant_id: str,
+        plugin_name: str,
+    ) -> PluginConfigModel | None:
+        self.calls.append((tenant_id, plugin_name))
+        if self._error is not None:
+            raise self._error
+        return self._row
 
 
 class _Tool:
@@ -131,6 +158,8 @@ async def test_run_pipeline_runs_repository_without_workspace(
     await _seed_conversation(db_session)
     service = CicdPipelineService(
         db_session,
+        pipeline_repository=SqlCicdPipelineRepository(db_session),
+        plugin_config_repository=_PluginConfigRepository(),
         provider_factory=lambda: _FakeDroneProvider(_success_result()),
     )
 
@@ -171,7 +200,12 @@ async def test_run_pipeline_uses_request_repository_when_provided(
     _ = test_project_db
     await _seed_conversation(db_session)
     provider = _FakeDroneProvider(_success_result())
-    service = CicdPipelineService(db_session, provider_factory=lambda: provider)
+    service = CicdPipelineService(
+        db_session,
+        pipeline_repository=SqlCicdPipelineRepository(db_session),
+        plugin_config_repository=_PluginConfigRepository(),
+        provider_factory=lambda: provider,
+    )
 
     summary = await service.run_pipeline(_request(repository="octo/service"))
 
@@ -186,7 +220,11 @@ async def test_run_pipeline_requires_repository(
 ) -> None:
     _ = test_project_db
     await _seed_conversation(db_session)
-    service = CicdPipelineService(db_session)
+    service = CicdPipelineService(
+        db_session,
+        pipeline_repository=SqlCicdPipelineRepository(db_session),
+        plugin_config_repository=_PluginConfigRepository(),
+    )
 
     with pytest.raises(CicdPipelineError) as exc_info:
         await service.run_pipeline(_request(repository=None))
@@ -200,7 +238,11 @@ async def test_run_pipeline_rejects_nested_repository_slug(
 ) -> None:
     _ = test_project_db
     await _seed_conversation(db_session)
-    service = CicdPipelineService(db_session)
+    service = CicdPipelineService(
+        db_session,
+        pipeline_repository=SqlCicdPipelineRepository(db_session),
+        plugin_config_repository=_PluginConfigRepository(),
+    )
 
     with pytest.raises(CicdPipelineError) as exc_info:
         await service.run_pipeline(_request(repository="owner/repo/extra"))
@@ -228,7 +270,12 @@ async def test_run_pipeline_failed_provider_result_is_persisted_as_failed_run(
         ),
         evidence_refs=("ci_pipeline:failed",),
     )
-    service = CicdPipelineService(db_session, provider_factory=lambda: _FakeDroneProvider(result))
+    service = CicdPipelineService(
+        db_session,
+        pipeline_repository=SqlCicdPipelineRepository(db_session),
+        plugin_config_repository=_PluginConfigRepository(),
+        provider_factory=lambda: _FakeDroneProvider(result),
+    )
 
     summary = await service.run_pipeline(_request())
 
@@ -248,22 +295,27 @@ async def test_run_pipeline_merges_tenant_plugin_config_before_provider_run(
 ) -> None:
     _ = test_project_db
     await _seed_conversation(db_session)
-    db_session.add(
-        PluginConfigModel(
-            id=PluginConfigModel.generate_id(),
-            tenant_id=TENANT_ID,
-            plugin_name="drone-pipeline-plugin",
-            config={
-                "drone_server_env": "TENANT_DRONE_SERVER",
-                "drone_token_env": "TENANT_DRONE_TOKEN",
-                "poll_interval_seconds": 3,
-                "server_url": "https://tenant.example",
-            },
-        )
+    plugin_config = PluginConfigModel(
+        id=PluginConfigModel.generate_id(),
+        tenant_id=TENANT_ID,
+        plugin_name="drone-pipeline-plugin",
+        config={
+            "drone_server_env": "TENANT_DRONE_SERVER",
+            "drone_token_env": "TENANT_DRONE_TOKEN",
+            "poll_interval_seconds": 3,
+            "server_url": "https://tenant.example",
+        },
     )
+    db_session.add(plugin_config)
     await db_session.flush()
     provider = _FakeDroneProvider(_success_result())
-    service = CicdPipelineService(db_session, provider_factory=lambda: provider)
+    repository = _PluginConfigRepository(plugin_config)
+    service = CicdPipelineService(
+        db_session,
+        pipeline_repository=SqlCicdPipelineRepository(db_session),
+        plugin_config_repository=repository,
+        provider_factory=lambda: provider,
+    )
 
     summary = await service.run_pipeline(_request())
 
@@ -274,6 +326,39 @@ async def test_run_pipeline_merges_tenant_plugin_config_before_provider_run(
     assert provider_config["drone_server_env"] == "TENANT_DRONE_SERVER"
     assert provider_config["drone_token_env"] == "TENANT_DRONE_TOKEN"
     assert provider_config["poll_interval_seconds"] == 3
+    assert repository.calls == [(TENANT_ID, "drone-pipeline-plugin")]
+
+
+async def test_run_pipeline_propagates_plugin_config_repository_failure(
+    db_session: AsyncSession,
+    test_project_db: Any,
+) -> None:
+    _ = test_project_db
+    await _seed_conversation(db_session)
+    repository = _PluginConfigRepository(error=SQLAlchemyError("CI/CD plugin config unavailable"))
+    service = CicdPipelineService(
+        db_session,
+        pipeline_repository=SqlCicdPipelineRepository(db_session),
+        plugin_config_repository=repository,
+        provider_factory=lambda: _FakeDroneProvider(_success_result()),
+    )
+
+    with pytest.raises(SQLAlchemyError, match="CI/CD plugin config unavailable"):
+        await service.run_pipeline(_request())
+
+
+def test_cicd_service_has_no_static_plugin_config_repository() -> None:
+    source = getsource(CicdPipelineService._merge_tenant_plugin_config)
+
+    assert "PluginConfigRepository(" not in source
+    assert "self._plugin_config_repository" in source
+
+
+def test_cicd_service_has_no_static_pipeline_repository() -> None:
+    source = getsource(CicdPipelineService)
+
+    assert "SqlCicdPipelineRepository" not in source
+    assert "self._pipeline_repo = pipeline_repository" in source
 
 
 async def test_run_pipeline_reports_disabled_provider_plugin(
@@ -291,7 +376,11 @@ async def test_run_pipeline_reports_disabled_provider_plugin(
         "src.application.services.cicd_pipeline_service.require_pipeline_provider",
         _missing_provider,
     )
-    service = CicdPipelineService(db_session)
+    service = CicdPipelineService(
+        db_session,
+        pipeline_repository=SqlCicdPipelineRepository(db_session),
+        plugin_config_repository=_PluginConfigRepository(),
+    )
 
     with pytest.raises(CicdPipelineError) as exc_info:
         await service.run_pipeline(_request())

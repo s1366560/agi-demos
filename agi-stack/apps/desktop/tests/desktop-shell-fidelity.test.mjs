@@ -3,6 +3,18 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const workbenchSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
+const authenticatedShellSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
+const sidebarSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopSidebarSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const desktopAuthSource = [
   '../src/hooks/useDesktopAuth.ts',
   '../src/hooks/useCloudSessionAuth.ts',
@@ -65,6 +77,10 @@ const canonicalNavigationSource = readFileSync(
   new URL('../src/features/navigation/desktopCanonicalNavigationCatalog.ts', import.meta.url),
   'utf8',
 );
+const rendererArtifactCatalogSource = readFileSync(
+  new URL('../src/plugins/desktopRendererArtifactCatalogV2.ts', import.meta.url),
+  'utf8',
+);
 const workspaceDockSource = readFileSync(
   new URL('../src/features/workspace/WorkspaceDock.tsx', import.meta.url),
   'utf8',
@@ -105,11 +121,17 @@ const noProjectQaHtml = readFileSync(
 test('desktop shell mounts only the prototype sidebar and page-owned headers', () => {
   assert.doesNotMatch(appSource, /className="titlebar"/);
   assert.doesNotMatch(appSource, /className="copilot-sidebar"/);
-  assert.equal((appSource.match(/<DesktopSidebar\b/g) ?? []).length, 1);
+  assert.equal(
+    (authenticatedShellSurfaceSource.match(/<DesktopRendererSidebarV2\b/g) ?? []).length,
+    1,
+  );
+  assert.equal((sidebarSurfaceSource.match(/<DesktopSidebar\b/g) ?? []).length, 1);
+  assert.doesNotMatch(authenticatedShellSurfaceSource, /<DesktopSidebar\b/u);
+  assert.doesNotMatch(appSource, /<DesktopSidebar\b/u);
 });
 
 test('streaming conversation replies expose a dedicated stop-session control', () => {
-  assert.match(appSource, /onStopResponse=\{socket\.stopAgentResponse\}/);
+  assert.match(appSource, /onStopResponse:\s*socket\.stopAgentResponse/u);
   assert.match(chatPanelSource, /responseStreaming[\s\S]*session\.stopResponse/);
   assert.match(chatPanelSource, /<StopIcon\s*\/>/);
   assert.match(
@@ -138,10 +160,8 @@ test('workspace tree gives the Radix viewport the full available navigation heig
 });
 
 test('authenticated identities without a project remain inside the desktop shell', () => {
-  const renderWorkbench =
-    appSource.match(
-      /const renderWorkbench = [\s\S]*?\n  \};[\s\S]*?\n  if \(!identityAuthenticated\)/,
-    )?.[0] ?? '';
+  const selectWorkbenchView =
+    appSource.match(/const selectDesktopWorkbenchViewV2 = [\s\S]*?\n  \};/u)?.[0] ?? '';
 
   assert.match(appSource, /const identityAuthenticated = isIdentityAuthenticated\(auth\)/);
   assert.match(appSource, /const showRuntimeConfig = isWorkspaceReady\(auth, config\)/);
@@ -151,8 +171,11 @@ test('authenticated identities without a project remain inside the desktop shell
     /setSettingsInitialSection\('workspace'\);[\s\S]*setSettingsWindowOpen\(true\);/,
   );
   assert.match(appSource, /if \(!identityAuthenticated\) \{[\s\S]*<LoginScreen/);
-  assert.match(renderWorkbench, /if \(!showRuntimeConfig\) return renderWorkspaceOverview\(\)/);
-  assert.doesNotMatch(renderWorkbench, /<SignedOutPanel/);
+  assert.match(
+    selectWorkbenchView,
+    /if \(!showRuntimeConfig\) return createWorkspaceWorkbenchViewV2\(\)/,
+  );
+  assert.doesNotMatch(selectWorkbenchView, /SignedOutPanel/);
 });
 
 test('authenticated identities without a project get a source-aligned selection state', () => {
@@ -201,7 +224,7 @@ test('the hierarchy QA exposes an authoritative empty-workspace project state', 
   assert.match(noProjectQaSource, /onNewTask=\{\(\) => setNewTaskOpen\(true\)\}/);
   assert.match(
     appSource,
-    /<WorkspaceOverview[\s\S]*workspaceAuthority=\{newTaskWorkspaceAuthority\}[\s\S]*onRetryWorkspaces=\{\(\) => void refreshRuntime\(\)\}/,
+    /kind:\s*'workspace',[\s\S]*workspaceAuthority:\s*newTaskWorkspaceAuthority[\s\S]*onRetryWorkspaces:\s*\(\) => void refreshRuntime\(\)/,
   );
 });
 
@@ -251,22 +274,29 @@ test('tenant and project changes require server-issued workspace context authori
   assert.match(hydrateCloudSession, /context: null/);
   assert.match(hydrateCloudSession, /tenantId: '',[\s\S]*projectId: '',[\s\S]*workspaceId: ''/);
   assert.doesNotMatch(hydrateCloudSession, /isLegacyWorkspaceContextRouteMissing/);
-  assert.match(applySettingsContext, /const requestConfig = configRef\.current/);
+  assert.match(
+    applySettingsContext,
+    /const requestConfig = Object\.freeze\(\{ \.\.\.configRef\.current \}\)/,
+  );
   assert.match(
     applySettingsContext,
     /const requestIsCurrent = \(\) =>[\s\S]*?authAttemptRevisionRef\.current === authAttemptRevision[\s\S]*?isSameDesktopRequestScope\(requestConfig, configRef\.current\)/,
   );
   assert.match(
     applySettingsContext,
-    /await contextClient\.listProjects\(tenantId\);\s*if \(!requestIsCurrent\(\)\) return;/,
+    /await withDesktopWorkspaceContextAuthorityOperationV2\(\s*desktopRendererGenerationV2\.actions,\s*authorityConfig,\s*async \(contextClient\) => \{/,
   );
   assert.match(
     applySettingsContext,
-    /await contextClient\.getWorkspaceContext\(\);\s*if \(!requestIsCurrent\(\)\) return;/,
+    /const listedProjects = await contextClient\.listProjects\(tenantId, signal\);\s*if \(!requestIsCurrent\(\)\) return;/,
   );
   assert.match(
     applySettingsContext,
-    /await contextClient\.switchWorkspaceContext\([\s\S]*?\);\s*if \(!requestIsCurrent\(\)\) return;/,
+    /const currentContextResponse = await contextClient\.getWorkspaceContext\(signal\);\s*if \(!requestIsCurrent\(\)\) return;/,
+  );
+  assert.match(
+    applySettingsContext,
+    /await contextClient\.switchWorkspaceContext\([\s\S]*?signal,\s*\);\s*if \(!requestIsCurrent\(\)\) return;/,
   );
   assert.match(applySettingsContext, /contextClient\.switchWorkspaceContext\(/);
   assert.doesNotMatch(
@@ -318,7 +348,12 @@ test('workspace settings freeze and expose selection semantics while a switch is
 });
 
 test('workspace creation uses its dedicated surface while session creation stays in new task', () => {
-  assert.match(appSource, /import \{ WorkspaceCreateDialog \}/);
+  assert.match(authenticatedShellSurfaceSource, /import \{ DesktopRendererWorkspaceCreateV2 \}/);
+  assert.match(
+    authenticatedShellSurfaceSource,
+    /<DesktopRendererWorkspaceCreateV2 input=\{surfaces\.workspaceCreate\} \/>/u,
+  );
+  assert.match(appSource, /workspaceCreate:\s*\{/u);
   assert.match(appSource, /const createWorkspaceFromDialog = async/);
   assert.doesNotMatch(appSource, /const createSessionForWorkspace = async/);
   assert.doesNotMatch(appSource, /newWorkspaceName|creatingWorkspace|creatingSessionWorkspaceId/);
@@ -332,7 +367,8 @@ test('an authoritative context switch closes settings even when workspace hydrat
 
   assert.match(applySettingsContext, /await refreshRuntime\(nextConfig, \[selectedProject\]\)/);
   assert.doesNotMatch(applySettingsContext, /contextSwitchLoadFailed/);
-  assert.match(appSource, /connection === 'error'[\s\S]*runtime\.retryWorkspace/);
+  assert.match(appSource, /connection === 'error'[\s\S]*onRetry:/u);
+  assert.match(workbenchSurfaceSource, /t\('runtime\.retryWorkspace'\)/u);
   assert.match(appSource, /workbenchRef\.current\?\.focus\(\);[\s\S]*void refreshRuntime\(\)/);
 });
 
@@ -378,10 +414,10 @@ test('workspace tree loading and error states announce changes and expose explic
   assert.match(workspaceDockSource, /actionLabel=\{t\('workspaceTree\.retry'\)\}/);
   assert.match(sidebarSource, /onRetryProject=\{onRetryProject\}/);
   assert.match(sidebarSource, /onRetryWorkspace=\{onRetryWorkspace\}/);
-  assert.match(appSource, /onRetryProject=\{\(\) => void refreshRuntime\(\)\}/);
+  assert.match(appSource, /onRetryProject:\s*\(\) => void refreshRuntime\(\)/);
   assert.match(
     appSource,
-    /onRetryWorkspace=\{\(workspaceId\) => void loadWorkspaceConversations\(workspaceId\)\}/,
+    /onRetryWorkspace:\s*\(workspaceId\) =>\s*void loadWorkspaceConversations\(workspaceId\)/,
   );
   assert.match(workspaceDockStyles, /\.workspace-tree-state > button/);
   assert.match(workspaceDockSource, /availability === 'refreshing'/);
@@ -485,11 +521,11 @@ test('workspace roster hydration isolates authority failures from the runtime co
   assert.match(refreshRuntime, /loadingWorkspaceAuthority\(\)/);
   assert.match(
     refreshRuntime,
-    /resolveWorkspaceAuthority\(scopedClient\.listWorkspaceMembers\(\)\)/,
+    /resolveWorkspaceAuthority\([\s\S]*?desktopWorkspaceRosterOperationsV2\.listWorkspaceMembers\(\{[\s\S]*?config: resolvedConfig,[\s\S]*?\}\),[\s\S]*?\)/,
   );
   assert.match(
     refreshRuntime,
-    /resolveWorkspaceAuthority\(scopedClient\.listWorkspaceAgents\(\)\)/,
+    /resolveWorkspaceAuthority\([\s\S]*?desktopWorkspaceRosterOperationsV2\.listWorkspaceAgents\(\{[\s\S]*?config: resolvedConfig,[\s\S]*?\}\),[\s\S]*?\)/,
   );
   assert.match(
     refreshRuntime,
@@ -503,7 +539,7 @@ test('notifications never open a standalone workspace review route', () => {
   assert.doesNotMatch(appSource, /switchSection\('review'\)/);
   assert.doesNotMatch(appSource, /WorkspaceReviewPanelVariant/);
   assert.doesNotMatch(appSource, /variant = 'workspace'/);
-  assert.match(appSource, /className="workbench-layout"/);
+  assert.match(workbenchSurfaceSource, /className="workbench-layout"/);
   assert.doesNotMatch(appSource, /review-panel-collapsed/);
   assert.doesNotMatch(globalStyles, /review-panel-collapsed/);
 });
@@ -521,7 +557,10 @@ test('sidebar bell opens the real Activity inbox workbench section', () => {
     /id === 'activity' && activityUnreadCount > 0 \? \(\s*<small>\{activityUnreadCount\}<\/small>\s*\) : null/,
   );
   assert.match(appSource, /if \(section === 'activity'\) switchSection\('activity'\)/);
-  assert.match(appSource, /if \(activeSection === 'activity'\) return renderActivityInbox\(\)/);
+  assert.match(
+    appSource,
+    /if \(activeSection === 'activity'\) return createActivityWorkbenchViewV2\(\)/,
+  );
   assert.doesNotMatch(
     appSource,
     /section === 'notifications'\) openSettingsEntry\('sidebar_notifications'\)/,
@@ -556,8 +595,9 @@ test('command palette derives Tenant Tasks with every canonical production route
   assert.match(canonicalNavigationSource, /'tenant-tenant-tasks', 'nav\.tasks'/);
   assert.match(
     appSource,
-    /const desktopCanonicalNavigationRegistry = useMemo\([\s\S]*CANONICAL_DESKTOP_ROUTE_IDS\.map\([\s\S]*desktopProductionRouteRegistry\.byId\.get/u,
+    /navigationRegistry: desktopCanonicalNavigationRegistry,[\s\S]*desktopRendererGenerationV2\.state/u,
   );
+  assert.doesNotMatch(appSource, /CANONICAL_DESKTOP_ROUTE_IDS\.map\(/u);
   assert.match(appSource, /deriveDesktopNavigationDiscoveryEntries\(\{/);
   assert.match(
     appSource,
@@ -578,26 +618,28 @@ test('sidebar exposes one focus-restoring all-features launcher', () => {
   assert.match(sidebarSource, /onOpenFeatureDirectory\(event\.currentTarget\)/);
   assert.match(
     appSource,
-    /onOpenFeatureDirectory=\{\(trigger\) => openCommandPalette\(trigger\)\}/,
+    /onOpenFeatureDirectory:\s*\(trigger\) => openCommandPalette\(trigger\)/,
   );
 });
 
-test('command palette opens Project Support through the scoped production route registry', () => {
+test('command palette derives auxiliary routes from the V2 navigation artifact', () => {
   const commandItems =
     appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
 
-  assert.match(commandItems, /id: 'project-support'/);
-  assert.match(commandItems, /label: t\('projectSupport\.title'\)/);
-  assert.match(commandItems, /description: t\('projectSupport\.subtitle'\)/);
   assert.match(
-    commandItems,
-    /desktopProductionRouteRegistry\.byId\.get\(PROJECT_SUPPORT_ROUTE_ID\)/,
+    canonicalNavigationSource,
+    /'project-support',[\s\S]*'projectSupport\.title',[\s\S]*'projectSupport\.subtitle'/u,
   );
   assert.match(
-    commandItems,
-    /buildDesktopRoutePath\(projectSupportRoute, \{\s*tenantId: config\.tenantId,\s*projectId: config\.projectId,/,
+    rendererArtifactCatalogSource,
+    /AUXILIARY_NAVIGATION_ROUTE_IDS_V2[\s\S]*DESKTOP_AUXILIARY_NAVIGATION_METADATA\.map/u,
   );
-  assert.match(commandItems, /desktopProductionRouteNavigation\.openPath\(projectSupportPath\)/);
+  assert.doesNotMatch(
+    commandItems,
+    /BACKEND_STORES_ROUTE_ID|PROJECT_PLAYBOOKS_ROUTE_ID|PROJECT_SUPPORT_ROUTE_ID/u,
+  );
+  assert.match(commandItems, /\.\.\.routeCommandItems/u);
+  assert.match(appSource, /desktopProductionRouteNavigation\.openPath\(entry\.destinationPath\)/u);
   assert.match(
     appSource,
     /item\.kind === 'route' && item\.id\.startsWith\('route:'\) && item\.routeId/u,
@@ -694,7 +736,7 @@ test('conversation more-actions menu dismisses outside and restores focus on Esc
 test('conversation task navigation opens the exact linked task', () => {
   assert.match(
     appSource,
-    /onOpenTask=\{[\s\S]*?setSelectedTaskId\(sessionDetailViewModel\.linkedTaskId!\);[\s\S]*?switchSection\('board'\)/,
+    /onOpenTask:\s*sessionDetailViewModel\.linkedTaskId[\s\S]*?setSelectedTaskId\(sessionDetailViewModel\.linkedTaskId!\);[\s\S]*?switchSection\('board'\)/,
   );
 });
 
@@ -860,7 +902,7 @@ test('composer model switcher explains an unconfigured model instead of a bare u
 
 test('sidebar and context rail widths are user resizable', () => {
   assert.match(appSource, /useResizablePanelWidth\(/);
-  assert.match(appSource, /--desktop-sidebar-preferred-width/);
+  assert.match(authenticatedShellSurfaceSource, /--desktop-sidebar-preferred-width/);
   assert.match(
     globalStyles,
     /--desktop-sidebar-width:\s*var\(--desktop-sidebar-preferred-width,\s*220px\)/,
@@ -869,7 +911,8 @@ test('sidebar and context rail widths are user resizable', () => {
     sidebarStyles,
     /--desktop-sidebar-width:\s*min\(\s*var\(--desktop-sidebar-preferred-width,\s*220px\),\s*200px\s*\)/,
   );
-  assert.match(appSource, /<ResizeHandle/);
+  assert.match(sidebarSurfaceSource, /<ResizeHandle/);
+  assert.doesNotMatch(authenticatedShellSurfaceSource, /<ResizeHandle/);
   // The resizable rail moved to the right sidebar, which owns its own width.
   assert.match(rightSidebarSource, /useResizablePanelWidth\(/);
   assert.match(rightSidebarSource, /agistack\.desktop\.rightSidebarWidth/);

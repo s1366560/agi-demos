@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 
 import pytest
 
@@ -85,9 +86,7 @@ class TestReflectionRunner:
         async def _factory(_pid: str) -> ReflectionService | None:
             return None
 
-        runner = ReflectionRunner(
-            project_ids_provider=_provider, service_factory=_factory
-        )
+        runner = ReflectionRunner(project_ids_provider=_provider, service_factory=_factory)
         assert await runner.run_once("p1") == []
 
     async def test_run_once_invokes_service(self) -> None:
@@ -100,12 +99,42 @@ class TestReflectionRunner:
             service_holder[pid] = await _service_with_signal(pid)
             return service_holder[pid]
 
-        runner = ReflectionRunner(
-            project_ids_provider=_provider, service_factory=_factory
-        )
+        runner = ReflectionRunner(project_ids_provider=_provider, service_factory=_factory)
         verdicts = await runner.run_once("p1")
         # NOOP verdicts are not "applied" — but reflector was still called
         assert isinstance(verdicts, list)
+
+    async def test_sweep_holds_configured_operation_boundary(self) -> None:
+        boundary_active = False
+        observed: list[bool] = []
+
+        @asynccontextmanager
+        async def _boundary():
+            nonlocal boundary_active
+            boundary_active = True
+            try:
+                yield None
+            finally:
+                boundary_active = False
+
+        async def _provider() -> list[str]:
+            observed.append(boundary_active)
+            return ["p1"]
+
+        async def _factory(_pid: str) -> ReflectionService | None:
+            observed.append(boundary_active)
+            return None
+
+        runner = ReflectionRunner(
+            project_ids_provider=_provider,
+            service_factory=_factory,
+            sweep_context_factory=_boundary,
+        )
+
+        await runner._sweep_once()
+
+        assert observed == [True, True]
+        assert boundary_active is False
 
     async def test_loop_sweeps_all_projects_then_stops(self) -> None:
         seen: list[str] = []

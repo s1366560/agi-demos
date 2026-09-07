@@ -10,9 +10,12 @@ import type {
   AgentInputFileMetadata,
   AgentWsEvent,
   DesktopRuntimeConfig,
-  HitlResponseSubmission,
   WorkspacePermissionMode,
 } from "../types";
+import {
+  acquireAgentSocketGenerationLeaseV2,
+  type AgentSocketGenerationLeaseFactoryV2,
+} from "./agentSocketGenerationLeaseV2";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const WATCHDOG_INTERVAL_MS = 10_000;
@@ -60,7 +63,6 @@ type AgentSocketState = {
     command: SubAgentControlCommand,
   ) => Promise<SubAgentControlReceipt>;
   stopAgentResponse: (conversationId: string) => boolean;
-  respondToHitl: (submission: HitlResponseSubmission) => boolean;
 };
 
 export type AgentSocketConversationTransition = {
@@ -480,6 +482,7 @@ export function useAgentSocket(
   enabled: boolean,
   contextRevision: number | null,
   activeConversationId: string | null,
+  acquireGenerationLease: AgentSocketGenerationLeaseFactoryV2,
 ): AgentSocketState {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -608,12 +611,6 @@ export function useAgentSocket(
     subscribeConversation,
   ]);
 
-  const respondToHitl = useCallback(
-    (submission: HitlResponseSubmission) =>
-      sendSocketMessage(buildHitlSocketMessage(submission)),
-    [sendSocketMessage],
-  );
-
   const stopAgentResponse = useCallback(
     (conversationId: string) =>
       deliverAgentStopSession(conversationId, sendSocketMessage),
@@ -700,6 +697,14 @@ export function useAgentSocket(
       return;
     }
 
+    const generationLease =
+      acquireAgentSocketGenerationLeaseV2(acquireGenerationLease);
+    if (generationLease.status === "rejected") {
+      setConnected(false);
+      setError(generationLease.reasonCode);
+      return;
+    }
+
     let disposed = false;
     let reconnectAttempt = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -771,7 +776,7 @@ export function useAgentSocket(
       let socket: WebSocket;
       try {
         const url = client.agentWsUrl(`desktop-${Date.now()}`);
-        socket =
+        socket = generationLease.constructSocket(() =>
           config.mode === "cloud" && cloudSocketTransport
             ? (createCloudSocketBridge(
                 {
@@ -786,7 +791,8 @@ export function useAgentSocket(
                 },
                 cloudSocketTransport,
               ) as unknown as WebSocket)
-            : new WebSocket(url, client.agentWsProtocols());
+            : new WebSocket(url, client.agentWsProtocols()),
+        );
         socketRef.current = socket;
       } catch (caught) {
         setError(String(caught));
@@ -926,11 +932,16 @@ export function useAgentSocket(
       const socket = socketRef.current;
       socketRef.current = null;
       if (socket) {
+        socket.onopen = null;
+        socket.onerror = null;
+        socket.onmessage = null;
         socket.onclose = null;
         socket.close();
       }
+      void generationLease.release();
     };
   }, [
+    acquireGenerationLease,
     client,
     cloudSocketTransport,
     config.apiKey,
@@ -953,7 +964,6 @@ export function useAgentSocket(
     sendSteerMessage,
     sendSubAgentControl,
     stopAgentResponse,
-    respondToHitl,
   };
 }
 
@@ -1046,54 +1056,6 @@ export function conversationSubscriptionMessages(
         : {}),
     };
   });
-}
-
-export function buildHitlSocketMessage(
-  submission: HitlResponseSubmission,
-): Record<string, unknown> {
-  const { requestId, hitlType, responseData } = submission;
-  switch (hitlType) {
-    case "clarification":
-      return {
-        type: "clarification_respond",
-        request_id: requestId,
-        answer: responseData.answer,
-      };
-    case "decision":
-      return {
-        type: "decision_respond",
-        request_id: requestId,
-        decision: responseData.decision,
-      };
-    case "env_var":
-      return {
-        type: "env_var_respond",
-        request_id: requestId,
-        ...(responseData.values ? { values: responseData.values } : {}),
-        ...(responseData.cancelled === true ? { cancelled: true } : {}),
-        ...(responseData.timeout === true ? { timeout: true } : {}),
-      };
-    case "permission": {
-      const granted =
-        typeof responseData.granted === "boolean"
-          ? responseData.granted
-          : responseData.action === "allow" ||
-            responseData.action === "allow_always";
-      return {
-        type: "permission_respond",
-        request_id: requestId,
-        granted,
-      };
-    }
-    case "a2ui_action":
-      return {
-        type: "a2ui_action_respond",
-        request_id: requestId,
-        action_name: responseData.action_name,
-        source_component_id: responseData.source_component_id,
-        context: responseData.context ?? {},
-      };
-  }
 }
 
 export function reconnectDelay(attempt: number): number {

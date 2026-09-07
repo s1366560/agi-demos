@@ -1,75 +1,108 @@
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { isIdentityAuthenticated } from '../auth/authContextModel';
-import type { CloudProjectOverviewClient } from '../project/projectOverviewClient';
-import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
+import type { ProjectOverviewClient } from '../project/projectOverviewClient';
 import {
   createProjectOverviewController,
   type ProjectOverviewController,
   type ProjectOverviewControllerOptions,
 } from '../project/projectOverviewController';
 import {
-  createLocalProjectOverviewClient,
-  type LocalProjectOverviewClient,
-} from '../project/projectOverviewLocalClient';
+  createDesktopProjectOverviewClientV2,
+  type DesktopProjectOverviewOperationsV2,
+} from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
+import {
+  createDesktopRuntimePoolClientV2,
+  type DesktopRuntimePoolOperationsV2,
+} from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
+import {
+  createDesktopRuntimeClustersClientV2,
+  type DesktopRuntimeClustersOperationsV2,
+} from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
+import {
+  createDesktopRuntimeInstancesClientV2,
+  type DesktopRuntimeInstancesOperationsV2,
+} from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
+import {
+  createDesktopRuntimeDeploymentsClientV2,
+  type DesktopRuntimeDeploymentsOperationsV2,
+} from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type {
   ProjectOverviewRouteBinding,
   ProjectOverviewRouteContext,
 } from '../project/projectOverviewRouteModule';
 import type { DeadLetterQueueRouteBinding } from '../governance/deadLetterQueueRouteModule';
 import { createDeadLetterQueueController } from '../governance/deadLetterQueueController';
-import { createDeadLetterQueueHttpClient } from '../governance/deadLetterQueueHttpClient';
+import {
+  createDesktopDeadLetterQueueClientV2,
+  type DesktopDeadLetterQueueOperationsV2,
+} from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type { RuntimePoolRouteBinding } from '../runtime-pool/runtimePoolRouteModule';
 import { createRuntimePoolController } from '../runtime-pool/runtimePoolController';
-import { createRuntimePoolHttpClient } from '../runtime-pool/runtimePoolClient';
 import type { RuntimeInstancesRouteBinding } from '../runtime-instances/runtimeInstancesRouteModule';
 import { createRuntimeInstancesController } from '../runtime-instances/runtimeInstancesController';
-import { createRuntimeInstancesClient } from '../runtime-instances/runtimeInstancesClient';
 import type { RuntimeClustersRouteBinding } from '../runtime-clusters/runtimeClustersRouteModule';
 import { createRuntimeClustersController } from '../runtime-clusters/runtimeClustersController';
-import { createRuntimeClustersClient } from '../runtime-clusters/runtimeClustersClient';
 import type { RuntimeDeploymentsRouteBinding } from '../runtime-deployments/runtimeDeploymentsRouteModule';
 import { createRuntimeDeploymentsController } from '../runtime-deployments/runtimeDeploymentsController';
-import { createRuntimeDeploymentsClient } from '../runtime-deployments/runtimeDeploymentsClient';
 import type { InstanceTemplatesRouteBinding } from '../instance-templates/instanceTemplatesRouteModule';
 import { createInstanceTemplatesController } from '../instance-templates/instanceTemplatesController';
-import { createInstanceTemplatesClient } from '../instance-templates/instanceTemplatesClient';
+import {
+  createDesktopInstanceTemplatesClientV2,
+  type DesktopInstanceTemplatesOperationsV2,
+} from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
 import type { UnifiedRuntimesRouteBinding } from '../unified-runtimes/unifiedRuntimesRouteModule';
 import { createUnifiedRuntimesController } from '../unified-runtimes/unifiedRuntimesController';
-import { createUnifiedRuntimesClient } from '../unified-runtimes/unifiedRuntimesClient';
+import {
+  createDesktopUnifiedRuntimesClientV2,
+  type DesktopUnifiedRuntimesOperationsV2,
+} from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type {
   DesktopCapabilityAvailability,
   DesktopCapabilitySnapshot,
 } from '../runtime/capabilitySnapshot';
 import type { TenantOverviewRouteBinding } from '../tenant/tenantOverviewRouteModule';
 import { createTenantOverviewController } from '../tenant/tenantOverviewController';
-import { createTenantOverviewHttpClient } from '../tenant/tenantOverviewHttpClient';
+import type { TenantOverviewClient } from '../tenant/tenantOverviewClient';
+import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { TenantAnalyticsRouteBinding } from '../tenant/tenantAnalyticsRouteModule';
 import { createTenantAnalyticsController } from '../tenant/tenantAnalyticsController';
-import { createTenantAnalyticsHttpClient } from '../tenant/tenantAnalyticsHttpClient';
+import type { TenantAnalyticsClient } from '../tenant/tenantAnalyticsClient';
+import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { TenantAgentDashboardRouteBinding } from '../tenant/tenantAgentDashboardRouteModule';
 import { createTenantAgentDashboardController } from '../tenant/tenantAgentDashboardController';
-import { createTenantAgentDashboardHttpClient } from '../tenant/tenantAgentDashboardHttpClient';
+import type { TenantAgentDashboardClient } from '../tenant/tenantAgentDashboardClient';
+import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { TenantAgentBindingsRouteBinding } from '../tenant/tenantAgentBindingsRouteModule';
 import { createTenantAgentBindingsController } from '../tenant/tenantAgentBindingsController';
-import { createTenantAgentBindingsHttpClient } from '../tenant/tenantAgentBindingsHttpClient';
+import {
+  createDesktopTenantAgentBindingsClientV2,
+  type DesktopTenantAgentBindingsOperationsV2,
+} from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { TenantProjectsRouteBinding } from '../tenant/tenantProjectsRouteModule';
 import { createTenantProjectsController } from '../tenant/tenantProjectsController';
-import { createTenantProjectsHttpClient } from '../tenant/tenantProjectsHttpClient';
+import {
+  createDesktopTenantProjectsClientV2,
+  type DesktopTenantProjectsOperationsV2,
+} from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type { TenantTasksRouteBinding } from '../tenant/tenantTasksRouteModule';
 import { createTenantTasksController } from '../tenant/tenantTasksController';
-import { createTenantTasksHttpClient } from '../tenant/tenantTasksHttpClient';
+import {
+  createDesktopTenantTasksClientV2,
+  type DesktopTenantTasksOperationsV2,
+} from '../../plugins/desktopTenantTasksAuthorityModuleV2';
 import type { TenantWorkspacesRouteBinding } from '../tenant/tenantWorkspacesRouteModule';
 import { createTenantWorkspacesController } from '../tenant/tenantWorkspacesController';
-import { createTenantWorkspacesHttpClient } from '../tenant/tenantWorkspacesHttpClient';
+import {
+  createTenantWorkspacesV2Client,
+  type TenantWorkspacesV2ClientDependencies,
+} from '../tenant/tenantWorkspacesV2Client';
 import type { DesktopRouteContext } from './desktopRouteRegistry';
 
 export type ProjectOverviewRouteRuntimeDependencies = Readonly<{
-  createCloudClient?: (
+  createClient?: (
+    operations: Pick<DesktopProjectOverviewOperationsV2, 'loadProjectOverview'>,
     config: DesktopRuntimeConfig,
-  ) => CloudProjectOverviewClient;
-  createLocalClient?: (
-    config: DesktopRuntimeConfig,
-  ) => LocalProjectOverviewClient;
+  ) => ProjectOverviewClient;
   createController?: (
     options: ProjectOverviewControllerOptions,
   ) => ProjectOverviewController;
@@ -141,6 +174,7 @@ export function resolveDesktopRouteCapability(
 export function createProjectOverviewRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ProjectOverviewRouteContext,
+  operations: Pick<DesktopProjectOverviewOperationsV2, 'loadProjectOverview'>,
   dependencies: ProjectOverviewRouteRuntimeDependencies = {},
 ): ProjectOverviewRouteBinding {
   if (
@@ -150,39 +184,22 @@ export function createProjectOverviewRouteBindingForRuntime(
     throw new Error('project_overview_runtime_scope_mismatch');
   }
 
-  const createCloudClient =
-    dependencies.createCloudClient ?? createCloudProjectOverviewClient;
-  const createLocalClient =
-    dependencies.createLocalClient ?? createLocalProjectOverviewClient;
+  if (typeof operations?.loadProjectOverview !== 'function') {
+    throw new Error('desktop_project_overview_authority_required');
+  }
+  const createClient = dependencies.createClient ?? createDesktopProjectOverviewClientV2;
   const createController =
     dependencies.createController ?? createProjectOverviewController;
-  if (config.mode === 'cloud') {
-    const scope = Object.freeze({
-      authority: config.mode,
-      tenantId: context.tenantId,
-      projectId: context.projectId,
-    });
-    const cloudClient = createCloudClient(config);
-    return Object.freeze({
-      controller: createController({
-        authority: 'cloud',
-        cloudClient,
-        initialScope: scope,
-      }),
-      scope,
-    });
-  }
-
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
     projectId: context.projectId,
   });
-  const localClient = createLocalClient(config);
+  const client = createClient(operations, config);
   return Object.freeze({
     controller: createController({
-      authority: 'local',
-      localClient,
+      authority: config.mode,
+      client,
       initialScope: scope,
     }),
     scope,
@@ -192,6 +209,10 @@ export function createProjectOverviewRouteBindingForRuntime(
 export function createTenantOverviewRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  tenantOverviewOperationsV2: Pick<
+    DesktopTenantOverviewOperationsV2,
+    'loadTenantOverview'
+  >,
 ): TenantOverviewRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_overview_runtime_scope_mismatch');
@@ -200,7 +221,15 @@ export function createTenantOverviewRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createTenantOverviewHttpClient(config);
+  const client: TenantOverviewClient = Object.freeze({
+    async load(requestScope, options) {
+      return tenantOverviewOperationsV2.loadTenantOverview({
+        config,
+        scope: requestScope,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
+  });
   return Object.freeze({
     controller: createTenantOverviewController({
       authority: config.mode,
@@ -215,6 +244,10 @@ export function createTenantAnalyticsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
   tenantPlan: string | null,
+  tenantAnalyticsOperationsV2: Pick<
+    DesktopTenantAnalyticsOperationsV2,
+    'loadTenantAnalytics'
+  >,
 ): TenantAnalyticsRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_analytics_runtime_scope_mismatch');
@@ -224,7 +257,15 @@ export function createTenantAnalyticsRouteBindingForRuntime(
     tenantId: context.tenantId,
     period: '30d' as const,
   });
-  const client = createTenantAnalyticsHttpClient(config);
+  const client: TenantAnalyticsClient = Object.freeze({
+    async load(requestScope, options) {
+      return tenantAnalyticsOperationsV2.loadTenantAnalytics({
+        config,
+        scope: requestScope,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
+  });
   return Object.freeze({
     controller: createTenantAnalyticsController({
       authority: config.mode,
@@ -239,6 +280,7 @@ export function createTenantAnalyticsRouteBindingForRuntime(
 export function createTenantAgentBindingsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  tenantAgentBindingsOperationsV2: DesktopTenantAgentBindingsOperationsV2,
 ): TenantAgentBindingsRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_agent_bindings_runtime_scope_mismatch');
@@ -247,7 +289,10 @@ export function createTenantAgentBindingsRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createTenantAgentBindingsHttpClient(config);
+  const client = createDesktopTenantAgentBindingsClientV2(
+    tenantAgentBindingsOperationsV2,
+    config,
+  );
   return Object.freeze({
     controller: createTenantAgentBindingsController({
       authority: config.mode,
@@ -261,6 +306,7 @@ export function createTenantAgentBindingsRouteBindingForRuntime(
 export function createTenantAgentDashboardRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  tenantAgentDashboardOperationsV2: DesktopTenantAgentDashboardOperationsV2,
 ): TenantAgentDashboardRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_agent_dashboard_runtime_scope_mismatch');
@@ -269,7 +315,33 @@ export function createTenantAgentDashboardRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createTenantAgentDashboardHttpClient(config);
+  const client: TenantAgentDashboardClient = Object.freeze({
+    async load(requestScope, signal) {
+      return tenantAgentDashboardOperationsV2.loadTenantAgentDashboard({
+        config,
+        scope: requestScope,
+        ...(signal === undefined ? {} : { signal }),
+      });
+    },
+    async updateConfig(requestScope, input, expectedRevision, signal) {
+      return tenantAgentDashboardOperationsV2.updateTenantAgentDashboardConfig({
+        config,
+        scope: requestScope,
+        input,
+        expectedRevision,
+        ...(signal === undefined ? {} : { signal }),
+      });
+    },
+    async inspectTrace(requestScope, conversationId, traceId, signal) {
+      return tenantAgentDashboardOperationsV2.inspectTenantAgentDashboardTrace({
+        config,
+        scope: requestScope,
+        conversationId,
+        traceId,
+        ...(signal === undefined ? {} : { signal }),
+      });
+    },
+  });
   return Object.freeze({
     controller: createTenantAgentDashboardController({
       authority: config.mode,
@@ -283,6 +355,7 @@ export function createTenantAgentDashboardRouteBindingForRuntime(
 export function createTenantProjectsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  tenantProjectsOperationsV2: DesktopTenantProjectsOperationsV2,
 ): TenantProjectsRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_projects_runtime_scope_mismatch');
@@ -291,7 +364,7 @@ export function createTenantProjectsRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createTenantProjectsHttpClient(config);
+  const client = createDesktopTenantProjectsClientV2(tenantProjectsOperationsV2, config);
   return Object.freeze({
     controller: createTenantProjectsController({
       authority: config.mode,
@@ -305,6 +378,7 @@ export function createTenantProjectsRouteBindingForRuntime(
 export function createTenantWorkspacesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  dependencies: TenantWorkspacesV2ClientDependencies,
 ): TenantWorkspacesRouteBinding {
   if (
     config.tenantId !== context.tenantId ||
@@ -318,7 +392,7 @@ export function createTenantWorkspacesRouteBindingForRuntime(
     tenantId: context.tenantId,
     projectId: config.projectId,
   });
-  const client = createTenantWorkspacesHttpClient(config);
+  const client = createTenantWorkspacesV2Client(config, dependencies);
   return Object.freeze({
     controller: createTenantWorkspacesController({
       authority: config.mode,
@@ -332,20 +406,28 @@ export function createTenantWorkspacesRouteBindingForRuntime(
 export function createTenantTasksRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  tenantTasksOperationsV2: DesktopTenantTasksOperationsV2,
 ): TenantTasksRouteBinding {
   if (
     config.tenantId !== context.tenantId ||
-    typeof config.projectId !== 'string' ||
-    !config.projectId.trim()
+    (config.mode === 'local' &&
+      (typeof config.projectId !== 'string' || !config.projectId.trim()))
   ) {
     throw new Error('tenant_tasks_runtime_scope_mismatch');
   }
-  const scope = Object.freeze({
-    authority: config.mode,
-    tenantId: context.tenantId,
-    projectId: config.projectId,
-  });
-  const client = createTenantTasksHttpClient(config);
+  const scope =
+    config.mode === 'cloud'
+      ? Object.freeze({
+          authority: 'cloud',
+          tenantId: context.tenantId,
+          projectId: null,
+        })
+      : Object.freeze({
+          authority: 'local',
+          tenantId: context.tenantId,
+          projectId: config.projectId,
+        });
+  const client = createDesktopTenantTasksClientV2(tenantTasksOperationsV2, config);
   return Object.freeze({
     controller: createTenantTasksController({
       authority: config.mode,
@@ -359,12 +441,13 @@ export function createTenantTasksRouteBindingForRuntime(
 export function createDeadLetterQueueRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  operations: DesktopDeadLetterQueueOperationsV2,
 ): DeadLetterQueueRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('dead_letter_queue_runtime_scope_mismatch');
   }
   const scope = Object.freeze({ authority: config.mode, tenantId: context.tenantId });
-  const client = createDeadLetterQueueHttpClient(config);
+  const client = createDesktopDeadLetterQueueClientV2(operations, config);
   return Object.freeze({
     controller: createDeadLetterQueueController({
       authority: config.mode,
@@ -378,15 +461,17 @@ export function createDeadLetterQueueRouteBindingForRuntime(
 export function createRuntimePoolRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2,
 ): RuntimePoolRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('runtime_pool_runtime_scope_mismatch');
   }
+  requireRuntimePoolOperationsV2(runtimePoolOperationsV2);
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createRuntimePoolHttpClient(config);
+  const client = createDesktopRuntimePoolClientV2(runtimePoolOperationsV2, config);
   return Object.freeze({
     controller: createRuntimePoolController({
       authority: config.mode,
@@ -400,15 +485,17 @@ export function createRuntimePoolRouteBindingForRuntime(
 export function createRuntimeInstancesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  runtimeInstancesOperationsV2: DesktopRuntimeInstancesOperationsV2,
 ): RuntimeInstancesRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('runtime_instances_runtime_scope_mismatch');
   }
+  requireRuntimeInstancesOperationsV2(runtimeInstancesOperationsV2);
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createRuntimeInstancesClient(config);
+  const client = createDesktopRuntimeInstancesClientV2(runtimeInstancesOperationsV2, config);
   return Object.freeze({
     controller: createRuntimeInstancesController({
       authority: config.mode,
@@ -422,15 +509,17 @@ export function createRuntimeInstancesRouteBindingForRuntime(
 export function createRuntimeClustersRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2,
 ): RuntimeClustersRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('runtime_clusters_runtime_scope_mismatch');
   }
+  requireRuntimeClustersOperationsV2(runtimeClustersOperationsV2);
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createRuntimeClustersClient(config);
+  const client = createDesktopRuntimeClustersClientV2(runtimeClustersOperationsV2, config);
   return Object.freeze({
     controller: createRuntimeClustersController({
       authority: config.mode,
@@ -444,6 +533,7 @@ export function createRuntimeClustersRouteBindingForRuntime(
 export function createRuntimeDeploymentsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string; instanceId?: string }>,
+  runtimeDeploymentsOperationsV2: DesktopRuntimeDeploymentsOperationsV2,
 ): RuntimeDeploymentsRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('runtime_deployments_runtime_scope_mismatch');
@@ -453,7 +543,7 @@ export function createRuntimeDeploymentsRouteBindingForRuntime(
     tenantId: context.tenantId,
     instanceId: context.instanceId ?? null,
   });
-  const client = createRuntimeDeploymentsClient(config);
+  const client = createDesktopRuntimeDeploymentsClientV2(runtimeDeploymentsOperationsV2, config);
   return Object.freeze({
     controller: createRuntimeDeploymentsController({
       authority: config.mode,
@@ -467,6 +557,7 @@ export function createRuntimeDeploymentsRouteBindingForRuntime(
 export function createInstanceTemplatesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  operations: DesktopInstanceTemplatesOperationsV2,
 ): InstanceTemplatesRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('instance_templates_runtime_scope_mismatch');
@@ -475,7 +566,7 @@ export function createInstanceTemplatesRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createInstanceTemplatesClient(config);
+  const client = createDesktopInstanceTemplatesClientV2(operations, config);
   return Object.freeze({
     controller: createInstanceTemplatesController({
       authority: config.mode,
@@ -489,6 +580,7 @@ export function createInstanceTemplatesRouteBindingForRuntime(
 export function createUnifiedRuntimesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  operations: DesktopUnifiedRuntimesOperationsV2,
 ): UnifiedRuntimesRouteBinding {
   if (
     config.tenantId !== context.tenantId ||
@@ -502,7 +594,7 @@ export function createUnifiedRuntimesRouteBindingForRuntime(
     tenantId: context.tenantId,
     projectId: config.projectId,
   });
-  const client = createUnifiedRuntimesClient(config);
+  const client = createDesktopUnifiedRuntimesClientV2(operations, config);
   return Object.freeze({
     controller: createUnifiedRuntimesController({
       authority: config.mode,
@@ -511,4 +603,43 @@ export function createUnifiedRuntimesRouteBindingForRuntime(
     }),
     scope,
   });
+}
+
+function requireRuntimePoolOperationsV2(operations: DesktopRuntimePoolOperationsV2): void {
+  if (
+    typeof operations?.getRuntimePoolStatus !== 'function' ||
+    typeof operations.listRuntimePoolInstances !== 'function' ||
+    typeof operations.getRuntimePoolMetrics !== 'function' ||
+    typeof operations.pauseRuntimePoolInstance !== 'function' ||
+    typeof operations.resumeRuntimePoolInstance !== 'function' ||
+    typeof operations.terminateRuntimePoolInstance !== 'function' ||
+    typeof operations.probeRuntimePool !== 'function'
+  ) {
+    throw new Error('desktop_runtime_pool_authority_required');
+  }
+}
+
+function requireRuntimeClustersOperationsV2(
+  operations: DesktopRuntimeClustersOperationsV2,
+): void {
+  if (
+    typeof operations?.listRuntimeClusters !== 'function' ||
+    typeof operations.getRuntimeClusterHealth !== 'function' ||
+    typeof operations.probeRuntimeClusters !== 'function'
+  ) {
+    throw new Error('desktop_runtime_clusters_authority_required');
+  }
+}
+
+function requireRuntimeInstancesOperationsV2(
+  operations: DesktopRuntimeInstancesOperationsV2,
+): void {
+  if (
+    typeof operations?.listRuntimeInstances !== 'function' ||
+    typeof operations.restartRuntimeInstance !== 'function' ||
+    typeof operations.deleteRuntimeInstance !== 'function' ||
+    typeof operations.probeRuntimeInstances !== 'function'
+  ) {
+    throw new Error('desktop_runtime_instances_authority_required');
+  }
 }

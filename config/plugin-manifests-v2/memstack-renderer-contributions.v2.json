@@ -1,0 +1,165 @@
+{
+  "schema_version": 2,
+  "plugin_id": "memstack-renderer-contributions",
+  "version": "2.0.0",
+  "runtime": "frontend",
+  "trust": "builtin",
+  "modules": [
+    {
+      "module_ref": "builtin://memstack/web/renderer-contribution-registry",
+      "entrypoint": "applyWebRendererContributionRegistryV2",
+      "artifact": {
+        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
+      },
+      "targets": ["web"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:web.renderer-contribution-registry",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["target"],
+          "properties": {
+            "target": { "const": "web", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:ff9b73bb2be42465e2324b562c4e57e20aa2d466c6a40909f8b0d945392d2592"
+    },
+    {
+      "module_ref": "builtin://memstack/web/renderer-contribution",
+      "entrypoint": "applyWebRendererContributionV2",
+      "artifact": {
+        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
+      },
+      "targets": ["web"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "registry",
+              "service": "service:web.renderer-contribution-registry",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "order", "payload"],
+          "properties": {
+            "id": { "minLength": 1, "maxLength": 128, "type": "string" },
+            "kind": { "enum": ["route", "navigation", "ui-slot"], "type": "string" },
+            "order": { "type": "integer" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["schema_version", "artifact_refs"],
+              "properties": {
+                "schema_version": { "const": 1, "type": "integer" },
+                "artifact_refs": {
+                  "type": "array",
+                  "items": { "minLength": 1, "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:a1adf76747c59abd6fc897622f8a0fc318f26a52d5cfa3c5659fcf79d936fbd7"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/renderer-contribution-registry",
+      "entrypoint": "applyDesktopRendererContributionRegistryV2",
+      "artifact": {
+        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.renderer-contribution-registry",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["target"],
+          "properties": {
+            "target": { "const": "desktop-renderer", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:91c83d16b21ca69d3044af3849b5562d8fb362393c121ea0263cf16310c8eea8"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/renderer-contribution",
+      "entrypoint": "applyDesktopRendererContributionV2",
+      "artifact": {
+        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "registry",
+              "service": "service:desktop-renderer.renderer-contribution-registry",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "order", "payload"],
+          "properties": {
+            "id": { "minLength": 1, "maxLength": 128, "type": "string" },
+            "kind": { "enum": ["route", "navigation", "ui-slot"], "type": "string" },
+            "order": { "type": "integer" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["schema_version", "artifact_refs"],
+              "properties": {
+                "schema_version": { "const": 1, "type": "integer" },
+                "artifact_refs": {
+                  "type": "array",
+                  "items": { "minLength": 1, "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:ee51655e1a4136786327a1a62480ce42455c37250a23e89c4c744ec07229724e"
+    }
+  ],
+  "permissions": ["ui.conversation.renderer", "ui.render"],
+  "quotas": {}
+}
