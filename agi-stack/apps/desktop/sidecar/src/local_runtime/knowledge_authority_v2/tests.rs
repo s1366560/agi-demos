@@ -19,6 +19,8 @@ mod push_http_tests;
 mod push_session_tests;
 #[path = "storage_tests.rs"]
 mod storage_tests;
+#[path = "renderer_contract_tests.rs"]
+mod renderer_contract_tests;
 
 const TOKEN: &str = "knowledge-generation-test-token";
 
