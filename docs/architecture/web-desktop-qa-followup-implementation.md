@@ -22,8 +22,8 @@ Approved baseline: `e9ae3a1d3`, 2026-09-07. Evidence source:
 | I0 | Cron admission, coherent test evidence, credential recovery | In progress | No orphan admission; same-revision full checks |
 | I1 | Shared contracts, snapshot isolation, entrypoint extraction | In progress | Cross-process positive and negative contracts |
 | I2 | Scoped local knowledge, CRUD/CAS, jobs, cloud operations | In progress | Scope, revision, durability; release with I3 |
-| I3 | Local extraction/retrieval, entities/community, bidirectional sync | Pending | Offline runtime and conflict/recovery acceptance |
-| I4 | Single cloud scheduler authority and local execution parity | Pending | Real runs and recovery in all three client modes |
+| I3 | Local extraction/retrieval, entities/community, bidirectional sync | In progress | Offline runtime and conflict/recovery acceptance |
+| I4 | Single cloud scheduler authority and local execution parity | In progress | Real runs and recovery in all three client modes |
 | I5 | Graph navigation, processing/sync diagnostics, populated governance QA | Pending | Actionable diagnosis and recovery |
 | I6 | Identity, external integrations and signed/platform releases | Pending | Per-platform and per-integration evidence |
 
@@ -208,3 +208,14 @@ reported 612 passed / 1 failed: its live conversation-session fixture still refe
 retired `workspace_tasks` table. That existing V1 dependency remains an I0 follow-up, not
 a passing full-server result. Rollback must keep overlap admission disabled or retain the
 serialization guard; existing skipped history is retained and needs no schema migration.
+
+I3.1 adds schema v3 durable replica identity, UUIDv5 change IDs, explicit scope-to-remote
+association and local-origin outbox rows in the content transaction. Proven scoped v2
+changes are backfilled; unattributed legacy memories stay excluded. The real closed
+knowledge authority exposes association/status/outbox queries, explicitly reporting
+remote authorization as unverified and transport as not started. No remote revision is
+inferred from a local version. The lifecycle shares the adapter's schema version and
+backs up v1/v2 before upgrading. Core/device strict Clippy, 13 storage tests, 659 full
+sidecar tests, generator check and contract completeness passed. Push receipts, pull
+cursors, conflict application and transport remain pending. Rollback must preserve the
+v3 database and replica ID; older binaries reject a newer schema instead of rewriting it.

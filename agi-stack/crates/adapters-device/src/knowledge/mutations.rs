@@ -174,6 +174,7 @@ fn apply(
         params![scope.tenant_id,scope.project_id,memory.id,memory.version,if deleted { "delete" } else { "upsert" },serde_json::to_string(&memory).map_err(storage)?],
     ).map_err(storage)?;
     let sequence = u64::try_from(tx.last_insert_rowid()).map_err(storage)?;
+    super::sync::enqueue_local(tx, sequence)?;
     Ok(MemoryChange {
         sequence,
         memory,

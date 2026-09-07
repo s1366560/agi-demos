@@ -181,7 +181,7 @@ fn version_one_upgrade_preserves_existing_content_and_changes() {
         let connection = rusqlite::Connection::open(&path).unwrap();
         connection
             .execute_batch(
-                "DROP TABLE knowledge_mutation_receipts; UPDATE knowledge_schema SET version=1;",
+                "DROP TABLE knowledge_mutation_receipts; DROP TABLE knowledge_sync_outbox; DROP TABLE knowledge_sync_links; DROP TABLE knowledge_replica; UPDATE knowledge_schema SET version=1;",
             )
             .unwrap();
         let upgraded = SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap();
@@ -202,7 +202,7 @@ fn version_one_upgrade_preserves_existing_content_and_changes() {
         let version: i64 = connection
             .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         drop(upgraded);
         drop(connection);
         std::fs::remove_file(path).unwrap();

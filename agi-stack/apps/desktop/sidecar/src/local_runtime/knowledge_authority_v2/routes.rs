@@ -1,6 +1,7 @@
 //! Narrow storage RPCs. They share the normal native launch/session/scope/
 //! generation middleware; capability publication stays closed independently.
 
+use agistack_core::knowledge::sync::KnowledgeSyncLink;
 use axum::{
     extract::Extension,
     http::{HeaderMap, StatusCode},
@@ -17,6 +18,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .route("/api/v1/knowledge/query", post(query))
         .route("/api/v1/knowledge/mutations", post(mutate))
+        .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
 }
 
 #[derive(Deserialize)]
@@ -33,6 +35,8 @@ enum KnowledgeQuery {
     List { limit: usize, offset: usize },
     Changes { after_sequence: u64, limit: usize },
     Change { sequence: u64 },
+    SyncStatus,
+    SyncOutbox { after_sequence: u64, limit: usize },
 }
 
 #[derive(Deserialize)]
@@ -52,6 +56,23 @@ async fn query(
     let operation = KnowledgeOperationV2::admit(lease, &authenticated, &request.scope)
         .map_err(IntoResponse::into_response)?;
     let result = match request.query {
+        KnowledgeQuery::SyncStatus => {
+            json!({"status":operation.sync_status().await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::SyncOutbox {
+            after_sequence,
+            limit,
+        } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            let items = operation
+                .sync_outbox(after_sequence, limit)
+                .await
+                .map_err(IntoResponse::into_response)?;
+            let next_sequence = items
+                .last()
+                .map_or(after_sequence, |item| item.local_change.sequence);
+            json!({"items":items,"next_sequence":next_sequence,"transport_state":"not_started"})
+        }
         KnowledgeQuery::Get { id } => {
             json!({"memory": operation.get(&id).await.map_err(IntoResponse::into_response)?.ok_or_else(not_found)?})
         }
@@ -146,6 +167,31 @@ async fn mutate(
     Ok(Json(
         json!({"contract_version": VERSION, "scope": request.scope, "result": {
             "receipt": outcome.receipt, "replayed": outcome.replayed, "processing_status": "accepted"
+        }}),
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SyncLinkRequest {
+    scope: KnowledgeOperationScopeV2,
+    link: KnowledgeSyncLink,
+}
+
+async fn configure_sync_link(
+    Extension(lease): Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Json(request): Json<SyncLinkRequest>,
+) -> RouteResult {
+    let operation = KnowledgeOperationV2::admit(lease, &authenticated, &request.scope)
+        .map_err(IntoResponse::into_response)?;
+    let status = operation
+        .configure_sync_link(request.link)
+        .await
+        .map_err(IntoResponse::into_response)?;
+    Ok(Json(
+        json!({"contract_version":VERSION,"scope":request.scope,"result": {
+            "status":status,"association_state":"configured","remote_authorization":"unverified"
         }}),
     ))
 }

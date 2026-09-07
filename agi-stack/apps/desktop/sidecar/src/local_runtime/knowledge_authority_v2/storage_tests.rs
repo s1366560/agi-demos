@@ -2,6 +2,53 @@ use super::*;
 use rusqlite::Connection;
 
 #[test]
+fn v2_upgrade_backs_up_before_creating_persistent_replica() {
+    let directory = TestDirectory::new();
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    let knowledge = directory.0.join("knowledge");
+    let database = knowledge.join("memories.db");
+    let connection = Connection::open(&database).unwrap();
+    connection.execute_batch("DROP TABLE knowledge_sync_outbox; DROP TABLE knowledge_sync_links; DROP TABLE knowledge_replica; UPDATE knowledge_schema SET version=2;").unwrap();
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    let backups: Vec<_> = fs::read_dir(&knowledge)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("pre-v2-")
+        })
+        .collect();
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    let old_version: i64 = backup
+        .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(old_version, 2);
+    let old_replica: i64 = backup
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name='knowledge_replica'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(old_replica, 0);
+    let replica: String = connection
+        .query_row("SELECT replica_id FROM knowledge_replica", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    let replay: String = connection
+        .query_row("SELECT replica_id FROM knowledge_replica", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(replica, replay);
+}
+
+#[test]
 fn version_upgrade_backs_up_wal_and_validates_before_modifying() {
     let directory = TestDirectory::new();
     let knowledge = directory.0.join("knowledge");
@@ -35,7 +82,7 @@ fn version_upgrade_backs_up_wal_and_validates_before_modifying() {
     let migrated: i64 = source
         .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(migrated, 2);
+    assert_eq!(migrated, 3);
     drop(repository);
     drop(storage_lifecycle::open(&directory.0).unwrap());
     assert_eq!(

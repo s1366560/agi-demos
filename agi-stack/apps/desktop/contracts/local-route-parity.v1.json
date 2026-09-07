@@ -2629,6 +2629,23 @@
           "expected_revision": 1
         }
       }
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-link",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-link",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {
+        "link": {
+          "remote_tenant_id": "remote-tenant",
+          "remote_project_id": "remote-project",
+          "remote_actor_id": "remote-actor"
+        }
+      }
     }
   ]
 }

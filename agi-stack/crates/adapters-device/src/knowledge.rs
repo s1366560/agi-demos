@@ -12,6 +12,9 @@ use async_trait::async_trait;
 use rusqlite::{params, Connection, OptionalExtension};
 
 mod mutations;
+mod sync;
+
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 3;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -39,7 +42,7 @@ impl SqliteKnowledgeRepository {
         let version: i64 = tx
             .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
             .map_err(storage)?;
-        if !(1..=2).contains(&version) {
+        if !(1..=KNOWLEDGE_SCHEMA_VERSION).contains(&version) {
             return Err(KnowledgeError::Storage(
                 "unsupported knowledge schema version".into(),
             ));
@@ -78,8 +81,13 @@ impl SqliteKnowledgeRepository {
                 request_json TEXT NOT NULL,
                 receipt_json TEXT NOT NULL,
                 PRIMARY KEY(tenant_id,project_id,actor_id,idempotency_key)
-             );
-             UPDATE knowledge_schema SET version=2;",
+             );",
+        )
+        .map_err(storage)?;
+        sync::migrate(&tx, version)?;
+        tx.execute(
+            "UPDATE knowledge_schema SET version=?1",
+            [KNOWLEDGE_SCHEMA_VERSION],
         )
         .map_err(storage)?;
         tx.commit().map_err(storage)?;

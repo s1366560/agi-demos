@@ -91,6 +91,7 @@ dependencies = [
  "petgraph",
  "rusqlite",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]

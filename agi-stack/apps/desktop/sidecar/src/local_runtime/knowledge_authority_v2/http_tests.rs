@@ -8,6 +8,138 @@ use super::*;
 use crate::local_runtime::local_router_with_generation_required;
 
 #[tokio::test]
+async fn sync_link_and_outbox_use_admitted_authority_without_claiming_remote_success() {
+    let directory = TestDirectory::new();
+    let state = test_state(TOKEN);
+    publish(&state, &directory, 1, true).await;
+    let scope = request_scope(&state);
+    let status_body = json!({"scope":scope,"query":{"operation":"sync_status"}});
+    let initial = request(
+        Arc::clone(&state),
+        "/api/v1/knowledge/query",
+        status_body.clone(),
+        None,
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(initial.0, StatusCode::OK);
+    assert!(initial.1["result"]["status"]["link"].is_null());
+    let link_body = json!({"scope":scope,"link":{"remote_tenant_id":"remote-tenant","remote_project_id":"remote-project","remote_actor_id":"remote-actor"}});
+    let linked = request(
+        Arc::clone(&state),
+        "/api/v1/knowledge/sync-link",
+        link_body.clone(),
+        None,
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(linked.0, StatusCode::OK);
+    assert_eq!(linked.1["result"]["association_state"], "configured");
+    assert_eq!(linked.1["result"]["remote_authorization"], "unverified");
+    let repeated = request(
+        Arc::clone(&state),
+        "/api/v1/knowledge/sync-link",
+        link_body.clone(),
+        None,
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(repeated.1, linked.1);
+    let mut changed = link_body.clone();
+    changed["link"]["remote_project_id"] = json!("another-project");
+    assert_eq!(
+        request(
+            Arc::clone(&state),
+            "/api/v1/knowledge/sync-link",
+            changed,
+            None,
+            None,
+            true
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let mut foreign = link_body;
+    foreign["scope"]["tenant_id"] = json!("another-tenant");
+    assert_eq!(
+        request(
+            Arc::clone(&state),
+            "/api/v1/knowledge/sync-link",
+            foreign,
+            None,
+            None,
+            true
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let lease = Arc::new(
+        state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .unwrap(),
+    );
+    let mut viewer = authenticated(&state);
+    viewer.membership_role = "viewer".into();
+    let view = KnowledgeOperationV2::admit(lease, &viewer, &scope).unwrap();
+    assert!(matches!(
+        view.configure_sync_link(agistack_core::knowledge::sync::KnowledgeSyncLink {
+            remote_tenant_id: "remote-tenant".into(),
+            remote_project_id: "remote-project".into(),
+            remote_actor_id: "remote-actor".into()
+        })
+        .await,
+        Err(KnowledgeAuthorityErrorV2::Forbidden)
+    ));
+    drop(view);
+    let created = request(
+        Arc::clone(&state),
+        "/api/v1/knowledge/mutations",
+        json!({"scope":scope,"mutation":mutation(&authenticated(&state))}),
+        Some("sync-create"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(created.0, StatusCode::OK);
+    let outbox = request(
+        Arc::clone(&state),
+        "/api/v1/knowledge/query",
+        json!({"scope":scope,"query":{"operation":"sync_outbox","after_sequence":0,"limit":20}}),
+        None,
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(outbox.0, StatusCode::OK);
+    assert_eq!(outbox.1["result"]["transport_state"], "not_started");
+    let items = outbox.1["result"]["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["local_change"], created.1["result"]["receipt"]);
+    assert!(Uuid::parse_str(items[0]["change_id"].as_str().unwrap()).is_ok());
+    let status = request(
+        Arc::clone(&state),
+        "/api/v1/knowledge/query",
+        status_body,
+        None,
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(status.1["result"]["status"]["pending_changes"], 1);
+    assert_eq!(
+        status.1["result"]["status"]["replica_id"],
+        initial.1["result"]["status"]["replica_id"]
+    );
+    state.platform_plugin_authority_v2.deactivate().await;
+}
+
+#[tokio::test]
 async fn executable_catalog_negative_routes_enforce_closed_release() {
     let catalog: Value = serde_json::from_str(include_str!(
         "../../../../contracts/local-route-parity.v1.json"
@@ -50,7 +182,8 @@ async fn executable_catalog_negative_routes_enforce_closed_release() {
         observed,
         std::collections::BTreeSet::from([
             "/api/v1/knowledge/query",
-            "/api/v1/knowledge/mutations"
+            "/api/v1/knowledge/mutations",
+            "/api/v1/knowledge/sync-link"
         ])
     );
     assert!(!directory.0.exists());

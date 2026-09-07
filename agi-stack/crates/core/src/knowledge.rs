@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Memory;
 
+pub mod sync;
+
 /// Explicit ownership supplied by the authenticated authority, never inferred
 /// from a memory ID or from historical rows without tenant attribution.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use agistack_adapters_device::knowledge::SqliteKnowledgeRepository;
+use agistack_adapters_device::knowledge::{SqliteKnowledgeRepository, KNOWLEDGE_SCHEMA_VERSION};
 use rusqlite::{backup::Backup, Connection, OpenFlags, OptionalExtension};
 use uuid::Uuid;
 
@@ -16,7 +16,7 @@ use crate::private_file_permissions::{
     set_private_directory_permissions, set_private_file_permissions,
 };
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = KNOWLEDGE_SCHEMA_VERSION;
 
 pub(super) fn open(app_data_dir: &Path) -> Result<Arc<SqliteKnowledgeRepository>, String> {
     let directory = app_data_dir.join("knowledge");

@@ -28,6 +28,7 @@ use super::{
 
 mod routes;
 mod storage_lifecycle;
+mod sync;
 #[cfg(test)]
 mod tests;
 
