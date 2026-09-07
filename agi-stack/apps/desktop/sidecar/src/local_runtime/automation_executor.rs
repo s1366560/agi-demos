@@ -27,6 +27,10 @@ use super::{
     PLAN_MODE_TOOL_NAMES,
 };
 
+#[cfg(test)]
+#[path = "automation_executor_conversation_tests.rs"]
+mod conversation_tests;
+
 #[derive(Clone)]
 struct ReadOnlyAutomationToolHost {
     inner: LocalToolHost,
@@ -382,10 +386,7 @@ pub(super) async fn execution_workspace_id(
     job_snapshot: &Value,
     command_conversation_id: Option<&str>,
 ) -> Result<String, &'static str> {
-    let configured_conversation_id = command_conversation_id
-        .or_else(|| job_snapshot.get("conversation_id").and_then(Value::as_str))
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
+    let configured_conversation_id = bound_conversation_id(job_snapshot, command_conversation_id);
     if let Some(conversation_id) = configured_conversation_id {
         let conversation = state
             .session_store
@@ -500,17 +501,8 @@ async fn automation_conversation(
     if !matches!(mode, "fresh" | "reuse") {
         return Err("local_automation_conversation_mode_invalid");
     }
-    let configured_id = claim
-        .conversation_id
-        .as_deref()
-        .or_else(|| {
-            claim
-                .job_snapshot
-                .get("conversation_id")
-                .and_then(Value::as_str)
-        })
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
+    let configured_id =
+        bound_conversation_id(&claim.job_snapshot, claim.conversation_id.as_deref());
     if mode == "reuse" && configured_id.is_none() {
         return Err("local_automation_reuse_conversation_required");
     }
@@ -539,6 +531,20 @@ async fn automation_conversation(
         None,
     )
     .await?;
+    let conversation_id = format!("local-automation-conversation-{}", claim.run_id);
+    if let Some(existing) = state
+        .session_store
+        .conversation(&conversation_id)
+        .map_err(|_| "local_automation_conversation_store_unavailable")?
+    {
+        if existing.tenant_id != claim.tenant_id || existing.project_id != claim.project_id {
+            return Err("local_automation_conversation_scope_mismatch");
+        }
+        if existing.workspace_id.as_deref() != Some(workspace_id.as_str()) {
+            return Err("local_automation_conversation_scope_mismatch");
+        }
+        return Ok(existing);
+    }
     let now = now_iso();
     let title = claim
         .job_snapshot
@@ -548,7 +554,7 @@ async fn automation_conversation(
         .filter(|value| !value.is_empty())
         .unwrap_or("Local automation");
     let conversation = LocalConversation {
-        id: format!("local-automation-conversation-{}", claim.run_id),
+        id: conversation_id,
         project_id: claim.project_id.clone(),
         tenant_id: claim.tenant_id.clone(),
         title: title.to_string(),
@@ -563,4 +569,15 @@ async fn automation_conversation(
         .insert_conversation(&conversation)
         .map_err(|_| "local_automation_conversation_store_unavailable")?;
     Ok(conversation)
+}
+
+fn bound_conversation_id<'a>(job: &'a Value, explicit: Option<&'a str>) -> Option<&'a str> {
+    explicit
+        .or_else(|| {
+            (job.get("conversation_mode").and_then(Value::as_str) == Some("reuse"))
+                .then(|| job.get("conversation_id").and_then(Value::as_str))
+                .flatten()
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }

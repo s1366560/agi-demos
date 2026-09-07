@@ -488,3 +488,15 @@ fenced. Permission answers resume conversation only and do not mint tool authori
 sealed environment answers remain excluded. Rollback leaves the existing schema
 unchanged and production Cron blocked. Evidence:
 `/tmp/memstack-cron-hitl-admission-live.log`.
+
+I4.15 aligns local fresh conversation selection with the Cloud executor: saved job
+bindings apply only in reuse mode, while explicit run bindings still support recovery.
+Manual fresh runs no longer send the job's stale conversation ID as an override.
+Retry after conversation insertion but before run-history persistence reuses the
+same generated run conversation after tenant/project/workspace checks. Two different
+runs still create distinct conversations. Thirty-two sidecar automation regressions,
+13 renderer model tests and TypeScript passed. No migration or capability change;
+rollback preserves all saved conversations and run records. Native end-to-end
+acceptance of reuse selection remains pending the editor's conversation picker.
+Evidence: `/tmp/automation-conversation-sidecar-tests.log` and
+`/tmp/automation-conversation-model-tests.log`.

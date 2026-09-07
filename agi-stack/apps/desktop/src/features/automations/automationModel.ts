@@ -347,3 +347,15 @@ export function automationLocalRecovery(
   }
   return { missedRunCount: count };
 }
+
+export function automationManualRunInput(job: AutomationJob): {
+  expected_revision: number;
+  conversation_id?: string;
+} {
+  return {
+    expected_revision: job.revision,
+    ...(job.conversation_mode === 'reuse' && job.conversation_id
+      ? { conversation_id: job.conversation_id }
+      : {}),
+  };
+}

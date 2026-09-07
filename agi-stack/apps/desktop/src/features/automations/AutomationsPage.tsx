@@ -32,6 +32,7 @@ import {
   automationEnvironmentId,
   automationLastRunAt,
   automationLastRunStatus,
+  automationManualRunInput,
   automationMutationKey,
   automationNextRunAt,
   automationPermissionProfile,
@@ -295,10 +296,7 @@ export function AutomationsPage({
     setMutationBusy(true);
     setMutationError(null);
     const attemptScope = `${projectId}:${job.id}`;
-    const attemptInput = {
-      expected_revision: job.revision,
-      conversation_id: job.conversation_id ?? undefined,
-    };
+    const attemptInput = automationManualRunInput(job);
     const idempotencyKey = automationRunAttemptKey(
       runAttempts.current,
       attemptScope,

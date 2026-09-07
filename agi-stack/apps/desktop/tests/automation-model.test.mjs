@@ -7,6 +7,7 @@ import {
   automationCapabilityReasonCode,
   automationEnvironmentId,
   automationLastRunAt,
+  automationManualRunInput,
   automationMutationKey,
   automationNextRunAt,
   automationPermissionProfile,
@@ -43,6 +44,14 @@ const job = {
   },
   created_at: '2026-07-01T00:00:00Z',
 };
+
+test('manual fresh runs do not promote a saved conversation into an explicit override', () => {
+  const bound = { ...job, revision: 9, conversation_id: 'saved-conversation' };
+  assert.deepEqual(automationManualRunInput({ ...bound, conversation_mode: 'fresh' }),
+    { expected_revision: 9 });
+  assert.deepEqual(automationManualRunInput(bound),
+    { expected_revision: 9, conversation_id: 'saved-conversation' });
+});
 
 test('automation presentation reads only explicit scheduler fields', () => {
   assert.equal(automationTriggerKind(job), 'schedule');
