@@ -391,6 +391,7 @@ import {
   createDesktopWorkbenchCapabilityClientProviderV2,
 } from './features/runtime/desktopWorkbenchCapabilityClientProviderV2';
 import { desktopCapability } from './features/runtime/capabilitySnapshot';
+import { NativeMemoriesRouteProvider } from './plugins/NativeMemoriesRouteProvider';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
 import { createDesktopWorkbenchSnapshotOperationsV2 } from './plugins/desktopWorkbenchSnapshotAuthorityModuleV2';
 import { createProjectSearchRouteBindingProviderV2 } from './features/search/projectSearchRouteBindingProviderV2';
@@ -7805,9 +7806,15 @@ export function App() {
 
   return (
     <DesktopRendererGenerationProviderV2 value={desktopRendererGenerationV2}>
-      <DesktopRendererAuthenticatedShellV2
-        viewModel={desktopAuthenticatedShellViewModelV2}
-      />
+      <NativeMemoriesRouteProvider
+        config={config}
+        auth={auth}
+        capabilitySnapshot={desktopCapabilityState.snapshot}
+      >
+        <DesktopRendererAuthenticatedShellV2
+          viewModel={desktopAuthenticatedShellViewModelV2}
+        />
+      </NativeMemoriesRouteProvider>
     </DesktopRendererGenerationProviderV2>
   );
 }

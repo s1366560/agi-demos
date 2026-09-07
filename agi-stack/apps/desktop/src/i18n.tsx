@@ -92,12 +92,17 @@ import {
   tenantWorkspacesEnUS,
   tenantWorkspacesZhCN,
 } from './features/tenant/locales/tenantWorkspacesMessages';
+import {
+  nativeMemoriesEnUS,
+  nativeMemoriesZhCN,
+} from './features/project-knowledge/locales/nativeMemoriesMessages';
 
 export type { DesktopLocale } from './i18nContext';
 
 const STORAGE_KEY = 'agistack.desktop.locale';
 
 const enUS: Record<string, string> = {
+  ...nativeMemoriesEnUS,
   ...deadLetterQueueEnUS,
   ...deviceApprovalEnUS,
   ...tenantCreationEnUS,
@@ -4162,6 +4167,7 @@ const enUS: Record<string, string> = {
 };
 
 const zhCN: Record<string, string> = {
+  ...nativeMemoriesZhCN,
   ...tenantCreationZhCN,
   ...invitationAcceptanceZhCN,
   ...deadLetterQueueZhCN,

@@ -1,0 +1,89 @@
+.native-memories-page {
+  display: grid;
+  gap: 1rem;
+  max-width: 64rem;
+  min-width: 0;
+  padding: 1.25rem;
+  color: var(--gray-12, #1b2430);
+  overflow-wrap: anywhere;
+}
+.native-memories-page header,
+.native-memories-page nav,
+.native-memories-page li > div,
+.native-memory-editor > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.native-memories-page h1 {
+  margin: 0 1rem 0 0;
+}
+.native-memories-page ol {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.native-memories-page li,
+.native-memory-editor:not(:empty) {
+  border: 1px solid var(--gray-6, #d1d5db);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+.native-memory-editor:empty {
+  display: none;
+}
+.native-memories-page h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+.native-memories-page button,
+.native-memory-editor input,
+.native-memory-editor textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--color-background, #fff);
+  border: 1px solid var(--gray-7, #b9c0c9);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+}
+.native-memories-page button:disabled {
+  opacity: 0.55;
+}
+.native-memories-page button:focus-visible,
+.native-memory-editor input:focus-visible,
+.native-memory-editor textarea:focus-visible {
+  outline: 2px solid var(--accent-9, #047aa4);
+  outline-offset: 2px;
+}
+.native-memory-editor fieldset,
+.native-memory-editor label {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+.native-memory-editor fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0 0 0.75rem;
+  gap: 1rem;
+}
+.native-memory-editor input,
+.native-memory-editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.native-memory-editor textarea {
+  resize: vertical;
+}
+.native-memory-editor dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.35rem 1rem;
+}
+.native-memory-editor dd {
+  margin: 0;
+}

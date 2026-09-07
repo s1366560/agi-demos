@@ -44,6 +44,7 @@
     "electron/main/sidecarSupervisor.ts",
     "electron/main/updatePolicy.ts",
     "src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx",
+    "src/plugins/NativeMemoriesRouteProvider.tsx",
     "src/plugins/DesktopRendererAuthenticatedShellV2.tsx",
     "src/plugins/DesktopRendererAuthenticationRouterV2.tsx",
     "src/plugins/DesktopRendererProductionRouterV2.tsx",

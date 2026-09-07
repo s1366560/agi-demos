@@ -53,8 +53,8 @@ client
     void accepted;
     void replayed;
   });
-// @ts-expect-error A native mutation requires an observed context.
 client.execute(scope, {
+  // @ts-expect-error A native mutation requires an observed context.
   operation: 'delete',
   id: 'memory-1',
   expected_revision: 1,
