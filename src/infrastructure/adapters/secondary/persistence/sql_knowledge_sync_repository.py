@@ -361,12 +361,7 @@ class SqlKnowledgeSyncRepository:
         request = canonical({"resolution": resolution.to_dict()})
         async with self._transaction():
             member = await self._authorize(scope, lock=True)
-            replay = await self._replay(scope, change_id, request)
-            if replay is not None:
-                return replay
             row = await self._conflict_row(scope, resolution.conflict_id)
-            if row.resolved_change_id is not None:
-                raise KnowledgeSyncError("knowledge_sync_conflict_resolved")
             current = await self._current(scope, row.memory_id)
             proposed = MemorySyncMutation.from_dict(row.proposed)
             await authorize_write(
@@ -376,6 +371,11 @@ class SqlKnowledgeSyncRepository:
                 current,
                 deleting=resolution.decision == "use_proposed" and proposed.operation == "delete",
             )
+            replay = await self._replay(scope, change_id, request)
+            if replay is not None:
+                return replay
+            if row.resolved_change_id is not None:
+                raise KnowledgeSyncError("knowledge_sync_conflict_resolved")
             if (current.revision if current else 0) != resolution.expected_current_revision:
                 raise KnowledgeSyncError("knowledge_sync_resolution_stale")
             row.resolved_change_id = change_id
@@ -436,10 +436,12 @@ class SqlKnowledgeSyncRepository:
     async def conflict(self, scope: KnowledgeSyncScope, conflict_id: str) -> dict[str, Any]:
         _ = await self._authorize(scope)
         row = await self._conflict_row(scope, conflict_id)
+        observed = await self._current(scope, row.memory_id)
         return {
             "id": row.id,
             "memory_id": row.memory_id,
             "proposed": row.proposed,
             "current": row.current,
+            "observed_current": observed.to_dict() if observed else None,
             "resolved_change_id": row.resolved_change_id,
         }

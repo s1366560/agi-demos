@@ -224,6 +224,8 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(storage)?;
         check_target(&tx, scope, target, true)?;
+        // Recover immutable requests before preparing new work. A later pull
+        // conflict cannot cancel an HTTP write whose result is still unknown.
         let candidate: Option<(u64, String, String, String, Option<String>)> = tx
             .query_row(
                 "SELECT c.sequence, o.change_id, c.payload, c.operation, p.request_json
@@ -232,13 +234,13 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
                  LEFT JOIN knowledge_sync_pushes p ON p.sequence=o.sequence
                  WHERE c.tenant_id=?1 AND c.project_id=?2 AND p.receipt_json IS NULL
                    AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=o.sequence)
-                   AND NOT EXISTS (
+                   AND (p.request_json IS NOT NULL OR NOT EXISTS (
                      SELECT 1 FROM knowledge_sync_pull_conflicts pc
                      WHERE pc.tenant_id=c.tenant_id AND pc.project_id=c.project_id
                        AND pc.memory_id=c.memory_id
                        AND NOT EXISTS (SELECT 1 FROM knowledge_sync_resolved_pull_conflicts r
                          WHERE r.tenant_id=pc.tenant_id AND r.project_id=pc.project_id AND r.sequence=pc.sequence)
-                   )
+                   ))
                    AND NOT EXISTS (
                      SELECT 1 FROM knowledge_sync_outbox eo
                      JOIN knowledge_processing_changes ec ON ec.sequence=eo.sequence
@@ -248,7 +250,7 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
                        AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=eo.sequence)
                        AND (ep.receipt_json IS NULL OR ep.conflict_json IS NOT NULL)
                    )
-                 ORDER BY c.sequence LIMIT 1",
+                 ORDER BY (p.request_json IS NULL), c.sequence LIMIT 1",
                 params![scope.tenant_id, scope.project_id],
                 |row| {
                     Ok((

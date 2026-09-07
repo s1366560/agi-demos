@@ -191,3 +191,6 @@ mod persistence;
 
 #[path = "knowledge_pull/validation.rs"]
 mod validation;
+
+#[path = "knowledge_pull/prepared_retry.rs"]
+mod prepared_retry;

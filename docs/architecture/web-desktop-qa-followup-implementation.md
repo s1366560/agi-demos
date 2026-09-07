@@ -465,3 +465,15 @@ The subsequent Desktop full run observed 4260 passes, two skips and one failure:
 the revision-bound parity artifact still audits the older knowledge page source.
 This is an outstanding artifact refresh, not a full-suite pass. Source batches will
 be frozen before the next formal parity regeneration and exact-commit validation.
+
+I3.11 restores immutable prepared push requests even when a later pull conflict
+exists, while new requests remain blocked. Restart retries preserve the original
+request/change ID/sequence and later local edits. Fifty Device knowledge tests,
+five native push/session tests and scoped strict Clippy passed. Cloud conflict
+refresh now adds observed_current without changing the historical current snapshot;
+resolution replays revalidate current write permission before returning a receipt.
+Twenty-eight sync repository tests passed, including viewer downgrade and edit-share
+revocation. No schema or release gate changed. Rollback must retain all prepared
+requests; it may reintroduce the retry deadlock but must never rewrite those requests.
+Logs: `/tmp/knowledge-prepared-retry-tests.log` and
+`/tmp/knowledge-conflict-refresh-green.log`.
