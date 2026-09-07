@@ -438,3 +438,30 @@ focused renderer tests and TypeScript passed. Evidence logs:
 `/tmp/knowledge-resolution-device-final.log`, `/tmp/knowledge-resolution-native-final.log`,
 `/tmp/local-memories-renderer-focused.log`. This is protocol and component acceptance;
 enabled native knowledge CRUD/sync acceptance remains outstanding.
+
+I3.10 routes enrolled HTTP create through the shared online CAS command under the
+same Project lock used by bootstrap. Explicit client key/revision are mandatory;
+unsupported fields are rejected. Unenrolled authorization and fields are preserved.
+Memory, journal, receipt and a dedicated pending projection task commit atomically.
+Processing is explicitly deferred until a revision-fenced worker is composed;
+legacy automatic/manual recovery cannot dispatch this task type. Forty-three tests
+passed, including 17 real PostgreSQL HTTP cases; Ruff, Mypy and Pyright passed.
+HTTP PATCH/delete and other portable writers remain incomplete. This batch has no
+migration and sync enrollment stays closed; rollback must preserve accepted tasks
+and receipts and cannot enable legacy writers for an enrolled project.
+
+I4.13 introduces generation-local Cloud Cron readiness with actual model/checkpoint
+composition provenance and loop-start acknowledgement. Missing HITL/permission/
+sealed-environment/scoped-tools/mutation dependencies explicitly block startup.
+Publication or a runtime handle alone never means running; stop, cancelled drain
+and panic revoke readiness. The complete server suite passed 643 tests, with Clippy
+successful and 17 existing warnings. Formal plugin artifacts were regenerated for
+the shared worker implementation and memory services. Production Cron remains
+blocked; Python retirement and ownership transfer have not occurred. Rollback must
+keep both scheduler production gates closed. Logs: `/tmp/online-http-authority-final.log`
+and `/tmp/memstack-cron-readiness-server-full.log`.
+
+The subsequent Desktop full run observed 4260 passes, two skips and one failure:
+the revision-bound parity artifact still audits the older knowledge page source.
+This is an outstanding artifact refresh, not a full-suite pass. Source batches will
+be frozen before the next formal parity regeneration and exact-commit validation.

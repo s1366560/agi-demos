@@ -162,3 +162,22 @@ async def test_authority_propagates_generation_failure_without_fallback(
         await db.close()
 
     assert error.value.code == "generation_not_pinned"
+
+
+async def test_online_memory_provider_uses_exact_operation_session() -> None:
+    from src.infrastructure.plugins.v2.memory_services import SqlMemoryRepositoryProviderV2
+
+    db = AsyncSession()
+    operation = SimpleNamespace(require=lambda key: db)
+    provider = SqlMemoryRepositoryProviderV2(strategy="request-async-session")
+    repository = provider.build_online(cast(Any, operation))
+    assert getattr(repository, "db", None) is db
+    await db.close()
+
+
+def test_online_memory_provider_rejects_invalid_operation_session() -> None:
+    from src.infrastructure.plugins.v2.memory_services import SqlMemoryRepositoryProviderV2
+
+    provider = SqlMemoryRepositoryProviderV2(strategy="request-async-session")
+    with pytest.raises(RuntimeV2Error, match="AsyncSession"):
+        provider.build_online(cast(Any, SimpleNamespace(require=lambda key: object())))

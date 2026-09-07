@@ -921,6 +921,7 @@ mod unit {
             project_schema,
             cron_jobs,
             worker_postgres: None,
+            cron_runtime_provenance: Default::default(),
             data_stats,
             deploys,
             subagent_templates,

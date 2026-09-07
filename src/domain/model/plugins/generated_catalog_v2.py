@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:b2a5261e61e94c706328d7c8cb0bce0e60820796f31cf662df624b498f8374'
-    '21","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:d0edd0f63ae73208a93ae7191c49905ae7fd48d881ece449dcd7a4d901bac4'
+    '72","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1247,7 +1247,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'd9aec89e90197d4ad1ed","entrypoint":"src.infrastructure.plugins.v2.mcp_services:mcp_appli'
     'cation_definition_v2","module_ref":"builtin://memstack/application/mcp-services","plugin'
     '_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact'
-    '_digest":"sha256:a18bcceb77d4f55d9c6ae636aba2a15a544c5b036e564b30881251e44c11a001","arti'
+    '_digest":"sha256:5148228af040a42d885e03da9fc3f058c9667f63494da4e1807070f647cb36c6","arti'
     'fact_source":"repo+python://src/infrastructure/plugins/v2/memory_services.py","contract"'
     ':{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalP'
     'roperties":false,"properties":{"strategy":{"const":"operation-scoped-provider","type":"s'
@@ -3886,8 +3886,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '9da2ab8b5faa888457ee7094d5ba4ab3b","entrypoint":"src.infrastructure.plugins.v2.invitatio'
     'n_services:_apply_invitation_provider_v2","module_ref":"builtin://memstack/persistence/i'
     'nvitation-provider","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targ'
-    'ets":["python"]},{"artifact_digest":"sha256:a18bcceb77d4f55d9c6ae636aba2a15a544c5b036e56'
-    '4b30881251e44c11a001","artifact_source":"repo+python://src/infrastructure/plugins/v2/mem'
+    'ets":["python"]},{"artifact_digest":"sha256:5148228af040a42d885e03da9fc3f058c9667f63494d'
+    'a4e1807070f647cb36c6","artifact_source":"repo+python://src/infrastructure/plugins/v2/mem'
     'ory_services.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2'
     '020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"request-a'
     'sync-session","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emit'
@@ -4325,8 +4325,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'fb24f5029a8130505e7ef3ceaf3d5553fa9c06842ba4f1ed572ec2747","entrypoint":"src.infrastruct'
     'ure.plugins.v2.tunnel_services:_apply_tunnel_connection_provider_v2","module_ref":"built'
     'in://memstack/runtime/tunnel-connection-provider","plugin_id":"memstack-runtime-kernel",'
-    '"plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:625338f51a6e5d'
-    'e19dd68e55acc6113d32e79386f117082b2b23d99d695bb008","artifact_source":"repo+rust://agi-s'
+    '"plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:a210d108e8b836'
+    '0a92de4595427be447ab3ce176b199f9869154b7bdb6201f37","artifact_source":"repo+rust://agi-s'
     'tack/apps/server/src/background_workers_v2.rs","contract":{"config_schema":{"$schema":"h'
     'ttps://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{'
     '"autostart":{"type":"boolean"}},"required":["autostart"],"type":"object"},"events":{"emi'
@@ -4335,8 +4335,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '1a434022ffae90c4b72ef5bdc6eb538ed0c85c29256bf75984","entrypoint":"ChannelOutboxWorkerMod'
     'uleV2::apply","module_ref":"builtin://memstack/rust-server/channel-outbox-worker","plugi'
     'n_id":"memstack-native-target-hosts","plugin_version":"2.0.0","targets":["rust-server"]}'
-    ',{"artifact_digest":"sha256:625338f51a6e5de19dd68e55acc6113d32e79386f117082b2b23d99d695b'
-    'b008","artifact_source":"repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"'
+    ',{"artifact_digest":"sha256:a210d108e8b8360a92de4595427be447ab3ce176b199f9869154b7bdb620'
+    '1f37","artifact_source":"repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"'
     ',"contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","'
     'additionalProperties":false,"properties":{"autostart":{"type":"boolean"}},"required":["a'
     'utostart"],"type":"object"},"events":{"emits":[],"handles":[]},"services":{"provides":[{'
@@ -4365,8 +4365,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'st":"sha256:75443a63ac79d996d7bcba1a2015ab84320702e0157897cbd62970669a79d2b2","entrypoin'
     't":"RustServerHttpRoutesModuleV2::apply","module_ref":"builtin://memstack/rust-server/ht'
     'tp-routes","plugin_id":"memstack-native-target-hosts","plugin_version":"2.0.0","targets"'
-    ':["rust-server"]},{"artifact_digest":"sha256:625338f51a6e5de19dd68e55acc6113d32e79386f11'
-    '7082b2b23d99d695bb008","artifact_source":"repo+rust://agi-stack/apps/server/src/backgrou'
+    ':["rust-server"]},{"artifact_digest":"sha256:a210d108e8b8360a92de4595427be447ab3ce176b19'
+    '9f9869154b7bdb6201f37","artifact_source":"repo+rust://agi-stack/apps/server/src/backgrou'
     'nd_workers_v2.rs","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"autostart":{"type":"boolean"'
     '}},"required":["autostart"],"type":"object"},"events":{"emits":[],"handles":[]},"service'
@@ -4539,7 +4539,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'time-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:b2a5261e61e94c706328d7c8cb0bce0e60820796f31cf662df624b498f837421"
+    "sha256:d0edd0f63ae73208a93ae7191c49905ae7fd48d881ece449dcd7a4d901bac472"
 )
 # fmt: on
 

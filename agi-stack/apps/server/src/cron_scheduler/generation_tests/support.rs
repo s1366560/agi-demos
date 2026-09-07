@@ -20,7 +20,8 @@ use tokio::sync::{Notify, Semaphore};
 
 use crate::background_worker_control_v2::{BackgroundWorkerControllerV2, WorkerFactoryV2};
 use crate::background_workers_v2::{
-    definitions_with_cron_resources_v2, CronWorkerResourceFactoryV2, WORKER_SERVICES_V2,
+    definitions_with_cron_resources_v2, CronWorkerResourceFactoryV2, CronWorkerResourceV2,
+    WORKER_SERVICES_V2,
 };
 use crate::cron_scheduler::{
     config::CronSchedulerConfig,
@@ -215,7 +216,10 @@ impl Probe {
                 .lock()
                 .unwrap()
                 .push((Arc::downgrade(&scheduler), driver));
-            Arc::new(move || scheduler.clone().spawn_if_enabled())
+            CronWorkerResourceV2 {
+                readiness: scheduler.readiness(),
+                factory: Arc::new(move || scheduler.clone().spawn_if_enabled()),
+            }
         })
     }
 }

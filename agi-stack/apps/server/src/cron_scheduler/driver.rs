@@ -20,6 +20,7 @@ use crate::cron_automation_runtime::{
     CronAutomationRuntimeWorker, ExecuteRunDispatchHandler, ReActAutomationRunExecutor,
     UuidConversationIdFactory,
 };
+use crate::cron_readiness_v2::{CronRuntimeDependenciesV2, CronRuntimeProvenanceV2};
 use crate::cron_schedule_fire::CronScheduleFireCoordinator;
 use crate::cron_schedule_reconcile::ReconcileScheduleHandler;
 use crate::cron_scheduler_ownership::{CronSchedulerLeaseStore, CronSchedulerOwnershipStore};
@@ -34,6 +35,7 @@ pub(crate) fn build_pg_cron_scheduler(
     engine: Arc<ReActEngine>,
     registry: HotPlugRegistry,
     config: CronSchedulerConfig,
+    provenance: CronRuntimeProvenanceV2,
 ) -> SharedCronScheduler {
     let ownership = Arc::new(PgCronSchedulerOwnerRepository::new(pool.clone()));
     let lease_store: Arc<dyn CronSchedulerLeaseStore> = ownership.clone();
@@ -67,7 +69,13 @@ pub(crate) fn build_pg_cron_scheduler(
         runtime,
         config: config.clone(),
     });
-    Arc::new(CronScheduler::new(lease_store, driver, clock, config))
+    Arc::new(CronScheduler::with_dependencies(
+        lease_store,
+        driver,
+        clock,
+        config,
+        CronRuntimeDependenciesV2::postgres(provenance),
+    ))
 }
 
 struct PgCronSchedulerDriver {

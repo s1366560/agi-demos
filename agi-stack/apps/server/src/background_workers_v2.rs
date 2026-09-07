@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use crate::{
     background_worker_control_v2::{BackgroundWorkerControllerV2, WorkerFactoryV2},
+    cron_readiness_v2::{CronReadinessBlockerV2, CronReadinessV2, CronRuntimeDependenciesV2},
     cron_scheduler::{build_pg_cron_scheduler, CronSchedulerConfig},
     AppState,
 };
@@ -29,7 +30,12 @@ const WORKER_CONTRACTS_V2: [&str; 3] = [
     "sha256:86e82e004640593f1d1ce1017fec173af733f249fa3fab8e66ebd1786cf11867",
 ];
 
-pub(crate) type CronWorkerResourceFactoryV2 = Arc<dyn Fn() -> WorkerFactoryV2 + Send + Sync>;
+pub(crate) struct CronWorkerResourceV2 {
+    pub(crate) factory: WorkerFactoryV2,
+    pub(crate) readiness: Arc<CronReadinessV2>,
+}
+
+pub(crate) type CronWorkerResourceFactoryV2 = Arc<dyn Fn() -> CronWorkerResourceV2 + Send + Sync>;
 
 pub(crate) fn definitions_with_cron_resources_v2(
     skill: WorkerFactoryV2,
@@ -109,12 +115,26 @@ impl PluginModuleRuntimeV2 for CronSchedulerWorkerModuleV2 {
     ) -> Result<(), RuntimeV2Error> {
         // Construct one scheduler/config snapshot per candidate. This closure only
         // activates after publication, and its controller owns the resources through drain.
-        let factory = (self.factory)();
-        let controller = prepare_worker_controller_v2(
-            context,
-            config,
-            &factory,
+        let resource = (self.factory)();
+        let autostart = config
+            .get("autostart")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| RuntimeV2Error::Module("worker autostart must be a boolean".into()))?;
+        if !autostart {
+            resource
+                .readiness
+                .blocked(CronReadinessBlockerV2::ModuleAutostartDisabled);
+        }
+        let controller = Arc::new(BackgroundWorkerControllerV2::paused_cron(
+            resource.factory,
+            resource.readiness,
+        ));
+        let cleanup = controller.clone();
+        context.effect(
             "service:rust-server.cron-scheduler-worker",
+            Box::new(move || {
+                Box::pin(async move { cleanup.drain().await.map_err(RuntimeV2Error::Module) })
+            }),
         )?;
         context.provide("service:rust-server.cron-scheduler-worker", controller)?;
         Ok(())
@@ -151,10 +171,14 @@ pub(crate) fn worker_definitions_v2(state: Option<&AppState>) -> Vec<PluginDefin
     let skill = state.and_then(|state| state.skill_evolution_worker.clone());
     let outbox = state.and_then(|state| state.channel_outbox_delivery_worker.clone());
     let cron_infrastructure = state.and_then(|state| {
-        state
-            .worker_postgres
-            .clone()
-            .map(|pool| (pool, Arc::clone(&state.engine), state.registry.clone()))
+        state.worker_postgres.clone().map(|pool| {
+            (
+                pool,
+                Arc::clone(&state.engine),
+                state.registry.clone(),
+                state.cron_runtime_provenance,
+            )
+        })
     });
     definitions_with_cron_resources_v2(
         Arc::new(move || {
@@ -168,16 +192,25 @@ pub(crate) fn worker_definitions_v2(state: Option<&AppState>) -> Vec<PluginDefin
                 .and_then(|worker| worker.clone().spawn_if_enabled())
         }),
         Arc::new(move || match &cron_infrastructure {
-            Some((pool, engine, registry)) => {
+            Some((pool, engine, registry, provenance)) => {
                 let scheduler = build_pg_cron_scheduler(
                     pool.clone(),
                     Arc::clone(engine),
                     registry.clone(),
                     CronSchedulerConfig::from_env(),
+                    *provenance,
                 );
-                Arc::new(move || scheduler.clone().spawn_if_enabled())
+                CronWorkerResourceV2 {
+                    readiness: scheduler.readiness(),
+                    factory: Arc::new(move || scheduler.clone().spawn_if_enabled()),
+                }
             }
-            None => Arc::new(|| None),
+            None => CronWorkerResourceV2 {
+                readiness: Arc::new(CronReadinessV2::new(
+                    CronRuntimeDependenciesV2::unavailable(),
+                )),
+                factory: Arc::new(|| None),
+            },
         }),
     )
 }
@@ -187,5 +220,14 @@ pub(crate) fn definitions_from_factories_v2(
     factories: [WorkerFactoryV2; 3],
 ) -> Vec<PluginDefinitionV2> {
     let [skill, outbox, cron] = factories;
-    definitions_with_cron_resources_v2(skill, outbox, Arc::new(move || cron.clone()))
+    definitions_with_cron_resources_v2(
+        skill,
+        outbox,
+        Arc::new(move || CronWorkerResourceV2 {
+            factory: cron.clone(),
+            readiness: Arc::new(CronReadinessV2::new(
+                CronRuntimeDependenciesV2::ready_for_test(),
+            )),
+        }),
+    )
 }

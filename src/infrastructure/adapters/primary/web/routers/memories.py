@@ -5,12 +5,13 @@ from datetime import UTC, datetime
 from typing import Any, Literal, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.domain.ports.services.graph_store_port import GraphStorePort as GraphServicePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
@@ -570,6 +571,8 @@ async def create_memory(
         memory_application_authority_dependency_v2
     ),
     workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    expected_revision: str | None = Header(None, alias="X-Memory-Expected-Revision"),
 ) -> Any:
     """Create a new memory.
 
@@ -583,6 +586,20 @@ async def create_memory(
         project_id = memory_data.project_id
         task_session_factory = _build_request_session_factory(db)
         project = await _get_memory_write_project(project_id, current_user, db)
+
+        context = await memory_application.services.online_commands.open(
+            str(current_user.id), project_id
+        )
+        if context.enabled:
+            from .memory_online_create import create_enrolled_memory
+
+            return await create_enrolled_memory(
+                memory_data,
+                memory_application,
+                context,
+                idempotency_key,
+                expected_revision,
+            )
 
         # Create memory
         memory_id = str(uuid4())
@@ -704,6 +721,11 @@ async def create_memory(
         )
 
         return MemoryResponse.from_orm(memory)
+    except KnowledgeSyncError as error:
+        from .knowledge_sync import error_response
+
+        await db.rollback()
+        return error_response(error)
     except HTTPException:
         raise
     except Exception as e:

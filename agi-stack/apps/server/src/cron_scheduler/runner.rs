@@ -8,6 +8,9 @@ use tokio::sync::watch;
 use tokio::time::sleep;
 
 use super::config::{CronSchedulerConfig, CRON_PRODUCTION_READY_ENV};
+use crate::cron_readiness_v2::{
+    CronReadinessBlockerV2, CronReadinessV2, CronRuntimeDependenciesV2,
+};
 use crate::cron_scheduler_ownership::CronSchedulerLeaseStore;
 use crate::cron_worker::CronWorkerClock;
 
@@ -18,6 +21,7 @@ pub(crate) enum CronSchedulerGate {
     Open,
     AutostartDisabled,
     ProductionNotReady,
+    DependenciesUnavailable,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -64,21 +68,51 @@ pub(crate) struct CronScheduler {
     driver: Arc<dyn CronSchedulerDriver>,
     clock: Arc<dyn CronWorkerClock>,
     config: CronSchedulerConfig,
+    readiness: Arc<CronReadinessV2>,
 }
 
 impl CronScheduler {
+    #[cfg(test)]
     pub(crate) fn new(
         ownership: Arc<dyn CronSchedulerLeaseStore>,
         driver: Arc<dyn CronSchedulerDriver>,
         clock: Arc<dyn CronWorkerClock>,
         config: CronSchedulerConfig,
     ) -> Self {
+        Self::with_dependencies(
+            ownership,
+            driver,
+            clock,
+            config,
+            CronRuntimeDependenciesV2::ready_for_test(),
+        )
+    }
+
+    pub(crate) fn with_dependencies(
+        ownership: Arc<dyn CronSchedulerLeaseStore>,
+        driver: Arc<dyn CronSchedulerDriver>,
+        clock: Arc<dyn CronWorkerClock>,
+        config: CronSchedulerConfig,
+        dependencies: CronRuntimeDependenciesV2,
+    ) -> Self {
+        let readiness = Arc::new(CronReadinessV2::new(dependencies));
+        if !config.autostart {
+            readiness.blocked(CronReadinessBlockerV2::AutostartDisabled);
+        }
+        if !config.production_ready {
+            readiness.blocked(CronReadinessBlockerV2::ProductionGateClosed);
+        }
         Self {
             ownership,
             driver,
             clock,
             config,
+            readiness,
         }
+    }
+
+    pub(crate) fn readiness(&self) -> Arc<CronReadinessV2> {
+        Arc::clone(&self.readiness)
     }
 
     pub(crate) fn gate(&self) -> CronSchedulerGate {
@@ -88,10 +122,14 @@ impl CronScheduler {
         if !self.config.production_ready {
             return CronSchedulerGate::ProductionNotReady;
         }
+        if !self.readiness.snapshot().blockers.is_empty() {
+            return CronSchedulerGate::DependenciesUnavailable;
+        }
         CronSchedulerGate::Open
     }
 
     pub(crate) fn spawn_if_enabled(self: Arc<Self>) -> Option<CronSchedulerRuntime> {
+        self.readiness.published();
         match self.gate() {
             CronSchedulerGate::AutostartDisabled => return None,
             CronSchedulerGate::ProductionNotReady => {
@@ -101,10 +139,18 @@ impl CronScheduler {
                 return None;
             }
             CronSchedulerGate::Open => {}
+            CronSchedulerGate::DependenciesUnavailable => return None,
         }
-        Some(CronSchedulerRuntime::spawn(
+        if self.readiness.snapshot().phase
+            != crate::cron_readiness_v2::CronRuntimePhaseV2::Published
+        {
+            return None;
+        }
+        let observer = self.readiness.clone();
+        Some(CronSchedulerRuntime::spawn_observed(
             "cron-scheduler",
             move |receiver| self.run_loop(receiver),
+            Some(observer),
         ))
     }
 
@@ -210,6 +256,11 @@ impl CronScheduler {
     }
 
     async fn run_loop(self: Arc<Self>, mut shutdown: watch::Receiver<bool>) {
+        // Spawning a handle is not evidence that the poll loop entered. A stop
+        // before first poll must never publish running or acquire ownership.
+        if *shutdown.borrow() || !self.readiness.confirm_loop_started() {
+            return;
+        }
         loop {
             if *shutdown.borrow() {
                 return;

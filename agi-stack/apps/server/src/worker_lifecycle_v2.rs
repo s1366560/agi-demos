@@ -1,18 +1,36 @@
 //! Cooperative worker retirement with independently observed task completion.
 
-use std::future::Future;
+use std::{future::Future, sync::Arc};
 
 use tokio::sync::watch;
 
 type WorkerResult = Result<(), String>;
 
+pub(crate) trait WorkerLifecycleObserverV2: Send + Sync {
+    fn stop_requested(&self);
+    fn finished(&self, result: &WorkerResult);
+}
+
 pub(crate) struct WorkerRuntimeV2 {
     shutdown: watch::Sender<bool>,
     completion: watch::Receiver<Option<WorkerResult>>,
+    observer: Option<Arc<dyn WorkerLifecycleObserverV2>>,
 }
 
 impl WorkerRuntimeV2 {
     pub(crate) fn spawn<F, Fut>(name: &'static str, run: F) -> Self
+    where
+        F: FnOnce(watch::Receiver<bool>) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        Self::spawn_observed(name, run, None)
+    }
+
+    pub(crate) fn spawn_observed<F, Fut>(
+        name: &'static str,
+        run: F,
+        observer: Option<Arc<dyn WorkerLifecycleObserverV2>>,
+    ) -> Self
     where
         F: FnOnce(watch::Receiver<bool>) -> Fut + Send + 'static,
         Fut: Future<Output = ()> + Send + 'static,
@@ -22,6 +40,7 @@ impl WorkerRuntimeV2 {
         let worker = tokio::spawn(async move { run(receiver).await });
         // This observer owns the JoinHandle even if a caller drops its runtime or
         // cancels shutdown(). Neither case may abort an already admitted operation.
+        let completion_observer = observer.clone();
         tokio::spawn(async move {
             let result = worker.await.map_err(|error| {
                 let reason = if error.is_panic() {
@@ -34,15 +53,22 @@ impl WorkerRuntimeV2 {
             if let Err(error) = &result {
                 eprintln!("[agistack] background worker terminated with an error: {error}");
             }
+            if let Some(observer) = completion_observer {
+                observer.finished(&result);
+            }
             completed.send_replace(Some(result));
         });
         Self {
             shutdown,
             completion,
+            observer,
         }
     }
 
     pub(crate) fn request_stop(&self) {
+        if let Some(observer) = &self.observer {
+            observer.stop_requested();
+        }
         self.shutdown.send_replace(true);
     }
 

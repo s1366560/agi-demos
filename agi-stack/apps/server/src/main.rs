@@ -49,6 +49,7 @@ mod conversation_session_api;
 mod cron_api;
 mod cron_automation_runtime;
 mod cron_hitl_resume;
+mod cron_readiness_v2;
 mod cron_schedule_fire;
 mod cron_schedule_reconcile;
 mod cron_scheduler;
@@ -304,6 +305,7 @@ pub(crate) struct AppState {
     pub(crate) cron_jobs: SharedCronJobs,
     /// Shared database infrastructure; worker resources are built by their V2 generation.
     pub(crate) worker_postgres: Option<PgPool>,
+    pub(crate) cron_runtime_provenance: cron_readiness_v2::CronRuntimeProvenanceV2,
     /// P7 exact graph data stats/export read surface over the portable
     /// GraphStore. Cleanup stays Python-owned.
     pub(crate) data_stats: SharedDataStats,
@@ -515,11 +517,17 @@ type MemoryAndAuth = (
 
 // ---- wiring ---------------------------------------------------------------
 
+type SelectedLlmAndEmbedding = (
+    Arc<dyn LlmPort>,
+    Arc<dyn EmbeddingPort>,
+    cron_readiness_v2::CronModelBackendV2,
+);
+
 /// Resolve the LLM + embedding ports from the environment — the cloud↔local
 /// seam. Default is the offline stub pair so `cargo run` and tests need no
 /// network or keys; setting `AGISTACK_LLM_BASE_URL` swaps in the HTTP adapter
 /// (optionally `AGISTACK_LLM_MODEL`, `AGISTACK_EMBED_MODEL`, `AGISTACK_LLM_API_KEY`).
-fn select_llm_and_embedding() -> (Arc<dyn LlmPort>, Arc<dyn EmbeddingPort>) {
+fn select_llm_and_embedding() -> SelectedLlmAndEmbedding {
     match std::env::var("AGISTACK_LLM_BASE_URL") {
         Ok(base) if !base.is_empty() => {
             let chat_model =
@@ -534,9 +542,17 @@ fn select_llm_and_embedding() -> (Arc<dyn LlmPort>, Arc<dyn EmbeddingPort>) {
                 emb = emb.with_api_key(k);
             }
             eprintln!("[agistack] LLM port: HTTP (cloud) via AGISTACK_LLM_BASE_URL");
-            (Arc::new(llm), Arc::new(emb))
+            (
+                Arc::new(llm),
+                Arc::new(emb),
+                cron_readiness_v2::CronModelBackendV2::HttpConfigured,
+            )
         }
-        _ => (Arc::new(StubLlm), Arc::new(HashEmbedding::new(64))),
+        _ => (
+            Arc::new(StubLlm),
+            Arc::new(HashEmbedding::new(64)),
+            cron_readiness_v2::CronModelBackendV2::Stub,
+        ),
     }
 }
 
@@ -918,7 +934,7 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
     // OpenAI-/LiteLLM-compatible endpoint (`adapters-http-llm`); otherwise use
     // the deterministic offline stubs. The core never sees which — it only holds
     // `Arc<dyn LlmPort>` / `Arc<dyn EmbeddingPort>` (ADR-0001).
-    let (llm, embedding) = select_llm_and_embedding();
+    let (llm, embedding, model_backend) = select_llm_and_embedding();
 
     let registry = build_registry();
     let workspace_authority: SharedWorkspaceAuthority =
@@ -1190,6 +1206,14 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         tenant_webhooks,
         project_schema,
         cron_jobs,
+        cron_runtime_provenance: cron_readiness_v2::CronRuntimeProvenanceV2 {
+            model: model_backend,
+            checkpoint: if workspace_plan_pool.is_some() {
+                cron_readiness_v2::CronCheckpointBackendV2::Postgres
+            } else {
+                cron_readiness_v2::CronCheckpointBackendV2::InMemory
+            },
+        },
         worker_postgres: workspace_plan_pool,
         data_stats,
         deploys,

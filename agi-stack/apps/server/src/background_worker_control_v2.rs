@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use agistack_plugin_host::GenerationLeaseV2;
 use tokio::sync::{oneshot, watch};
 
+use crate::cron_readiness_v2::{CronReadinessBlockerV2, CronReadinessSnapshotV2, CronReadinessV2};
 use crate::worker_lifecycle_v2::WorkerRuntimeV2;
 
 pub(crate) type WorkerFactoryV2 = Arc<dyn Fn() -> Option<WorkerRuntimeV2> + Send + Sync>;
@@ -19,6 +20,7 @@ struct ControllerState {
 pub(crate) struct BackgroundWorkerControllerV2 {
     factory: WorkerFactoryV2,
     state: Mutex<ControllerState>,
+    cron_readiness: Option<Arc<CronReadinessV2>>,
 }
 
 impl BackgroundWorkerControllerV2 {
@@ -26,7 +28,22 @@ impl BackgroundWorkerControllerV2 {
         Self {
             factory,
             state: Mutex::new(ControllerState::default()),
+            cron_readiness: None,
         }
+    }
+
+    pub(crate) fn paused_cron(factory: WorkerFactoryV2, readiness: Arc<CronReadinessV2>) -> Self {
+        Self {
+            factory,
+            state: Mutex::new(ControllerState::default()),
+            cron_readiness: Some(readiness),
+        }
+    }
+
+    pub(crate) fn cron_readiness(&self) -> Option<CronReadinessSnapshotV2> {
+        self.cron_readiness
+            .as_ref()
+            .map(|readiness| readiness.snapshot())
     }
 
     fn activate(&self) -> Result<(), String> {
@@ -39,10 +56,28 @@ impl BackgroundWorkerControllerV2 {
         }
         if !state.started {
             state.started = true;
+            if let Some(readiness) = &self.cron_readiness {
+                readiness.published();
+                if !readiness.snapshot().blockers.is_empty() {
+                    return Ok(());
+                }
+            }
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (self.factory)())) {
-                Ok(runtime) => state.runtime = runtime.map(Arc::new),
+                Ok(runtime) => {
+                    if runtime.is_none() {
+                        if let Some(readiness) = &self.cron_readiness {
+                            if readiness.snapshot().blockers.is_empty() {
+                                readiness.blocked(CronReadinessBlockerV2::SchedulerNotConstructed);
+                            }
+                        }
+                    }
+                    state.runtime = runtime.map(Arc::new);
+                }
                 Err(_) => {
                     state.stopped = true;
+                    if let Some(readiness) = &self.cron_readiness {
+                        readiness.stopped(true);
+                    }
                     return Err("background worker factory panicked".to_owned());
                 }
             }
@@ -56,6 +91,9 @@ impl BackgroundWorkerControllerV2 {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.stopped = true;
+        if let Some(readiness) = &self.cron_readiness {
+            readiness.draining();
+        }
         if let Some(runtime) = &state.runtime {
             runtime.request_stop();
         }
@@ -70,8 +108,19 @@ impl BackgroundWorkerControllerV2 {
             .runtime
             .clone();
         match runtime {
-            Some(runtime) => runtime.shutdown().await,
-            None => Ok(()),
+            Some(runtime) => {
+                let result = runtime.shutdown().await;
+                if let Some(readiness) = &self.cron_readiness {
+                    readiness.stopped(result.is_err());
+                }
+                result
+            }
+            None => {
+                if let Some(readiness) = &self.cron_readiness {
+                    readiness.stopped(false);
+                }
+                Ok(())
+            }
         }
     }
 }

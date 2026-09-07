@@ -6,6 +6,7 @@ use crate::background_worker_control_v2::BackgroundWorkerGenerationV2;
 
 mod pg;
 mod support;
+mod readiness;
 use support::*;
 
 #[tokio::test]

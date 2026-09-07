@@ -9,6 +9,7 @@ from typing import Any, Protocol, runtime_checkable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.memory_service import MemoryService
+from src.application.services.online_memory_commands import OnlineMemoryCommands
 from src.application.services.search_service import SearchService
 from src.application.use_cases.memory.create_memory import CreateMemoryUseCase
 from src.application.use_cases.memory.delete_memory import DeleteMemoryUseCase
@@ -16,9 +17,13 @@ from src.application.use_cases.memory.get_memory import GetMemoryUseCase
 from src.application.use_cases.memory.list_memories import ListMemoriesUseCase
 from src.application.use_cases.memory.search_memory import SearchMemoryUseCase
 from src.domain.ports.repositories.memory_repository import MemoryRepository
+from src.domain.ports.repositories.online_memory_repository import OnlineMemoryRepository
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
     SqlMemoryRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_online_memory_repository import (
+    SqlOnlineMemoryRepository,
 )
 
 from .graph_runtime import GraphRuntimeServiceV2
@@ -45,6 +50,7 @@ class MemoryApplicationServicesV2:
 
     graph_service: GraphStorePort
     memory_repository: MemoryRepository
+    online_commands: OnlineMemoryCommands
     memory_service: MemoryService
     search_service: SearchService
     create_memory_use_case: CreateMemoryUseCase
@@ -59,6 +65,8 @@ class MemoryRepositoryProviderProtocolV2(Protocol):
     """Consumer-visible repository factory hiding the SQL implementation."""
 
     def build(self, operation: OperationContextV2) -> MemoryRepository: ...
+
+    def build_online(self, operation: OperationContextV2) -> OnlineMemoryRepository: ...
 
 
 @runtime_checkable
@@ -83,6 +91,15 @@ class SqlMemoryRepositoryProviderV2:
             )
         return SqlMemoryRepository(db)
 
+    def build_online(self, operation: OperationContextV2) -> OnlineMemoryRepository:
+        db = operation.require(_OPERATION_DB_SESSION_SERVICE_V2)
+        if not isinstance(db, AsyncSession):
+            raise RuntimeV2Error(
+                "invalid_operation_db_session",
+                "online memory provider requires an AsyncSession operation service",
+            )
+        return SqlOnlineMemoryRepository(db)
+
 
 @dataclass(frozen=True, kw_only=True)
 class MemoryApplicationResolverV2:
@@ -97,6 +114,7 @@ class MemoryApplicationResolverV2:
         return MemoryApplicationServicesV2(
             graph_service=graph_service,
             memory_repository=memory_repository,
+            online_commands=OnlineMemoryCommands(self.repository_provider.build_online(operation)),
             memory_service=MemoryService(
                 memory_repo=memory_repository,
                 graph_service=graph_service,
