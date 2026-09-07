@@ -22,6 +22,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
@@ -631,6 +632,9 @@ async def _execute_memory_create(
             ensure_ascii=False,
             default=str,
         )
+    except KnowledgeSyncError as e:
+        await session.rollback()
+        return json.dumps({"error": e.code, "code": e.code})
     except Exception as e:
         logger.warning("memory_create failed error_type=%s", type(e).__name__)
         await session.rollback()
@@ -813,6 +817,9 @@ async def _execute_memory_update(
             ensure_ascii=False,
             default=str,
         )
+    except KnowledgeSyncError as e:
+        await session.rollback()
+        return json.dumps({"error": e.code, "code": e.code})
     except ValueError as e:
         return json.dumps({"error": str(e)})
     except Exception as e:
@@ -964,6 +971,9 @@ async def _execute_memory_delete(
             },
             ensure_ascii=False,
         )
+    except KnowledgeSyncError as e:
+        await session.rollback()
+        return json.dumps({"error": e.code, "code": e.code})
     except ValueError as e:
         return json.dumps({"error": str(e)})
     except Exception as e:

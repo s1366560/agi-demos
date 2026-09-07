@@ -652,7 +652,11 @@ def mock_embedding_service():
 @pytest.fixture
 def mock_memory_repo():
     """Create a mock memory repository for testing."""
+    from contextlib import nullcontext
+    from unittest.mock import Mock
+
     repo = AsyncMock()
+    repo.legacy_write = Mock(side_effect=lambda **kwargs: nullcontext())
     repo.create = AsyncMock()
     repo.find_by_id = AsyncMock()
     repo.find_by_project = AsyncMock()

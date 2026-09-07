@@ -584,3 +584,14 @@ all 33 local automation tests; it also checks latest status, list/detail agreeme
 receipt replay and exclusion of foreign-tenant rows. No migration/capability change.
 Native visual recheck is pending the next canonical rebuild. Evidence:
 `/tmp/automation-last-run-red.log` and `/tmp/automation-last-run-tests.log`.
+
+I3.14 fences legacy MemoryService, tool, use-case and both SQL repository writers
+before graph or SQL mutations. A transaction-held project lock excludes sync
+enrollment while permitting graph-session foreign-key checks; enrolled projects
+require structured sync write context and missing enrollment fences fail closed.
+Explicit project and tenant mismatch and invalid update tenant metadata are rejected
+before side effects. Real PostgreSQL concurrency and scope cases plus legacy unit/
+integration regressions passed (136 total); Ruff, mypy and diff checks passed.
+No migration or capability gate changed. Historical missing tenant metadata retains
+legacy behavior; reprocess/derived writers and Rust portable writers remain pending.
+Rollback must keep sync enrollment closed and preserve journals and user content.

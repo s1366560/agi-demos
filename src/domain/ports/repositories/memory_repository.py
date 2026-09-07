@@ -1,10 +1,22 @@
 from abc import ABC, abstractmethod
+from contextlib import AbstractAsyncContextManager
 
 from src.domain.model.memory.memory import Memory
 from src.domain.model.memory.processing import MemoryProcessingSource
 
 
 class MemoryRepository(ABC):
+    @abstractmethod
+    def legacy_write(
+        self,
+        *,
+        project_id: str | None = None,
+        memory_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> AbstractAsyncContextManager[None]:
+        """Validate supplied scope and retain the legacy-write fence through commit."""
+        raise NotImplementedError
+
     async def update_processing_status(self, source: MemoryProcessingSource, status: str) -> bool:
         """Update derived state atomically, never fall back to a full object save."""
         raise NotImplementedError("Conditional memory processing updates are not supported")

@@ -1,3 +1,6 @@
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import override
 
 from sqlalchemy import delete, or_, select
@@ -6,12 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.model.memory.memory import Memory
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.knowledge_sync_legacy_admission import (
+    admit_legacy_memory_write,
+)
 from src.infrastructure.adapters.secondary.persistence.models import Memory as MemoryModel
 
 
 class SqlAlchemyMemoryRepository(MemoryRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._legacy_write_depth = 0
+        self._legacy_write_owner: asyncio.Task[object] | None = None
 
     def _to_domain(self, model: MemoryModel) -> Memory:
         return Memory(
@@ -53,13 +61,44 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
             updated_at=entity.updated_at,
         )
 
+    @asynccontextmanager
+    async def legacy_write(
+        self,
+        *,
+        project_id: str | None = None,
+        memory_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> AsyncIterator[None]:
+        owner = asyncio.current_task()
+        if self._legacy_write_depth and self._legacy_write_owner is not owner:
+            raise RuntimeError("Concurrent legacy writes cannot share an AsyncSession")
+        outermost = self._legacy_write_depth == 0
+        self._legacy_write_owner = owner
+        self._legacy_write_depth += 1
+        try:
+            await admit_legacy_memory_write(
+                self._session, project_id=project_id, memory_id=memory_id, tenant_id=tenant_id
+            )
+            yield
+            if outermost:
+                await self._session.commit()
+        except BaseException:
+            if outermost:
+                await self._session.rollback()
+            raise
+        finally:
+            self._legacy_write_depth -= 1
+            if outermost:
+                self._legacy_write_owner = None
+
     async def save(self, memory: Memory) -> Memory:
-        model = self._to_model(memory)
-        # Check if exists to merge or add
-        # Simple merge for now
-        await self._session.merge(model)
-        await self._session.commit()
-        return memory
+        async with self.legacy_write(project_id=memory.project_id, memory_id=memory.id):
+            model = self._to_model(memory)
+            # Check if exists to merge or add
+            # Simple merge for now
+            await self._session.merge(model)
+            await self._session.flush()
+            return memory
 
     async def find_by_id(self, memory_id: str) -> Memory | None:
         result = await self._session.execute(
@@ -100,8 +139,11 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
         return [self._to_domain(m) for m in models]
 
     async def delete(self, memory_id: str) -> bool:
-        await self._session.execute(
-            refresh_select_statement(delete(MemoryModel).where(MemoryModel.id == memory_id))
-        )
-        await self._session.commit()
-        return True
+        if await self.find_by_id(memory_id) is None:
+            return True
+        async with self.legacy_write(memory_id=memory_id):
+            await self._session.execute(
+                refresh_select_statement(delete(MemoryModel).where(MemoryModel.id == memory_id))
+            )
+            await self._session.flush()
+            return True

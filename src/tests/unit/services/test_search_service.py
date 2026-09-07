@@ -55,6 +55,9 @@ class _FailingGraphDataServiceStub(_GraphServiceStub):
 
 
 class _MemoryRepositoryStub(MemoryRepository):
+    def legacy_write(self, *, project_id=None, memory_id=None, tenant_id=None):
+        raise NotImplementedError("Read-only repository stub does not admit writes")
+
     def __init__(self, memories: list[Memory]) -> None:
         self._memories = memories
         self.list_calls: list[dict[str, Any]] = []

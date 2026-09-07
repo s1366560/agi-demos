@@ -33,21 +33,24 @@ class DeleteMemoryUseCase:
 
     async def execute(self, command: DeleteMemoryCommand) -> None:
         # 1. Check if memory exists
-        memory = await self._memory_repo.find_by_id(command.memory_id)
-        if not memory:
-            # Idempotent: if not found, consider deleted
-            return
+        async with self._memory_repo.legacy_write(
+            memory_id=command.memory_id, project_id=command.project_id
+        ):
+            memory = await self._memory_repo.find_by_id(command.memory_id)
+            if not memory:
+                # Idempotent: if not found, consider deleted
+                return
 
-        # 2. Delete from Graphiti (nodes/edges)
-        try:
-            await self._graph_service.delete_episode_by_memory_id(command.memory_id)
-        except Exception as e:
-            # Log but continue to ensure DB consistency
-            logger.warning(
-                "Failed to delete memory from Graphiti: memory_id=%s error_type=%s",
-                command.memory_id,
-                type(e).__name__,
-            )
+            # 2. Delete from Graphiti (nodes/edges)
+            try:
+                await self._graph_service.delete_episode_by_memory_id(command.memory_id)
+            except Exception as e:
+                # Log but continue to ensure DB consistency
+                logger.warning(
+                    "Failed to delete memory from Graphiti: memory_id=%s error_type=%s",
+                    command.memory_id,
+                    type(e).__name__,
+                )
 
-        # 3. Delete from DB
-        await self._memory_repo.delete(command.memory_id)
+            # 3. Delete from DB
+            await self._memory_repo.delete(command.memory_id)

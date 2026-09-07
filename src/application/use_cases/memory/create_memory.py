@@ -46,56 +46,59 @@ class CreateMemoryUseCase:
 
     async def execute(self, command: CreateMemoryCommand) -> Memory:
         # Create Memory Entity
-        memory = Memory(
-            project_id=command.project_id,
-            title=command.title,
-            content=command.content,
-            author_id=command.author_id,
-            content_type=command.content_type,
-            tags=command.tags or [],
-            entities=command.entities or [],
-            relationships=command.relationships or [],
-            collaborators=command.collaborators or [],
-            is_public=command.is_public,
-            metadata={
-                **(command.metadata or {}),
-                "tenant_id": command.tenant_id,
-                "project_id": command.project_id,
-                "user_id": command.author_id,
-            },
-        )
+        async with self._memory_repo.legacy_write(
+            project_id=command.project_id, tenant_id=command.tenant_id
+        ):
+            memory = Memory(
+                project_id=command.project_id,
+                title=command.title,
+                content=command.content,
+                author_id=command.author_id,
+                content_type=command.content_type,
+                tags=command.tags or [],
+                entities=command.entities or [],
+                relationships=command.relationships or [],
+                collaborators=command.collaborators or [],
+                is_public=command.is_public,
+                metadata={
+                    **(command.metadata or {}),
+                    "tenant_id": command.tenant_id,
+                    "project_id": command.project_id,
+                    "user_id": command.author_id,
+                },
+            )
 
-        # Save to primary repository (DB)
-        await self._memory_repo.save(memory)
+            # Save to primary repository (DB)
+            await self._memory_repo.save(memory)
 
-        # Sync to Graph (Graphiti)
-        if command.content_type == "text":
-            try:
-                episode = Episode(
-                    name=command.title,
-                    content=command.content,
-                    source_type=SourceType.TEXT,
-                    valid_at=memory.created_at,
-                    tenant_id=command.tenant_id,
-                    project_id=command.project_id,
-                    user_id=command.author_id,
-                    metadata={
-                        "memory_id": memory.id,
-                        "project_id": command.project_id,
-                        "tenant_id": command.tenant_id,
-                        "entities": command.entities,
-                        "relationships": command.relationships,
-                    },
-                )
-                await self._graph_service.add_episode(episode)
-            except Exception as e:
-                # Log error but don't fail the operation (consistent with current behavior)
-                # In a real system, we might want to use an Outbox pattern or event bus
-                logger.warning(
-                    "Failed to sync memory to Graphiti: memory_id=%s project_id=%s error_type=%s",
-                    memory.id,
-                    command.project_id,
-                    type(e).__name__,
-                )
+            # Sync to Graph (Graphiti)
+            if command.content_type == "text":
+                try:
+                    episode = Episode(
+                        name=command.title,
+                        content=command.content,
+                        source_type=SourceType.TEXT,
+                        valid_at=memory.created_at,
+                        tenant_id=command.tenant_id,
+                        project_id=command.project_id,
+                        user_id=command.author_id,
+                        metadata={
+                            "memory_id": memory.id,
+                            "project_id": command.project_id,
+                            "tenant_id": command.tenant_id,
+                            "entities": command.entities,
+                            "relationships": command.relationships,
+                        },
+                    )
+                    await self._graph_service.add_episode(episode)
+                except Exception as e:
+                    # Log error but don't fail the operation (consistent with current behavior)
+                    # In a real system, we might want to use an Outbox pattern or event bus
+                    logger.warning(
+                        "Failed to sync memory to Graphiti: memory_id=%s project_id=%s error_type=%s",
+                        memory.id,
+                        command.project_id,
+                        type(e).__name__,
+                    )
 
-        return memory
+            return memory

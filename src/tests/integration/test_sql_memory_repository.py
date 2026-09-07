@@ -2,7 +2,10 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.domain.model.memory.memory import Memory
-from src.infrastructure.adapters.secondary.persistence.models import Base
+from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+    KnowledgeSyncEnrollmentModel as Enrollment,
+)
+from src.infrastructure.adapters.secondary.persistence.models import Base, Project, Tenant, User
 from src.infrastructure.adapters.secondary.sql_memory_repository import SqlAlchemyMemoryRepository
 
 
@@ -18,6 +21,22 @@ async def db_session():
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async with session_factory() as session:
+        session.add_all(
+            [
+                User(id=user_id, email=f"{user_id}@test.local", hashed_password="unused")
+                for user_id in ["user_1", "u1"]
+            ]
+        )
+        await session.flush()
+        session.add(Tenant(id="tenant", name="QA", slug="qa", owner_id="user_1"))
+        await session.flush()
+        for project_id in ["proj_1", "proj_A", "proj_B"]:
+            session.add(
+                Project(id=project_id, name=project_id, tenant_id="tenant", owner_id="user_1")
+            )
+            await session.flush()
+            session.add(Enrollment(project_id=project_id, tenant_id="tenant", enabled=False))
+        await session.commit()
         yield session
 
     await engine.dispose()

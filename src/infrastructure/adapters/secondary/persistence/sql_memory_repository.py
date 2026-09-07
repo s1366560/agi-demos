@@ -3,6 +3,8 @@ V2 SQLAlchemy implementation of MemoryRepository using BaseRepository.
 """
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import override
 
 from sqlalchemy import or_, select
@@ -14,6 +16,9 @@ from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.infrastructure.adapters.secondary.common.base_repository import (
     BaseRepository,
     refresh_select_statement,
+)
+from src.infrastructure.adapters.secondary.persistence.knowledge_sync_legacy_admission import (
+    admit_legacy_memory_write,
 )
 from src.infrastructure.adapters.secondary.persistence.memory_processing import (
     update_memory_processing_status,
@@ -31,37 +36,51 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
+    @asynccontextmanager
+    async def legacy_write(
+        self,
+        *,
+        project_id: str | None = None,
+        memory_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> AsyncIterator[None]:
+        await admit_legacy_memory_write(
+            self._session, project_id=project_id, memory_id=memory_id, tenant_id=tenant_id
+        )
+        yield
+
     async def save(self, memory: Memory) -> Memory:
         """Save a memory (create or update)."""
-        result = await self._session.execute(
-            refresh_select_statement(
-                self._refresh_statement(select(DBMemory).where(DBMemory.id == memory.id))
+        async with self.legacy_write(project_id=memory.project_id, memory_id=memory.id):
+            result = await self._session.execute(
+                refresh_select_statement(
+                    self._refresh_statement(select(DBMemory).where(DBMemory.id == memory.id))
+                )
             )
-        )
-        db_memory = result.scalar_one_or_none()
+            db_memory = result.scalar_one_or_none()
 
-        if db_memory:
-            # Update existing memory
-            db_memory.title = memory.title
-            db_memory.content = memory.content
-            db_memory.content_type = memory.content_type
-            db_memory.tags = memory.tags
-            db_memory.entities = memory.entities
-            db_memory.relationships = memory.relationships
-            db_memory.version = memory.version
-            db_memory.collaborators = memory.collaborators
-            db_memory.is_public = memory.is_public
-            db_memory.status = memory.status
-            db_memory.processing_status = memory.processing_status
-            db_memory.meta = memory.metadata
-            db_memory.updated_at = memory.updated_at
-        else:
-            # Create new memory
-            db_memory = self._to_db(memory)
-            self._session.add(db_memory)
+            if db_memory:
+                # Update existing memory
+                db_memory.title = memory.title
+                db_memory.content = memory.content
+                db_memory.content_type = memory.content_type
+                db_memory.tags = memory.tags
+                db_memory.entities = memory.entities
+                db_memory.relationships = memory.relationships
+                db_memory.version = memory.version
+                db_memory.collaborators = memory.collaborators
+                db_memory.is_public = memory.is_public
+                db_memory.status = memory.status
+                db_memory.processing_status = memory.processing_status
+                db_memory.meta = memory.metadata
+                db_memory.updated_at = memory.updated_at
+            else:
+                # Create new memory
+                db_memory = self._to_db(memory)
+                self._session.add(db_memory)
 
-        await self._session.flush()
-        return memory
+            await self._session.flush()
+            return memory
 
     @override
     async def update_processing_status(self, source: MemoryProcessingSource, status: str) -> bool:
@@ -123,7 +142,10 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
 
     async def delete(self, memory_id: str) -> bool:
         """Delete a memory."""
-        return await super().delete(memory_id)
+        if await self.find_by_id(memory_id) is None:
+            return False
+        async with self.legacy_write(memory_id=memory_id):
+            return await super().delete(memory_id)
 
     def _to_domain(self, db_memory: DBMemory | None) -> Memory | None:
         """Convert database model to domain model."""

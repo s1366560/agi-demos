@@ -1,4 +1,5 @@
 import logging
+from contextlib import nullcontext
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -11,7 +12,9 @@ from src.domain.ports.services.graph_service_port import GraphServicePort
 
 @pytest.fixture
 def mock_repo():
-    return Mock(spec=MemoryRepository)
+    repo = Mock(spec=MemoryRepository)
+    repo.legacy_write.side_effect = lambda **kwargs: nullcontext()
+    return repo
 
 
 @pytest.fixture

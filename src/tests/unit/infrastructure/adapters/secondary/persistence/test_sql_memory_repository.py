@@ -17,6 +17,36 @@ from src.infrastructure.adapters.secondary.persistence.sql_memory_repository imp
 @pytest.fixture
 async def v2_memory_repo(v2_db_session: AsyncSession) -> SqlMemoryRepository:
     """Create a V2 memory repository for testing."""
+    from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+        KnowledgeSyncEnrollmentModel,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import Project, Tenant, User
+
+    v2_db_session.add(User(id="user-1", email="legacy@test.local", hashed_password="unused"))
+    await v2_db_session.flush()
+    v2_db_session.add(Tenant(id="tenant-legacy", name="Legacy", slug="legacy", owner_id="user-1"))
+    await v2_db_session.flush()
+    for project_id in [
+        "other-project",
+        "proj-0",
+        "proj-1",
+        "proj-2",
+        "proj-list",
+        "proj-order",
+        "proj-page",
+        "proj-search",
+        "proj-search-order",
+    ]:
+        v2_db_session.add(
+            Project(id=project_id, tenant_id="tenant-legacy", owner_id="user-1", name=project_id)
+        )
+        await v2_db_session.flush()
+        v2_db_session.add(
+            KnowledgeSyncEnrollmentModel(
+                project_id=project_id, tenant_id="tenant-legacy", enabled=False
+            )
+        )
+    await v2_db_session.flush()
     return SqlMemoryRepository(v2_db_session)
 
 

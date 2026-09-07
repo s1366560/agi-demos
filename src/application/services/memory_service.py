@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.domain.model.enums import ProcessingStatus
+from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.domain.model.memory.episode import Episode, SourceType
 from src.domain.model.memory.memory import Memory
 from src.domain.model.memory.processing import MemoryProcessingSource
@@ -17,6 +18,18 @@ from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
 
 logger = logging.getLogger(__name__)
+
+
+def _legacy_update_tenant_id(
+    persisted_metadata: dict[str, Any], update_metadata: dict[str, Any] | None
+) -> str | None:
+    tenant_id = persisted_metadata.get("tenant_id")
+    if update_metadata is not None and "tenant_id" in update_metadata:
+        tenant_id = update_metadata["tenant_id"]
+        if not isinstance(tenant_id, str) or not tenant_id.strip():
+            raise KnowledgeSyncError("knowledge_sync_input_invalid")
+    # Historical rows without tenant metadata retain their existing behavior.
+    return tenant_id if isinstance(tenant_id, str) and tenant_id else None
 
 
 class SearchResults:
@@ -77,74 +90,75 @@ class MemoryService:
         Returns:
             Created memory with processing_status=PENDING
         """
-        persisted_metadata = {
-            **(metadata or {}),
-            "tenant_id": tenant_id,
-            "project_id": project_id,
-            "user_id": user_id,
-        }
-
-        # Create memory entity
-        memory = Memory(
-            id=Memory.generate_id(),
-            project_id=project_id,
-            title=title,
-            content=content,
-            author_id=user_id,
-            content_type=content_type,
-            tags=tags or [],
-            is_public=is_public,
-            status="ENABLED",
-            processing_status=ProcessingStatus.PENDING.value,
-            metadata=persisted_metadata,
-            created_at=datetime.now(UTC),
-        )
-
-        # Save memory to database
-        await self._memory_repo.save(memory)
-        logger.info(
-            "Saved memory to database tag_count=%d is_public=%s enqueue_graph=%s",
-            len(memory.tags),
-            memory.is_public,
-            enqueue_graph,
-        )
-
-        if not enqueue_graph:
-            return memory
-
-        # Create episode for graph processing
-        episode = Episode(
-            id=Episode.generate_id(),
-            name=title,
-            content=content,
-            source_type=SourceType.TEXT,
-            valid_at=datetime.now(UTC),
-            metadata={
-                "memory_id": memory.id,
+        async with self._memory_repo.legacy_write(project_id=project_id, tenant_id=tenant_id):
+            persisted_metadata = {
+                **(metadata or {}),
                 "tenant_id": tenant_id,
                 "project_id": project_id,
                 "user_id": user_id,
-            },
-            tenant_id=tenant_id,
-            project_id=project_id,
-            user_id=user_id,
-            status=ProcessingStatus.PENDING.value,
-        )
+            }
 
-        # Add episode to graph (this also queues background processing)
-        source = MemoryProcessingSource(
-            memory_id=memory.id, project_id=memory.project_id, revision=memory.version
-        )
-        try:
-            await self._graph_service.add_episode(episode)
-            logger.info("Added episode to graph")
-        except Exception as e:
-            logger.error("Failed to add episode to graph error_type=%s", type(e).__name__)
-            # Update memory status to failed
-            await self._mark_processing_failed(memory, source)
-            raise
+            # Create memory entity
+            memory = Memory(
+                id=Memory.generate_id(),
+                project_id=project_id,
+                title=title,
+                content=content,
+                author_id=user_id,
+                content_type=content_type,
+                tags=tags or [],
+                is_public=is_public,
+                status="ENABLED",
+                processing_status=ProcessingStatus.PENDING.value,
+                metadata=persisted_metadata,
+                created_at=datetime.now(UTC),
+            )
 
-        return memory
+            # Save memory to database
+            await self._memory_repo.save(memory)
+            logger.info(
+                "Saved memory to database tag_count=%d is_public=%s enqueue_graph=%s",
+                len(memory.tags),
+                memory.is_public,
+                enqueue_graph,
+            )
+
+            if not enqueue_graph:
+                return memory
+
+            # Create episode for graph processing
+            episode = Episode(
+                id=Episode.generate_id(),
+                name=title,
+                content=content,
+                source_type=SourceType.TEXT,
+                valid_at=datetime.now(UTC),
+                metadata={
+                    "memory_id": memory.id,
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                    "user_id": user_id,
+                },
+                tenant_id=tenant_id,
+                project_id=project_id,
+                user_id=user_id,
+                status=ProcessingStatus.PENDING.value,
+            )
+
+            # Add episode to graph (this also queues background processing)
+            source = MemoryProcessingSource(
+                memory_id=memory.id, project_id=memory.project_id, revision=memory.version
+            )
+            try:
+                await self._graph_service.add_episode(episode)
+                logger.info("Added episode to graph")
+            except Exception as e:
+                logger.error("Failed to add episode to graph error_type=%s", type(e).__name__)
+                # Update memory status to failed
+                await self._mark_processing_failed(memory, source)
+                raise
+
+            return memory
 
     async def get_memory(self, memory_id: str) -> Memory | None:
         """
@@ -262,86 +276,89 @@ class MemoryService:
         Raises:
             ValueError: If memory doesn't exist
         """
-        memory = await self._memory_repo.find_by_id(memory_id)
-        if not memory:
-            raise ValueError(f"Memory {memory_id} not found")
+        async with self._memory_repo.legacy_write(memory_id=memory_id):
+            memory = await self._memory_repo.find_by_id(memory_id)
+            if not memory:
+                raise ValueError(f"Memory {memory_id} not found")
 
-        # Track if content changed for reprocessing
-        content_changed = False
+            tenant_id = _legacy_update_tenant_id(memory.metadata, metadata)
+            async with self._memory_repo.legacy_write(memory_id=memory_id, tenant_id=tenant_id):
+                # Track if content changed for reprocessing
+                content_changed = False
 
-        # Update fields if provided
-        if title is not None:
-            memory.title = title
-        if content is not None:
-            if content != memory.content:
-                content_changed = True
-            memory.content = content
-        if tags is not None:
-            memory.tags = tags
-        if is_public is not None:
-            memory.is_public = is_public
-        if metadata is not None:
-            memory.metadata.update(metadata)
+                # Update fields if provided
+                if title is not None:
+                    memory.title = title
+                if content is not None:
+                    if content != memory.content:
+                        content_changed = True
+                    memory.content = content
+                if tags is not None:
+                    memory.tags = tags
+                if is_public is not None:
+                    memory.is_public = is_public
+                if metadata is not None:
+                    memory.metadata.update(metadata)
 
-        memory.updated_at = datetime.now(UTC)
+                memory.updated_at = datetime.now(UTC)
 
-        # If content changed, reprocess by updating processing status
-        if content_changed:
-            memory.processing_status = ProcessingStatus.PENDING.value
+                # If content changed, reprocess by updating processing status
+                if content_changed:
+                    memory.processing_status = ProcessingStatus.PENDING.value
 
-        await self._memory_repo.save(memory)
-        logger.info(
-            "Updated memory title_updated=%s content_changed=%s tags_updated=%s "
-            "is_public_updated=%s metadata_updated=%s tag_count=%d",
-            title is not None,
-            content_changed,
-            tags is not None,
-            is_public is not None,
-            metadata is not None,
-            len(memory.tags),
-        )
-
-        # If content changed, forget the stale graph state and create a new episode.
-        if content_changed:
-            source = MemoryProcessingSource(
-                memory_id=memory.id, project_id=memory.project_id, revision=memory.version
-            )
-            try:
-                try:
-                    await self._graph_service.delete_episode_by_memory_id(memory_id)
-                    logger.info("Cleaned old graph state before reprocessing memory")
-                except Exception as cleanup_error:
-                    logger.warning(
-                        "Failed to clean old graph state before reprocessing memory error_type=%s",
-                        type(cleanup_error).__name__,
-                    )
-
-                episode = Episode(
-                    id=Episode.generate_id(),
-                    name=memory.title,
-                    content=memory.content,
-                    source_type=SourceType.TEXT,
-                    valid_at=datetime.now(UTC),
-                    metadata={
-                        "memory_id": memory.id,
-                        "tenant_id": memory.metadata.get("tenant_id"),
-                        "project_id": memory.project_id,
-                        "user_id": memory.author_id,
-                        "reprocess": True,
-                    },
-                    tenant_id=memory.metadata.get("tenant_id"),
-                    project_id=memory.project_id,
-                    user_id=memory.author_id,
-                    status=ProcessingStatus.PENDING.value,
+                await self._memory_repo.save(memory)
+                logger.info(
+                    "Updated memory title_updated=%s content_changed=%s tags_updated=%s "
+                    "is_public_updated=%s metadata_updated=%s tag_count=%d",
+                    title is not None,
+                    content_changed,
+                    tags is not None,
+                    is_public is not None,
+                    metadata is not None,
+                    len(memory.tags),
                 )
-                await self._graph_service.add_episode(episode)
-                logger.info("Queued reprocessing for memory")
-            except Exception as e:
-                logger.error("Failed to queue reprocessing error_type=%s", type(e).__name__)
-                await self._mark_processing_failed(memory, source)
-                raise
 
-        return memory
+                # If content changed, forget the stale graph state and create a new episode.
+                if content_changed:
+                    source = MemoryProcessingSource(
+                        memory_id=memory.id, project_id=memory.project_id, revision=memory.version
+                    )
+                    try:
+                        try:
+                            await self._graph_service.delete_episode_by_memory_id(memory_id)
+                            logger.info("Cleaned old graph state before reprocessing memory")
+                        except Exception as cleanup_error:
+                            logger.warning(
+                                "Failed to clean old graph state before reprocessing memory error_type=%s",
+                                type(cleanup_error).__name__,
+                            )
+
+                        episode = Episode(
+                            id=Episode.generate_id(),
+                            name=memory.title,
+                            content=memory.content,
+                            source_type=SourceType.TEXT,
+                            valid_at=datetime.now(UTC),
+                            metadata={
+                                "memory_id": memory.id,
+                                "tenant_id": memory.metadata.get("tenant_id"),
+                                "project_id": memory.project_id,
+                                "user_id": memory.author_id,
+                                "reprocess": True,
+                            },
+                            tenant_id=memory.metadata.get("tenant_id"),
+                            project_id=memory.project_id,
+                            user_id=memory.author_id,
+                            status=ProcessingStatus.PENDING.value,
+                        )
+                        await self._graph_service.add_episode(episode)
+                        logger.info("Queued reprocessing for memory")
+                    except Exception as e:
+                        logger.error("Failed to queue reprocessing error_type=%s", type(e).__name__)
+                        await self._mark_processing_failed(memory, source)
+                        raise
+
+                return memory
 
     async def delete_memory(self, memory_id: str) -> None:
         """
@@ -357,31 +374,32 @@ class MemoryService:
         Raises:
             ValueError: If memory doesn't exist
         """
-        memory = await self._memory_repo.find_by_id(memory_id)
-        if not memory:
-            raise ValueError(f"Memory {memory_id} not found")
+        async with self._memory_repo.legacy_write(memory_id=memory_id):
+            memory = await self._memory_repo.find_by_id(memory_id)
+            if not memory:
+                raise ValueError(f"Memory {memory_id} not found")
 
-        # Delete episode from graph using the proper remove_episode method
-        # This ensures orphaned entities and edges are cleaned up
-        graph_cleanup_failed = False
-        try:
-            await self._graph_service.delete_episode_by_memory_id(memory_id)
-            logger.info("Removed graph state with proper cleanup")
-        except Exception as e:
-            graph_cleanup_failed = True
-            logger.warning(
-                "Failed to remove graph state for memory error_type=%s. "
-                "Orphaned data may remain in Neo4j. Continuing with database deletion.",
-                type(e).__name__,
-            )
+            # Delete episode from graph using the proper remove_episode method
+            # This ensures orphaned entities and edges are cleaned up
+            graph_cleanup_failed = False
+            try:
+                await self._graph_service.delete_episode_by_memory_id(memory_id)
+                logger.info("Removed graph state with proper cleanup")
+            except Exception as e:
+                graph_cleanup_failed = True
+                logger.warning(
+                    "Failed to remove graph state for memory error_type=%s. "
+                    "Orphaned data may remain in Neo4j. Continuing with database deletion.",
+                    type(e).__name__,
+                )
 
-        # Delete memory from database
-        await self._memory_repo.delete(memory_id)
+            # Delete memory from database
+            await self._memory_repo.delete(memory_id)
 
-        if graph_cleanup_failed:
-            logger.warning("Deleted memory from database but graph cleanup failed")
-        else:
-            logger.info("Deleted memory")
+            if graph_cleanup_failed:
+                logger.warning("Deleted memory from database but graph cleanup failed")
+            else:
+                logger.info("Deleted memory")
 
     async def share_memory(self, memory_id: str, collaborators: list[str]) -> Memory:
         """
@@ -397,20 +415,21 @@ class MemoryService:
         Raises:
             ValueError: If memory doesn't exist
         """
-        memory = await self._memory_repo.find_by_id(memory_id)
-        if not memory:
-            raise ValueError(f"Memory {memory_id} not found")
+        async with self._memory_repo.legacy_write(memory_id=memory_id):
+            memory = await self._memory_repo.find_by_id(memory_id)
+            if not memory:
+                raise ValueError(f"Memory {memory_id} not found")
 
-        # Add collaborators (avoid duplicates)
-        for user_id in collaborators:
-            if user_id not in memory.collaborators:
-                memory.collaborators.append(user_id)
+            # Add collaborators (avoid duplicates)
+            for user_id in collaborators:
+                if user_id not in memory.collaborators:
+                    memory.collaborators.append(user_id)
 
-        memory.updated_at = datetime.now(UTC)
-        await self._memory_repo.save(memory)
-        logger.info("Shared memory collaborator_count=%d", len(collaborators))
+            memory.updated_at = datetime.now(UTC)
+            await self._memory_repo.save(memory)
+            logger.info("Shared memory collaborator_count=%d", len(collaborators))
 
-        return memory
+            return memory
 
     async def get_processing_status(self, memory_id: str) -> str:
         """
