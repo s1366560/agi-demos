@@ -59,13 +59,22 @@ async def try_enrolled_memory_mutation(
     change_id: str | None,
     expected_revision: str | None,
     patch_data: MemoryUpdate | None = None,
+    expected_project_id: str | None = None,
 ) -> Response | None:
     from .knowledge_sync import error_response
+    from .memory_command_preconditions import require_memory_command_availability
 
     db = authority.db
     try:
         context = await authority.services.online_commands.open_memory(actor_id, memory_id)
-        if context is None or not context.enabled:
+        if context is None:
+            return None
+        if expected_project_id is not None and context.scope.project_id != expected_project_id:
+            raise HTTPException(status_code=404, detail=_("Memory not found"))
+        require_memory_command_availability(
+            enabled=context.enabled, change_id=change_id, expected_revision=expected_revision
+        )
+        if not context.enabled:
             return None
         key, revision = mutation_preconditions(change_id, expected_revision)
         if patch_data is None:

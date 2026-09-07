@@ -480,7 +480,6 @@ async def test_disabled_patch_preserves_legacy_expired_share_and_null_field_sema
     response = await client.patch(
         f"/api/v1/memories/{memory_id}",
         json={"version": 1, "title": None, "entities": [], "tags": ["legacy"]},
-        headers={"Idempotency-Key": "ignored", "X-Memory-Expected-Revision": "ignored"},
     )
     assert response.status_code == 200, response.text
     assert response.json()["title"] == "Online"

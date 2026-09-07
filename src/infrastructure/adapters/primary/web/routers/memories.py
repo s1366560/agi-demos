@@ -2,7 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
@@ -574,8 +574,8 @@ async def create_memory(
         memory_application_authority_dependency_v2
     ),
     workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    expected_revision: str | None = Header(None, alias="X-Memory-Expected-Revision"),
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    expected_revision: Annotated[str | None, Header(alias="X-Memory-Expected-Revision")] = None,
 ) -> Any:
     """Create a new memory.
 
@@ -592,6 +592,13 @@ async def create_memory(
 
         context = await memory_application.services.online_commands.open(
             str(current_user.id), project_id
+        )
+        from .memory_command_preconditions import require_memory_command_availability
+
+        require_memory_command_availability(
+            enabled=context.enabled,
+            change_id=idempotency_key,
+            expected_revision=expected_revision,
         )
         if context.enabled:
             from .memory_online_create import create_enrolled_memory
@@ -818,13 +825,15 @@ async def get_memory(
     memory_application: MemoryApplicationAuthorityV2 = Depends(
         memory_application_authority_dependency_v2
     ),
+    project_id: str | None = None,
 ) -> Any:
     """Get a specific memory."""
     db = memory_application.db
     graph_service = memory_application.services.graph_service
-    result = await db.execute(
-        refresh_select_statement(select(Memory).where(Memory.id == memory_id))
-    )
+    query = select(Memory).where(Memory.id == memory_id)
+    if project_id is not None:
+        query = query.where(Memory.project_id == project_id)
+    result = await db.execute(refresh_select_statement(query))
     memory = result.scalar_one_or_none()
 
     if not memory:
@@ -852,8 +861,9 @@ async def delete_memory(
     memory_application: MemoryApplicationAuthorityV2 = Depends(
         memory_application_authority_dependency_v2
     ),
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    expected_revision: str | None = Header(None, alias="X-Memory-Expected-Revision"),
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    expected_revision: Annotated[str | None, Header(alias="X-Memory-Expected-Revision")] = None,
+    project_id: str | None = None,
 ) -> JSONResponse | Response:
     """Delete a memory from all storage systems (DB, Graphiti)."""
     db = memory_application.db
@@ -866,6 +876,7 @@ async def delete_memory(
         authority=memory_application,
         change_id=idempotency_key,
         expected_revision=expected_revision,
+        expected_project_id=project_id,
     )
     if admitted is not None:
         return admitted
@@ -1137,8 +1148,9 @@ async def update_memory(
     memory_application: MemoryApplicationAuthorityV2 = Depends(
         memory_application_authority_dependency_v2
     ),
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    expected_revision: str | None = Header(None, alias="X-Memory-Expected-Revision"),
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    expected_revision: Annotated[str | None, Header(alias="X-Memory-Expected-Revision")] = None,
+    project_id: str | None = None,
 ) -> Any:
     """Update an existing memory with optimistic locking."""
     db = memory_application.db
@@ -1152,6 +1164,7 @@ async def update_memory(
         change_id=idempotency_key,
         expected_revision=expected_revision,
         patch_data=memory_data,
+        expected_project_id=project_id,
     )
     if admitted is not None:
         return admitted
