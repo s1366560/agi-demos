@@ -190,6 +190,21 @@ function authorizeProjectKnowledgeCohort(
   if (request.form !== undefined || request.mutation !== undefined || request.response !== undefined) {
     return null;
   }
+  if (
+    request.method === 'GET' &&
+    request.body === undefined &&
+    target.pathname === '/api/v1/memories/' &&
+    exactQueryKeys(target.searchParams, new Set(['project_id', 'page', 'page_size'])) &&
+    target.searchParams.get('page') === '1' &&
+    target.searchParams.get('page_size') === '50'
+  ) {
+    return endpoint(
+      'project',
+      null,
+      requiredIdentifier(target.searchParams.get('project_id')),
+      null,
+    );
+  }
   if (request.method === 'GET' && segments[3] === 'graph') {
     const page =
       (target.pathname === '/api/v1/graph/entities/' ||
@@ -1654,6 +1669,29 @@ function authorizeWorkspaceProjection(
   target: URL,
   segments: readonly string[],
 ): CloudProductEndpoint | null {
+  if (segments[3] === 'workspaces' && segments[5] === 'autonomy' &&
+      segments[6] === 'attentions' && noQuery(target) && request.body === undefined) {
+    const workspaceId = requiredIdentifier(segments[4]);
+    if (segments.length === 7 && request.method === 'GET' && request.mutation === undefined) {
+      return endpoint('workspace', null, null, workspaceId);
+    }
+    if (segments.length === 9 && request.method === 'POST') {
+      requiredIdentifier(segments[7]);
+      if (segments[8] === 'retry' && request.mutation === undefined) {
+        return endpoint('workspace', null, null, workspaceId);
+      }
+      const mutation = request.mutation;
+      if (segments[8] === 'resolve' && mutation !== null && typeof mutation === 'object' &&
+          'expected_revision' in mutation && 'idempotency_key' in mutation &&
+          Number.isSafeInteger(mutation.expected_revision) &&
+          Number(mutation.expected_revision) >= 0 &&
+          typeof mutation.idempotency_key === 'string' && mutation.idempotency_key.length >= 16 &&
+          mutation.idempotency_key.length <= 256) {
+        return endpoint('workspace', null, null, workspaceId);
+      }
+    }
+    return null;
+  }
   if (
     segments.length !== 6 ||
     segments[3] !== 'workspaces' ||
