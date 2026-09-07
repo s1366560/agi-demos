@@ -130,6 +130,37 @@ test('v4 local input normalizes conservatively to local_offline v5', () => {
   assert.deepEqual(snapshot?.capabilities.search.supporting_authority_sources, []);
 });
 
+test('v5 preserves compound desktop bridges but rejects supporting authority from another runtime', () => {
+  const cases = [
+    ['cloud', 'cloud_service', ['sidecar', 'electron'], ['native_runtime']],
+    ['local_online', 'cloud_service', ['sidecar', 'electron'], ['native_runtime']],
+    ['local_online', 'sidecar', ['cloud_service', 'electron'], ['native_runtime']],
+    ['local_offline', 'sidecar', ['electron'], ['cloud_service', 'native_runtime']],
+    ['native', 'native_runtime', ['electron'], ['cloud_service', 'sidecar']],
+  ];
+  for (const [runtimeState, primary, supported, rejected] of cases) {
+    const parse = (sources) => parseDesktopCapabilitySnapshot({
+      version: '5.0.0',
+      runtime_state: runtimeState,
+      capabilities: {
+        'browser-integration-browser-bridge': v5Capability({
+          authority_source: primary,
+          supporting_authority_sources: sources,
+        }),
+      },
+    });
+    // Cloud auxiliary probes use sidecar + Electron even in cloud mode.
+    assert.deepEqual(
+      parse(supported)?.capabilities['browser-integration-browser-bridge'].supporting_authority_sources,
+      supported,
+      `${runtimeState} must retain its desktop bridge dependencies`,
+    );
+    for (const source of rejected) {
+      assert.equal(parse([...supported, source]), null, `${runtimeState} must reject ${source}`);
+    }
+  }
+});
+
 test('local_online cloud-only routes require Cloud primary authority', () => {
   const cloudCapability = v5Capability({
     scope: { ...nullScope, tenant_id: 'tenant-1' },

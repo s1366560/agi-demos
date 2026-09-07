@@ -551,8 +551,17 @@ function isAuthorityStateValid(
     return source === 'renderer' && supportingSources.length === 0 && !active;
   }
   if (!active && supportingSources.length > 0) return false;
-  return authoritySourcesForRuntimeState(runtimeState).includes(
-    source as Exclude<DesktopCapabilityAuthoritySource, 'renderer' | 'electron'>,
+  const runtimeSources: readonly DesktopCapabilityAuthoritySource[] =
+    authoritySourcesForRuntimeState(runtimeState);
+  return (
+    runtimeSources.includes(source) &&
+    supportingSources.every(
+      (supportingSource) =>
+        supportingSource === 'electron' ||
+        runtimeSources.includes(supportingSource) ||
+        // Cloud auxiliary operations still use the local sidecar device bridge.
+        (runtimeState === 'cloud' && supportingSource === 'sidecar'),
+    )
   );
 }
 
