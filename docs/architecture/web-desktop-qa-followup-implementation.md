@@ -648,3 +648,15 @@ Rollback removes navigation only. Evidence: `/tmp/automation-navigation-tests.lo
 `/tmp/memstack-qa-20260907/native-automation-open-result.txt`.
 During development HMR, the native renderer reported an inactive generation lease
 store; full renderer reload recovered. HMR lifecycle root cause remains to verify.
+
+I3.16 adds read-only resolution lookup by actor/key and keyset pagination of
+prepared or pending-reconciliation journals. Settled records remain valid cursor
+anchors; foreign/unknown cursors are rejected. Recovery no longer depends on the
+latest 200 history records. Native Knowledge 42 and Device CloudResolution 23
+tests passed, including 205 pending records across DB reopen and 201 completed
+records ahead of an older prepared decision. Core/Device strict Clippy passed;
+Sidecar baseline errors remain unchanged. No schema/gate/UI changes; rollback
+removes queries only and retains all records. Evidence:
+`/tmp/knowledge-cloud-recovery-native-all.log`,
+`/tmp/knowledge-cloud-recovery-device-all.log`,
+`/tmp/knowledge-cloud-recovery-clippy.log`.

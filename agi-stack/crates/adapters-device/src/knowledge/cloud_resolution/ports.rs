@@ -2,6 +2,17 @@ use super::*;
 
 #[async_trait]
 impl KnowledgeCloudResolutionRepository for SqliteKnowledgeRepository {
+    async fn pending_cloud_resolutions(
+        &self,
+        scope: &KnowledgeScope,
+        target: &KnowledgeSyncTarget,
+        actor: &str,
+        before_resolution_id: Option<&str>,
+        limit: usize,
+    ) -> KnowledgeResult<KnowledgeCloudResolutionPage> {
+        self.pending_cloud_resolutions_durable(scope, target, actor, before_resolution_id, limit)
+    }
+
     async fn cloud_resolution_by_key(
         &self,
         scope: &KnowledgeScope,

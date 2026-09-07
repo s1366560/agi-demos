@@ -104,6 +104,14 @@ pub struct KnowledgeCloudResolutionRecord {
     pub reconciliation_archive: Option<KnowledgeCloudResolutionContext>,
 }
 
+/// Pending recovery uses a journal identity as a keyset cursor. The cursor remains
+/// valid after its record settles, and is scoped to the same local actor/project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeCloudResolutionPage {
+    pub items: Vec<KnowledgeCloudResolutionRecord>,
+    pub next_before_resolution_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct KnowledgeCloudReconciliationCommand {
@@ -134,6 +142,15 @@ pub struct KnowledgeCloudResolutionOutcome {
 /// Native callers use the synchronous durable forms while holding their fence.
 #[async_trait]
 pub trait KnowledgeCloudResolutionRepository: Send + Sync {
+    async fn pending_cloud_resolutions(
+        &self,
+        scope: &KnowledgeScope,
+        target: &KnowledgeSyncTarget,
+        actor: &str,
+        before_resolution_id: Option<&str>,
+        limit: usize,
+    ) -> KnowledgeResult<KnowledgeCloudResolutionPage>;
+
     async fn cloud_resolution_by_key(
         &self,
         scope: &KnowledgeScope,

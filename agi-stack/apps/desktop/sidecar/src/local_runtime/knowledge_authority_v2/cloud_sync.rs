@@ -229,6 +229,38 @@ impl KnowledgeOperationV2 {
             )?)
         })
     }
+    pub(in crate::local_runtime::knowledge_authority_v2) async fn cloud_resolution_by_key(
+        &self,
+        broker: &TrustedSessionBroker,
+        key: &str,
+    ) -> Result<Option<KnowledgeCloudResolutionRecord>, KnowledgeAuthorityErrorV2> {
+        let (repository, transport) = self.resolution_transport(broker).await?;
+        transport.with_current_session(|| {
+            Ok(repository.cloud_resolution_by_key_durable(
+                &self.scope,
+                &transport.target,
+                &self.actor_id,
+                key,
+            )?)
+        })
+    }
+    pub(in crate::local_runtime::knowledge_authority_v2) async fn pending_cloud_resolutions(
+        &self,
+        broker: &TrustedSessionBroker,
+        before_resolution_id: Option<&str>,
+        limit: usize,
+    ) -> Result<KnowledgeCloudResolutionPage, KnowledgeAuthorityErrorV2> {
+        let (repository, transport) = self.resolution_transport(broker).await?;
+        transport.with_current_session(|| {
+            Ok(repository.pending_cloud_resolutions_durable(
+                &self.scope,
+                &transport.target,
+                &self.actor_id,
+                before_resolution_id,
+                limit,
+            )?)
+        })
+    }
     pub(in crate::local_runtime::knowledge_authority_v2) async fn cloud_reconciliation_context(
         &self,
         broker: &TrustedSessionBroker,

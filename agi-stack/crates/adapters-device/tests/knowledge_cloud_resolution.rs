@@ -140,6 +140,9 @@ mod persistence;
 #[path = "knowledge_cloud_resolution/absence.rs"]
 mod absence;
 
+#[path = "knowledge_cloud_resolution/recovery.rs"]
+mod recovery;
+
 #[test]
 fn keep_current_has_no_journal_sequence_and_settles_both_conflicts_without_echo() {
     block_on(async {

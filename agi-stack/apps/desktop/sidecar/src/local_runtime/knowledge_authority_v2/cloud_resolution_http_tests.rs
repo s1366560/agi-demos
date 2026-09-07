@@ -31,6 +31,9 @@ mod recovery;
 #[path = "cloud_resolution_http/session.rs"]
 mod session;
 
+#[path = "cloud_resolution_http/discovery.rs"]
+mod discovery;
+
 #[tokio::test]
 async fn cloud_commit_then_ack_failure_new_local_edit_and_same_key_replay_preserves_both() {
     let directory = TestDirectory::new();

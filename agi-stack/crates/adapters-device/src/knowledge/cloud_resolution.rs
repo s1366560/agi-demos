@@ -15,6 +15,7 @@ mod ports;
 mod prepare;
 mod receipt;
 mod reconcile;
+mod recovery;
 mod schema;
 pub(super) use schema::migrate;
 

@@ -63,10 +63,25 @@ pub(super) struct CloudQueryRequest {
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum CloudQuery {
-    ConflictContext { local_sequence: u64 },
-    Resolution { resolution_id: String },
-    Resolutions { limit: usize },
-    ReconciliationContext { resolution_id: String },
+    ConflictContext {
+        local_sequence: u64,
+    },
+    Resolution {
+        resolution_id: String,
+    },
+    ResolutionByKey {
+        idempotency_key: String,
+    },
+    PendingResolutions {
+        before_resolution_id: Option<String>,
+        limit: usize,
+    },
+    Resolutions {
+        limit: usize,
+    },
+    ReconciliationContext {
+        resolution_id: String,
+    },
 }
 
 pub(super) async fn resolve(
@@ -146,6 +161,26 @@ pub(super) async fn query(
         .map_err(IntoResponse::into_response)?;
     let broker = broker(&state).map_err(IntoResponse::into_response)?;
     let result = match body.query {
+        CloudQuery::ResolutionByKey { idempotency_key } => {
+            json!({
+                "record": operation.cloud_resolution_by_key(&broker, &idempotency_key)
+                    .await.map_err(IntoResponse::into_response)?,
+            })
+        }
+        CloudQuery::PendingResolutions {
+            before_resolution_id,
+            limit,
+        } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            let page = operation
+                .pending_cloud_resolutions(&broker, before_resolution_id.as_deref(), limit)
+                .await
+                .map_err(IntoResponse::into_response)?;
+            json!({
+                "items": page.items,
+                "next_before_resolution_id": page.next_before_resolution_id,
+            })
+        }
         CloudQuery::ConflictContext { local_sequence } => {
             json!({
                 "context":operation.cloud_conflict_context(&broker,
