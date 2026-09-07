@@ -17,6 +17,7 @@
 pub mod agent;
 pub mod community;
 pub mod graph;
+pub mod knowledge;
 pub mod model;
 pub mod ports;
 pub mod service;

@@ -50,6 +50,24 @@ or accepted-task deletion is part of this batch.
 
 ## Outstanding implementation requirements
 
+### Implemented foundations, not feature release
+
+- I1.1 validates compound capability supporting sources against runtime state.
+  Cloud sidecar/Electron bridges remain valid; offline/native cross-runtime sources
+  are rejected. TypeScript compilation and 42 related tests passed, including
+  production generation settlement/drain tests. Global decoding stays fail-closed.
+- I2.1 adds a strict scoped memory port and SQLite knowledge tables, CAS revisions,
+  tombstones, stable pagination and atomic processing changes. Legacy unattributed
+  rows remain outside the new authority. Core/Device 85 tests and strict Clippy
+  passed, including concurrent CAS and transactional fault injection. Queue consumers,
+  knowledge authority, indexes and sync are still pending; no local feature is enabled.
+
+Both batches are additive or restrictive and need no live data migration. Reverting
+the storage adapter does not delete its versioned tables. Reverting the source check
+restores acceptance of invalid compound declarations and is not a safe security rollback.
+
+### Remaining work
+
 - Knowledge: tenant/project-scoped reads and deletes, CAS writes, atomic processing
   outbox, index recovery, per-action availability and cloud pagination/mutations.
 - Sync: explicit project association, stable IDs, revisions, change IDs, cursor,

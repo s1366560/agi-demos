@@ -24,6 +24,7 @@
 pub mod checkpoint;
 pub mod graph;
 pub mod hnsw;
+pub mod knowledge;
 pub mod repo;
 pub mod vector;
 
