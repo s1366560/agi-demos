@@ -167,6 +167,7 @@ pub(super) struct AutomationWorker {
     executor: Arc<dyn AutomationExecutor>,
     clock: Arc<dyn AutomationClock>,
     config: AutomationWorkerConfig,
+    active_since: chrono::DateTime<chrono::Utc>,
 }
 
 impl AutomationWorker {
@@ -177,11 +178,13 @@ impl AutomationWorker {
         config: AutomationWorkerConfig,
     ) -> Result<Self, AutomationWorkerError> {
         config.validate()?;
+        let active_since = clock.now();
         Ok(Self {
             store,
             executor,
             clock,
             config,
+            active_since,
         })
     }
 
@@ -203,8 +206,12 @@ impl AutomationWorker {
                 AutomationHitlResumeOutcome::AlreadyResumed => {}
             }
         }
-        let scheduled =
-            dispatch_due_schedules(&self.store, self.clock.as_ref(), self.config.batch_size)?;
+        let scheduled = dispatch_due_schedules(
+            &self.store,
+            self.clock.as_ref(),
+            self.config.batch_size,
+            self.active_since,
+        )?;
         let mut report = AutomationWorkerDrainReport {
             scheduled: scheduled.enqueued,
             hitl_requeued,

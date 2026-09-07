@@ -139,3 +139,12 @@ and generator check passed. Generated metadata is not a substitute for runtime a
 
 The original 66-capability QA matrix remains unchanged until new end-to-end evidence
 exists. No pending feature is considered delivered by this implementation ledger.
+
+I4.3 captures the worker activation time and records older scheduled fires as terminal
+`skipped` with `local_automation_app_was_not_running`. Reconciliation remains bounded
+by the dispatch batch, advances each occurrence atomically and creates no execution
+operation for missed fires. Previously accepted operations remain recoverable. The
+restart regression first reached the executor incorrectly; after the fix, three missed
+fires remain in history without execution and an exact startup-boundary fire is eligible.
+All 28 automation tests passed. Missed-count presentation and an explicit catch-up action
+remain pending; this is not the complete local automation release.

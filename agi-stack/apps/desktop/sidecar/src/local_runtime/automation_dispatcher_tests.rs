@@ -325,8 +325,8 @@ mod tests {
         let store = DesktopSessionStore::in_memory().expect("session store");
         seed_job(&store, "job-due", 1, 1, true, created.now());
 
-        let projected =
-            dispatch_due_schedules(&store, &created, 8).expect("project initial schedule");
+        let projected = dispatch_due_schedules(&store, &created, 8, created.now())
+            .expect("project initial schedule");
         assert_eq!(projected.due, 0);
         assert_eq!(projected.enqueued, 0);
         assert_eq!(
@@ -339,8 +339,10 @@ mod tests {
         );
 
         let due = FixedAutomationClock::at("2099-07-01T09:31:00Z");
-        let first = dispatch_due_schedules(&store, &due, 8).expect("dispatch due schedule");
-        let replay = dispatch_due_schedules(&store, &due, 8).expect("replay due schedule");
+        let first =
+            dispatch_due_schedules(&store, &due, 8, created.now()).expect("dispatch due schedule");
+        let replay =
+            dispatch_due_schedules(&store, &due, 8, created.now()).expect("replay due schedule");
         assert_eq!(first.due, 1);
         assert_eq!(first.enqueued, 1);
         assert_eq!(replay.due, 0);
@@ -505,22 +507,27 @@ mod tests {
         let created = FixedAutomationClock::at("2099-07-01T09:30:00Z");
         let store = DesktopSessionStore::in_memory().expect("session store");
         seed_job(&store, "job-overlap", 1, 1, true, created.now());
-        dispatch_due_schedules(&store, &created, 8).expect("initialize cursor");
+        dispatch_due_schedules(&store, &created, 8, created.now()).expect("initialize cursor");
         let first_fire = FixedAutomationClock::at("2099-07-01T09:31:00Z");
         assert_eq!(
-            dispatch_due_schedules(&store, &first_fire, 8)
+            dispatch_due_schedules(&store, &first_fire, 8, created.now())
                 .unwrap()
                 .enqueued,
             1
         );
         let overlap = FixedAutomationClock::at("2099-07-01T09:32:00Z");
         assert_eq!(
-            dispatch_due_schedules(&store, &overlap, 8)
+            dispatch_due_schedules(&store, &overlap, 8, created.now())
                 .unwrap()
                 .enqueued,
             0
         );
-        assert_eq!(dispatch_due_schedules(&store, &overlap, 8).unwrap().due, 0);
+        assert_eq!(
+            dispatch_due_schedules(&store, &overlap, 8, created.now())
+                .unwrap()
+                .due,
+            0
+        );
         let (runs, total) = list_runs(&store, "local-project", "job-overlap", 50, 0).unwrap();
         assert_eq!(total, 2);
         let skipped = runs
@@ -548,7 +555,9 @@ mod tests {
         settle_operation(&store, &claim, AutomationRunStatus::Success, None, &overlap).unwrap();
         let next = FixedAutomationClock::at("2099-07-01T09:33:00Z");
         assert_eq!(
-            dispatch_due_schedules(&store, &next, 8).unwrap().enqueued,
+            dispatch_due_schedules(&store, &next, 8, created.now())
+                .unwrap()
+                .enqueued,
             1
         );
     }

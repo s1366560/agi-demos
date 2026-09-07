@@ -407,6 +407,50 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn restart_records_missed_fires_without_executing_them() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let created = Arc::new(FixedClock::at("2099-09-03T10:00:00Z"));
+        seed_job(&store, "job-missed", 0, created.now());
+        let executor = Arc::new(ScriptedExecutor::new([]));
+        let initial = AutomationWorker::new(
+            store.clone(),
+            executor.clone(),
+            created,
+            AutomationWorkerConfig::local_default(),
+        )
+        .expect("initial worker");
+        assert_eq!(initial.drain_once().await.unwrap().scheduled, 0);
+        drop(initial);
+
+        let restarted = AutomationWorker::new(
+            store.clone(),
+            executor.clone(),
+            Arc::new(FixedClock::at("2099-09-03T10:03:30Z")),
+            AutomationWorkerConfig::local_default(),
+        )
+        .expect("restarted worker");
+        for _ in 0..4 {
+            let report = restarted.drain_once().await.expect("reconcile missed fire");
+            assert_eq!(report.scheduled, 0);
+            assert_eq!(report.claimed, 0);
+        }
+        let (runs, total) = list_runs(&store, "local-project", "job-missed", 10, 0).unwrap();
+        assert_eq!(total, 3);
+        assert!(runs.iter().all(|run| run["status"] == "skipped"
+            && run["error_message"] == "local_automation_app_was_not_running"));
+        assert!(executor.run_ids.lock().unwrap().is_empty());
+        let current = FixedClock::at("2099-09-03T10:04:00Z");
+        let report = crate::local_runtime::automation_dispatcher::dispatch_due_schedules(
+            &store,
+            &current,
+            8,
+            current.now(),
+        )
+        .expect("a fire at the startup boundary is eligible");
+        assert_eq!(report.enqueued, 1);
+    }
+
     fn seed_job(
         store: &DesktopSessionStore,
         job_id: &str,

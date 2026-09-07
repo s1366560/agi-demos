@@ -22,6 +22,7 @@ pub(super) fn dispatch_due_schedules(
     store: &DesktopSessionStore,
     clock: &dyn AutomationClock,
     limit: usize,
+    active_since: DateTime<Utc>,
 ) -> Result<AutomationScheduleDispatchSummary, AutomationLedgerError> {
     if limit == 0 || limit > 256 {
         return Err(AutomationLedgerError::InvalidRecord(
@@ -153,7 +154,11 @@ pub(super) fn dispatch_due_schedules(
             &occurrence_key,
             scheduled_for,
             now,
-            active_run.then_some("local_automation_previous_run_active"),
+            if scheduled_for < active_since {
+                Some("local_automation_app_was_not_running")
+            } else {
+                active_run.then_some("local_automation_previous_run_active")
+            },
         )? {
             summary.enqueued += 1;
         }
