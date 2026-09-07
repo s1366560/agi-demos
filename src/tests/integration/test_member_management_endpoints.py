@@ -10,6 +10,21 @@ Tests for:
 import pytest
 from httpx import AsyncClient
 
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
+
+
+@pytest.fixture(autouse=True)
+async def _project_members_generation(test_app):
+    await initialize_plugin_runtime_v2(test_app)
+    assert "projects" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+
 
 @pytest.mark.integration
 @pytest.mark.security
@@ -66,6 +81,10 @@ class TestMemberManagementEndpoints:
         test_app.dependency_overrides[get_current_user] = lambda: (_ for _ in ()).throw(
             HTTPException(status_code=401, detail="Not authenticated")
         )
+        # A publication snapshots dependency overrides into its private app.
+        # Republish the test generation after changing its authentication fixture.
+        await shutdown_plugin_runtime_v2(test_app)
+        await initialize_plugin_runtime_v2(test_app)
 
         project_id = str(test_project_db.id)
         user_id = "some-user-id"

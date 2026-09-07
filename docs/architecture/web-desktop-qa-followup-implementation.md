@@ -94,6 +94,12 @@ A unit-tree run was interrupted with 3745 passed, 43 failed and 27 setup errors 
 reading an in-progress Desktop artifact whose generated manifest had not yet been rebuilt.
 This run is diagnostic only. Subsequent full checks must use frozen generated artifacts.
 
+I0.2 initializes the real plugin generation in member contract/integration fixtures and
+republishes the negative-auth fixture before issuing the request, since each publication
+captures its dependency overrides. All 15 member tests have passing focused evidence
+(14 passed in the first run; the corrected authentication test then passed). No production
+authentication or route behavior changed. Revert only affects test coverage setup.
+
 - Knowledge: tenant/project-scoped reads and deletes, CAS writes, atomic processing
   outbox, index recovery, per-action availability and cloud pagination/mutations.
 - Sync: explicit project association, stable IDs, revisions, change IDs, cursor,
