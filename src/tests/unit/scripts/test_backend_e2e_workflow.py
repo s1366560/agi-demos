@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -173,50 +174,119 @@ def test_full_sandbox_image_uses_supported_lts_runtime() -> None:
     dockerfile = SANDBOX_DOCKERFILE_PATH.read_text(encoding="utf-8")
 
     assert "FROM ubuntu:24.04" in dockerfile
-    assert "PYTHON_VERSION=3.12" in dockerfile
+    assert "ARG PYTHON_VERSION=3.12" in dockerfile
+    assert "ARG NODE_VERSION=22" in dockerfile
+    assert "FROM python:${PYTHON_VERSION}-slim-bookworm AS python-wheel-builder" in dockerfile
+    assert "FROM node:${NODE_VERSION}-bookworm-slim AS node-runtime" in dockerfile
     assert "plucky" not in dockerfile
     assert "mirrors.tuna.tsinghua.edu.cn" not in dockerfile
-    assert "ARG DOCKER_CLI_IMAGE=docker:cli@sha256:" in dockerfile
-    assert "amd64) TTYD_ARCH=x86_64" in dockerfile
-    assert "sha256sum -c -" in dockerfile
     assert "USER sandbox" in dockerfile
     assert "useradd --uid 10001" in dockerfile
     assert "PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright" in dockerfile
-    assert "ln -sf /root/.bun" not in dockerfile
-    assert "golang-go rustc cargo" in dockerfile
     assert "--break-system-packages" not in dockerfile
-    assert dockerfile.count("playwright install") == 1
-    assert "https://ports.ubuntu.com" in dockerfile
-    assert "Acquire::Retries=10" in dockerfile
-    assert dockerfile.count("--mount=type=cache,target=/var/cache/apt,sharing=locked") >= 2
-    assert dockerfile.index("python -m venv ${SKILLS_VENV}") < dockerfile.index(
-        "pypdf pdfplumber reportlab pdf2image"
-    )
+    assert dockerfile.count("install chromium --no-shell") == 1
+    assert "python3 -m venv /opt/sandbox-mcp-venv" in dockerfile
+    assert "--no-index" in dockerfile
+    assert "--find-links=/wheelhouse" in dockerfile
+    for stage, source, target in (
+        ("node-runtime", "/usr/local/", "/usr/local/"),
+        ("python-runtime", "/opt/sandbox-mcp-venv", "/opt/sandbox-mcp-venv"),
+        ("playwright-browser", "/opt/ms-playwright", "/opt/ms-playwright"),
+        ("sky-cua-builder", "/out/", "/opt/sky-cua/"),
+    ):
+        assert f"COPY --from={stage} {source} {target}" in dockerfile
+    assert 'test "$(git rev-parse HEAD)" = "${SKY_CUA_COMMIT}"' in dockerfile
+    assert "cargo build --locked --release" in dockerfile
+    assert "TTYD_ARCH=x86_64" in dockerfile
+    assert "TTYD_ARCH=aarch64" in dockerfile
+    assert dockerfile.count("TTYD_SHA256=") == 2
+    assert dockerfile.count("KASM_SHA256=") == 2
+    assert '${TTYD_SHA256}  /usr/local/bin/ttyd" | sha256sum -c -' in dockerfile
+    assert '${KASM_SHA256}  /tmp/kasmvnc.deb" | sha256sum -c -' in dockerfile
+    assert "unsupported ttyd architecture" in dockerfile
+    assert "unsupported KasmVNC architecture" in dockerfile
 
 
 def test_full_sandbox_entrypoint_is_fail_closed_and_profile_aware() -> None:
     entrypoint = SANDBOX_ENTRYPOINT_PATH.read_text(encoding="utf-8")
     dockerfile = SANDBOX_DOCKERFILE_PATH.read_text(encoding="utf-8")
-
+    assert "set -Eeuo pipefail" in entrypoint
     assert 'TERMINAL_ENABLED="${TERMINAL_ENABLED:-true}"' in entrypoint
-    assert 'if [ "$TERMINAL_ENABLED" = "true" ]; then' in entrypoint
-    assert (
-        'ttyd -W -c "$SERVICE_AUTH_USERNAME:$SERVICE_AUTH_TOKEN" -p "$TERMINAL_PORT"' in entrypoint
-    )
     assert 'SERVICE_AUTH_TOKEN="${SANDBOX_SERVICE_AUTH_TOKEN:-${MCP_STATIC_TOKEN:-}}"' in entrypoint
-    assert 'vncpasswd -u "$SERVICE_AUTH_USERNAME" -w "$HOME/.kasmpasswd"' in entrypoint
+    assert '-c "${SERVICE_AUTH_USERNAME}:${SERVICE_AUTH_TOKEN}"' in entrypoint
     assert "-disableBasicAuth" not in entrypoint
-    assert 'if [ -z "$SERVICE_AUTH_TOKEN" ]; then' in entrypoint
-    assert "rm -f /tmp/.X1-lock /tmp/.X11-unix/X1" in entrypoint
-    assert "start_kasmvnc || log_warn" not in entrypoint
-    assert "if ! start_mcp_server; then" in entrypoint
-    assert "/root" not in entrypoint
-    assert 'wait_for_port "$MCP_PORT" 30' in entrypoint
-    assert "MCP server is not running" in entrypoint
     assert "entering standby mode" not in entrypoint
     assert "DESKTOP_ENABLED" in dockerfile.split("HEALTHCHECK", maxsplit=1)[1]
     assert "TERMINAL_ENABLED" in dockerfile.split("HEALTHCHECK", maxsplit=1)[1]
-    assert "sandbox:kasmvnc:ow" not in dockerfile
+
+    # Execute the production orchestration, replacing only side-effecting services.
+    main_function = "main() {" + entrypoint.split("main() {", 1)[1].split("\n}\n", 1)[0] + "\n}"
+    service_names = (
+        "configure_hostname",
+        "prepare_session_directories",
+        "start_session_dbus",
+        "activate_at_spi",
+        "start_kasmvnc",
+        "wait_for_x11_session",
+        "clear_stale_chromium_profile_locks",
+        "install_chromium_native_host",
+        "start_chromium",
+        "start_mcp_server",
+        "start_ttyd",
+        "wait_for_primary_process",
+    )
+    stubs = "\n".join(f"{name}() {{ echo {name}; }}" for name in service_names)
+
+    def run_main(*, desktop: str, terminal: str, token: str, fail_mcp: bool = False):
+        script = (
+            "set -Eeuo pipefail\n"
+            + main_function
+            + "\n"
+            + stubs
+            + '\nlog_error() { echo "$*" >&2; }\nlog_success() { :; }\n'
+            + f"DESKTOP_ENABLED={desktop}\nTERMINAL_ENABLED={terminal}\n"
+            + f"SERVICE_AUTH_TOKEN={token}\n"
+        )
+        if fail_mcp:
+            script += "start_mcp_server() { echo mcp-failed; return 17; }\n"
+        return subprocess.run(
+            ["bash"],
+            input=script + "main\n",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    terminal_function = (
+        "start_ttyd() {" + entrypoint.split("start_ttyd() {", 1)[1].split("\n}\n", 1)[0] + "\n}"
+    )
+    disabled_terminal = subprocess.run(
+        ["bash"],
+        input="set -Eeuo pipefail\nTERMINAL_ENABLED=false\n" + terminal_function + "\nstart_ttyd\n",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert disabled_terminal.returncode == 0
+    assert disabled_terminal.stdout == ""
+
+    denied = run_main(desktop="false", terminal="true", token="")
+    assert denied.returncode != 0
+    assert "Interactive services require" in denied.stderr
+    assert "start_ttyd" not in denied.stdout
+    headless = run_main(desktop="false", terminal="false", token="")
+    assert headless.returncode == 0
+    assert "start_kasmvnc" not in headless.stdout
+    assert "start_mcp_server" in headless.stdout
+    desktop = run_main(desktop="true", terminal="true", token="test-token")
+    assert desktop.returncode == 0
+    calls = desktop.stdout.splitlines()
+    assert calls.index("start_kasmvnc") < calls.index("start_chromium")
+    assert calls.index("start_mcp_server") < calls.index("start_ttyd")
+    failed = run_main(desktop="false", terminal="true", token="test-token", fail_mcp=True)
+    assert failed.returncode == 17
+    assert "start_ttyd" not in failed.stdout
+    assert "wait_for_primary_process" not in failed.stdout
 
 
 def test_full_sandbox_runtime_has_scheduled_release_gate() -> None:

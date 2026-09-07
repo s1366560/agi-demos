@@ -538,7 +538,7 @@ class TestMaintenanceRouter:
         return store
 
     @pytest.mark.asyncio
-    async def test_deduplicate_entities_dry_run(self, client, mock_neo4j_client):
+    async def test_deduplicate_entities_dry_run(self, client, mock_graphiti_client):
         """Test entity deduplication in dry run mode delegates to the store."""
         # mock_graphiti_client (aliased to mock_graph_service) is wired by the
         # client fixture; override find_duplicate_entities on it.
@@ -551,10 +551,17 @@ class TestMaintenanceRouter:
         )
         client.app.dependency_overrides[get_graph_store] = lambda: store
 
-        response = client.post(
-            "/api/v1/maintenance/deduplicate",
-            json={"similarity_threshold": 0.9, "dry_run": True},
-        )
+        async def graph_runtime_factory() -> object:
+            return mock_graphiti_client
+
+        await initialize_plugin_runtime_v2(client.app, graph_runtime_factory=graph_runtime_factory)
+        try:
+            response = client.post(
+                "/api/v1/maintenance/deduplicate",
+                json={"similarity_threshold": 0.9, "dry_run": True},
+            )
+        finally:
+            await shutdown_plugin_runtime_v2(client.app)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -925,10 +932,16 @@ class TestTasksRouter:
     """Test cases for tasks router endpoints."""
 
     @pytest.mark.asyncio
-    async def test_get_task_stats(self, client, test_db):
+    async def test_get_task_stats(self, client, test_db, mock_graphiti_client):
         """Test getting task statistics."""
-        # Make request
-        response = client.get("/api/v1/tasks/stats")
+        async def graph_runtime_factory() -> object:
+            return mock_graphiti_client
+
+        await initialize_plugin_runtime_v2(client.app, graph_runtime_factory=graph_runtime_factory)
+        try:
+            response = client.get("/api/v1/tasks/stats")
+        finally:
+            await shutdown_plugin_runtime_v2(client.app)
 
         # Assert
         assert response.status_code == status.HTTP_200_OK

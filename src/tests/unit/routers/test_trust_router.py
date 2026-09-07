@@ -19,6 +19,30 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     User,
 )
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
+
+
+def _request_with_authority(authority: object) -> SimpleNamespace:
+    runtime = WorkspaceCoreRuntimeServiceV2(
+        settings=SimpleNamespace(),
+        client=SimpleNamespace(),
+        authority=authority,
+        context_judge=SimpleNamespace(),
+        plan_judge=SimpleNamespace(),
+        autonomy_judge=SimpleNamespace(),
+        access_verifier=SimpleNamespace(),
+        event_sink=SimpleNamespace(),
+        agent_runtime_provider=SimpleNamespace(),
+        provider_adapter=SimpleNamespace(),
+    )
+    return SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                workspace_authority=authority,
+                workspace_core_runtime_service_v2=runtime,
+            )
+        )
+    )
 
 
 class _MissingApprovalService:
@@ -84,9 +108,7 @@ async def test_list_trust_policies_rejects_workspace_from_other_tenant(
             }
         )
     )
-    request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(workspace_authority=authority))
-    )
+    request = _request_with_authority(authority)
 
     monkeypatch.setattr(trust, "_require_tenant_access", allow_access)
     monkeypatch.setattr(trust, "_build_service", lambda _db: _UnexpectedTrustService())
@@ -131,9 +153,7 @@ async def test_get_decision_record_rejects_record_outside_requested_workspace(
             }
         )
     )
-    request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(workspace_authority=authority))
-    )
+    request = _request_with_authority(authority)
     record = DecisionRecordModel(
         id="decision-outside-workspace",
         tenant_id=test_project_db.tenant_id,

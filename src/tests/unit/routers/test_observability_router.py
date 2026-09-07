@@ -12,6 +12,7 @@ from src.domain.ports.services.workspace_authority_port import (
 from src.infrastructure.adapters.primary.web.routers.observability import (
     _require_observability_access,
 )
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 
 
 def _request(*, tenant_id: str = "tenant-1", role: str | None = "viewer") -> SimpleNamespace:
@@ -30,7 +31,26 @@ def _request(*, tenant_id: str = "tenant-1", role: str | None = "viewer") -> Sim
             return_value={"workspace-1": profile} if role is not None else {}
         )
     )
-    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(workspace_authority=authority)))
+    runtime = WorkspaceCoreRuntimeServiceV2(
+        settings=SimpleNamespace(),
+        client=SimpleNamespace(),
+        authority=authority,
+        context_judge=SimpleNamespace(),
+        plan_judge=SimpleNamespace(),
+        autonomy_judge=SimpleNamespace(),
+        access_verifier=SimpleNamespace(),
+        event_sink=SimpleNamespace(),
+        agent_runtime_provider=SimpleNamespace(),
+        provider_adapter=SimpleNamespace(),
+    )
+    return SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                workspace_authority=authority,
+                workspace_core_runtime_service_v2=runtime,
+            )
+        )
+    )
 
 
 @pytest.mark.unit
