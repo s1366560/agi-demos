@@ -9,10 +9,10 @@ use super::ApiError;
 const CAPABILITY_PROTOCOL_VERSION: u32 = 1;
 const REQUIRED_MANIFEST_VERSION: u32 = 1;
 const REQUIRED_CONTRACT_SHA256: &str =
-    "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768";
-const REQUIRED_ROUTE_COUNT: usize = 92;
+    "a0d6fb2d3ae01d30e767c184b29f07544cb33d86b9c55ee04391cb7f40117c30";
+const REQUIRED_ROUTE_COUNT: usize = 95;
 const REQUIRED_ROUTE_KEYS_SHA256: &str =
-    "e4fea0501bbf438e30f55e0937246fda5709fdf4e3b7831c85147c6303bb3f07";
+    "d58c38e884a298e4dc9b9aa4ab8ff7ab4694adb3def80719d9c71c4646ae02db";
 
 // Public handlers must only be added here after their method/path, response,
 // status, error, pagination, authorization, and event golden contracts pass.
@@ -384,6 +384,18 @@ const IMPLEMENTED_PUBLIC_ROUTES: &[PublicRouteCapability] = &[
     PublicRouteCapability {
         method: "POST",
         path: "/api/v1/workspaces/{workspace_id}/autonomy/tick",
+    },
+    PublicRouteCapability {
+        method: "GET",
+        path: "/api/v1/workspaces/{workspace_id}/autonomy/attentions",
+    },
+    PublicRouteCapability {
+        method: "POST",
+        path: "/api/v1/workspaces/{workspace_id}/autonomy/attentions/{attention_id}/retry",
+    },
+    PublicRouteCapability {
+        method: "POST",
+        path: "/api/v1/workspaces/{workspace_id}/autonomy/attentions/{attention_id}/resolve",
     },
 ];
 const IMPLEMENTED_CONTRACT_SHA256: Option<&str> = Some(REQUIRED_CONTRACT_SHA256);

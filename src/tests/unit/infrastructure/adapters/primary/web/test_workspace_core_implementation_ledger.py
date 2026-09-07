@@ -36,12 +36,12 @@ def test_implementation_ledger_matches_complete_capabilities() -> None:
     evidence = generator.load_evidence_contract(EVIDENCE_PATH, REPO_ROOT)
     ledger = generator.build_ledger(manifest, implemented, evidence)
 
-    assert ledger["requiredRouteCount"] == 92
+    assert ledger["requiredRouteCount"] == 95
     assert ledger["implementedRouteCount"] == len(implemented)
-    assert ledger["implementedRouteCount"] == 92
+    assert ledger["implementedRouteCount"] == 95
     assert ledger["pendingRouteCount"] == 0
     assert ledger["implementedRouteKeysSha256"] == (
-        "e4fea0501bbf438e30f55e0937246fda5709fdf4e3b7831c85147c6303bb3f07"
+        "d58c38e884a298e4dc9b9aa4ab8ff7ab4694adb3def80719d9c71c4646ae02db"
     )
     assert ledger["declarationComplete"] is True
     assert ledger["complete"] is False
@@ -54,7 +54,7 @@ def test_implementation_ledger_matches_complete_capabilities() -> None:
     assert ledger["schemaRevision"] == generator._alembic_head(REPO_ROOT)
     assert len(ledger["evidenceSourcesSha256"]) == 64
     assert ledger["evidenceSuiteCount"] == 6
-    assert len(ledger["routes"]) == 92
+    assert len(ledger["routes"]) == 95
     persisted = generator.load_json(LEDGER_PATH)
     assert persisted["requiredRouteCount"] == ledger["requiredRouteCount"]
     assert persisted["implementedRouteKeysSha256"] == ledger["implementedRouteKeysSha256"]

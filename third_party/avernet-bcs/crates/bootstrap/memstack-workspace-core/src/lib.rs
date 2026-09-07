@@ -1234,15 +1234,15 @@ mod tests {
 
         assert_eq!(payload["protocol_version"], 1);
         assert_eq!(payload["manifest_version"], 1);
-        assert_eq!(payload["required_route_count"], 92);
-        assert_eq!(payload["implemented_route_count"], 92);
+        assert_eq!(payload["required_route_count"], 95);
+        assert_eq!(payload["implemented_route_count"], 95);
         assert_eq!(
             payload["implemented_contract_sha256"],
-            "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768"
+            "a0d6fb2d3ae01d30e767c184b29f07544cb33d86b9c55ee04391cb7f40117c30"
         );
         assert_eq!(
             payload["implemented_route_keys_sha256"],
-            "e4fea0501bbf438e30f55e0937246fda5709fdf4e3b7831c85147c6303bb3f07"
+            "d58c38e884a298e4dc9b9aa4ab8ff7ab4694adb3def80719d9c71c4646ae02db"
         );
         assert_eq!(payload["complete"], true);
         Ok(())
