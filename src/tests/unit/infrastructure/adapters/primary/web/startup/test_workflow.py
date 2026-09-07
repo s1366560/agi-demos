@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import src.infrastructure.adapters.primary.web.startup.workflow as workflow_module
+from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.infrastructure.adapters.primary.web.startup.workflow import (
     _run_episode_processing_workflow,
     _run_incremental_refresh_workflow,
@@ -18,6 +19,9 @@ from src.infrastructure.adapters.primary.web.startup.workflow import (
     build_asyncio_workflow_engine_v2,
 )
 from src.infrastructure.adapters.secondary.background_tasks import TaskManager
+from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+    KnowledgeSyncEnrollmentModel,
+)
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, TaskLog, User
 from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
@@ -29,6 +33,18 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 _ROOT = Path(__file__).resolve().parents[8]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+
+
+@pytest.fixture(autouse=True)
+async def legacy_project_fence(test_db, test_project_db):
+    test_db.add(
+        KnowledgeSyncEnrollmentModel(
+            project_id=test_project_db.id,
+            tenant_id=test_project_db.tenant_id,
+            enabled=False,
+        )
+    )
+    await test_db.commit()
 
 
 def _task(task_id: str, project_id: str, payload: dict[str, object]) -> TaskLog:
@@ -300,13 +316,14 @@ async def test_episode_job_without_matching_source_keeps_memory_state(
     test_db.add_all([memory, task])
     await test_db.commit()
 
-    await _run_episode_processing_workflow(
-        payload, SimpleNamespace(process_episode=AsyncMock(return_value=SimpleNamespace()))
-    )
+    graph = SimpleNamespace(process_episode=AsyncMock(return_value=SimpleNamespace()))
+    with pytest.raises(KnowledgeSyncError):
+        await _run_episode_processing_workflow(payload, graph)
+    graph.process_episode.assert_not_awaited()
 
     await test_db.refresh(task)
     await test_db.refresh(memory)
-    assert task.status == "COMPLETED"
+    assert task.status == "FAILED"
     assert memory.processing_status == "PENDING"
 
 
@@ -335,7 +352,7 @@ async def test_replaced_task_failure_does_not_overwrite_current_task_success(
     test_db.add_all([memory, task])
     await test_db.commit()
 
-    with pytest.raises(RuntimeError, match="late failure"):
+    with pytest.raises(KnowledgeSyncError, match="knowledge_sync_write_conflict"):
         await _run_episode_processing_workflow(
             payload,
             SimpleNamespace(process_episode=AsyncMock(side_effect=RuntimeError("late failure"))),
@@ -383,15 +400,15 @@ async def test_episode_processing_workflow_fails_fast_for_missing_project(
 
     graph_service = SimpleNamespace(process_episode=AsyncMock())
 
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises(KnowledgeSyncError, match="knowledge_sync_write_conflict"):
         await _run_episode_processing_workflow(payload, graph_service)
 
     graph_service.process_episode.assert_not_awaited()
     await test_db.refresh(task)
     await test_db.refresh(memory)
     assert task.status == "FAILED"
-    assert task.message == "Graph processing failed"
-    assert "does not exist" in (task.error_message or "")
+    assert task.message == "Graph processing source rejected"
+    assert "knowledge_sync_write_conflict" in (task.error_message or "")
     assert memory.processing_status == "PENDING"
 
 

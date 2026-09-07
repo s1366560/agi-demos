@@ -732,3 +732,18 @@ passed. Three further 13-test PTY runs across zsh/sh passed. This is source-leve
 Sidecar validation, not native Electron acceptance after rebuild. Evidence:
 `/tmp/sidecar-close-order-full.log`, `/tmp/sidecar-close-order-clippy-final.log`,
 `/tmp/sidecar-pty-close-order-repeat.log`, `/tmp/sidecar-pty-stall.sample`.
+
+I3.19 closes Python legacy graph maintenance admission. An independent transaction
+holds the project/enrollment lock through reprocess cleanup, request commit and
+workflow start. Workers re-admit and validate current memory, project, revision,
+task and exact content before extraction. PROCESSING CAS must apply before graph
+work; COMPLETED CAS misses cannot publish successful task results. Incremental
+refresh scopes UUID queries to the authorized project, uses canonical tenant and
+SQL memory content, and rejects removed/foreign sources; community rebuild also
+holds admission. Pure graph records remain separate from memory revisions. All
+enrolled legacy jobs stay rejected and revision-fenced enrolled work remains deferred.
+55 tests passed (27 real PostgreSQL plus 28 workflow/router), including bootstrap
+races, stale/foreign/removed sources, CAS misses, graph failure and cancellation.
+Ruff and targeted helper/workflow mypy passed; router isolated mypy retains its
+existing unrelated errors. Evidence: `/tmp/python-processing-final.log`,
+`/tmp/python-processing-cas-red.log`. No schema or feature readiness changes.

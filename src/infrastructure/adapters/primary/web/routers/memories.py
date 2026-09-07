@@ -27,6 +27,9 @@ from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 i
     workflow_engine_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.memory_processing_admission import (
+    legacy_graph_write,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     MemoryShare,
@@ -956,13 +959,6 @@ async def reprocess_memory(
     if not memory:
         raise HTTPException(status_code=404, detail=_("Memory not found"))
 
-    # Check if already processing to prevent duplicate tasks
-    if memory.processing_status in ["PENDING", "PROCESSING"]:
-        raise HTTPException(
-            status_code=409,
-            detail=_("Memory is already being processed. Please wait for completion."),
-        )
-
     # 2. Check permissions
     if memory.author_id != current_user.id:
         if not await _has_memory_share_edit_permission(memory_id, current_user.id, db):
@@ -979,67 +975,83 @@ async def reprocess_memory(
             if not user_project_result.scalar_one_or_none():
                 raise HTTPException(status_code=403, detail=_("Permission denied"))
 
-    # 3. Clean up old episode data before reprocessing
     try:
-        logger.info(f"Cleaning up old episode data for memory {memory_id} before reprocessing")
-        await graph_service.delete_episode_by_memory_id(memory_id)
-    except Exception as e:
-        logger.warning(f"Failed to clean up old episode data for memory {memory_id}: {e}")
-        # Continue with reprocessing even if cleanup fails
+        async with legacy_graph_write(
+            async_sessionmaker(bind=db.bind, expire_on_commit=False),
+            project_id=memory.project_id,
+            memory_id=memory_id,
+        ):
+            await db.refresh(memory)
+            await _check_memory_edit_permission(memory, current_user, db)
+            if memory.processing_status in {"PENDING", "PROCESSING"}:
+                raise HTTPException(
+                    status_code=409,
+                    detail=_("Memory is already being processed. Please wait for completion."),
+                )
+            # 3. Clean up old episode data before reprocessing
+            try:
+                logger.info(
+                    f"Cleaning up old episode data for memory {memory_id} before reprocessing"
+                )
+                await graph_service.delete_episode_by_memory_id(memory_id)
+            except Exception as e:
+                logger.warning(f"Failed to clean up old episode data for memory {memory_id}: {e}")
+                # Continue with reprocessing even if cleanup fails
 
-    # 4. Trigger processing
-    try:
-        # Get project for tenant_id
-        project_result = await db.execute(
-            refresh_select_statement(select(Project).where(Project.id == memory.project_id))
-        )
-        project = project_result.scalar_one_or_none()
-        if not project:
-            raise HTTPException(status_code=404, detail=_("Project not found"))
+            # 4. Trigger processing
+            try:
+                # Get project for tenant_id
+                project_result = await db.execute(
+                    refresh_select_statement(select(Project).where(Project.id == memory.project_id))
+                )
+                project = project_result.scalar_one_or_none()
+                if not project:
+                    raise HTTPException(status_code=404, detail=_("Project not found"))
 
-        task_id, workflow_id, task_payload = _add_memory_reprocessing_task(
-            db=db,
-            memory=memory,
-            project=project,
-            current_user=current_user,
-            source_description="User input (reprocess)",
-            workflow_id=f"episode-reprocess-{memory.id}",
-        )
+                task_id, workflow_id, task_payload = _add_memory_reprocessing_task(
+                    db=db,
+                    memory=memory,
+                    project=project,
+                    current_user=current_user,
+                    source_description="User input (reprocess)",
+                    workflow_id=f"episode-reprocess-{memory.id}",
+                )
 
-        await db.commit()
-        await db.refresh(memory)
+                await db.commit()
+                await db.refresh(memory)
 
-        workflow_started = await _start_memory_reprocessing_workflow(
-            memory=memory,
-            db=db,
-            workflow_engine=workflow_engine,
-            task_id=task_id,
-            workflow_id=workflow_id,
-            task_payload=task_payload,
-        )
-        if not workflow_started:
-            raise HTTPException(
-                status_code=500,
-                detail=_("Failed to queue memory for reprocessing. Please try again."),
-            )
+                workflow_started = await _start_memory_reprocessing_workflow(
+                    memory=memory,
+                    db=db,
+                    workflow_engine=workflow_engine,
+                    task_id=task_id,
+                    workflow_id=workflow_id,
+                    task_payload=task_payload,
+                )
+                if not workflow_started:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=_("Failed to queue memory for reprocessing. Please try again."),
+                    )
 
-        logger.info(f"Memory {memory.id} re-queued for processing. Task: {task_id}")
-        return MemoryResponse.from_orm(memory)
+                logger.info(f"Memory {memory.id} re-queued for processing. Task: {task_id}")
+                return MemoryResponse.from_orm(memory)
 
-    except HTTPException as http_exc:
-        # HTTPExceptions from validation (lines 528-540) occur before status update,
-        # so no rollback needed. However, if any HTTPException occurs after status
-        # update (line 556-557), we must rollback to avoid inconsistent state.
-        # In the current implementation, no HTTPExceptions are raised after line 556,
-        # but we include rollback here for safety in case the code evolves.
+            except HTTPException as http_exc:
+                await db.rollback()
+                raise http_exc
+            except Exception as e:
+                await db.rollback()
+                logger.error(f"Failed to reprocess memory {memory_id}: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=_("Failed to queue memory for reprocessing. Please try again."),
+                ) from e
+    except KnowledgeSyncError as error:
+        from .knowledge_sync import error_response
+
         await db.rollback()
-        raise http_exc
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Failed to reprocess memory {memory_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=_("Failed to queue memory for reprocessing. Please try again.")
-        ) from e
+        return error_response(error)
 
 
 async def _check_memory_edit_permission(memory: Any, current_user: User, db: AsyncSession) -> None:

@@ -1,5 +1,6 @@
 """Workflow engine initialization for startup."""
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -8,15 +9,24 @@ from typing import Any, cast
 
 from sqlalchemy import select
 
+from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.domain.model.memory.processing import MemoryProcessingSource
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+    KnowledgeSyncTombstoneModel,
+)
 from src.infrastructure.adapters.secondary.persistence.memory_processing import (
     update_memory_processing_status,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Project, TaskLog
+from src.infrastructure.adapters.secondary.persistence.memory_processing_admission import (
+    canonical_graph_tenant,
+    legacy_graph_write,
+    require_processing_source,
+)
+from src.infrastructure.adapters.secondary.persistence.models import Memory, TaskLog
 from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 from src.infrastructure.plugins.v2.boundary import (
     current_process_generation_host_v2,
@@ -43,13 +53,19 @@ async def _update_episode_processing_records(
     result: dict[str, Any] | None = None,
     error_message: str | None = None,
     processing_source: MemoryProcessingSource | None = None,
-) -> None:
+) -> bool:
     """Persist task and memory processing state for the episode workflow."""
     if not task_id and not memory_id:
-        return
+        return True
 
     now = datetime.now(UTC)
     async with async_session_factory() as session, session.begin():
+        if memory_id and (
+            processing_source is None
+            or processing_source.memory_id != memory_id
+            or not await update_memory_processing_status(session, processing_source, status)
+        ):
+            return False
         if task_id:
             task_result = await session.execute(
                 refresh_select_statement(select(TaskLog).where(TaskLog.id == task_id))
@@ -67,8 +83,7 @@ async def _update_episode_processing_records(
                 if status in {"COMPLETED", "FAILED"}:
                     task.completed_at = now
 
-        if processing_source is not None and processing_source.memory_id == memory_id:
-            _ = await update_memory_processing_status(session, processing_source, status)
+        return True
 
 
 def _episode_processing_result(result: object, episode_uuid: str) -> dict[str, object]:
@@ -88,14 +103,6 @@ def _episode_processing_result(result: object, episode_uuid: str) -> dict[str, o
 def _read_optional_str(payload: dict[str, Any], key: str) -> str | None:
     value = payload.get(key)
     return value if isinstance(value, str) and value else None
-
-
-async def _project_exists(project_id: str) -> bool:
-    async with async_session_factory() as session:
-        result = await session.execute(
-            refresh_select_statement(select(Project.id).where(Project.id == project_id).limit(1))
-        )
-        return result.scalar_one_or_none() is not None
 
 
 async def _run_episode_processing_workflow(
@@ -120,61 +127,87 @@ async def _run_episode_processing_workflow(
     if not callable(processor):
         raise RuntimeError("Graph service does not support episode processing")
 
-    if project_id and not await _project_exists(project_id):
-        message = f"Project {project_id} does not exist; cannot process episode"
-        await _update_episode_processing_records(
-            task_id=task_id,
-            memory_id=memory_id,
-            processing_source=processing_source,
-            status="FAILED",
-            progress=100,
-            message="Graph processing failed",
-            error_message=message,
-        )
-        raise ValueError(message)
-
-    await _update_episode_processing_records(
-        task_id=task_id,
-        memory_id=memory_id,
-        processing_source=processing_source,
-        status="PROCESSING",
-        progress=10,
-        message="Extracting entities and relationships",
-    )
-
+    admitted = False
     try:
-        result = await cast(Any, processor)(
-            episode_uuid=episode_uuid,
-            content=content,
+        async with legacy_graph_write(
+            async_session_factory,
             project_id=project_id,
             tenant_id=tenant_id,
-            user_id=user_id,
-            excluded_entity_types=cast(
-                list[str] | None,
-                excluded_entity_types if isinstance(excluded_entity_types, list) else None,
-            ),
-        )
-        result_payload = _episode_processing_result(result, episode_uuid)
-        await _update_episode_processing_records(
-            task_id=task_id,
             memory_id=memory_id,
-            processing_source=processing_source,
-            status="COMPLETED",
-            progress=100,
-            message="Graph processing complete",
-            result=result_payload,
-        )
-        return result_payload
-    except Exception as exc:
-        await _update_episode_processing_records(
-            task_id=task_id,
-            memory_id=memory_id,
-            processing_source=processing_source,
-            status="FAILED",
-            progress=100,
-            message="Graph processing failed",
-            error_message=str(exc),
-        )
+        ) as admission:
+            await require_processing_source(
+                admission,
+                processing_source,
+                episode_uuid=episode_uuid,
+                content=content,
+            )
+            tenant_id = await canonical_graph_tenant(admission, cast(str, project_id))
+            applied = await _update_episode_processing_records(
+                task_id=task_id,
+                memory_id=memory_id,
+                processing_source=processing_source,
+                status="PROCESSING",
+                progress=10,
+                message="Extracting entities and relationships",
+            )
+            if not applied:
+                raise KnowledgeSyncError("knowledge_sync_write_conflict")
+            admitted = True
+            try:
+                result = await cast(Any, processor)(
+                    episode_uuid=episode_uuid,
+                    content=content,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    excluded_entity_types=cast(
+                        list[str] | None,
+                        excluded_entity_types if isinstance(excluded_entity_types, list) else None,
+                    ),
+                )
+                result_payload = _episode_processing_result(result, episode_uuid)
+                applied = await _update_episode_processing_records(
+                    task_id=task_id,
+                    memory_id=memory_id,
+                    processing_source=processing_source,
+                    status="COMPLETED",
+                    progress=100,
+                    message="Graph processing complete",
+                    result=result_payload,
+                )
+                if not applied:
+                    raise KnowledgeSyncError("knowledge_sync_write_conflict")
+                return result_payload
+            except (Exception, asyncio.CancelledError) as exc:
+                applied = await _update_episode_processing_records(
+                    task_id=task_id,
+                    memory_id=memory_id,
+                    processing_source=processing_source,
+                    status="FAILED",
+                    progress=100,
+                    message="Graph processing failed",
+                    error_message=str(exc) or "Graph processing cancelled",
+                )
+                if not applied:
+                    await _update_episode_processing_records(
+                        task_id=task_id,
+                        memory_id=None,
+                        status="FAILED",
+                        progress=100,
+                        message="Graph processing source rejected",
+                        error_message=str(exc),
+                    )
+                raise
+    except (Exception, asyncio.CancelledError) as exc:
+        if not admitted:
+            await _update_episode_processing_records(
+                task_id=task_id,
+                memory_id=None,
+                status="FAILED",
+                progress=100,
+                message="Graph processing source rejected",
+                error_message=str(exc),
+            )
         raise
 
 
@@ -253,24 +286,30 @@ async def _run_rebuild_communities_workflow(
     )
 
     try:
-        result = await _rebuild_communities_for_project(graph_service, project_id)
-        await _update_episode_processing_records(
-            task_id=task_id,
-            memory_id=None,
-            status="COMPLETED",
-            progress=100,
-            message="Community rebuild complete",
-            result=result,
-        )
-        return result
-    except Exception as exc:
+        async with legacy_graph_write(
+            async_session_factory,
+            project_id=project_id,
+            tenant_id=_read_optional_str(payload, "tenant_id"),
+        ):
+            result = await _rebuild_communities_for_project(graph_service, project_id)
+            await _update_episode_processing_records(
+                task_id=task_id,
+                memory_id=None,
+                status="COMPLETED",
+                progress=100,
+                message="Community rebuild complete",
+                result=result,
+            )
+            return result
+
+    except (Exception, asyncio.CancelledError) as exc:
         await _update_episode_processing_records(
             task_id=task_id,
             memory_id=None,
             status="FAILED",
             progress=100,
             message="Community rebuild failed",
-            error_message=str(exc),
+            error_message=str(exc) or "Community rebuild cancelled",
         )
         raise
 
@@ -290,21 +329,22 @@ async def _load_incremental_refresh_episodes(
         result = await neo4j_client.execute_query(
             """
             MATCH (ep:Episodic)
-            WHERE ep.uuid IN $episode_uuids
+            WHERE ep.uuid IN $episode_uuids AND ep.project_id = $project_id
             RETURN ep.uuid as uuid, ep.content as content, ep.project_id as project_id,
-                   ep.tenant_id as tenant_id, ep.user_id as user_id
+                   ep.tenant_id as tenant_id, ep.user_id as user_id, ep.memory_id as memory_id
             LIMIT $limit
             """,
             episode_uuids=episode_uuids,
+            project_id=project_id,
             limit=limit,
         )
     else:
         result = await neo4j_client.execute_query(
             """
             MATCH (ep:Episodic)
-            WHERE $project_id IS NULL OR ep.project_id = $project_id
+            WHERE ep.project_id = $project_id
             RETURN ep.uuid as uuid, ep.content as content, ep.project_id as project_id,
-                   ep.tenant_id as tenant_id, ep.user_id as user_id
+                   ep.tenant_id as tenant_id, ep.user_id as user_id, ep.memory_id as memory_id
             ORDER BY ep.created_at DESC
             LIMIT $limit
             """,
@@ -343,57 +383,80 @@ async def _run_incremental_refresh_workflow(
     )
 
     try:
-        episodes = await _load_incremental_refresh_episodes(
-            graph_service,
+        async with legacy_graph_write(
+            async_session_factory,
             project_id=project_id,
-            episode_uuids=episode_uuids,
-            limit=100,
-        )
-        processed = 0
-        skipped = 0
-        for episode in episodes:
-            episode_uuid = episode.get("uuid")
-            content = episode.get("content")
-            if not isinstance(episode_uuid, str) or not isinstance(content, str) or not content:
-                skipped += 1
-                continue
-            await cast(Any, processor)(
-                episode_uuid=episode_uuid,
-                content=content,
-                project_id=episode.get("project_id") or project_id,
-                tenant_id=episode.get("tenant_id") or tenant_id,
-                user_id=episode.get("user_id") or user_id,
-                excluded_entity_types=None,
+            tenant_id=tenant_id,
+        ) as admission:
+            tenant_id = await canonical_graph_tenant(admission, cast(str, project_id))
+            episodes = await _load_incremental_refresh_episodes(
+                graph_service,
+                project_id=project_id,
+                episode_uuids=episode_uuids,
+                limit=100,
             )
-            processed += 1
+            processed = 0
+            skipped = 0
+            for episode in episodes:
+                episode_uuid = episode.get("uuid")
+                content = episode.get("content")
+                if not isinstance(episode_uuid, str) or not isinstance(content, str) or not content:
+                    skipped += 1
+                    continue
+                if episode.get("project_id") != project_id or episode.get("tenant_id") != tenant_id:
+                    raise KnowledgeSyncError("knowledge_sync_forbidden")
+                source_id = episode.get("memory_id") or episode_uuid
+                memory = await admission.get(Memory, source_id)
+                if memory is not None:
+                    if memory.project_id != project_id:
+                        raise KnowledgeSyncError("knowledge_sync_forbidden")
+                    content = memory.content
+                elif episode.get("memory_id") or await admission.scalar(
+                    select(KnowledgeSyncTombstoneModel.memory_id).where(
+                        KnowledgeSyncTombstoneModel.memory_id == source_id
+                    )
+                ):
+                    raise KnowledgeSyncError("knowledge_sync_write_conflict")
+                await cast(Any, processor)(
+                    episode_uuid=episode_uuid,
+                    content=content,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    user_id=episode.get("user_id") or user_id,
+                    excluded_entity_types=None,
+                )
+                processed += 1
 
-        communities_result: dict[str, object] | None = None
-        if payload.get("rebuild_communities") and project_id:
-            communities_result = await _rebuild_communities_for_project(graph_service, project_id)
+            communities_result: dict[str, object] | None = None
+            if payload.get("rebuild_communities") and project_id:
+                communities_result = await _rebuild_communities_for_project(
+                    graph_service, project_id
+                )
 
-        result: dict[str, object] = {
-            "project_id": project_id,
-            "processed": processed,
-            "skipped": skipped,
-            "communities": communities_result,
-        }
-        await _update_episode_processing_records(
-            task_id=task_id,
-            memory_id=None,
-            status="COMPLETED",
-            progress=100,
-            message="Incremental refresh complete",
-            result=result,
-        )
-        return result
-    except Exception as exc:
+            result: dict[str, object] = {
+                "project_id": project_id,
+                "processed": processed,
+                "skipped": skipped,
+                "communities": communities_result,
+            }
+            await _update_episode_processing_records(
+                task_id=task_id,
+                memory_id=None,
+                status="COMPLETED",
+                progress=100,
+                message="Incremental refresh complete",
+                result=result,
+            )
+            return result
+
+    except (Exception, asyncio.CancelledError) as exc:
         await _update_episode_processing_records(
             task_id=task_id,
             memory_id=None,
             status="FAILED",
             progress=100,
             message="Incremental refresh failed",
-            error_message=str(exc),
+            error_message=str(exc) or "Incremental refresh cancelled",
         )
         raise
 
