@@ -254,3 +254,13 @@ while preserving stagger offsets and strictly future cursors. Cloud schedule tes
 passed; local automation tests: 30 passed; shared crate strict Clippy passed. No new
 external dependency version was introduced. Native execution and cloud readiness gates
 remain outstanding.
+
+I4.9 projects each local job's actual next-fire cursor and persisted missed-trigger count
+from SQLite without modifying content revisions or replay receipts. Counts are restricted
+to tenant/project/job and the explicit app-closed reason. The local recovery notice explains
+tray/quit behavior and reuses the existing permission-gated, idempotent Run command for a
+single catch-up run. It labels the count as cumulative recorded misses, not an instantaneous
+estimate of an unreconciled backlog. Local automation 30 passed; renderer model/client/notice
+30 passed; renderer typecheck passed. Canonical native launch succeeded, but native Cron
+navigation still closed because its capability has no authority revision. This pre-existing
+protocol gap must be fixed before the notice's native acceptance is complete.

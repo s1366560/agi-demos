@@ -16198,9 +16198,15 @@ mod tests {
             .await
             .expect("automation list response");
         assert_eq!(jobs.status(), StatusCode::OK);
+        let mut projected_job = created.clone();
+        projected_job["state"] = json!({
+            "execution_target": "local",
+            "missed_run_count": 0,
+            "next_run_at": null,
+        });
         assert_eq!(
             response_json(jobs).await,
-            json!({ "items": [created.clone()], "total": 1 })
+            json!({ "items": [projected_job], "total": 1 })
         );
 
         let capabilities = app

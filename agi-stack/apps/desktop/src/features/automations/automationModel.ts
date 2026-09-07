@@ -323,3 +323,18 @@ function isExactStringSet(input: unknown, expectedValues: readonly string[]): in
     values.every((value, index) => value === expected[index])
   );
 }
+
+export function automationLocalRecovery(
+  job: AutomationJob,
+): { missedRunCount: number } | null {
+  const count = job.state.missed_run_count;
+  if (
+    job.state.execution_target !== 'local' ||
+    typeof count !== 'number' ||
+    !Number.isSafeInteger(count) ||
+    count < 0
+  ) {
+    return null;
+  }
+  return { missedRunCount: count };
+}

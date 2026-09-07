@@ -440,6 +440,22 @@ mod tests {
         assert!(runs.iter().all(|run| run["status"] == "skipped"
             && run["error_message"] == "local_automation_app_was_not_running"));
         assert!(executor.run_ids.lock().unwrap().is_empty());
+        let job =
+            crate::local_runtime::automation_store::get(&store, "local-project", "job-missed")
+                .unwrap();
+        assert_eq!(job["state"]["missed_run_count"], 3);
+        assert_eq!(job["state"]["execution_target"], "local");
+        assert_eq!(job["state"]["next_run_at"], "2099-09-03T10:04:00+00:00");
+        let (jobs, _) =
+            crate::local_runtime::automation_store::list(&store, "local-project", true, 10, 0)
+                .unwrap();
+        assert_eq!(jobs[0]["state"], job["state"]);
+        assert!(crate::local_runtime::automation_store::get(
+            &store,
+            "another-project",
+            "job-missed",
+        )
+        .is_err());
         let current = FixedClock::at("2099-09-03T10:04:00Z");
         let report = crate::local_runtime::automation_dispatcher::dispatch_due_schedules(
             &store,

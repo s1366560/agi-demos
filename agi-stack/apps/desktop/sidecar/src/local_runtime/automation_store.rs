@@ -64,22 +64,20 @@ pub(super) fn list(
         )
         .map_err(storage)?;
     let mut statement = connection
-        .prepare(
-            "SELECT value_json FROM desktop_automation_jobs
-             WHERE project_id = ?1 AND (?2 = 0 OR enabled = 1)
-             ORDER BY created_at DESC, id ASC LIMIT ?3 OFFSET ?4",
+        .prepare(&format!(
+            "{JOB_PROJECTION_SQL}
+             WHERE job.project_id = ?1 AND (?2 = 0 OR job.enabled = 1)
+             ORDER BY job.created_at DESC, job.id ASC LIMIT ?3 OFFSET ?4"
+        ))
+        .map_err(storage)?;
+    let items = statement
+        .query_map(
+            params![project_id, enabled_filter, limit, offset],
+            decode_job_projection,
         )
+        .map_err(storage)?
+        .collect::<Result<Vec<_>, _>>()
         .map_err(storage)?;
-    let rows = statement
-        .query_map(params![project_id, enabled_filter, limit, offset], |row| {
-            row.get::<_, String>(0)
-        })
-        .map_err(storage)?;
-    let mut items = Vec::new();
-    for row in rows {
-        let encoded = row.map_err(storage)?;
-        items.push(serde_json::from_str(&encoded).map_err(invalid_record)?);
-    }
     Ok((items, total))
 }
 
@@ -89,7 +87,15 @@ pub(super) fn get(
     automation_id: &str,
 ) -> Result<Value, AutomationStoreError> {
     let connection = store.connection().map_err(AutomationStoreError::Storage)?;
-    read_job(&connection, project_id, automation_id)?.ok_or(AutomationStoreError::NotFound)
+    connection
+        .query_row(
+            &format!("{JOB_PROJECTION_SQL} WHERE job.id = ?1 AND job.project_id = ?2"),
+            params![automation_id, project_id],
+            decode_job_projection,
+        )
+        .optional()
+        .map_err(storage)?
+        .ok_or(AutomationStoreError::NotFound)
 }
 
 pub(super) fn create(
@@ -377,4 +383,35 @@ fn storage(error: rusqlite::Error) -> AutomationStoreError {
 
 fn invalid_record(error: serde_json::Error) -> AutomationStoreError {
     AutomationStoreError::InvalidRecord(error.to_string())
+}
+
+// Read runtime projections without changing job revisions or immutable mutation receipts.
+const JOB_PROJECTION_SQL: &str = "
+    SELECT job.value_json, schedule.next_fire_at,
+      (SELECT COUNT(*) FROM desktop_automation_runs AS run
+       WHERE run.job_id = job.id AND run.project_id = job.project_id
+         AND run.tenant_id = json_extract(job.value_json, '$.tenant_id')
+         AND run.status = 'skipped'
+         AND run.error_code = 'local_automation_app_was_not_running')
+    FROM desktop_automation_jobs AS job
+    LEFT JOIN desktop_automation_schedule_state AS schedule
+      ON schedule.job_id = job.id AND schedule.project_id = job.project_id";
+
+fn decode_job_projection(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+    let encoded: String = row.get(0)?;
+    let mut job: Value = serde_json::from_str(&encoded).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    let next_fire_at: Option<String> = row.get(1)?;
+    let missed_run_count: u64 = row.get(2)?;
+    let Some(state) = job.get_mut("state").and_then(Value::as_object_mut) else {
+        return Err(rusqlite::Error::InvalidQuery);
+    };
+    state.insert("execution_target".into(), Value::from("local"));
+    state.insert("missed_run_count".into(), Value::from(missed_run_count));
+    state.insert(
+        "next_run_at".into(),
+        next_fire_at.map_or(Value::Null, Value::from),
+    );
+    Ok(job)
 }

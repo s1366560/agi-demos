@@ -20,6 +20,7 @@ import type {
 } from '../../types';
 import type { DesktopCapabilityView } from '../runtime/capabilitySnapshot';
 import { AutomationEditorDialog } from './AutomationEditorDialog';
+import { AutomationRecoveryNotice } from './AutomationRecoveryNotice';
 import {
   automationRunAttemptKey,
   settleAutomationRunAttempt,
@@ -646,6 +647,13 @@ function AutomationDetail({
         <AutomationFact label={t('automations.payload')} value={job.payload.kind} />
         <AutomationFact label={t('automations.delivery')} value={job.delivery.kind} />
       </dl>
+
+      <AutomationRecoveryNotice
+        job={job}
+        runAllowed={runCapability.allowed}
+        busy={busy}
+        onRun={onRun}
+      />
 
       {!runCapability.allowed ? (
         <div id="automation-mutation-capability" className="automation-capability-note" role="note">
