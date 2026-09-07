@@ -2843,3 +2843,62 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     ...options,
   });
 }
+
+test('cloud tenant projections preserve the aggregate capability snapshot', async () => {
+  const { projectDesktopTenantTasksCloudSnapshotV2 } = require(
+    '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTasksHttpProjectionV2.js',
+  );
+  const { projectDesktopTenantAgentBindingsCloudSnapshotV2 } = require(
+    '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAgentBindingsHttpProjectionV2.js',
+  );
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify(searchContract), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+  try {
+    const client = createWorkbenchCapabilityClient(
+      { getAutomationCapabilities: async () => automationContract },
+      { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-1' },
+      {
+        tenantTasksOperationsV2: {
+          async loadTenantTasks({ scope }) {
+            return projectDesktopTenantTasksCloudSnapshotV2(
+              { total: 0, pending: 0, processing: 0, completed: 0, failed: 0,
+                throughput_per_minute: 0, error_rate: 0 },
+              [],
+              { tasks: [], total: 0, limit: 1, offset: 0, has_more: false },
+              scope,
+              { limit: 1, offset: 0, search: '', status: 'all' },
+            );
+          },
+        },
+        tenantAgentBindingsOperationsV2: {
+          async listTenantAgentBindings({ scope }) {
+            return projectDesktopTenantAgentBindingsCloudSnapshotV2(
+              [], [],
+              { context: { tenant_id: scope.tenantId, revision: 23 }, membership_role: 'admin' },
+              scope,
+            );
+          },
+        },
+      },
+    );
+    const snapshot = await client.loadSnapshot();
+    const tasks = snapshot.capabilities['tenant-tenant-tasks'];
+    assert.equal(tasks.service_version, '0.1.0');
+    assert.equal(tasks.availability, 'unavailable');
+    assert.equal(tasks.reason_code, 'capability_authority_revision_unavailable');
+    assert.deepEqual(tasks.allowed_actions, []);
+    assert.equal(tasks.authority_revision, null);
+    const bindings = snapshot.capabilities['tenant-tenant-agent-bindings'];
+    assert.equal(bindings.service_version, '0.1.0');
+    assert.equal(bindings.availability, 'available');
+    assert.equal(bindings.authority_revision, 23);
+    assert.ok(bindings.allowed_actions.includes('create'));
+    assert.ok(snapshot.capabilities['project-project-memories']);
+    assert.ok(snapshot.capabilities.workspace_collaboration);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

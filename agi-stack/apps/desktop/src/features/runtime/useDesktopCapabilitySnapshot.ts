@@ -32,8 +32,11 @@ export function useDesktopCapabilitySnapshot(
       .then((nextSnapshot) => {
         if (!controller.signal.aborted) setSnapshot(nextSnapshot);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setSnapshot(null);
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          console.warn('[desktop-capability-snapshot]', capabilitySnapshotFailureCode(error));
+          setSnapshot(null);
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -42,4 +45,13 @@ export function useDesktopCapabilitySnapshot(
   }, [attempt, client, enabled]);
 
   return { loading, reload, snapshot };
+}
+
+function capabilitySnapshotFailureCode(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return 'snapshot_load_failed';
+  for (const key of ['reasonCode', 'code']) {
+    const value = Reflect.get(error, key);
+    if (typeof value === 'string' && /^[a-z][a-z0-9_:-]{0,255}$/.test(value)) return value;
+  }
+  return 'snapshot_load_failed';
 }

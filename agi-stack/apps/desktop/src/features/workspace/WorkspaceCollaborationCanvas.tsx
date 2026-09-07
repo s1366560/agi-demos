@@ -41,6 +41,7 @@ import {
   type WorkspaceCollaborationSurfaceProps as SurfaceProps,
   type WorkspaceCollaborationTranslate as Translate,
 } from './WorkspaceCollaborationSurfacePrimitives';
+import { workspaceCollaborationFailureReason } from './workspaceCollaborationFailureReason';
 import './WorkspaceCollaborationCanvas.css';
 
 export type WorkspaceCollaborationCanvasProps = {
@@ -131,7 +132,7 @@ export function WorkspaceCollaborationCanvas({
               current,
               surface,
               generation,
-              'workspace_surface_load_failed',
+              workspaceCollaborationFailureReason(error, 'workspace_surface_load_failed'),
             ),
           );
         })
@@ -274,7 +275,7 @@ export function WorkspaceCollaborationCanvas({
             current,
             surface,
             generation,
-            'workspace_surface_mutation_refetch_failed',
+            workspaceCollaborationFailureReason(error, 'workspace_surface_mutation_failed'),
           ),
         );
         setMutationFailed(true);
@@ -408,6 +409,9 @@ function AuthorityNotice({
     >
       <strong>{t(`workspaceCollaboration.state.${status}.title`)}</strong>
       <p>{t(`workspaceCollaboration.state.${status}.description`)}</p>
+      {snapshot?.reason_code && /^[a-z][a-z0-9_:-]{0,255}$/.test(snapshot.reason_code) ? (
+        <code>{snapshot.reason_code}</code>
+      ) : null}
     </div>
   );
 }

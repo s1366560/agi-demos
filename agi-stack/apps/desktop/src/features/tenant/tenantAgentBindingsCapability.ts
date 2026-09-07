@@ -41,7 +41,7 @@ export async function loadTenantAgentBindingsCapability(
     return {
       availability: snapshot.availability,
       reason_code: snapshot.reasonCode,
-      service_version: snapshot.serviceVersion,
+      service_version: config.mode === 'cloud' ? '0.1.0' : snapshot.serviceVersion,
       contract_version: snapshot.contractVersion,
       allowed_actions: snapshot.allowedActions,
       scope,

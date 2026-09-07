@@ -116,6 +116,7 @@ def _rows_to_elements(rows: list[dict[str, Any]]) -> dict[str, Any]:
                         "label": _graph_node_label(s_props, r.get("source_labels") or []),
                         "name": s_props.get("name", "Unknown"),
                         **s_props,
+                        "type": _graph_node_type(r.get("source_labels") or []),
                     }
                 }
 
@@ -131,6 +132,7 @@ def _rows_to_elements(rows: list[dict[str, Any]]) -> dict[str, Any]:
                         "label": _graph_node_label(t_props, r.get("target_labels") or []),
                         "name": t_props.get("name", "Unknown"),
                         **t_props,
+                        "type": _graph_node_type(r.get("target_labels") or []),
                     }
                 }
 
@@ -152,6 +154,12 @@ def _rows_to_elements(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 )
 
     return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
+
+
+def _graph_node_type(labels: list[str]) -> str | None:
+    """Expose the graph store's structural node kind without inferring from content."""
+    kinds = {"Entity", "Episodic", "Community"}.intersection(labels)
+    return next(iter(kinds)) if len(kinds) == 1 else None
 
 
 def _serialize_datetime(value: Any) -> str | None:

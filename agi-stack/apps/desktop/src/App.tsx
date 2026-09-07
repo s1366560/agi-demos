@@ -7641,6 +7641,7 @@ export function App() {
         navigation: desktopProductionRouteNavigation,
         permissions: desktopProductionRouteAuthorityV2.permissions,
         resolveCapability: desktopProductionRouteAuthorityV2.resolveCapability,
+        reloadCapability: desktopCapabilityState.reload,
         resolvePermissionSnapshot:
           desktopProductionRouteAuthorityV2.resolvePermissionSnapshot,
         switchScope: switchProductionRouteScope,

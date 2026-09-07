@@ -1,3 +1,5 @@
+import { authorizeWorkspaceCollaborationMutation } from './cloudWorkspaceCollaborationMutationPolicy';
+
 export type CloudProductRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type CloudProductEndpoint = Readonly<{
@@ -1700,6 +1702,13 @@ function authorizeWorkspaceProjection(
     return null;
   }
   if (
+    segments.length === 7 && segments[3] === 'workspaces' && segments[5] === 'topology' &&
+    ['nodes', 'edges'].includes(segments[6] ?? '') && request.method === 'GET' &&
+    request.body === undefined && request.mutation === undefined && noQuery(target)
+  ) {
+    return endpoint('workspace', null, null, requiredIdentifier(segments[4]));
+  }
+  if (
     segments.length !== 6 ||
     segments[3] !== 'workspaces' ||
     !['tasks', 'plan'].includes(segments[5] ?? '') ||
@@ -1993,6 +2002,22 @@ function authorizeWorkspaceHierarchy(
       : null;
   }
   const resource = segments[9];
+  if (
+    request.method === 'GET' && request.body === undefined && request.mutation === undefined
+  ) {
+    const collection = segments.length === 10 &&
+      ['objectives', 'genes', 'members', 'agents'].includes(resource ?? '') && noQuery(target);
+    const blackboard = resource === 'blackboard' && (
+      (segments.length === 11 &&
+        ['posts', 'execution-diagnostics'].includes(segments[10] ?? '') && noQuery(target)) ||
+      (segments.length === 13 && segments[10] === 'posts' && segments[12] === 'replies' &&
+        Boolean(requiredIdentifier(segments[11])) && noQuery(target)) ||
+      (segments.length === 11 && segments[10] === 'files' &&
+        exactQueryKeys(target.searchParams, new Set(['parent_path'])) &&
+        target.searchParams.get('parent_path') === '/')
+    );
+    if (collection || blackboard) return endpoint('workspace', tenantId, projectId, workspaceId);
+  }
   if (segments.length === 10) {
     const allowed =
       ((resource === 'members' || resource === 'agents' || resource === 'messages') &&
@@ -2011,6 +2036,11 @@ function authorizeWorkspaceHierarchy(
     return endpoint('workspace', tenantId, projectId, workspaceId);
   }
   if (segments.length === 11) {
+    if (resource === 'collaboration' && segments[10] === 'mutations' &&
+        request.method === 'POST' && noQuery(target) &&
+        authorizeWorkspaceCollaborationMutation(request.body, request.mutation)) {
+      return endpoint('workspace', tenantId, projectId, workspaceId);
+    }
     if (
       resource === 'collaboration' &&
       ['capabilities', 'authority'].includes(segments[10] ?? '') &&

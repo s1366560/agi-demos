@@ -30,6 +30,7 @@ export type DesktopProductionRouterProps = Readonly<
     legacyPassthroughRouteIds?: ReadonlySet<string>;
     location: DesktopHashLocationPort;
     navigation: DesktopProductionRouterNavigationPort;
+    reloadCapability?: () => void;
   }
 >;
 
@@ -58,6 +59,7 @@ export function DesktopProductionRouter({
   resolvePermissions,
   resolvePermissionSnapshot,
   resolveCapability,
+  reloadCapability,
   switchScope,
 }: DesktopProductionRouterProps) {
   const hostOptions = useMemo<DesktopHashRouteHostOptions<DesktopRouteModule>>(
@@ -92,7 +94,7 @@ export function DesktopProductionRouter({
       forceLegacyChildren={forceLegacyChildren}
       legacyPassthroughRouteIds={legacyPassthroughRouteIds}
       navigation={navigation}
-      retry={retry}
+      retry={() => retryDesktopProductionRoute(retry, { status: state.status, reloadCapability })}
       state={state}
     >
       {children}
@@ -428,7 +430,15 @@ export function handleDesktopProductionRouteBoundaryEscape(
 
 export function retryDesktopProductionRoute(
   retry: () => Promise<void>,
+  recovery?: Readonly<{
+    status: DesktopRouteHostState['status'];
+    reloadCapability?: () => void;
+  }>,
 ): Promise<void> {
+  if (recovery?.status === 'unavailable' && recovery.reloadCapability) {
+    recovery.reloadCapability();
+    return Promise.resolve();
+  }
   return retry();
 }
 

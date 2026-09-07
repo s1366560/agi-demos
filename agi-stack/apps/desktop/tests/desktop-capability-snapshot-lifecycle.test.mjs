@@ -134,3 +134,25 @@ test('actual App HMR publication aborts old generation before its late snapshot 
   pending.resolve({ id: 'old-generation' }); await flush();
   assert.deepEqual(h.render().snapshot, { id: 'new-generation' });
 });
+
+test('snapshot diagnostics log only protocol codes and retain fail-closed state', async () => {
+  const original = console.warn;
+  const observations = [];
+  console.warn = (...args) => observations.push(args);
+  try {
+    const h = harness({ async loadSnapshot() {
+      throw Object.assign(new Error('sensitive transport body'), { code: 'desktop_capability_snapshot_invalid:workspace_collaboration' });
+    } });
+    h.render(); await flush();
+    assert.equal(h.render().snapshot, null);
+    assert.deepEqual(observations, [['[desktop-capability-snapshot]', 'desktop_capability_snapshot_invalid:workspace_collaboration']]);
+    h.unmount();
+    observations.length = 0;
+    const unsafe = harness({ async loadSnapshot() {
+      throw Object.assign(new Error('sensitive raw message'), { code: 'https://example.test?token=private' });
+    } });
+    unsafe.render(); await flush();
+    assert.deepEqual(observations, [['[desktop-capability-snapshot]', 'snapshot_load_failed']]);
+    unsafe.unmount();
+  } finally { console.warn = original; }
+});

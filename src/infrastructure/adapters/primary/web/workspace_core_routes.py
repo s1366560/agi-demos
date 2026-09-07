@@ -87,6 +87,7 @@ _REQUEST_HEADER_ALLOWLIST = frozenset(
         "traceparent",
         "tracestate",
         "x-correlation-id",
+        "x-expected-revision",
         "x-request-id",
     }
 )

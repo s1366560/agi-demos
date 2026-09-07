@@ -1097,7 +1097,17 @@ export function createDesktopWorkbenchCapabilityClient(
         },
       };
       const snapshot = parseDesktopCapabilitySnapshot(rawSnapshot);
-      if (!snapshot) throw new Error('desktop capability snapshot is invalid');
+      if (!snapshot) {
+        const invalidCapability = Object.entries(rawSnapshot.capabilities).find(([name, entry]) =>
+          !parseDesktopCapabilitySnapshot({
+            ...rawSnapshot,
+            capabilities: { [name]: entry },
+          }),
+        )?.[0];
+        throw Object.assign(new Error('desktop capability snapshot is invalid'), {
+          code: `desktop_capability_snapshot_invalid:${invalidCapability ?? 'envelope'}`,
+        });
+      }
       return snapshot;
     },
   };

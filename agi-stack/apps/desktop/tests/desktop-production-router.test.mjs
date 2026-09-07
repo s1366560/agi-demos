@@ -738,3 +738,28 @@ function hashLocation(initialHash) {
     },
   };
 }
+
+
+test('unavailable retry refreshes capability without resolving the stale snapshot', async () => {
+  const calls = [];
+  await retryDesktopProductionRoute(
+    async () => { calls.push('resolve-stale-snapshot'); },
+    { status: 'unavailable', reloadCapability: () => { calls.push('reload-capability'); } },
+  );
+  assert.deepEqual(calls, ['reload-capability']);
+});
+
+test('module load retry preserves its operation without reloading successful capabilities', async () => {
+  const calls = [];
+  await retryDesktopProductionRoute(
+    async () => { calls.push('retry-module'); },
+    { status: 'error', reloadCapability: () => { calls.push('reload-capability'); } },
+  );
+  assert.deepEqual(calls, ['retry-module']);
+});
+
+test('unavailable authentication router without capability reload keeps route retry', async () => {
+  let retries = 0;
+  await retryDesktopProductionRoute(async () => { retries += 1; }, { status: 'unavailable' });
+  assert.equal(retries, 1);
+});

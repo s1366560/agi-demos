@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import pytest
+
 from src.infrastructure.adapters.primary.web.routers.graph import (
     SubgraphRequest,
     get_entity_types,
@@ -230,3 +232,60 @@ async def test_get_entity_types_forwards_tenant_scope_for_superuser() -> None:
     assert response == {"entity_types": [], "total": 0}
     kwargs = store.get_entity_types.await_args.kwargs
     assert kwargs["tenant_id"] == "tenant-1"
+
+
+@pytest.mark.parametrize(
+    ("labels", "expected_type"),
+    [
+        (["Node", "Artifact", "Entity"], "Entity"),
+        (["Community", "Node"], "Community"),
+        (["Node", "Episodic"], "Episodic"),
+        (["Artifact"], None),
+        ([], None),
+        (["Entity", "Community"], None),
+    ],
+)
+@pytest.mark.parametrize("operation", ["graph", "subgraph"])
+async def test_graph_node_type_uses_structural_labels(
+    labels: list[str], expected_type: str | None, operation: str
+) -> None:
+    props = {
+        "name": "Community is only a display name",
+        "entity_type": "Artifact",
+        "type": "untrusted-business-property",
+    }
+    rows = [
+        {
+            "source_id": "source-id",
+            "source_labels": labels,
+            "source_props": props,
+            "edge_id": "edge-id",
+            "edge_type": "RELATED_TO",
+            "edge_props": {},
+            "target_id": "target-id",
+            "target_labels": labels,
+            "target_props": props,
+        }
+    ]
+    store = _store()
+    store.get_graph_visualization.return_value = rows
+    store.get_subgraph.return_value = rows
+    arguments = {
+        "current_user": SimpleNamespace(is_superuser=True),
+        "graph_application": _application(store),
+    }
+    response = (
+        await get_graph(project_id="project-1", **arguments)
+        if operation == "graph"
+        else await get_subgraph(
+            SubgraphRequest(node_uuids=["source-id"], project_id="project-1"), **arguments
+        )
+    )
+    for node in response["elements"]["nodes"]:
+        assert node["data"]["type"] == expected_type
+        assert node["data"]["name"] == props["name"]
+        assert node["data"]["entity_type"] == "Artifact"
+        if expected_type == "Entity":
+            assert node["data"]["label"] == "Artifact"
+    assert response["elements"]["edges"][0]["data"]["label"] == "RELATED_TO"
+    assert props["type"] == "untrusted-business-property"
