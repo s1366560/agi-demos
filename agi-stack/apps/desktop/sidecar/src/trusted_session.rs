@@ -88,14 +88,20 @@ impl fmt::Display for TrustedSessionBrokerError {
 #[derive(Clone)]
 pub(crate) struct TrustedSessionBroker {
     store: Arc<dyn TrustedSessionStore>,
-    operations: Arc<Mutex<()>>,
+    operations: Arc<Mutex<u64>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TrustedSessionSnapshot {
+    pub(crate) record: Option<TrustedSessionRecord>,
+    pub(crate) epoch: u64,
 }
 
 impl TrustedSessionBroker {
     pub(crate) fn new(store: Arc<dyn TrustedSessionStore>) -> Self {
         Self {
             store,
-            operations: Arc::new(Mutex::new(())),
+            operations: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -107,47 +113,93 @@ impl TrustedSessionBroker {
         &self,
         record: TrustedSessionRecord,
     ) -> Result<(), TrustedSessionBrokerError> {
-        let _operation = self.lock_operations()?;
+        let mut operation = self.lock_operations()?;
         validate_record(&record)?;
         let serialized =
             serde_json::to_string(&record).map_err(|_| TrustedSessionBrokerError::InvalidRecord)?;
-        self.store.save_raw(&serialized).map_err(map_store_error)
+        let next = next_epoch(*operation)?;
+        self.store.save_raw(&serialized).map_err(map_store_error)?;
+        *operation = next;
+        Ok(())
     }
 
     pub(crate) fn load(&self) -> Result<Option<TrustedSessionRecord>, TrustedSessionBrokerError> {
-        let _operation = self.lock_operations()?;
+        self.snapshot().map(|snapshot| snapshot.record)
+    }
+
+    pub(crate) fn snapshot(&self) -> Result<TrustedSessionSnapshot, TrustedSessionBrokerError> {
+        self.with_snapshot(|snapshot| snapshot)
+    }
+
+    /// Run a short synchronous operation against an atomic record/epoch view.
+    /// The callback must not reenter this broker or perform network/async work.
+    /// This lets a trusted consumer fence a local commit against logout/rotation.
+    pub(crate) fn with_snapshot<T>(
+        &self,
+        action: impl FnOnce(TrustedSessionSnapshot) -> T,
+    ) -> Result<T, TrustedSessionBrokerError> {
+        let mut operation = self.lock_operations()?;
+        let record = self.load_locked(&mut operation)?;
+        Ok(action(TrustedSessionSnapshot {
+            record,
+            epoch: *operation,
+        }))
+    }
+
+    fn load_locked(
+        &self,
+        operation: &mut u64,
+    ) -> Result<Option<TrustedSessionRecord>, TrustedSessionBrokerError> {
         let Some(serialized) = self.store.load_raw().map_err(map_store_error)? else {
             return Ok(None);
         };
         let record = match serde_json::from_str::<TrustedSessionRecord>(&serialized) {
             Ok(record) => record,
-            Err(_) => return self.discard_invalid(TrustedSessionBrokerError::CorruptRecord),
+            Err(_) => {
+                return self.discard_invalid(TrustedSessionBrokerError::CorruptRecord, operation)
+            }
         };
         if let Err(error) = validate_record(&record) {
-            return self.discard_invalid(error);
+            return self.discard_invalid(error, operation);
         }
         Ok(Some(record))
     }
 
     pub(crate) fn clear(&self) -> Result<(), TrustedSessionBrokerError> {
-        let _operation = self.lock_operations()?;
-        self.store.clear_raw().map_err(map_store_error)
+        let mut operation = self.lock_operations()?;
+        let next = next_epoch(*operation)?;
+        self.store.clear_raw().map_err(map_store_error)?;
+        *operation = next;
+        Ok(())
     }
 
     fn discard_invalid<T>(
         &self,
         error: TrustedSessionBrokerError,
+        operation: &mut u64,
     ) -> Result<T, TrustedSessionBrokerError> {
+        let next = next_epoch(*operation)?;
         self.store.clear_raw().map_err(map_store_error)?;
+        *operation = next;
         Err(error)
     }
 
-    fn lock_operations(&self) -> Result<MutexGuard<'_, ()>, TrustedSessionBrokerError> {
+    fn lock_operations(&self) -> Result<MutexGuard<'_, u64>, TrustedSessionBrokerError> {
         self.operations
             .lock()
             .map_err(|_| TrustedSessionBrokerError::StorageUnavailable)
     }
 }
+
+fn next_epoch(epoch: u64) -> Result<u64, TrustedSessionBrokerError> {
+    epoch
+        .checked_add(1)
+        .ok_or(TrustedSessionBrokerError::StorageUnavailable)
+}
+
+#[cfg(test)]
+#[path = "trusted_session_epoch_tests.rs"]
+mod epoch_tests;
 
 fn validate_record(record: &TrustedSessionRecord) -> Result<(), TrustedSessionBrokerError> {
     if record.version != TRUSTED_SESSION_RECORD_VERSION {

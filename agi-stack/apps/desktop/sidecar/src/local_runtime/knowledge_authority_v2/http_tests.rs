@@ -117,7 +117,6 @@ async fn sync_link_and_outbox_use_admitted_authority_without_claiming_remote_suc
     )
     .await;
     assert_eq!(outbox.0, StatusCode::OK);
-    assert_eq!(outbox.1["result"]["transport_state"], "not_started");
     let items = outbox.1["result"]["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["local_change"], created.1["result"]["receipt"]);
@@ -183,7 +182,8 @@ async fn executable_catalog_negative_routes_enforce_closed_release() {
         std::collections::BTreeSet::from([
             "/api/v1/knowledge/query",
             "/api/v1/knowledge/mutations",
-            "/api/v1/knowledge/sync-link"
+            "/api/v1/knowledge/sync-link",
+            "/api/v1/knowledge/sync-push"
         ])
     );
     assert!(!directory.0.exists());

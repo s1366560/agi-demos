@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{KnowledgeResult, KnowledgeScope, MemoryChange};
 
+pub mod push;
+
 /// Explicit user-selected association. Configured does not mean the remote
 /// actor or project has been authenticated. Rebinding requires a future
 /// explicit migration protocol rather than silently reusing existing outbox IDs.

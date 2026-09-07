@@ -3,7 +3,7 @@
 
 use agistack_core::knowledge::sync::KnowledgeSyncLink;
 use axum::{
-    extract::Extension,
+    extract::{Extension, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
@@ -19,6 +19,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .route("/api/v1/knowledge/query", post(query))
         .route("/api/v1/knowledge/mutations", post(mutate))
         .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
+        .route("/api/v1/knowledge/sync-push", post(push_once))
 }
 
 #[derive(Deserialize)]
@@ -36,6 +37,8 @@ enum KnowledgeQuery {
     Changes { after_sequence: u64, limit: usize },
     Change { sequence: u64 },
     SyncStatus,
+    RemoteBaseline { id: String },
+    PushConflicts { limit: usize },
     SyncOutbox { after_sequence: u64, limit: usize },
 }
 
@@ -56,6 +59,13 @@ async fn query(
     let operation = KnowledgeOperationV2::admit(lease, &authenticated, &request.scope)
         .map_err(IntoResponse::into_response)?;
     let result = match request.query {
+        KnowledgeQuery::RemoteBaseline { id } => {
+            json!({"version":operation.remote_baseline(&id).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::PushConflicts { limit } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            json!({"items":operation.push_conflicts(limit).await.map_err(IntoResponse::into_response)?})
+        }
         KnowledgeQuery::SyncStatus => {
             json!({"status":operation.sync_status().await.map_err(IntoResponse::into_response)?})
         }
@@ -71,7 +81,7 @@ async fn query(
             let next_sequence = items
                 .last()
                 .map_or(after_sequence, |item| item.local_change.sequence);
-            json!({"items":items,"next_sequence":next_sequence,"transport_state":"not_started"})
+            json!({"items":items,"next_sequence":next_sequence})
         }
         KnowledgeQuery::Get { id } => {
             json!({"memory": operation.get(&id).await.map_err(IntoResponse::into_response)?.ok_or_else(not_found)?})
@@ -196,6 +206,33 @@ async fn configure_sync_link(
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PushRequest {
+    scope: KnowledgeOperationScopeV2,
+}
+
+async fn push_once(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(lease): Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Json(request): Json<PushRequest>,
+) -> RouteResult {
+    let operation = KnowledgeOperationV2::admit(lease, &authenticated, &request.scope)
+        .map_err(IntoResponse::into_response)?;
+    let broker = state
+        .platform_plugin_authority_v2
+        .trusted_sessions()
+        .ok_or_else(|| KnowledgeAuthorityErrorV2::TransportUnavailable.into_response())?;
+    let result = operation
+        .push_once(&broker)
+        .await
+        .map_err(IntoResponse::into_response)?;
+    Ok(Json(
+        json!({"contract_version":VERSION,"scope":request.scope,"result":result}),
+    ))
+}
+
 fn validate_limit(limit: usize) -> Result<(), &'static str> {
     if (1..=200).contains(&limit) {
         return Ok(());
@@ -226,6 +263,16 @@ fn rejection(status: StatusCode, code: &str, message: &str) -> Response {
 impl IntoResponse for KnowledgeAuthorityErrorV2 {
     fn into_response(self) -> Response {
         let (status, code, message) = match self {
+            Self::TransportUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "knowledge_sync_transport_unavailable",
+                "trusted cloud synchronization transport is unavailable",
+            ),
+            Self::RemoteRejected => (
+                StatusCode::BAD_GATEWAY,
+                "knowledge_sync_remote_failed",
+                "cloud synchronization request failed",
+            ),
             Self::ReleaseClosed => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "knowledge_release_closed",

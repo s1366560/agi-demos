@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:1091f522600d49fbd920258ee81ebbc6f3ef5d3337eea8d6d453903f45353a",
-    "61\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:7ba28d1ebccd35ed26051d471023cf651a1b0a24410d6f4bcc562b0aa173f6",
+    "2d\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1591,8 +1591,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "591c3be9313b7e95be51385485b551a36281cd221e440ea5d\",\"entrypoint\":\"DesktopSidecarHttpRoute",
     "sModuleV2::apply\",\"module_ref\":\"builtin://memstack/desktop-sidecar/http-routes\",\"plugin_",
     "id\":\"memstack-native-target-hosts\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-sidecar\"",
-    "]},{\"artifact_digest\":\"sha256:3849007125d3ddf214e8bb893a63570d9a2f5d3d75472846494609cc04",
-    "f64e30\",\"artifact_source\":\"repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/",
+    "]},{\"artifact_digest\":\"sha256:ecd6e3fc411705c80347dd2ecac6fdf2ea066385a86703d2dda087f0de",
+    "5ebc32\",\"artifact_source\":\"repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/",
     "knowledge_authority_v2.rs\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.o",
     "rg/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"release_contract\":{",
     "\"const\":\"knowledge-and-sync-v1\",\"type\":\"string\"},\"release_state\":{\"const\":\"closed\",\"type",
@@ -4536,4 +4536,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "time-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:1091f522600d49fbd920258ee81ebbc6f3ef5d3337eea8d6d453903f45353a61";
+    "sha256:7ba28d1ebccd35ed26051d471023cf651a1b0a24410d6f4bcc562b0aa173f62d";

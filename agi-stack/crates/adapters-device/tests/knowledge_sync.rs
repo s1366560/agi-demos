@@ -213,7 +213,7 @@ fn v2_migration_backfills_only_scoped_local_changes_once() {
             .unwrap();
         drop(repo);
         let connection = rusqlite::Connection::open(&db.0).unwrap();
-        connection.execute_batch("DROP TABLE knowledge_sync_outbox; DROP TABLE knowledge_sync_links; DROP TABLE knowledge_replica; UPDATE knowledge_schema SET version=2; CREATE TABLE memories(id TEXT,project_id TEXT); INSERT INTO memories VALUES('unattributed','project');").unwrap();
+        connection.execute_batch("DROP TABLE knowledge_sync_pushes; DROP TABLE knowledge_sync_remote_versions; DROP TABLE knowledge_sync_targets; DROP TABLE knowledge_sync_outbox; DROP TABLE knowledge_sync_links; DROP TABLE knowledge_replica; UPDATE knowledge_schema SET version=2; CREATE TABLE memories(id TEXT,project_id TEXT); INSERT INTO memories VALUES('unattributed','project');").unwrap();
         let upgraded = db.open();
         let status = upgraded.sync_status(&scope).await.unwrap();
         assert!(status.link.is_none());

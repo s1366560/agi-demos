@@ -57,6 +57,7 @@ pub(super) fn migrate(tx: &Transaction<'_>, previous_version: i64) -> KnowledgeR
         }
     }
     replica(tx)?;
+    super::push::migrate(tx, previous_version)?;
     Ok(())
 }
 
@@ -90,7 +91,7 @@ fn status(conn: &Connection, scope: &KnowledgeScope) -> KnowledgeResult<Knowledg
         |row| Ok(KnowledgeSyncLink { remote_tenant_id: row.get(0)?, remote_project_id: row.get(1)?, remote_actor_id: row.get(2)? }),
     ).optional().map_err(storage)?;
     let pending_changes = conn.query_row(
-        "SELECT count(*) FROM knowledge_sync_outbox o JOIN knowledge_processing_changes c ON c.sequence=o.sequence WHERE c.tenant_id=?1 AND c.project_id=?2",
+        "SELECT count(*) FROM knowledge_sync_outbox o JOIN knowledge_processing_changes c ON c.sequence=o.sequence WHERE c.tenant_id=?1 AND c.project_id=?2 AND NOT EXISTS (SELECT 1 FROM knowledge_sync_pushes p WHERE p.sequence=o.sequence AND p.receipt_json IS NOT NULL AND p.conflict_json IS NULL)",
         params![scope.tenant_id, scope.project_id], |row| row.get(0),
     ).map_err(storage)?;
     Ok(KnowledgeSyncStatus {
@@ -164,7 +165,7 @@ impl KnowledgeSyncRepository for SqliteKnowledgeRepository {
         };
         let conn = self.conn.lock().map_err(storage)?;
         let mut statement = conn.prepare(
-            "SELECT o.change_id,c.sequence,c.payload,c.operation FROM knowledge_sync_outbox o JOIN knowledge_processing_changes c ON c.sequence=o.sequence WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.sequence>?3 ORDER BY c.sequence LIMIT ?4",
+            "SELECT o.change_id,c.sequence,c.payload,c.operation FROM knowledge_sync_outbox o JOIN knowledge_processing_changes c ON c.sequence=o.sequence WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.sequence>?3 AND NOT EXISTS (SELECT 1 FROM knowledge_sync_pushes p WHERE p.sequence=o.sequence AND p.receipt_json IS NOT NULL AND p.conflict_json IS NULL) ORDER BY c.sequence LIMIT ?4",
         ).map_err(storage)?;
         let rows = statement
             .query_map(

@@ -12,9 +12,10 @@ use async_trait::async_trait;
 use rusqlite::{params, Connection, OptionalExtension};
 
 mod mutations;
+mod push;
 mod sync;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 3;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 4;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,

@@ -29,6 +29,7 @@ use super::{
 mod routes;
 mod storage_lifecycle;
 mod sync;
+mod sync_transport;
 #[cfg(test)]
 mod tests;
 
@@ -161,6 +162,10 @@ impl KnowledgeAuthorityV2 {
 
 #[derive(Debug, thiserror::Error)]
 pub(super) enum KnowledgeAuthorityErrorV2 {
+    #[error("trusted cloud synchronization transport is unavailable")]
+    TransportUnavailable,
+    #[error("cloud synchronization request failed")]
+    RemoteRejected,
     #[error("knowledge and synchronization release is closed")]
     ReleaseClosed,
     #[error("knowledge authority is disposed")]

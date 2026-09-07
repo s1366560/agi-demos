@@ -264,3 +264,20 @@ estimate of an unreconciled backlog. Local automation 30 passed; renderer model/
 30 passed; renderer typecheck passed. Canonical native launch succeeded, but native Cron
 navigation still closed because its capability has no authority revision. This pre-existing
 protocol gap must be fixed before the notice's native acceptance is complete.
+
+I3.3 adds a durable local push protocol. Prepared requests retain their change ID and
+exact payload across retries; verified applied receipts update the remote baseline in
+the same SQLite transaction as acknowledgment. Conflicts retain both snapshots and
+block later pushes for that memory. The renderer cannot provide cloud URLs, credentials
+or receipts: native transport verifies the trusted session, cloud actor and project.
+Session epoch checks fence logout, credential rotation and clear/restore of the same
+token; final receipt commit shares the broker's short synchronous lock. Invalid or
+expired sessions leave the outbox unacknowledged. No lock spans network I/O.
+
+Full sidecar tests: 669 passed. Knowledge HTTP tests cover session changes during
+authentication, project lookup, mutation and conflict retrieval; storage and broker
+tests cover replay, malformed receipts and identity fencing. Strict Core/device Clippy
+and generated artifact checks passed; sidecar Clippy retains existing failures. Cloud
+route enrollment/mounting, pull, manual conflict resolution and native bidirectional
+acceptance remain pending. Rollback disables the new push entry point and retains the
+SQLite outbox, receipts and remote baselines.
