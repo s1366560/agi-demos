@@ -260,7 +260,9 @@ export async function executeVaultBoundCloudRequest(
   );
   const contextBody = await boundedJson(contextResponse, false, session.credential);
   if (!contextResponse.ok) throw new Error('cloud request scope observation failed');
-  const context = parseObservedContext(contextBody);
+  const context = await observeEndpointWorkspaceScope(
+    endpoint, parseObservedContext(contextBody), session, dependencies,
+  );
   assertEndpointScope(endpoint, context);
   if (endpoint.kind === 'workspace-context-switch') {
     const switchContext = async (): Promise<VaultBoundCloudRequestResult> => {
@@ -1189,6 +1191,30 @@ function parseObservedContext(
     projectId: identifierOrNull(input.context.project_id),
     workspaceId: identifierOrNull(input.context.workspace_id),
   });
+}
+
+async function observeEndpointWorkspaceScope(
+  endpoint: AuthorizedEndpoint,
+  context: Readonly<{ tenantId: string; projectId: string | null; workspaceId: string | null }>,
+  session: TrustedCloudSession,
+  dependencies: VaultBoundCloudRequestDependencies,
+): Promise<typeof context> {
+  assertEndpointScope({ ...endpoint, workspaceId: null }, context);
+  if (endpoint.workspaceId == null || context.workspaceId !== null) return context;
+  if (context.projectId === null) throw new Error('cloud request workspace scope unavailable');
+  const path = `/api/v1/tenants/${encodeURIComponent(context.tenantId)}/projects/${
+    encodeURIComponent(context.projectId)
+  }/workspaces/${encodeURIComponent(endpoint.workspaceId)}`;
+  const response = await authorizedFetch(session, dependencies, { path, method: 'GET' });
+  const body = await boundedJson(response, false, session.credential);
+  dependencies.signal?.throwIfAborted();
+  if (
+    !response.ok || !isRecord(body) || body.id !== endpoint.workspaceId ||
+    body.tenant_id !== context.tenantId || body.project_id !== context.projectId
+  ) {
+    throw new Error('cloud request workspace scope observation failed');
+  }
+  return Object.freeze({ ...context, workspaceId: endpoint.workspaceId });
 }
 
 function assertEndpointScope(
