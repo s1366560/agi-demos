@@ -136,6 +136,7 @@ async def _execute_memory_get(
 # @tool_define version of MemorySearchTool
 # ---------------------------------------------------------------------------
 
+
 def _current_memory_search_runtime() -> tuple[Any, Any, str]:
     runtime = _memory_tool_runtime.get()
     if runtime is not None:
@@ -318,6 +319,7 @@ async def memory_search_tool(
 # @tool_define version of MemoryGetTool
 # ---------------------------------------------------------------------------
 
+
 def _current_memory_get_runtime() -> tuple[Callable[..., Any] | None, str]:
     runtime = _memory_tool_runtime.get()
     if runtime is not None:
@@ -385,6 +387,7 @@ async def memory_get_tool(
 # MemoryCreateTool (class-based) + @tool_define memory_create_tool
 # ---------------------------------------------------------------------------
 
+
 def _current_memory_write_runtime() -> MemoryToolRuntime:
     runtime = _memory_tool_runtime.get()
     if runtime is not None:
@@ -403,6 +406,7 @@ def _schedule_memory_create_background_sync(
     session_factory: Callable[..., Any],
     graph_service: Any,
     memory_id: str,
+    source_revision: int,
     title: str,
     content: str,
     project_id: str,
@@ -417,6 +421,7 @@ def _schedule_memory_create_background_sync(
             session_factory=session_factory,
             graph_service=graph_service,
             memory_id=memory_id,
+            source_revision=source_revision,
             title=title,
             content=content,
             project_id=project_id,
@@ -436,6 +441,7 @@ async def _background_sync_created_memory(
     session_factory: Callable[..., Any],
     graph_service: Any,
     memory_id: str,
+    source_revision: int,
     title: str,
     content: str,
     project_id: str,
@@ -474,18 +480,24 @@ async def _background_sync_created_memory(
             "memory_create: failed to queue graph processing error_type=%s",
             type(graph_err).__name__,
         )
-        await _mark_created_memory_processing_status(
+        _ = await _mark_created_memory_processing_status(
             session_factory=session_factory,
             memory_id=memory_id,
+            project_id=project_id,
+            source_revision=source_revision,
             processing_status="FAILED",
         )
         return
 
-    await _mark_created_memory_processing_status(
+    applied = await _mark_created_memory_processing_status(
         session_factory=session_factory,
         memory_id=memory_id,
+        project_id=project_id,
+        source_revision=source_revision,
         processing_status="COMPLETED",
     )
+    if not applied:
+        return
 
     session = session_factory()
     try:
@@ -514,8 +526,11 @@ async def _mark_created_memory_processing_status(
     *,
     session_factory: Callable[..., Any],
     memory_id: str,
+    project_id: str,
+    source_revision: int,
     processing_status: str,
-) -> None:
+) -> bool:
+    from src.domain.model.memory.processing import MemoryProcessingSource
     from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
         SqlMemoryRepository,
     )
@@ -523,11 +538,14 @@ async def _mark_created_memory_processing_status(
     session = session_factory()
     try:
         repo = SqlMemoryRepository(session)
-        memory = await repo.find_by_id(memory_id)
-        if memory is not None:
-            memory.processing_status = processing_status
-            _ = await repo.save(memory)
-            await session.commit()
+        applied = await repo.update_processing_status(
+            MemoryProcessingSource(
+                memory_id=memory_id, project_id=project_id, revision=source_revision
+            ),
+            processing_status,
+        )
+        await session.commit()
+        return applied
     except Exception as status_err:
         logger.warning(
             "memory_create: failed to mark memory processing status "
@@ -536,6 +554,7 @@ async def _mark_created_memory_processing_status(
             type(status_err).__name__,
         )
         await session.rollback()
+        return False
     finally:
         await session.close()
 
@@ -588,6 +607,7 @@ async def _execute_memory_create(
             session_factory=session_factory,
             graph_service=graph_service,
             memory_id=memory.id,
+            source_revision=memory.version,
             title=title,
             content=content,
             project_id=project_id,

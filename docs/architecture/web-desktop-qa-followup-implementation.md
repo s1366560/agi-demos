@@ -358,3 +358,13 @@ Renderer requests carry scope only. Session clear/rotation/expiry, permission de
 malformed pages and timeout/retry have regression coverage. The complete sidecar suite
 passed 677 tests; Clippy added no knowledge-sync diagnostics. Conflict resolution,
 cloud writer enrollment and native bidirectional acceptance remain pending.
+
+I3.7 fences asynchronous processing-status writes by the captured project, memory
+revision and task identity. These updates cannot insert a missing row or overwrite
+portable content, and legacy payloads without a valid source revision skip Memory
+writeback. Producers persist source identity before starting the workflow. Production
+startup now loads the same complete manifest list used by bundle construction.
+Derived-state and PostgreSQL regressions passed 91 tests; HTTP regressions passed 25;
+production startup/bundle passed nine after formal artifact regeneration. Mypy and
+Ruff passed; Pyright reported zero errors. Same-task attempt fencing and complete
+portable-writer synchronization remain follow-up work.

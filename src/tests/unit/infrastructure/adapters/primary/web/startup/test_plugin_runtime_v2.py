@@ -68,6 +68,9 @@ async def test_initialize_and_shutdown_plugin_runtime_v2(
     assert plugin_runtime_host_v2_from_scope({"app": app}) is host
     assert current_process_generation_host_v2() is host
     assert host.manager.current is not None
+    assert "memstack-local-knowledge" in {
+        manifest.plugin_id for manifest in host.manager.current.snapshot.manifests
+    }
     route_registry = app.state.platform_plugin_route_registry_v2
     route_graph = app.state.platform_plugin_route_graph_v2
     assert app.state.platform_plugin_http_route_publication_v2 is not None
@@ -442,6 +445,7 @@ async def test_restart_nack_is_durable_and_retains_last_good(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A local restore NACK must not overwrite the preceding durable ACK or its history."""
+
     @asynccontextmanager
     async def session_factory():
         yield db_session

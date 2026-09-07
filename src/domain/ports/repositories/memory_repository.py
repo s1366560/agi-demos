@@ -1,9 +1,14 @@
 from abc import ABC, abstractmethod
 
 from src.domain.model.memory.memory import Memory
+from src.domain.model.memory.processing import MemoryProcessingSource
 
 
 class MemoryRepository(ABC):
+    async def update_processing_status(self, source: MemoryProcessingSource, status: str) -> bool:
+        """Update derived state atomically, never fall back to a full object save."""
+        raise NotImplementedError("Conditional memory processing updates are not supported")
+
     @abstractmethod
     async def save(self, memory: Memory) -> Memory:
         pass

@@ -12,6 +12,7 @@ from typing import Any
 from src.domain.model.enums import ProcessingStatus
 from src.domain.model.memory.episode import Episode, SourceType
 from src.domain.model.memory.memory import Memory
+from src.domain.model.memory.processing import MemoryProcessingSource
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
 
@@ -36,6 +37,10 @@ class MemoryService:
     def __init__(self, memory_repo: MemoryRepository, graph_service: GraphServicePort) -> None:
         self._memory_repo = memory_repo
         self._graph_service = graph_service
+
+    async def _mark_processing_failed(self, memory: Memory, source: MemoryProcessingSource) -> None:
+        if await self._memory_repo.update_processing_status(source, ProcessingStatus.FAILED.value):
+            memory.processing_status = ProcessingStatus.FAILED.value
 
     async def create_memory(
         self,
@@ -127,14 +132,16 @@ class MemoryService:
         )
 
         # Add episode to graph (this also queues background processing)
+        source = MemoryProcessingSource(
+            memory_id=memory.id, project_id=memory.project_id, revision=memory.version
+        )
         try:
             await self._graph_service.add_episode(episode)
             logger.info("Added episode to graph")
         except Exception as e:
             logger.error("Failed to add episode to graph error_type=%s", type(e).__name__)
             # Update memory status to failed
-            memory.processing_status = ProcessingStatus.FAILED.value
-            await self._memory_repo.save(memory)
+            await self._mark_processing_failed(memory, source)
             raise
 
         return memory
@@ -296,6 +303,9 @@ class MemoryService:
 
         # If content changed, forget the stale graph state and create a new episode.
         if content_changed:
+            source = MemoryProcessingSource(
+                memory_id=memory.id, project_id=memory.project_id, revision=memory.version
+            )
             try:
                 try:
                     await self._graph_service.delete_episode_by_memory_id(memory_id)
@@ -328,8 +338,7 @@ class MemoryService:
                 logger.info("Queued reprocessing for memory")
             except Exception as e:
                 logger.error("Failed to queue reprocessing error_type=%s", type(e).__name__)
-                memory.processing_status = ProcessingStatus.FAILED.value
-                await self._memory_repo.save(memory)
+                await self._mark_processing_failed(memory, source)
                 raise
 
         return memory

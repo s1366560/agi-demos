@@ -35,6 +35,7 @@ from .protocol import (
     canonical_json_v2,
     parse_plugin_manifest_v2,
 )
+from .target_profiles import PRODUCTION_TARGET_MANIFEST_V2_PATHS
 
 _ROOT = Path(__file__).resolve().parents[4]
 _ZERO_DIGEST_V2 = f"sha256:{'0' * 64}"
@@ -46,9 +47,7 @@ PRODUCTION_TARGET_PROFILE_PATH_V2 = (
     _ROOT / "config/plugin-profiles/memstack-production-target-hosts.v2.yaml"
 )
 PRODUCTION_MANIFEST_PATHS_V2 = (
-    _ROOT / "config/plugin-manifests-v2/memstack-native-target-hosts.v2.json",
-    _ROOT / "config/plugin-manifests-v2/memstack-renderer-contributions.v2.json",
-    _ROOT / "config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json",
+    *PRODUCTION_TARGET_MANIFEST_V2_PATHS,
     _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
 )
 _SOURCE_PREFIXES_V2 = (

@@ -52,6 +52,8 @@ def _add_memory_reprocessing_task(
     """Stage a memory reprocessing task in the caller's active DB transaction."""
     task_id = str(uuid4())
     task_payload = {
+        "task_id": task_id,
+        "source_revision": memory.version,
         "group_id": memory.project_id,
         "name": memory.title or str(memory.id),
         "content": memory.content,
@@ -90,17 +92,26 @@ async def _mark_memory_reprocessing_task_failed(
     error: Exception,
 ) -> None:
     """Persist failed workflow-start state for both the memory and task log."""
-    memory.processing_status = "FAILED"
     task_result = await db.execute(
         refresh_select_statement(select(TaskLog).where(TaskLog.id == task_id))
     )
     task_log = task_result.scalar_one_or_none()
+    applied = False
     if task_log is not None:
+        from src.domain.model.memory.processing import MemoryProcessingSource
+        from src.infrastructure.adapters.secondary.persistence.memory_processing import (
+            update_memory_processing_status,
+        )
+
+        source = MemoryProcessingSource.from_payload(task_log.payload or {})
+        if source is not None and source.task_id == task_id:
+            applied = await update_memory_processing_status(db, source, "FAILED")
         task_log.status = "FAILED"
         task_log.error_message = str(error)
         task_log.completed_at = datetime.now(UTC)
     await db.commit()
-    await db.refresh(memory)
+    if applied:
+        await db.refresh(memory)
 
 
 async def _start_memory_reprocessing_workflow(
@@ -617,6 +628,8 @@ async def create_memory(
 
             task_id = str(uuid4())
             task_payload = {
+                "task_id": task_id,
+                "source_revision": memory.version,
                 "group_id": project_id,
                 "name": memory.title or str(memory.id),
                 "content": memory.content,

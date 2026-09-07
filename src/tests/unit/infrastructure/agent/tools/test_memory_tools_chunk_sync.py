@@ -121,6 +121,7 @@ class TestMemoryToolsChunkSync:
                 id="mem-1",
                 title="Memory title",
                 processing_status="PENDING",
+                version=1,
             )
         )
         schedule_sync = MagicMock()
@@ -157,6 +158,7 @@ class TestMemoryToolsChunkSync:
         service.create_memory.assert_awaited_once()
         assert service.create_memory.await_args.kwargs["enqueue_graph"] is False
         assert schedule_sync.call_args.kwargs["memory_id"] == "mem-1"
+        assert schedule_sync.call_args.kwargs["source_revision"] == 1
         assert schedule_sync.call_args.kwargs["project_id"] == "proj-1"
         assert schedule_sync.call_args.kwargs["embedding_service"] is None
 
@@ -173,6 +175,7 @@ class TestMemoryToolsChunkSync:
                 id=secret_memory_id,
                 title="Memory title",
                 processing_status="PENDING",
+                version=1,
             )
         )
         schedule_sync = MagicMock()
@@ -259,6 +262,7 @@ class TestMemoryToolsChunkSync:
         repo = MagicMock()
         repo.find_by_id = AsyncMock(return_value=memory)
         repo.save = AsyncMock(return_value=memory)
+        repo.update_processing_status = AsyncMock(return_value=True)
         graph_service = SimpleNamespace(add_episode=AsyncMock())
         upsert_chunks = AsyncMock(return_value=1)
 
@@ -277,6 +281,7 @@ class TestMemoryToolsChunkSync:
             ),
         ):
             await _background_sync_created_memory(
+                source_revision=1,
                 session_factory=session_factory,
                 graph_service=graph_service,
                 memory_id="mem-1",
@@ -291,8 +296,9 @@ class TestMemoryToolsChunkSync:
             )
 
         graph_service.add_episode.assert_awaited_once()
-        assert memory.processing_status == "COMPLETED"
-        repo.save.assert_awaited_once_with(memory)
+        repo.update_processing_status.assert_awaited_once()
+        assert repo.update_processing_status.await_args.args[1] == "COMPLETED"
+        repo.save.assert_not_awaited()
         sessions[0].commit.assert_awaited_once()
         upsert_chunks.assert_awaited_once()
         sessions[1].commit.assert_awaited_once()
@@ -305,6 +311,7 @@ class TestMemoryToolsChunkSync:
         repo = MagicMock()
         repo.find_by_id = AsyncMock(return_value=memory)
         repo.save = AsyncMock(return_value=memory)
+        repo.update_processing_status = AsyncMock(return_value=True)
         graph_service = SimpleNamespace(add_episode=AsyncMock(side_effect=RuntimeError("boom")))
         upsert_chunks = AsyncMock(return_value=1)
 
@@ -319,6 +326,7 @@ class TestMemoryToolsChunkSync:
             ),
         ):
             await _background_sync_created_memory(
+                source_revision=1,
                 session_factory=session_factory,
                 graph_service=graph_service,
                 memory_id="mem-1",
@@ -332,9 +340,44 @@ class TestMemoryToolsChunkSync:
                 embedding_service=None,
             )
 
-        assert memory.processing_status == "FAILED"
-        repo.save.assert_awaited_once_with(memory)
+        repo.update_processing_status.assert_awaited_once()
+        assert repo.update_processing_status.await_args.args[1] == "FAILED"
+        repo.save.assert_not_awaited()
         session.commit.assert_awaited_once()
+        upsert_chunks.assert_not_awaited()
+
+    async def test_stale_created_memory_result_does_not_save_or_start_chunk_write(self) -> None:
+        session = AsyncMock()
+        repo = SimpleNamespace(update_processing_status=AsyncMock(return_value=False))
+        upsert_chunks = AsyncMock()
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch("src.infrastructure.memory.chunk_sync.upsert_memory_chunks", upsert_chunks),
+        ):
+            await _background_sync_created_memory(
+                session_factory=lambda: session,
+                graph_service=SimpleNamespace(add_episode=AsyncMock()),
+                memory_id="memory",
+                source_revision=4,
+                project_id="project",
+                tenant_id="tenant",
+                title="Original",
+                content="Original",
+                user_id="user",
+                category="fact",
+                tags=[],
+                embedding_service=None,
+            )
+        source = repo.update_processing_status.await_args.args[0]
+        assert (source.memory_id, source.project_id, source.revision, source.task_id) == (
+            "memory",
+            "project",
+            4,
+            None,
+        )
         upsert_chunks.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -350,6 +393,7 @@ class TestMemoryToolsChunkSync:
         repo = MagicMock()
         repo.find_by_id = AsyncMock(return_value=memory)
         repo.save = AsyncMock(return_value=memory)
+        repo.update_processing_status = AsyncMock(return_value=True)
         graph_service = SimpleNamespace(
             add_episode=AsyncMock(side_effect=RuntimeError(exception_detail))
         )
@@ -367,6 +411,7 @@ class TestMemoryToolsChunkSync:
             ),
         ):
             await _background_sync_created_memory(
+                source_revision=1,
                 session_factory=session_factory,
                 graph_service=graph_service,
                 memory_id=secret_memory_id,
@@ -397,6 +442,7 @@ class TestMemoryToolsChunkSync:
         repo = MagicMock()
         repo.find_by_id = AsyncMock(return_value=memory)
         repo.save = AsyncMock(return_value=memory)
+        repo.update_processing_status = AsyncMock(return_value=True)
         graph_service = SimpleNamespace(add_episode=AsyncMock())
         upsert_chunks = AsyncMock(side_effect=RuntimeError(exception_detail))
         caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
@@ -416,6 +462,7 @@ class TestMemoryToolsChunkSync:
             ),
         ):
             await _background_sync_created_memory(
+                source_revision=1,
                 session_factory=session_factory,
                 graph_service=graph_service,
                 memory_id=secret_memory_id,
@@ -443,7 +490,7 @@ class TestMemoryToolsChunkSync:
         secret_memory_id = "mem-status-secret"
         exception_detail = "status update leaked memory id mem-status-secret"
         repo = MagicMock()
-        repo.find_by_id = AsyncMock(side_effect=RuntimeError(exception_detail))
+        repo.update_processing_status = AsyncMock(side_effect=RuntimeError(exception_detail))
         caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
 
         with patch(
@@ -451,6 +498,8 @@ class TestMemoryToolsChunkSync:
             return_value=repo,
         ):
             await _mark_created_memory_processing_status(
+                project_id="proj-1",
+                source_revision=1,
                 session_factory=session_factory,
                 memory_id=secret_memory_id,
                 processing_status="FAILED",

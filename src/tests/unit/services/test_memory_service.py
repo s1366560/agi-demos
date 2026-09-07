@@ -18,6 +18,41 @@ from src.domain.model.memory.memory import Memory
 class TestMemoryService:
     """Test MemoryService business logic."""
 
+    @pytest.mark.parametrize("operation", ["create", "update"])
+    async def test_graph_failure_uses_conditional_status_write_without_resaving_content(
+        self, operation, mock_memory_repo, mock_graphiti_client
+    ):
+        memory = Memory(
+            id="memory",
+            project_id="project",
+            author_id="author",
+            title="Old",
+            content="Old",
+            version=7,
+        )
+        mock_memory_repo.find_by_id.return_value = memory
+        mock_memory_repo.update_processing_status = AsyncMock(return_value=False)
+        mock_graphiti_client.add_episode.side_effect = RuntimeError("graph unavailable")
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+        with pytest.raises(RuntimeError, match="graph unavailable"):
+            if operation == "create":
+                await service.create_memory(
+                    title="Title",
+                    content="Content",
+                    project_id="project",
+                    user_id="actor",
+                    tenant_id="tenant",
+                )
+            else:
+                await service.update_memory(memory_id="memory", content="New")
+        assert mock_memory_repo.save.await_count == 1
+        source, status = mock_memory_repo.update_processing_status.await_args.args
+        assert source.project_id == "project"
+        assert source.revision == (1 if operation == "create" else 7)
+        assert status == "FAILED"
+        if operation == "update":
+            assert memory.processing_status == "PENDING"
+
     async def test_create_memory_success(self, mock_memory_repo, mock_graphiti_client):
         """Test successful memory creation."""
         # Arrange

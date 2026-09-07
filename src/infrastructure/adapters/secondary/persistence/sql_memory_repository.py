@@ -9,10 +9,14 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.memory import Memory
+from src.domain.model.memory.processing import MemoryProcessingSource
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.infrastructure.adapters.secondary.common.base_repository import (
     BaseRepository,
     refresh_select_statement,
+)
+from src.infrastructure.adapters.secondary.persistence.memory_processing import (
+    update_memory_processing_status,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Memory as DBMemory
 
@@ -58,6 +62,10 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
 
         await self._session.flush()
         return memory
+
+    @override
+    async def update_processing_status(self, source: MemoryProcessingSource, status: str) -> bool:
+        return await update_memory_processing_status(self._session, source, status)
 
     async def find_by_id(self, memory_id: str) -> Memory | None:
         """Find a memory by ID."""

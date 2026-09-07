@@ -177,9 +177,11 @@ async def test_episode_processing_workflow_updates_task_and_memory(
     memory_id = str(uuid4())
     task_id = str(uuid4())
     memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
     payload = {
         "task_id": task_id,
         "memory_id": memory_id,
+        "source_revision": 1,
         "uuid": memory_id,
         "content": memory.content,
         "project_id": test_project_db.id,
@@ -243,9 +245,11 @@ async def test_episode_processing_workflow_marks_failures(
     memory_id = str(uuid4())
     task_id = str(uuid4())
     memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
     payload = {
         "task_id": task_id,
         "memory_id": memory_id,
+        "source_revision": 1,
         "uuid": memory_id,
         "content": memory.content,
         "project_id": test_project_db.id,
@@ -271,6 +275,79 @@ async def test_episode_processing_workflow_marks_failures(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("source_revision", [None, True, "1", 0, 2])
+async def test_episode_job_without_matching_source_keeps_memory_state(
+    test_db, test_project_db, test_user, monkeypatch, source_revision
+):
+    monkeypatch.setattr(
+        workflow_module,
+        "async_session_factory",
+        async_sessionmaker(test_db.bind, class_=AsyncSession, expire_on_commit=False),
+    )
+    memory_id, task_id = str(uuid4()), str(uuid4())
+    memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
+    payload = {
+        "task_id": task_id,
+        "memory_id": memory_id,
+        "uuid": memory_id,
+        "project_id": test_project_db.id,
+        "content": memory.content,
+    }
+    if source_revision is not None:
+        payload["source_revision"] = source_revision
+    task = _task(task_id, test_project_db.id, payload)
+    test_db.add_all([memory, task])
+    await test_db.commit()
+
+    await _run_episode_processing_workflow(
+        payload, SimpleNamespace(process_episode=AsyncMock(return_value=SimpleNamespace()))
+    )
+
+    await test_db.refresh(task)
+    await test_db.refresh(memory)
+    assert task.status == "COMPLETED"
+    assert memory.processing_status == "PENDING"
+
+
+@pytest.mark.unit
+async def test_replaced_task_failure_does_not_overwrite_current_task_success(
+    test_db, test_project_db, test_user, monkeypatch
+):
+    monkeypatch.setattr(
+        workflow_module,
+        "async_session_factory",
+        async_sessionmaker(test_db.bind, class_=AsyncSession, expire_on_commit=False),
+    )
+    memory_id, task_id = str(uuid4()), str(uuid4())
+    memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = "replacement-task"
+    memory.processing_status = "COMPLETED"
+    payload = {
+        "task_id": task_id,
+        "memory_id": memory_id,
+        "uuid": memory_id,
+        "project_id": test_project_db.id,
+        "content": memory.content,
+        "source_revision": 1,
+    }
+    task = _task(task_id, test_project_db.id, payload)
+    test_db.add_all([memory, task])
+    await test_db.commit()
+
+    with pytest.raises(RuntimeError, match="late failure"):
+        await _run_episode_processing_workflow(
+            payload,
+            SimpleNamespace(process_episode=AsyncMock(side_effect=RuntimeError("late failure"))),
+        )
+
+    await test_db.refresh(task)
+    await test_db.refresh(memory)
+    assert task.status == "FAILED"
+    assert memory.processing_status == "COMPLETED"
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_episode_processing_workflow_fails_fast_for_missing_project(
     test_db: AsyncSession,
@@ -289,9 +366,11 @@ async def test_episode_processing_workflow_fails_fast_for_missing_project(
     memory_id = str(uuid4())
     task_id = str(uuid4())
     memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
     payload = {
         "task_id": task_id,
         "memory_id": memory_id,
+        "source_revision": 1,
         "uuid": memory_id,
         "content": memory.content,
         "project_id": missing_project_id,
@@ -313,7 +392,7 @@ async def test_episode_processing_workflow_fails_fast_for_missing_project(
     assert task.status == "FAILED"
     assert task.message == "Graph processing failed"
     assert "does not exist" in (task.error_message or "")
-    assert memory.processing_status == "FAILED"
+    assert memory.processing_status == "PENDING"
 
 
 @pytest.mark.unit

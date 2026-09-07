@@ -51,6 +51,7 @@ def test_production_bundle_is_closed_deterministic_and_composable() -> None:
     assert snapshot == expected
     assert len(snapshot.entries) > 1
     assert {manifest.plugin_id for manifest in snapshot.manifests} == {
+        "memstack-local-knowledge",
         "memstack-native-target-hosts",
         "memstack-renderer-contributions",
         "memstack-renderer-target-hosts",

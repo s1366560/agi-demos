@@ -8,11 +8,15 @@ from typing import Any, cast
 
 from sqlalchemy import select
 
+from src.domain.model.memory.processing import MemoryProcessingSource
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, TaskLog
+from src.infrastructure.adapters.secondary.persistence.memory_processing import (
+    update_memory_processing_status,
+)
+from src.infrastructure.adapters.secondary.persistence.models import Project, TaskLog
 from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 from src.infrastructure.plugins.v2.boundary import (
     current_process_generation_host_v2,
@@ -38,6 +42,7 @@ async def _update_episode_processing_records(
     message: str,
     result: dict[str, Any] | None = None,
     error_message: str | None = None,
+    processing_source: MemoryProcessingSource | None = None,
 ) -> None:
     """Persist task and memory processing state for the episode workflow."""
     if not task_id and not memory_id:
@@ -62,14 +67,8 @@ async def _update_episode_processing_records(
                 if status in {"COMPLETED", "FAILED"}:
                     task.completed_at = now
 
-        if memory_id:
-            memory_result = await session.execute(
-                refresh_select_statement(select(Memory).where(Memory.id == memory_id))
-            )
-            memory = memory_result.scalar_one_or_none()
-            if memory is not None:
-                memory.processing_status = status
-                memory.updated_at = now
+        if processing_source is not None and processing_source.memory_id == memory_id:
+            _ = await update_memory_processing_status(session, processing_source, status)
 
 
 def _episode_processing_result(result: object, episode_uuid: str) -> dict[str, object]:
@@ -106,6 +105,7 @@ async def _run_episode_processing_workflow(
     """Run local episode graph extraction for the asyncio workflow engine."""
     task_id = _read_optional_str(payload, "task_id")
     memory_id = _read_optional_str(payload, "memory_id")
+    processing_source = MemoryProcessingSource.from_payload(payload)
     episode_uuid = _read_optional_str(payload, "uuid")
     content = _read_optional_str(payload, "content")
     project_id = _read_optional_str(payload, "project_id")
@@ -125,6 +125,7 @@ async def _run_episode_processing_workflow(
         await _update_episode_processing_records(
             task_id=task_id,
             memory_id=memory_id,
+            processing_source=processing_source,
             status="FAILED",
             progress=100,
             message="Graph processing failed",
@@ -135,6 +136,7 @@ async def _run_episode_processing_workflow(
     await _update_episode_processing_records(
         task_id=task_id,
         memory_id=memory_id,
+        processing_source=processing_source,
         status="PROCESSING",
         progress=10,
         message="Extracting entities and relationships",
@@ -156,6 +158,7 @@ async def _run_episode_processing_workflow(
         await _update_episode_processing_records(
             task_id=task_id,
             memory_id=memory_id,
+            processing_source=processing_source,
             status="COMPLETED",
             progress=100,
             message="Graph processing complete",
@@ -166,6 +169,7 @@ async def _run_episode_processing_workflow(
         await _update_episode_processing_records(
             task_id=task_id,
             memory_id=memory_id,
+            processing_source=processing_source,
             status="FAILED",
             progress=100,
             message="Graph processing failed",

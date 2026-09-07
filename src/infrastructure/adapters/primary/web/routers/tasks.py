@@ -581,6 +581,7 @@ def _task_payload_for_memory(memory: Memory, project: Project, task_id: str) -> 
         "name": memory.title or str(memory.id),
         "content": memory.content,
         "source_description": "Historical memory retry",
+        "source_revision": memory.version,
         "episode_type": memory.content_type or "text",
         "entity_types": None,
         "uuid": memory.id,
