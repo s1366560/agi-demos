@@ -178,3 +178,50 @@ function jsonResponse(body, status = 200) {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+async function projectCatalogStats(stats, tenantId = 'tenant-1') {
+  return projectVaultBoundCloudSession({
+    async loadTrustedSession() { return trustedSession; },
+    async fetch(url) {
+      const path = new URL(url).pathname;
+      if (path === '/api/v1/workspace-context') return jsonResponse({
+        context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 7 },
+      });
+      if (path === '/api/v1/auth/me') return jsonResponse({
+        user_id: 'user-1', email: 'user@example.test', roles: [],
+      });
+      const tenant = path === '/api/v1/tenants/';
+      return jsonResponse({
+        [tenant ? 'tenants' : 'projects']: tenant ? [{ id: 'tenant-1', name: 'Tenant' }] : [{
+          id: 'project-1', tenant_id: tenantId, name: 'Project',
+          ...(stats === undefined ? {} : { stats }),
+        }],
+        total: 1, page: 1, page_size: 100,
+        ...(tenant ? {} : { owner_ids: ['user-1'] }),
+      });
+    },
+  });
+}
+
+test('Cloud project projection retains only evidenced knowledge metrics', async () => {
+  const projection = await projectCatalogStats({
+    memory_count: 1, node_count: 3, storage_used: 59,
+    recent_activity: [{ title: 'not projected' }], extra_private_field: 'not projected',
+  });
+  assert.deepEqual(projection.projects[0].stats, { memory_count: 1, node_count: 3, storage_used: 59 });
+});
+
+test('Cloud project projection does not invent missing knowledge metrics', async () => {
+  assert.equal(Object.hasOwn((await projectCatalogStats(undefined)).projects[0], 'stats'), false);
+  assert.deepEqual((await projectCatalogStats({ memory_count: 0 })).projects[0].stats, { memory_count: 0 });
+});
+
+for (const value of [-1, '1', null, {}, 1e400]) {
+  test(`Cloud project projection rejects invalid metric ${String(value)}`, async () => {
+    await assert.rejects(() => projectCatalogStats({ memory_count: value }), /project.*stats/u);
+  });
+}
+
+test('Cloud project projection rejects cross-tenant catalog even with valid metrics', async () => {
+  await assert.rejects(() => projectCatalogStats({ memory_count: 1 }, 'tenant-2'), /scope mismatch/u);
+});

@@ -100,3 +100,32 @@ for (const path of [
     }
   });
 }
+
+for (const path of [
+  '/api/v1/projects/project-1/stats',
+  memoryPath.replace('page_size=50', 'page_size=5'),
+]) {
+  test(`Cloud overview permits exact scoped read ${path}`, async () => {
+    const requests = [];
+    await executeVaultBoundCloudRequest({ method: 'GET', path }, dependencies(requests));
+    assert.deepEqual(requests, ['/api/v1/workspace-context', path]);
+    const crossScope = [];
+    await assert.rejects(() => executeVaultBoundCloudRequest(
+      { method: 'GET', path: path.replace('project-1', 'project-2') }, dependencies(crossScope),
+    ), /cloud request project scope mismatch/u);
+    assert.deepEqual(crossScope, ['/api/v1/workspace-context']);
+  });
+}
+for (const input of [
+  { method: 'GET', path: '/api/v1/projects/project-1/stats?tenant_id=tenant-1' },
+  { method: 'GET', path: '/api/v1/projects/project-1/stats/' },
+  { method: 'GET', path: '/api/v1/projects/project-1/stats', body: {} },
+  { method: 'POST', path: '/api/v1/projects/project-1/stats' },
+  { method: 'GET', path: memoryPath.replace('page_size=50', 'page_size=05') },
+]) {
+  test(`Cloud overview rejects non-contract read ${JSON.stringify(input)}`, async () => {
+    const requests = [];
+    await assert.rejects(() => executeVaultBoundCloudRequest(input, dependencies(requests)));
+    assert.deepEqual(requests, []);
+  });
+}

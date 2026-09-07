@@ -191,12 +191,19 @@ function authorizeProjectKnowledgeCohort(
     return null;
   }
   if (
+    request.method === 'GET' && request.body === undefined &&
+    segments.length === 6 && segments[3] === 'projects' && segments[5] === 'stats' &&
+    noQuery(target)
+  ) {
+    return endpoint('project', null, requiredIdentifier(segments[4]), null);
+  }
+  if (
     request.method === 'GET' &&
     request.body === undefined &&
     target.pathname === '/api/v1/memories/' &&
     exactQueryKeys(target.searchParams, new Set(['project_id', 'page', 'page_size'])) &&
     target.searchParams.get('page') === '1' &&
-    target.searchParams.get('page_size') === '50'
+    ['5', '50'].includes(target.searchParams.get('page_size') ?? '')
   ) {
     return endpoint(
       'project',

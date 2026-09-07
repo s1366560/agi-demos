@@ -521,13 +521,30 @@ function projectProject(value: unknown, tenantId: string): Readonly<Record<strin
   if (value.is_public !== undefined && typeof value.is_public !== 'boolean') {
     throw new Error('cloud session project visibility is invalid');
   }
+  const stats = projectKnowledgeStats(value.stats);
   return Object.freeze({
     id,
     tenant_id: observedTenantId,
     name,
     ...(description === undefined ? {} : { description }),
     ...(value.is_public === undefined ? {} : { is_public: value.is_public }),
+    ...(stats === undefined ? {} : { stats }),
   });
+}
+
+function projectKnowledgeStats(value: unknown): Readonly<Record<string, number>> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isRecord(value)) throw new Error('cloud session project stats are invalid');
+  const stats: Record<string, number> = {};
+  for (const key of ['memory_count', 'node_count', 'storage_used']) {
+    if (!Object.hasOwn(value, key)) continue;
+    const metric = value[key];
+    if (typeof metric !== 'number' || !Number.isFinite(metric) || metric < 0) {
+      throw new Error('cloud session project stats are invalid');
+    }
+    stats[key] = metric;
+  }
+  return Object.freeze(stats);
 }
 
 function displayString(value: unknown, reason: string): string {
