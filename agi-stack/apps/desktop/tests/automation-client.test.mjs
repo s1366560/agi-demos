@@ -18,6 +18,10 @@ const automationsPageSource = readFileSync(
   new URL('../src/features/automations/AutomationsPage.tsx', import.meta.url),
   'utf8',
 );
+const automationDetailSource = readFileSync(
+  new URL('../src/features/automations/AutomationDetail.tsx', import.meta.url),
+  'utf8',
+);
 const sidebarSource = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
   'utf8',
@@ -48,7 +52,7 @@ test('App projects the narrow automation API into the route binding and the page
   assert.match(automationsPageSource, /api\.runAutomation/u);
   assert.match(automationsPageSource, /expected_revision: job\.revision/u);
   assert.match(automationsPageSource, /onRun=\{\(\) => void runJob\(selectedJob\)\}/u);
-  assert.match(automationsPageSource, /onClick=\{onRun\}/u);
+  assert.match(automationDetailSource, /onClick=\{onRun\}/u);
 });
 
 test('the narrow automation API preserves the versioned capability authority', async () => {

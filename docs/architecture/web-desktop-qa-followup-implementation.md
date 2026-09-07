@@ -605,3 +605,16 @@ takeover, timeout, recovery and result projection tests remain green. No migrati
 or capability changes; rejected workers leave run and receipt state untouched.
 Rollback must pause local automation before reverting this fencing guard. Evidence:
 `/tmp/automation-expired-lease-red.log`, `/tmp/automation-expired-lease-all-tests.log`.
+
+I1.5 extracts AutomationDetail and its private row/fact/date helpers from the
+page without changing component bodies, props, authority calls or UI behavior.
+The page now owns loading/mutations while the detail module owns presentation.
+TypeScript, 16 client tests and both browser create/edit/reuse scenarios passed.
+No migration; rollback is the module extraction alone. Evidence:
+`/tmp/automation-detail-extract-tsc.log`, `/tmp/automation-detail-extract-client.log`,
+`/tmp/automation-detail-extract-browser.log`.
+
+Native I4.19 recheck after canonical rebuild at b33a6a48e shows the persisted
+QA reuse job last-run summary as 2026-09-07 18:11, success, matching its history
+record after restart. Evidence: `/tmp/memstack-qa-20260907/native-automation-last-run-projection.txt`.
+I3.14 final 136-test recheck is recorded at `/tmp/legacy-memory-admission-136-tests.log`.
