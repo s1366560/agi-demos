@@ -42,7 +42,7 @@ test('vault-bound Cloud session projection returns identity and scope without th
       if (path === '/api/v1/auth/me') {
         return jsonResponse({ user_id: 'user-1', email: 'user@example.test', roles: [] });
       }
-      if (path === '/api/v1/tenants') {
+      if (path === '/api/v1/tenants/') {
         assert.equal(new URL(url).search, '?page=1&page_size=100');
         return jsonResponse({
           tenants: [{ id: 'tenant-1', name: 'Tenant One' }],
@@ -51,7 +51,7 @@ test('vault-bound Cloud session projection returns identity and scope without th
           page_size: 100,
         });
       }
-      assert.equal(path, '/api/v1/projects');
+      assert.equal(path, '/api/v1/projects/');
       assert.equal(new URL(url).search, '?page=1&page_size=100&tenant_id=tenant-1');
       return jsonResponse({
         projects: [{ id: 'project-1', tenant_id: 'tenant-1', name: 'Project One' }],
@@ -149,7 +149,7 @@ test('vault-bound Cloud session projection validates project catalog metadata', 
             if (path === '/api/v1/auth/me') {
               return jsonResponse({ user_id: 'user-1', email: 'user@example.test', roles: [] });
             }
-            if (path === '/api/v1/tenants') {
+            if (path === '/api/v1/tenants/') {
               return jsonResponse({
                 tenants: [{ id: 'tenant-1', name: 'Tenant One' }],
                 total: 1,

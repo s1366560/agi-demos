@@ -2897,12 +2897,8 @@ class AgentBindingModel(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    agent_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("agent_definitions.id"),
-        nullable=False,
-        index=True,
-    )
+    # Definition identity is validated by the active generation, including catalog-only agents.
+    agent_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     channel_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     channel_id: Mapped[str | None] = mapped_column(String, nullable=True)
     account_id: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -2911,8 +2907,6 @@ class AgentBindingModel(Base):
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    agent: Mapped["AgentDefinitionModel"] = relationship(foreign_keys=[agent_id])
 
     __table_args__ = (
         Index(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast, override
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -165,7 +165,12 @@ class SqlAgentBindingRepository(
         )
 
         if channel_type is not None:
-            query = query.where(AgentBindingModel.channel_type.in_([channel_type, None]))
+            query = query.where(
+                or_(
+                    AgentBindingModel.channel_type == channel_type,
+                    AgentBindingModel.channel_type.is_(None),
+                )
+            )
 
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query.execution_options(populate_existing=True)))
@@ -243,7 +248,12 @@ class SqlAgentBindingRepository(
         )
 
         if channel_type is not None:
-            query = query.where(AgentBindingModel.channel_type.in_([channel_type, None]))
+            query = query.where(
+                or_(
+                    AgentBindingModel.channel_type == channel_type,
+                    AgentBindingModel.channel_type.is_(None),
+                )
+            )
 
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query.execution_options(populate_existing=True)))

@@ -381,7 +381,7 @@ export async function projectVaultBoundCloudSession(
     session,
     dependencies,
     'tenants',
-    (page) => `/api/v1/tenants?page=${page}&page_size=${IDENTITY_CATALOG_PAGE_SIZE}`,
+    (page) => `/api/v1/tenants/?page=${page}&page_size=${IDENTITY_CATALOG_PAGE_SIZE}`,
     projectTenant,
   );
   if (!tenants.some((tenant) => tenant.id === context.tenantId)) {
@@ -392,7 +392,7 @@ export async function projectVaultBoundCloudSession(
     dependencies,
     'projects',
     (page) =>
-      `/api/v1/projects?page=${page}&page_size=${IDENTITY_CATALOG_PAGE_SIZE}&tenant_id=${encodeURIComponent(context.tenantId)}`,
+      `/api/v1/projects/?page=${page}&page_size=${IDENTITY_CATALOG_PAGE_SIZE}&tenant_id=${encodeURIComponent(context.tenantId)}`,
     (value) => projectProject(value, context.tenantId),
   );
   if (context.projectId !== null && !projects.some((project) => project.id === context.projectId)) {
