@@ -595,3 +595,13 @@ integration regressions passed (136 total); Ruff, mypy and diff checks passed.
 No migration or capability gate changed. Historical missing tenant metadata retains
 legacy behavior; reprocess/derived writers and Rust portable writers remain pending.
 Rollback must keep sync enrollment closed and preserve journals and user content.
+
+I4.20 rejects expired local operation leases even before a replacement worker
+claims the operation. Renewal, settlement (including waiting-human), and retry
+require current expiry strictly after the clock; the clock is sampled after the
+connection/transaction lock. The exact expiry boundary regression first failed on
+renewal and now passes with all 34 automation tests. Existing heartbeat extension,
+takeover, timeout, recovery and result projection tests remain green. No migration
+or capability changes; rejected workers leave run and receipt state untouched.
+Rollback must pause local automation before reverting this fencing guard. Evidence:
+`/tmp/automation-expired-lease-red.log`, `/tmp/automation-expired-lease-all-tests.log`.

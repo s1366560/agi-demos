@@ -102,6 +102,85 @@ mod tests {
     }
 
     #[test]
+    fn expired_lease_cannot_renew_settle_or_retry_before_a_replacement_claims() {
+        for action in ["renew", "success", "waiting_human", "retry"] {
+            let store = DesktopSessionStore::in_memory().unwrap();
+            let started = FixedAutomationClock::at("2099-03-01T10:00:00Z");
+            seed_job(&store, "expired", 1, 1, false, started.now());
+            automation_store::update(
+                &store,
+                "local-user",
+                "local-project",
+                "expired",
+                "update",
+                "retry-policy",
+                "retry-policy",
+                1,
+                &started.now().to_rfc3339(),
+                |job| {
+                    job["max_retries"] = json!(1);
+                    Ok(())
+                },
+            )
+            .unwrap();
+            enqueue_manual_run(
+                &store,
+                ManualRunCommand {
+                    user_id: "local-user",
+                    project_id: "local-project",
+                    job_id: "expired",
+                    expected_revision: 2,
+                    idempotency_key: "run",
+                    request_hash: "run",
+                    conversation_id: None,
+                },
+                &started,
+            )
+            .unwrap();
+            let claim =
+                claim_next_operation(&store, "old-worker", Duration::from_secs(30), &started)
+                    .unwrap()
+                    .unwrap();
+            let expired = FixedAutomationClock::at("2099-03-01T10:00:30Z");
+            match action {
+                "renew" => assert!(!renew_operation_lease(
+                    &store,
+                    &claim,
+                    Duration::from_secs(30),
+                    &expired
+                )
+                .unwrap()),
+                "retry" => assert_eq!(
+                    crate::local_runtime::automation_dispatcher::retry_operation(
+                        &store,
+                        &claim,
+                        "temporary",
+                        Duration::from_secs(1),
+                        &expired,
+                    )
+                    .unwrap_err(),
+                    AutomationLedgerError::LeaseLost
+                ),
+                _ => {
+                    let status = if action == "success" {
+                        AutomationRunStatus::Success
+                    } else {
+                        AutomationRunStatus::WaitingHuman
+                    };
+                    assert_eq!(
+                        settle_operation(&store, &claim, status, None, &expired).unwrap_err(),
+                        AutomationLedgerError::LeaseLost
+                    );
+                }
+            }
+            let (runs, total) = list_runs(&store, "local-project", "expired", 10, 0).unwrap();
+            assert_eq!(total, 1);
+            assert_eq!(runs[0]["status"], "running");
+            assert!(runs[0]["finished_at"].is_null());
+        }
+    }
+
+    #[test]
     fn job_projection_reports_latest_finished_run_without_changing_mutation_receipts() {
         let store = DesktopSessionStore::in_memory().unwrap();
         let created = FixedAutomationClock::at("2099-03-01T10:00:00Z");

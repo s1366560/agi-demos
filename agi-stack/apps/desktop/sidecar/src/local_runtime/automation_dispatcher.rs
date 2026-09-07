@@ -503,19 +503,19 @@ pub(super) fn renew_operation_lease(
     }
     let lease_millis = i64::try_from(lease_duration.as_millis())
         .map_err(|_| AutomationLedgerError::InvalidRecord("lease duration is too large".into()))?;
+    let connection = store.connection().map_err(AutomationLedgerError::Storage)?;
     let now = clock.now();
     let lease_expires_at_ms = now
         .timestamp_millis()
         .checked_add(lease_millis)
         .ok_or_else(|| AutomationLedgerError::InvalidRecord("lease expiry overflow".into()))?;
-    store
-        .connection()
-        .map_err(AutomationLedgerError::Storage)?
+    connection
         .execute(
             "UPDATE desktop_automation_operations
              SET lease_expires_at_ms = ?1, updated_at = ?2
              WHERE id = ?3 AND run_id = ?4 AND status = 'running'
-               AND lease_owner = ?5 AND lease_token = ?6 AND fence_token = ?7",
+               AND lease_owner = ?5 AND lease_token = ?6 AND fence_token = ?7
+               AND lease_expires_at_ms > ?8",
             params![
                 lease_expires_at_ms,
                 now.to_rfc3339(),
@@ -524,6 +524,7 @@ pub(super) fn renew_operation_lease(
                 claim.worker_id,
                 claim.lease_token,
                 claim.fence_token,
+                now.timestamp_millis(),
             ],
         )
         .map(|updated| updated == 1)
@@ -572,7 +573,8 @@ pub(super) fn settle_operation_with_result(
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(storage)?;
-    let now_text = clock.now().to_rfc3339();
+    let now = clock.now();
+    let now_text = now.to_rfc3339();
     let result_summary_json = execution
         .result_summary
         .as_ref()
@@ -585,7 +587,8 @@ pub(super) fn settle_operation_with_result(
              SET status = ?1, lease_owner = NULL, lease_token = NULL,
                  lease_expires_at_ms = NULL, last_error_code = ?2, updated_at = ?3
              WHERE id = ?4 AND run_id = ?5 AND status = 'running'
-               AND lease_owner = ?6 AND lease_token = ?7 AND fence_token = ?8",
+               AND lease_owner = ?6 AND lease_token = ?7 AND fence_token = ?8
+               AND lease_expires_at_ms > ?9",
             params![
                 status.as_str(),
                 execution.error_code,
@@ -595,6 +598,7 @@ pub(super) fn settle_operation_with_result(
                 claim.worker_id,
                 claim.lease_token,
                 claim.fence_token,
+                now.timestamp_millis(),
             ],
         )
         .map_err(storage)?;
@@ -648,6 +652,10 @@ pub(super) fn retry_operation(
     }
     let delay_millis = i64::try_from(retry_delay.as_millis())
         .map_err(|_| AutomationLedgerError::InvalidRecord("retry delay is too large".into()))?;
+    let mut connection = store.connection().map_err(AutomationLedgerError::Storage)?;
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(storage)?;
     let now = clock.now();
     let available_at_ms = now
         .timestamp_millis()
@@ -656,10 +664,6 @@ pub(super) fn retry_operation(
     if available_at_ms >= claim.deadline_at.timestamp_millis() {
         return Ok(false);
     }
-    let mut connection = store.connection().map_err(AutomationLedgerError::Storage)?;
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(storage)?;
     let now_text = now.to_rfc3339();
     let requeued = transaction
         .execute(
@@ -668,7 +672,8 @@ pub(super) fn retry_operation(
                  lease_owner = NULL, lease_token = NULL, lease_expires_at_ms = NULL,
                  last_error_code = ?2, updated_at = ?3
              WHERE id = ?4 AND run_id = ?5 AND status = 'running'
-               AND lease_owner = ?6 AND lease_token = ?7 AND fence_token = ?8",
+               AND lease_owner = ?6 AND lease_token = ?7 AND fence_token = ?8
+               AND lease_expires_at_ms > ?9",
             params![
                 available_at_ms,
                 error_code,
@@ -678,6 +683,7 @@ pub(super) fn retry_operation(
                 claim.worker_id,
                 claim.lease_token,
                 claim.fence_token,
+                now.timestamp_millis(),
             ],
         )
         .map_err(storage)?;
