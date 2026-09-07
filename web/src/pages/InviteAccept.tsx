@@ -11,7 +11,7 @@
  * @module pages/InviteAccept
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useSyncExternalStore } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -22,6 +22,11 @@ import { CheckCircle2, Mail } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 
 import { invitationService, type InvitationVerifyResponse } from '@/services/invitationService';
+
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '@/plugins/webOperationAdmissionV2';
 
 import { getErrorMessage } from '@/types/common';
 
@@ -55,6 +60,12 @@ export const InviteAccept: React.FC = () => {
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
+  const canVerify = !isAuthenticated || availability.available;
 
   const [pageState, setPageState] = useState<PageState>('loading');
   const [invitationDetails, setInvitationDetails] = useState<InvitationDetails | null>(null);
@@ -64,6 +75,7 @@ export const InviteAccept: React.FC = () => {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
 
   const verifyInvitation = useCallback(async () => {
+    if (!canVerify) return;
     await Promise.resolve();
 
     setPageState('loading');
@@ -108,7 +120,7 @@ export const InviteAccept: React.FC = () => {
       setPageState('error');
       setErrorMessage(getErrorMessage(error));
     }
-  }, [token, t]);
+  }, [token, t, canVerify]);
 
   /**
    * Verify the invitation token on mount
@@ -131,7 +143,7 @@ export const InviteAccept: React.FC = () => {
    * Handle invitation acceptance
    */
   const handleAccept = useCallback(async () => {
-    if (!token || !isAuthenticated) {
+    if (!token || !isAuthenticated || !availability.available) {
       return;
     }
 
@@ -145,7 +157,7 @@ export const InviteAccept: React.FC = () => {
       setPageState('error');
       setErrorMessage(getErrorMessage(error));
     }
-  }, [token, isAuthenticated]);
+  }, [token, isAuthenticated, availability.available]);
 
   /**
    * Leave the invitation pending and return home. There is no backend
@@ -203,7 +215,7 @@ export const InviteAccept: React.FC = () => {
   };
 
   // Loading state
-  if (pageState === 'loading') {
+  if (pageState === 'loading' || !canVerify) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
         <Card className="w-full max-w-md mx-4">

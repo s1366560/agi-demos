@@ -1,4 +1,5 @@
 import { httpClient } from './client/httpClient';
+import { kernelHttpClient } from './client/kernelHttpClient';
 
 // ============================================================================
 // TYPES
@@ -53,7 +54,8 @@ export const invitationService = {
     httpClient.delete(`/tenants/${tenantId}/invitations/${invitationId}`),
 
   verify: (token: string) =>
-    httpClient.get<InvitationVerifyResponse>(`/invitations/verify/${token}`),
+    // Public identity validation must also work before login establishes a generation.
+    kernelHttpClient.get<InvitationVerifyResponse>(`/invitations/verify/${token}`),
 
   accept: (token: string, displayName?: string) => {
     const body: Record<string, string> = {};

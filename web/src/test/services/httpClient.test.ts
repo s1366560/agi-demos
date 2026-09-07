@@ -127,6 +127,23 @@ describe('httpClient', () => {
       expect(isNoAuthEndpoint('/auth/tokenized')).toBe(false);
       expect(isNoAuthEndpoint('/auth/oauthish')).toBe(false);
       expect(isNoAuthEndpoint('/auth/me')).toBe(false);
+      expect(isNoAuthEndpoint('/invitations/verify/token')).toBe(true);
+      expect(isNoAuthEndpoint('/api/v1/invitations/verify/token')).toBe(true);
+      expect(isNoAuthEndpoint('/invitations/verify-other/token')).toBe(false);
+      expect(isNoAuthEndpoint('/invitations/accept/token')).toBe(false);
+      expect(isNoAuthEndpoint('/tenants/tenant-1/invitations')).toBe(false);
+    });
+
+    it('allows anonymous invitation verification but rejects anonymous acceptance', async () => {
+      vi.mocked(getAuthToken).mockReturnValue(null);
+      const config = { url: '/invitations/verify/token', headers: {} };
+      expect(capturedRequestInterceptor?.(config)).toBe(config);
+      await expect(
+        capturedRequestInterceptor?.({
+          url: '/invitations/accept/token',
+          headers: {},
+        })
+      ).rejects.toThrow('No authentication token');
     });
 
     it('should require auth for paths that only share a public prefix', async () => {
