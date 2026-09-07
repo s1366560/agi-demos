@@ -1,4 +1,15 @@
 import {
+  available,
+  degraded,
+  emptyCapabilityScope,
+  unavailable,
+} from './workbenchCapabilityAvailability';
+import {
+  normalizeLocalSearchCapabilityContract,
+  normalizeSearchCapabilityContract,
+} from './workbenchSearchCapabilityDecoding';
+
+import {
   requireActiveWorkbenchSnapshotV2,
   settleWorkbenchSnapshotBranchesV2,
 } from './desktopWorkbenchSnapshotSettlementV2';
@@ -215,12 +226,16 @@ import {
 } from './capabilitySnapshot';
 import {
   negotiateCapabilityContract,
-  type CapabilityContractNegotiation,
 } from './capabilityVersion';
 
 export type DesktopWorkbenchCapabilityClient = {
   loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot>;
 };
+
+export {
+  normalizeLocalSearchCapabilityContract,
+  normalizeSearchCapabilityContract,
+} from './workbenchSearchCapabilityDecoding';
 
 export {
   normalizeWorkspaceCollaborationAuthorityContract,
@@ -396,21 +411,6 @@ type AutomationCapabilityAuthority = Pick<
   'getAutomationCapabilities'
 >;
 
-type SearchCapabilityDeclaration = {
-  endpoint: string;
-  parameters?: Readonly<Record<string, string>>;
-};
-
-const LOCAL_SEARCH_SUPPORTED_TYPES = [
-  'advanced',
-  'temporal',
-  'faceted',
-] as const;
-const LOCAL_SEARCH_UNAVAILABLE_TYPES = [
-  'graph_traversal',
-  'community',
-] as const;
-
 const MANAGEMENT_ROUTE_CAPABILITY_NAMES = Object.freeze([
   'tenant-tenant-providers',
   'tenant-tenant-agent-definitions',
@@ -426,27 +426,6 @@ const PROJECT_WORKSPACES_SERVICE_VERSION = '0.1.0';
 const PROJECT_WORKSPACES_CONTRACT_VERSION = '4.0.0';
 const PROJECT_BLACKBOARD_SERVICE_VERSION = '0.1.0';
 const PROJECT_BLACKBOARD_CONTRACT_VERSION = '4.0.0';
-
-const SEARCH_CONTRACT: Readonly<Record<string, SearchCapabilityDeclaration>> = {
-  semantic: { endpoint: '/api/v1/memory/search' },
-  advanced: {
-    endpoint: '/api/v1/search-enhanced/advanced',
-    parameters: {
-      query: 'string (required)',
-      strategy: 'string (optional)',
-      focal_node_uuid: 'string (optional)',
-      reranker: 'string (optional)',
-      limit: 'integer (1-200)',
-      tenant_id: 'string (optional)',
-      project_id: 'string (optional)',
-      since: 'ISO datetime string (optional)',
-    },
-  },
-  graph_traversal: { endpoint: '/api/v1/search-enhanced/graph-traversal' },
-  community: { endpoint: '/api/v1/search-enhanced/community' },
-  temporal: { endpoint: '/api/v1/search-enhanced/temporal' },
-  faceted: { endpoint: '/api/v1/search-enhanced/faceted' },
-} as const;
 
 export function createDesktopWorkbenchCapabilityClient(
   automationApi: AutomationCapabilityAuthority,
@@ -1837,113 +1816,6 @@ function normalizeManagementRouteObservation(
   return managementRouteObservation(scope, observation.itemCount);
 }
 
-export function normalizeSearchCapabilityContract(
-  input: unknown,
-): DesktopCapabilityAvailability {
-  const negotiation = negotiateCapabilityContract(
-    input,
-    DESKTOP_MINIMUM_CONTRACT_VERSION,
-  );
-  if (!negotiation.compatible) {
-    return unavailable(
-      negotiation.reason_code ?? 'capability_contract_version_invalid',
-      negotiation,
-    );
-  }
-  if (
-    !isExactRecord(input, [
-      'service_version',
-      'contract_version',
-      'search_types',
-      'filters',
-    ]) ||
-    !isExactRecord(input.search_types, Object.keys(SEARCH_CONTRACT)) ||
-    !isExactRecord(input.filters, ['entity_types', 'relationship_types']) ||
-    !isStringArray(input.filters.entity_types) ||
-    !isStringArray(input.filters.relationship_types)
-  ) {
-    return unavailable('search_capability_contract_invalid', negotiation);
-  }
-
-  for (const [searchType, expected] of Object.entries(SEARCH_CONTRACT)) {
-    const declaration = input.search_types[searchType];
-    if (
-      !isExactRecord(declaration, ['description', 'endpoint', 'parameters']) ||
-      typeof declaration.description !== 'string' ||
-      declaration.endpoint !== expected.endpoint ||
-      !isRecord(declaration.parameters) ||
-      (expected.parameters !== undefined &&
-        !matchesExactStringRecord(declaration.parameters, expected.parameters))
-    ) {
-      return unavailable('search_capability_contract_invalid', negotiation);
-    }
-  }
-  return available(negotiation, {
-    allowedActions: Object.keys(SEARCH_CONTRACT),
-  });
-}
-
-export function normalizeLocalSearchCapabilityContract(
-  input: unknown,
-  scope: { tenantId: string; projectId: string },
-): DesktopCapabilityAvailability {
-  const negotiation = negotiateCapabilityContract(
-    input,
-    DESKTOP_MINIMUM_CONTRACT_VERSION,
-  );
-  if (!negotiation.compatible) {
-    return unavailable(
-      negotiation.reason_code ?? 'capability_contract_version_invalid',
-      negotiation,
-    );
-  }
-  if (
-    !isExactRecord(input, [
-      'service_version',
-      'contract_version',
-      'mode',
-      'reason_code',
-      'tenant_id',
-      'project_id',
-      'projection_revision',
-      'backfill_cursor',
-      'supported_search_types',
-      'unavailable_search_types',
-    ]) ||
-    input.mode !== 'keyword_degraded' ||
-    (input.reason_code !== 'local_embeddings_unavailable' &&
-      input.reason_code !== 'local_search_backfill_in_progress') ||
-    input.tenant_id !== scope.tenantId ||
-    input.project_id !== scope.projectId ||
-    typeof input.projection_revision !== 'number' ||
-    !Number.isSafeInteger(input.projection_revision) ||
-    input.projection_revision < 0 ||
-    (input.backfill_cursor !== null &&
-      (typeof input.backfill_cursor !== 'string' ||
-        !/^timeline_rowid:[1-9][0-9]*$/.test(input.backfill_cursor))) ||
-    !matchesExactStringArray(
-      input.supported_search_types,
-      LOCAL_SEARCH_SUPPORTED_TYPES,
-    ) ||
-    !matchesExactStringArray(
-      input.unavailable_search_types,
-      LOCAL_SEARCH_UNAVAILABLE_TYPES,
-    )
-  ) {
-    return unavailable('local_search_capability_contract_invalid', negotiation);
-  }
-  if (
-    (input.reason_code === 'local_search_backfill_in_progress') !==
-    (input.backfill_cursor !== null)
-  ) {
-    return unavailable('local_search_capability_contract_invalid', negotiation);
-  }
-  return degraded(input.reason_code, negotiation, {
-    allowedActions: LOCAL_SEARCH_SUPPORTED_TYPES,
-    authorityRevision: input.projection_revision,
-  });
-}
-
 export function normalizeAutomationCapabilityContract(
   input: unknown,
 ): DesktopCapabilityAvailability {
@@ -2318,52 +2190,6 @@ async function loadRuntimeDeploymentsCapability(
   }
 }
 
-function available(
-  negotiation: CapabilityContractNegotiation,
-  metadata: CapabilityAuthorityMetadata = {},
-): DesktopCapabilityAvailability {
-  return {
-    availability: 'available',
-    reason_code: null,
-    service_version: negotiation.service_version,
-    contract_version: negotiation.contract_version,
-    allowed_actions: [...(metadata.allowedActions ?? [])],
-    scope: emptyCapabilityScope(),
-    authority_revision: metadata.authorityRevision ?? null,
-  };
-}
-
-function degraded(
-  reasonCode: string,
-  negotiation: CapabilityContractNegotiation,
-  metadata: CapabilityAuthorityMetadata = {},
-): DesktopCapabilityAvailability {
-  return {
-    availability: 'degraded',
-    reason_code: reasonCode,
-    service_version: negotiation.service_version,
-    contract_version: negotiation.contract_version,
-    allowed_actions: [...(metadata.allowedActions ?? [])],
-    scope: emptyCapabilityScope(),
-    authority_revision: metadata.authorityRevision ?? null,
-  };
-}
-
-function unavailable(
-  reasonCode: string,
-  negotiation?: CapabilityContractNegotiation,
-): DesktopCapabilityAvailability {
-  return {
-    availability: 'unavailable',
-    reason_code: reasonCode,
-    service_version: negotiation?.service_version ?? null,
-    contract_version: negotiation?.contract_version ?? null,
-    allowed_actions: [],
-    scope: emptyCapabilityScope(),
-    authority_revision: null,
-  };
-}
-
 function notApplicable(reasonCode: string): DesktopCapabilityAvailability {
   return {
     availability: 'not_applicable',
@@ -2375,11 +2201,6 @@ function notApplicable(reasonCode: string): DesktopCapabilityAvailability {
     authority_revision: null,
   };
 }
-
-type CapabilityAuthorityMetadata = {
-  allowedActions?: readonly string[];
-  authorityRevision?: number | null;
-};
 
 function withObservedAuthority(
   capability: DesktopCapabilityAvailability,
@@ -2494,61 +2315,12 @@ function workspaceCapabilityScope(
   };
 }
 
-function emptyCapabilityScope(): DesktopCapabilityScope {
-  return {
-    tenant_id: null,
-    project_id: null,
-    workspace_id: null,
-    instance_id: null,
-  };
-}
-
 function scopeIdentifier(input: string): string | null {
   return input.length > 0 && input === input.trim() ? input : null;
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === 'object' && input !== null && !Array.isArray(input);
-}
-
-function isExactRecord(
-  input: unknown,
-  expectedKeys: readonly string[],
-): input is Record<string, unknown> {
-  if (!isRecord(input)) return false;
-  const keys = Object.keys(input).sort();
-  const expected = [...expectedKeys].sort();
-  return (
-    keys.length === expected.length &&
-    keys.every((key, index) => key === expected[index])
-  );
-}
-
-function isStringArray(input: unknown): input is string[] {
-  return (
-    Array.isArray(input) && input.every((item) => typeof item === 'string')
-  );
-}
-
-function matchesExactStringRecord(
-  input: unknown,
-  expected: Readonly<Record<string, string>>,
-): boolean {
-  return (
-    isExactRecord(input, Object.keys(expected)) &&
-    Object.entries(expected).every(([key, value]) => input[key] === value)
-  );
-}
-
-function matchesExactStringArray(
-  input: unknown,
-  expected: readonly string[],
-): boolean {
-  return (
-    Array.isArray(input) &&
-    input.length === expected.length &&
-    input.every((value, index) => value === expected[index])
-  );
 }
 
 function readWorkspaceCollaborationCapabilityScope(

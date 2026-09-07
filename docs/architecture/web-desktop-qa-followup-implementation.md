@@ -187,3 +187,13 @@ the same expired run, reject its stale lease, hold serialization during HITL, an
 it after terminal completion. Tests use private schemas in an isolated QA database.
 Strict adapter Clippy passed for all targets. This does not enable cloud command readiness
 or prove scheduler cutover; reverting it requires stopping parallel runtime consumers.
+
+I1.3 moves search contract decoding and shared availability construction out of the large
+workbench capability client while preserving its exports and function bodies. TypeScript
+compilation and 60 focused workbench/contract/snapshot tests passed; AST comparison found
+all 61 original top-level function bodies unchanged. The complete Desktop snapshot ran
+4254 tests: 4250 passed, two failed and two skipped. The failures are the stale formal
+parity audit for the committed cloud pagination policy and a Run Review fixture's fixed
+profile entry count (436, now 437). Neither is ignored; final full Desktop/native gates
+remain pending after formal inventory regeneration and fixture correction. This extraction
+can be reverted without a protocol, authority or data migration.
