@@ -2,6 +2,7 @@
 //! `MemoryRepository` must not be used for tenant-facing knowledge operations.
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use crate::model::Memory;
 
@@ -21,17 +22,71 @@ pub enum KnowledgeError {
     NotFound,
     #[error("memory revision conflict")]
     Conflict,
+    #[error("idempotency key belongs to a different request")]
+    IdempotencyConflict,
     #[error("knowledge storage error: {0}")]
     Storage(String),
 }
 
 pub type KnowledgeResult<T> = Result<T, KnowledgeError>;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MemoryMutation {
+    Create {
+        memory: Memory,
+    },
+    Update {
+        memory: Memory,
+        expected_revision: u32,
+    },
+    Delete {
+        id: String,
+        expected_revision: u32,
+    },
+}
+
+/// Durable change available for processing. This is an accepted change, not
+/// evidence that extraction, indexing or synchronization has completed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryChange {
+    pub sequence: u64,
+    pub memory: Memory,
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryMutationOutcome {
+    pub receipt: MemoryChange,
+    pub replayed: bool,
+}
+
 /// Every operation includes both ownership fields. Updates and deletion use
 /// atomic revision checks; successful writes must persist a processing change
 /// in the same transaction. Deleted IDs stay reserved as tombstones.
 #[async_trait]
 pub trait ScopedMemoryRepository: Send + Sync {
+    /// Idempotency keys are isolated by scope and authenticated actor. Equal
+    /// requests replay the original receipt, including after subsequent edits.
+    /// Receipt, change and content are committed atomically.
+    async fn mutate(
+        &self,
+        scope: &KnowledgeScope,
+        actor_id: &str,
+        idempotency_key: &str,
+        mutation: MemoryMutation,
+    ) -> KnowledgeResult<MemoryMutationOutcome>;
+    async fn changes(
+        &self,
+        scope: &KnowledgeScope,
+        after_sequence: u64,
+        limit: usize,
+    ) -> KnowledgeResult<Vec<MemoryChange>>;
+    async fn change(
+        &self,
+        scope: &KnowledgeScope,
+        sequence: u64,
+    ) -> KnowledgeResult<Option<MemoryChange>>;
     /// Create revision 1. Existing IDs, including tombstones, conflict.
     async fn create(&self, scope: &KnowledgeScope, memory: Memory) -> KnowledgeResult<Memory>;
     async fn get(&self, scope: &KnowledgeScope, id: &str) -> KnowledgeResult<Option<Memory>>;

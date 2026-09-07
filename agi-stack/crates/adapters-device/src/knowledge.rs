@@ -4,11 +4,14 @@
 use std::sync::Mutex;
 
 use agistack_core::knowledge::{
-    KnowledgeError, KnowledgeResult, KnowledgeScope, ScopedMemoryRepository,
+    KnowledgeError, KnowledgeResult, KnowledgeScope, MemoryChange, MemoryMutation,
+    MemoryMutationOutcome, ScopedMemoryRepository,
 };
 use agistack_core::Memory;
 use async_trait::async_trait;
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, Connection, OptionalExtension};
+
+mod mutations;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -36,7 +39,7 @@ impl SqliteKnowledgeRepository {
         let version: i64 = tx
             .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
             .map_err(storage)?;
-        if version != 1 {
+        if !(1..=2).contains(&version) {
             return Err(KnowledgeError::Storage(
                 "unsupported knowledge schema version".into(),
             ));
@@ -64,6 +67,19 @@ impl SqliteKnowledgeRepository {
                 payload TEXT NOT NULL,
                 UNIQUE(tenant_id, project_id, memory_id, revision)
              );",
+        )
+        .map_err(storage)?;
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS knowledge_mutation_receipts (
+                tenant_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL,
+                request_json TEXT NOT NULL,
+                receipt_json TEXT NOT NULL,
+                PRIMARY KEY(tenant_id,project_id,actor_id,idempotency_key)
+             );
+             UPDATE knowledge_schema SET version=2;",
         )
         .map_err(storage)?;
         tx.commit().map_err(storage)?;
@@ -102,37 +118,46 @@ fn payload(conn: &Connection, scope: &KnowledgeScope, id: &str) -> KnowledgeResu
     ).optional().map_err(storage)
 }
 
-fn record_change(
-    tx: &Transaction<'_>,
-    scope: &KnowledgeScope,
-    memory: &Memory,
-    operation: &str,
-    payload: &str,
-) -> KnowledgeResult<()> {
-    tx.execute(
-        "INSERT INTO knowledge_processing_changes(tenant_id,project_id,memory_id,revision,operation,payload) VALUES(?1,?2,?3,?4,?5,?6)",
-        params![scope.tenant_id,scope.project_id,memory.id,memory.version,operation,payload],
-    ).map_err(storage)?;
-    Ok(())
-}
-
 #[async_trait]
 impl ScopedMemoryRepository for SqliteKnowledgeRepository {
-    async fn create(&self, scope: &KnowledgeScope, memory: Memory) -> KnowledgeResult<Memory> {
-        validate_memory(scope, &memory, 1)?;
-        let mut conn = self.conn.lock().map_err(storage)?;
-        let tx = conn.transaction().map_err(storage)?;
-        let json = serde_json::to_string(&memory).map_err(storage)?;
-        let inserted = tx.execute(
-            "INSERT INTO knowledge_memories(tenant_id,project_id,id,revision,created_at_ms,payload) VALUES(?1,?2,?3,1,?4,?5) ON CONFLICT(tenant_id,project_id,id) DO NOTHING",
-            params![scope.tenant_id,scope.project_id,memory.id,memory.created_at_ms,json],
-        ).map_err(storage)?;
-        if inserted == 0 {
-            return Err(KnowledgeError::Conflict);
+    async fn mutate(
+        &self,
+        scope: &KnowledgeScope,
+        actor_id: &str,
+        idempotency_key: &str,
+        mutation: MemoryMutation,
+    ) -> KnowledgeResult<MemoryMutationOutcome> {
+        self.mutate_durable(scope, actor_id, idempotency_key, mutation)
+    }
+
+    async fn changes(
+        &self,
+        scope: &KnowledgeScope,
+        after_sequence: u64,
+        limit: usize,
+    ) -> KnowledgeResult<Vec<MemoryChange>> {
+        self.read_changes(scope, after_sequence, limit)
+    }
+
+    async fn change(
+        &self,
+        scope: &KnowledgeScope,
+        sequence: u64,
+    ) -> KnowledgeResult<Option<MemoryChange>> {
+        if sequence == 0 {
+            validate(scope, "change")?;
+            return Ok(None);
         }
-        record_change(&tx, scope, &memory, "upsert", &json)?;
-        tx.commit().map_err(storage)?;
-        Ok(memory)
+        Ok(self
+            .read_changes(scope, sequence - 1, 1)?
+            .into_iter()
+            .find(|change| change.sequence == sequence))
+    }
+
+    async fn create(&self, scope: &KnowledgeScope, memory: Memory) -> KnowledgeResult<Memory> {
+        Ok(self
+            .apply_unkeyed(scope, MemoryMutation::Create { memory })?
+            .memory)
     }
 
     async fn get(&self, scope: &KnowledgeScope, id: &str) -> KnowledgeResult<Option<Memory>> {
@@ -172,30 +197,18 @@ impl ScopedMemoryRepository for SqliteKnowledgeRepository {
     async fn update(
         &self,
         scope: &KnowledgeScope,
-        mut memory: Memory,
+        memory: Memory,
         expected_revision: u32,
     ) -> KnowledgeResult<Memory> {
-        validate_memory(scope, &memory, expected_revision)?;
-        memory.version = expected_revision
-            .checked_add(1)
-            .ok_or(KnowledgeError::InvalidInput)?;
-        let mut conn = self.conn.lock().map_err(storage)?;
-        let tx = conn.transaction().map_err(storage)?;
-        let json = serde_json::to_string(&memory).map_err(storage)?;
-        let updated = tx.execute(
-            "UPDATE knowledge_memories SET revision=?4,payload=?5 WHERE tenant_id=?1 AND project_id=?2 AND id=?3 AND revision=?6 AND deleted=0",
-            params![scope.tenant_id,scope.project_id,memory.id,memory.version,json,expected_revision],
-        ).map_err(storage)?;
-        if updated == 0 {
-            return Err(if payload(&tx, scope, &memory.id)?.is_some() {
-                KnowledgeError::Conflict
-            } else {
-                KnowledgeError::NotFound
-            });
-        }
-        record_change(&tx, scope, &memory, "upsert", &json)?;
-        tx.commit().map_err(storage)?;
-        Ok(memory)
+        Ok(self
+            .apply_unkeyed(
+                scope,
+                MemoryMutation::Update {
+                    memory,
+                    expected_revision,
+                },
+            )?
+            .memory)
     }
 
     async fn delete(
@@ -204,28 +217,13 @@ impl ScopedMemoryRepository for SqliteKnowledgeRepository {
         id: &str,
         expected_revision: u32,
     ) -> KnowledgeResult<()> {
-        validate(scope, id)?;
-        let revision = expected_revision
-            .checked_add(1)
-            .filter(|_| expected_revision > 0)
-            .ok_or(KnowledgeError::InvalidInput)?;
-        let mut conn = self.conn.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-            .map_err(storage)?;
-        let json = payload(&tx, scope, id)?.ok_or(KnowledgeError::NotFound)?;
-        let mut memory: Memory = serde_json::from_str(&json).map_err(storage)?;
-        if memory.version != expected_revision {
-            return Err(KnowledgeError::Conflict);
-        }
-        memory.version = revision;
-        let json = serde_json::to_string(&memory).map_err(storage)?;
-        tx.execute(
-            "UPDATE knowledge_memories SET revision=?4,deleted=1,payload=?5 WHERE tenant_id=?1 AND project_id=?2 AND id=?3 AND revision=?6 AND deleted=0",
-            params![scope.tenant_id,scope.project_id,id,revision,json,expected_revision],
-        ).map_err(storage)?;
-        record_change(&tx, scope, &memory, "delete", &json)?;
-        tx.commit().map_err(storage)?;
+        self.apply_unkeyed(
+            scope,
+            MemoryMutation::Delete {
+                id: id.into(),
+                expected_revision,
+            },
+        )?;
         Ok(())
     }
 }

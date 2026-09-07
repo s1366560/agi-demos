@@ -68,6 +68,20 @@ restores acceptance of invalid compound declarations and is not a safe security 
 
 ### Remaining work
 
+I2.2 adds durable actor-scoped mutation receipts and scoped change cursor/detail reads.
+Equal requests replay the original receipt even after later edits/deletion; conflicting
+payloads fail. All content/change/receipt writes share one transaction. Core/Device
+90 tests and strict Clippy passed. Schema v1 to v2 is an additive transactional migration;
+the authority lifecycle must still implement pre-upgrade backup and verification before
+opening production data. Processing and synchronization consumers remain pending.
+
+I0 full-suite audit correction: the prior 16095-node baseline corresponds to `src/tests/unit`,
+as confirmed by current collection of 16102 nodes after seven added admission tests.
+The entire `src/tests` tree collects 16667 nodes. An attempted full-tree run failed eight
+member contract tests without generation initialization and was interrupted at ACP after
+259.67 seconds (49 passed). ACP passed alone and with preceding e2e/telemetry tests (50/50).
+This is not a full Backend pass; both scope and interrupted execution remain explicit.
+
 - Knowledge: tenant/project-scoped reads and deletes, CAS writes, atomic processing
   outbox, index recovery, per-action availability and cloud pagination/mutations.
 - Sync: explicit project association, stable IDs, revisions, change IDs, cursor,
