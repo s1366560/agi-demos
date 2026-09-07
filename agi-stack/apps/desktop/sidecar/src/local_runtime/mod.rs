@@ -1756,6 +1756,10 @@ impl LocalRuntimeState {
     }
 
     #[cfg(test)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "test helper mirrors the generation-bound runner"
+    )]
     async fn run_agent_message_on_generation(
         self: Arc<Self>,
         conversation_id: String,
@@ -2912,7 +2916,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
     #[cfg(test)]
     {
         let admission = PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
-        return local_router_with_generation_admission(state, admission);
+        local_router_with_generation_admission(state, admission)
     }
     #[cfg(not(test))]
     local_router_with_generation_required(state)
@@ -6804,7 +6808,7 @@ async fn create_run_input(
         .workspace_id
         .as_deref()
         .ok_or_else(|| invalid_composer_context("run conversation has no workspace"))?;
-    let _plugin_generation_lease = validate_composer_context_authority(
+    validate_composer_context_authority(
         &state,
         &authenticated,
         run_workspace_id,
@@ -9109,6 +9113,10 @@ fn terminal_session_authority_is_current(
         && validate_terminal_session_authority(state, authenticated, project_id, lease).is_ok()
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "socket owns each authenticated admission value through PTY drain"
+)]
 async fn terminal_socket_loop(
     socket: WebSocket,
     cwd: PathBuf,

@@ -214,25 +214,36 @@ mod platform {
                         Err(error)
                     }));
                 }
-                while !exited {
-                    match child.try_wait() {
-                        Ok(Some(_)) => break,
-                        Err(error) if error.raw_os_error() == Some(libc::ECHILD) => break,
-                        Err(error) => record_failure(&mut failures, format!("try_wait: {error}")),
-                        Ok(None) => {}
+                // Close the PTY before waiting: macOS terminal teardown can keep a
+                // killed child in exit until the master descriptors are released.
+                // Retain the child and generation owner until reaping is confirmed.
+                // Duplicate descriptors share O_NONBLOCK, including the writer's EOT Drop.
+                self.writer.take();
+                self.reader.take();
+                self.master.take();
+                if !exited {
+                    loop {
+                        match child.try_wait() {
+                            Ok(Some(_)) => break,
+                            Err(error) if error.raw_os_error() == Some(libc::ECHILD) => break,
+                            Err(error) => {
+                                record_failure(&mut failures, format!("try_wait: {error}"))
+                            }
+                            Ok(None) => {}
+                        }
+                        if let Err(error) = child.kill() {
+                            record_failure(&mut failures, format!("kill: {error}"));
+                        }
+                        match child.wait() {
+                            Ok(_) => break,
+                            // The owned direct child was already reaped by another wait call.
+                            Err(error) if error.raw_os_error() == Some(libc::ECHILD) => break,
+                            Err(error) => record_failure(&mut failures, format!("wait: {error}")),
+                        }
+                        // A failed kill/wait is not proof of exit. Retain this owner and the
+                        // generation while retrying; never release a possibly live process.
+                        std::thread::sleep(Duration::from_millis(20));
                     }
-                    if let Err(error) = child.kill() {
-                        record_failure(&mut failures, format!("kill: {error}"));
-                    }
-                    match child.wait() {
-                        Ok(_) => break,
-                        // The owned direct child was already reaped by another wait call.
-                        Err(error) if error.raw_os_error() == Some(libc::ECHILD) => break,
-                        Err(error) => record_failure(&mut failures, format!("wait: {error}")),
-                    }
-                    // A failed kill/wait is not proof of exit. Retain this owner and the
-                    // generation while retrying; never release a possibly live process.
-                    std::thread::sleep(Duration::from_millis(20));
                 }
             }
             self.child.take();
@@ -465,6 +476,11 @@ mod platform {
             std::thread::sleep(Duration::from_millis(5));
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod close_order_tests {
+        include!("terminal_pty_close_order_tests.rs");
     }
 }
 

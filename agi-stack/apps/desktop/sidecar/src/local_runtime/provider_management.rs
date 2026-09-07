@@ -664,7 +664,7 @@ fn mutate_llm_provider(
     // selection exists yet: the first configured provider must be usable
     // immediately. An explicit selection always wins, so this only fills the
     // empty slot and never overrides an operator's choice.
-    if creating && next_binding.is_some() && runtime.selections.get(tenant_id).is_none() {
+    if creating && next_binding.is_some() && !runtime.selections.contains_key(tenant_id) {
         let credential_ready = next_binding
             .as_ref()
             .is_some_and(|binding| binding.auth_method == "none")

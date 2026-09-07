@@ -376,8 +376,8 @@ fn validate_receipt(
                     .as_ref()
                     .is_some_and(|value| !value.is_empty())
                 && receipt.applied_version.is_some() == receipt.applied_digest.is_some()
-                && receipt.applied_version.is_none_or(|version| version > 0)
-                && receipt.applied_digest.as_ref().is_none_or(|digest| {
+                && receipt.applied_version.map_or(true, |version| version > 0)
+                && receipt.applied_digest.as_ref().map_or(true, |digest| {
                     digest.len() == 64
                         && digest
                             .bytes()

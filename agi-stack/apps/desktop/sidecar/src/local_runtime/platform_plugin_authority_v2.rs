@@ -185,7 +185,7 @@ pub(crate) enum PlatformPluginRendererDistributionV2 {
         snapshot: Value,
     },
     Cloud {
-        distribution: ControlPlaneDistributionV2,
+        distribution: Box<ControlPlaneDistributionV2>,
     },
 }
 
@@ -327,7 +327,7 @@ impl PlatformPluginAuthorityV2 {
             &distribution.snapshot,
             Some(distribution.envelope.version),
             PlatformPluginRendererDistributionV2::Cloud {
-                distribution: distribution.clone(),
+                distribution: Box::new(distribution.clone()),
             },
             generation,
         )

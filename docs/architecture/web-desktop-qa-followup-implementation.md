@@ -718,3 +718,17 @@ Development API recovery: existing explicit builtin upgrade service CAS-upgraded
 desired revision 5 to 6, preserving the exact existing profile source and validating
 all replacement archives. Canonical backend startup completed; authenticated login
 and project listing returned HTTP 200. Evidence: `/tmp/knowledge-api-restored-launch.log`.
+
+I0.5 repairs Sidecar strict validation: MSRV-compatible receipt checks, explicit
+set membership and test-only helpers, boxed cloud distribution, and unchanged
+authentication validation without misleading unit-valued lease bindings. Four new
+cloud resolution routes now have executable closed-release probes. Initial full
+Sidecar run: 695 passed/1 missing-probe failure; next run exposed a real Unix PTY
+cleanup failure. A sampled stalled run held PTY descriptors while blocked in wait4.
+Cleanup now closes PTY descriptors before waiting, while retaining child/generation
+ownership until exit. A deterministic ordering regression and real zsh/sh tests
+cover the fix. Final full Sidecar: 697 passed, zero failed; strict all-target Clippy
+passed. Three further 13-test PTY runs across zsh/sh passed. This is source-level
+Sidecar validation, not native Electron acceptance after rebuild. Evidence:
+`/tmp/sidecar-close-order-full.log`, `/tmp/sidecar-close-order-clippy-final.log`,
+`/tmp/sidecar-pty-close-order-repeat.log`, `/tmp/sidecar-pty-stall.sample`.

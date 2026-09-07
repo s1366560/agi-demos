@@ -53,14 +53,14 @@ impl LocalRuntimeState {
             None => {
                 // No explicit runtime selection: local mode configures at most one
                 // active provider per tenant, so the sole binding is the default.
-                let (key, binding) = active.iter().next().copied()?;
+                let (key, binding) = active.first().copied()?;
                 if active.len() > 1 {
                     return None;
                 }
                 (key, binding)
             }
         };
-        if binding.auth_method != "none" && !runtime.credentials.contains_key(&key) {
+        if binding.auth_method != "none" && !runtime.credentials.contains_key(key) {
             return None;
         }
         Some(LlmRouteTarget {

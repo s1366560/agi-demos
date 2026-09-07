@@ -347,6 +347,7 @@ impl DesktopSessionStore {
         versions
     }
 
+    #[cfg(test)]
     pub(in crate::local_runtime) fn set_managed_resource_enabled(
         &self,
         kind: ManagedResourceKind,

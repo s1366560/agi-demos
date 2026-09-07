@@ -2703,6 +2703,90 @@
       "authority": "native_session_required",
       "expected_status": 401,
       "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-cloud-query",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-cloud-query",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {
+        "query": {
+          "operation": "pending_resolutions",
+          "before_resolution_id": null,
+          "limit": 20
+        }
+      },
+      "idempotency_key": "closed-cloud-resolution"
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-resolve-push",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-resolve-push",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {
+        "resolution": {
+          "local_sequence": 1,
+          "memory_id": "memory",
+          "conflict_id": "conflict",
+          "guard": {
+            "expected_local_revision": 1,
+            "expected_remote_revision": 1,
+            "expected_baseline_revision": 0,
+            "conflict_sequences": []
+          },
+          "choice": {
+            "decision": "keep_current"
+          }
+        }
+      },
+      "idempotency_key": "closed-cloud-resolution"
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-resume-resolution",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-resume-resolution",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {
+        "resolution_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "idempotency_key": "closed-cloud-resolution"
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-reconcile-resolution",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-reconcile-resolution",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {
+        "resolution_id": "00000000-0000-4000-8000-000000000001",
+        "reconciliation": {
+          "guard": {
+            "expected_local_revision": 1,
+            "expected_remote_revision": 1,
+            "expected_baseline_revision": 0,
+            "conflict_sequences": []
+          },
+          "choice": {
+            "decision": "use_local"
+          }
+        }
+      },
+      "idempotency_key": "closed-cloud-resolution"
     }
   ]
 }

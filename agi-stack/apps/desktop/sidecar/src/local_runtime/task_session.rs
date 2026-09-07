@@ -179,7 +179,7 @@ pub(super) async fn create_task_session(
         .and_then(Value::as_str)
         .ok_or_else(|| workspace_core_bridge::bad_request("Workspace is invalid"))?
         .to_string();
-    let _plugin_generation_lease = super::validate_composer_context_authority(
+    super::validate_composer_context_authority(
         &state,
         &authenticated,
         &workspace_id,
