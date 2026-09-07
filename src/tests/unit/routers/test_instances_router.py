@@ -24,6 +24,7 @@ from src.infrastructure.adapters.primary.web.routers.instances import (
     add_member,
     apply_pending_config,
     delete_instance,
+    get_instance,
     list_members,
     remove_member,
     restart_instance,
@@ -533,3 +534,46 @@ async def test_instance_routes_sanitize_service_value_errors(
 
         deploy = await _latest_deploy(test_db, managed_instance.id)
         assert deploy.triggered_by == test_user.id
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("action", ["get", "update", "scale", "restart", "delete"])
+async def test_deleted_instance_rejects_reads_and_lifecycle_actions(
+    test_db: AsyncSession,
+    managed_instance: InstanceModel,
+    test_user: User,
+    action: str,
+) -> None:
+    authority = _authority(
+        db=test_db,
+        user=test_user,
+        tenant_id=managed_instance.tenant_id,
+    )
+    instance_id = managed_instance.id
+    await delete_instance(instance_id, authority=authority)
+    await test_db.refresh(managed_instance)
+    assert managed_instance.deleted_at is not None
+    original_name = managed_instance.name
+    original_replicas = managed_instance.replicas
+
+    with pytest.raises(HTTPException) as exc:
+        if action == "get":
+            await get_instance(instance_id, authority=authority)
+        elif action == "update":
+            await update_instance(instance_id, InstanceUpdate(name="revived"), authority=authority)
+        elif action == "scale":
+            await scale_instance(instance_id, ScaleRequest(desired_replicas=7), authority=authority)
+        elif action == "restart":
+            await restart_instance(instance_id, authority=authority)
+        else:
+            await delete_instance(instance_id, authority=authority)
+
+    assert exc.value.status_code == status.HTTP_404_NOT_FOUND
+    await test_db.refresh(managed_instance)
+    assert managed_instance.deleted_at is not None
+    assert managed_instance.name == original_name
+    assert managed_instance.replicas == original_replicas
+    deploys = await test_db.execute(
+        select(DeployRecordModel).where(DeployRecordModel.instance_id == instance_id)
+    )
+    assert deploys.scalars().all() == []

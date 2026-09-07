@@ -10,10 +10,15 @@ from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User as DBUser, UserRole
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.admin_dlq_services import (
     ADMIN_DLQ_APPLICATION_SERVICE_V2,
@@ -57,11 +62,28 @@ def _user_has_admin_access(current_user: DBUser) -> bool:
     user_roles = cast(Iterable[Any], getattr(current_user, "roles", []) or [])
     return any(
         getattr(getattr(user_role, "role", None), "name", None) in _ADMIN_ROLE_NAMES
+        and getattr(user_role, "tenant_id", None) is None
+        and getattr(user_role, "project_id", None) is None
         for user_role in user_roles
     )
 
 
-def require_admin(current_user: DBUser = Depends(get_current_user)) -> DBUser:
+async def _get_current_user_with_dlq_roles(
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DBUser:
+    """Load both role relationships inside the request's async DB context."""
+    result = await db.execute(
+        refresh_select_statement(
+            select(DBUser)
+            .where(DBUser.id == current_user.id)
+            .options(selectinload(DBUser.roles).selectinload(UserRole.role))
+        )
+    )
+    return cast(DBUser, result.scalar_one())
+
+
+def require_admin(current_user: DBUser = Depends(_get_current_user_with_dlq_roles)) -> DBUser:
     """Require an explicit global-admin role before resolving DLQ services."""
     if not _user_has_admin_access(current_user):
         raise HTTPException(

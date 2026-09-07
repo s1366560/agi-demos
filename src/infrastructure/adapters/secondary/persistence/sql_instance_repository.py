@@ -29,6 +29,20 @@ class SqlInstanceRepository(BaseRepository[Instance, InstanceModel], InstanceRep
         super().__init__(session)
 
     @override
+    async def find_by_id(self, entity_id: str) -> Instance | None:
+        """Resolve only active instances for reads and lifecycle operations."""
+        if not entity_id:
+            raise ValueError("ID cannot be empty")
+        query = select(InstanceModel).where(
+            InstanceModel.id == entity_id,
+            InstanceModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        return self._to_domain(result.scalar_one_or_none())
+
+    @override
     async def find_by_tenant(
         self, tenant_id: str, limit: int = 50, offset: int = 0
     ) -> list[Instance]:
