@@ -4,6 +4,7 @@ import {
   PROJECT_MEMORIES_DEGRADED_REASON,
   type ProjectMemoriesSnapshot,
   type ProjectMemory,
+  type ProjectMemoriesPageOptions,
 } from '../features/project-knowledge/projectMemoriesClient';
 import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
@@ -12,6 +13,8 @@ export type DesktopProjectMemoriesLoadOperationInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
   scope: ProjectKnowledgeScope;
   signal?: AbortSignal;
+  page?: number;
+  pageSize?: number;
 }>;
 
 export type DesktopProjectMemoriesAuthorityOperationInputV2 =
@@ -20,7 +23,7 @@ export type DesktopProjectMemoriesAuthorityOperationInputV2 =
 export type PreparedDesktopProjectMemoriesAuthorityOperationV2 =
   DesktopProjectMemoriesAuthorityOperationInputV2;
 
-const INPUT_KEYS_V2 = new Set(['kind', 'config', 'scope', 'signal']);
+const INPUT_KEYS_V2 = new Set(['kind', 'config', 'scope', 'signal', 'page', 'pageSize']);
 const SCOPE_KEYS_V2 = new Set(['authority', 'tenantId', 'projectId']);
 const SNAPSHOT_KEYS_V2 = new Set([
   'scope',
@@ -31,6 +34,8 @@ const SNAPSHOT_KEYS_V2 = new Set([
   'allowedActions',
   'memories',
   'total',
+  'page',
+  'pageSize',
 ]);
 const MEMORY_KEYS_V2 = new Set([
   'id',
@@ -64,6 +69,7 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
     kind: 'load',
     config,
     scope,
+    ...normalizeDesktopProjectMemoriesPageV2(input),
     ...(input.signal === undefined ? {} : { signal: input.signal }),
   });
 }
@@ -119,8 +125,10 @@ export function cloneDesktopProjectMemoriesScopeV2(
 
 export function requireDesktopProjectMemoriesSnapshotV2(
   value: unknown,
-  scope: ProjectKnowledgeScope
+  scope: ProjectKnowledgeScope,
+  options: ProjectMemoriesPageOptions = {}
 ): ProjectMemoriesSnapshot {
+  const page = normalizeDesktopProjectMemoriesPageV2(options);
   if (
     !isPlainRecordV2(value) ||
     !hasExactKeysV2(value, SNAPSHOT_KEYS_V2) ||
@@ -131,11 +139,30 @@ export function requireDesktopProjectMemoriesSnapshotV2(
     !Number.isSafeInteger(value.scopeRevision) ||
     Number(value.scopeRevision) < 0 ||
     !sameScopeV2(value.scope, scope) ||
+    value.page !== page.page ||
+    value.pageSize !== page.pageSize ||
+    !Array.isArray(value.memories) ||
+    value.memories.length > page.pageSize ||
     !validMemoryPageV2(value.memories, value.total, scope.projectId)
   ) {
     throw invalidServiceContractV2();
   }
   return deepFreezeV2(structuredClone(value)) as ProjectMemoriesSnapshot;
+}
+
+export function normalizeDesktopProjectMemoriesPageV2(
+  options: ProjectMemoriesPageOptions = {}
+): Readonly<{ page: number; pageSize: number }> {
+  if (!isPlainRecordV2(options)) throw invalidInputV2();
+  const page = options.page === undefined ? 1 : options.page;
+  const pageSize = options.pageSize === undefined ? 50 : options.pageSize;
+  if (
+    !Number.isSafeInteger(page) || page < 1 ||
+    !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100
+  ) {
+    throw invalidInputV2();
+  }
+  return Object.freeze({ page, pageSize });
 }
 
 function validMemoryPageV2(

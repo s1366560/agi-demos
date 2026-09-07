@@ -66,8 +66,12 @@ for (const [name, input] of [
   ['extra tenant scope', { method: 'GET', path: `${memoryPath}&tenant_id=tenant-2` }],
   ['duplicate project', { method: 'GET', path: `${memoryPath}&project_id=project-2` }],
   ['extra parameter', { method: 'GET', path: `${memoryPath}&include_private=true` }],
-  ['different page', { method: 'GET', path: memoryPath.replace('page=1', 'page=2') }],
-  ['different page size', { method: 'GET', path: memoryPath.replace('page_size=50', 'page_size=100') }],
+  ['zero page', { method: 'GET', path: memoryPath.replace('page=1', 'page=0') }],
+  ['oversized page size', { method: 'GET', path: memoryPath.replace('page_size=50', 'page_size=101') }],
+  ['fractional page', { method: 'GET', path: memoryPath.replace('page=1', 'page=1.5') }],
+  ['noncanonical page', { method: 'GET', path: memoryPath.replace('page=1', 'page=01') }],
+  ['unsafe page', { method: 'GET', path: memoryPath.replace('page=1', 'page=9007199254740992') }],
+  ['duplicate page', { method: 'GET', path: memoryPath + '&page=2' }],
   ['empty project', { method: 'GET', path: memoryPath.replace('project-1', '') }],
   ['read body', { method: 'GET', path: memoryPath, body: { project_id: 'project-2' } }],
 ]) {
@@ -127,5 +131,14 @@ for (const input of [
     const requests = [];
     await assert.rejects(() => executeVaultBoundCloudRequest(input, dependencies(requests)));
     assert.deepEqual(requests, []);
+  });
+}
+
+for (const [page, pageSize] of [[2, 50], [3, 25], [1, 100]]) {
+  test(`Cloud memories permits scoped page ${page} with size ${pageSize}`, async () => {
+    const requests = [];
+    const path = `/api/v1/memories/?project_id=project-1&page=${page}&page_size=${pageSize}`;
+    await executeVaultBoundCloudRequest({ method: 'GET', path }, dependencies(requests));
+    assert.deepEqual(requests, ['/api/v1/workspace-context', path]);
   });
 }

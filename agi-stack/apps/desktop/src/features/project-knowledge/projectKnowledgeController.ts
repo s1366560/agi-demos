@@ -16,6 +16,7 @@ export type ProjectKnowledgeController = Readonly<{
   retry: () => Promise<void>;
   cancel: () => void;
   stop: () => void;
+  goToPage?: (page: number) => Promise<void>;
 }>;
 
 export function createProjectKnowledgeController<TSnapshot extends ProjectKnowledgeSnapshotBase>({

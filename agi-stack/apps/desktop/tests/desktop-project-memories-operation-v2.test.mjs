@@ -8,10 +8,11 @@ const { RuntimeV2Error } = require('@agistack/plugin-runtime');
 const {
   DesktopProjectMemoriesAuthorityUnavailableErrorV2,
   createDesktopProjectMemoriesOperationsV2,
+  createDesktopProjectMemoriesClientV2,
   withDesktopProjectMemoriesAuthorityOperationV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopProjectMemoriesAuthorityModuleV2.js');
 const { createDesktopProjectMemoriesHttpAuthorityV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopProjectMemoriesHttpProjectionV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopProjectMemoriesHttpProjectionV2.js',
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
@@ -64,6 +65,8 @@ function result(operationScope = scope(), id = 'memory-1') {
     allowedActions: ['view', 'list'],
     memories: [memory(id)],
     total: 1,
+    page: 1,
+    pageSize: 50,
   };
 }
 
@@ -111,7 +114,7 @@ test('Memories load freezes input and holds one exact project generation lease',
   const operationScope = scope();
   const controller = new AbortController();
   const operations = createDesktopProjectMemoriesOperationsV2(() =>
-    acceptedActions(serviceFixture(received), 'digest-memories', lifecycle)
+    acceptedActions(serviceFixture(received), 'digest-memories', lifecycle),
   );
   const pending = operations.loadProjectMemories({
     config,
@@ -170,7 +173,7 @@ test('invalid Memories scope, signal and unknown fields fail before acquisition'
       () => operations.loadProjectMemories(invalidInput),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === 'desktop_project_memories_operation_input_invalid'
+        error.code === 'desktop_project_memories_operation_input_invalid',
     );
   }
   assert.equal(acquisitions, 0);
@@ -182,7 +185,7 @@ test('invalid Memories scope, signal and unknown fields fail before acquisition'
       }),
     (error) =>
       error instanceof DesktopProjectMemoriesAuthorityUnavailableErrorV2 &&
-      error.reasonCode === 'desktop_renderer_generation_actions_unavailable'
+      error.reasonCode === 'desktop_renderer_generation_actions_unavailable',
   );
 });
 
@@ -199,7 +202,7 @@ test('missing or malformed Memories service, authority and snapshots fail closed
     })).loadProjectMemories({ config: runtimeConfig(), scope: scope() }),
     (error) =>
       error instanceof DesktopProjectMemoriesAuthorityUnavailableErrorV2 &&
-      error.reasonCode === 'missing_service'
+      error.reasonCode === 'missing_service',
   );
   for (const service of [
     Object.freeze({ bindOperation: null }),
@@ -210,10 +213,11 @@ test('missing or malformed Memories service, authority and snapshots fail closed
   ]) {
     await assert.rejects(
       createDesktopProjectMemoriesOperationsV2(() =>
-        acceptedActions(service, 'invalid-shape')
+        acceptedActions(service, 'invalid-shape'),
       ).loadProjectMemories({ config: runtimeConfig(), scope: scope() }),
       (error) =>
-        error instanceof RuntimeV2Error && error.code === 'desktop_project_memories_service_invalid'
+        error instanceof RuntimeV2Error &&
+        error.code === 'desktop_project_memories_service_invalid',
     );
   }
   const valid = result();
@@ -232,11 +236,11 @@ test('missing or malformed Memories service, authority and snapshots fail closed
   ]) {
     await assert.rejects(
       createDesktopProjectMemoriesOperationsV2(() =>
-        acceptedActions(serviceFixture([], { result: invalidResult }), 'invalid-result')
+        acceptedActions(serviceFixture([], { result: invalidResult }), 'invalid-result'),
       ).loadProjectMemories({ config: runtimeConfig(), scope: scope() }),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === 'desktop_project_memories_service_contract_invalid'
+        error.code === 'desktop_project_memories_service_contract_invalid',
     );
   }
 });
@@ -299,11 +303,11 @@ test('HTTP projection keeps context and memory reads in one authority', async ()
     await assert.rejects(
       createDesktopProjectMemoriesHttpAuthorityV2(
         runtimeConfig({ mode: 'local' }),
-        scope('local')
+        scope('local'),
       ).load(),
       (error) =>
         error.status === 501 &&
-        error.payload.reason_code === 'local_project_memories_authority_unavailable'
+        error.payload.reason_code === 'local_project_memories_authority_unavailable',
     );
     assert.equal(requests.length, 2);
   } finally {
@@ -319,13 +323,13 @@ test('escaped Memories authority is revoked and primary failure wins over releas
     (authority) => {
       escaped = authority;
       return authority.load();
-    }
+    },
   );
   await assert.rejects(
     escaped.load(),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_project_memories_operation_released'
+      error.code === 'desktop_project_memories_operation_released',
   );
   const primary = new Error('primary_failure');
   const release = new Error('release_failure');
@@ -335,17 +339,17 @@ test('escaped Memories authority is revoked and primary failure wins over releas
       { kind: 'load', config: runtimeConfig(), scope: scope() },
       async () => {
         throw primary;
-      }
+      },
     ),
-    (error) => error === primary
+    (error) => error === primary,
   );
   await assert.rejects(
     withDesktopProjectMemoriesAuthorityOperationV2(
       acceptedActions(serviceFixture([]), 'digest-release', [], release),
       { kind: 'load', config: runtimeConfig(), scope: scope() },
-      (authority) => authority.load()
+      (authority) => authority.load(),
     ),
-    (error) => error === release
+    (error) => error === release,
   );
 });
 
@@ -390,3 +394,126 @@ function jsonResponse(payload, status = 200) {
     headers: { 'content-type': 'application/json' },
   });
 }
+
+test('Memories client carries pagination through the leased authority and vault main policy to HTTP', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const lifecycle = [];
+  const controller = new AbortController();
+  const network = async (input, init) => {
+    const url = new URL(String(input));
+    calls.push({ url, signal: init.signal });
+    if (url.pathname === '/api/v1/workspace-context') {
+      return jsonResponse({
+        context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 8 },
+      });
+    }
+    return jsonResponse({ memories: [], total: 76, page: 3, page_size: 25 });
+  };
+  const { executeVaultBoundCloudRequest } = require(COMPILED_ROOT + '/electron/main/cloudRequestPolicy.js');
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const response = await executeVaultBoundCloudRequest({ method: init.method, path: url.pathname + url.search }, {
+      loadTrustedSession: async () => ({
+        version: 1, api_base_url: 'https://cloud.memstack.test', runtime_mode: 'cloud',
+        credential_kind: 'cloud_bearer', credential: 'vault-only-pagination-fixture', expires_at: '2099-01-01T00:00:00Z',
+      }),
+      fetch: network,
+      signal: init.signal,
+    });
+    return jsonResponse(response.body, response.status);
+  };
+  try {
+    const operations = createDesktopProjectMemoriesOperationsV2(() =>
+      acceptedActions(
+        Object.freeze({ bindOperation: createDesktopProjectMemoriesHttpAuthorityV2 }),
+        'pagination-generation',
+        lifecycle,
+      ),
+    );
+    const client = createDesktopProjectMemoriesClientV2(operations, runtimeConfig());
+    const snapshot = await client.load(scope(), {
+      page: 3,
+      pageSize: 25,
+      signal: controller.signal,
+    });
+    assert.equal(snapshot.page, 3);
+    assert.equal(snapshot.pageSize, 25);
+    assert.equal(snapshot.total, 76);
+    assert.equal(calls.at(-1).url.search, '?project_id=project-1&page=3&page_size=25');
+    assert.equal(calls.filter(({ url }) => url.pathname === '/api/v1/workspace-context').length, 2);
+    assert.ok(calls.every((call) => call.signal === controller.signal));
+    assert.deepEqual(
+      lifecycle.map(({ type }) => type),
+      ['acquire', 'release'],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Memories pagination rejects invalid input before lease acquisition and rejects a service returning another page', async () => {
+  let acquisitions = 0;
+  const operations = createDesktopProjectMemoriesOperationsV2(() => {
+    acquisitions++;
+    return acceptedActions(serviceFixture([]), 'pagination');
+  });
+  for (const pagination of [
+    { page: 0 },
+    { page: 1.5 },
+    { page: Infinity },
+    { pageSize: 0 },
+    { pageSize: 101 },
+    { page: null },
+  ]) {
+    assert.throws(
+      () =>
+        operations.loadProjectMemories({ config: runtimeConfig(), scope: scope(), ...pagination }),
+      (error) => error.code === 'desktop_project_memories_operation_input_invalid',
+    );
+  }
+  assert.equal(acquisitions, 0);
+  await assert.rejects(
+    operations.loadProjectMemories({ config: runtimeConfig(), scope: scope(), page: 2 }),
+    (error) => error.code === 'desktop_project_memories_service_contract_invalid',
+  );
+});
+
+test('Memories HTTP rejects mismatched paging metadata and cross-project rows, and cancels between scope and list', async () => {
+  const originalFetch = globalThis.fetch;
+  let payload;
+  let onScope = () => {};
+  let requests = 0;
+  globalThis.fetch = async (input) => {
+    requests++;
+    if (new URL(String(input)).pathname === '/api/v1/workspace-context') {
+      onScope();
+      return jsonResponse({
+        context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 8 },
+      });
+    }
+    return jsonResponse(payload);
+  };
+  try {
+    const authority = createDesktopProjectMemoriesHttpAuthorityV2(runtimeConfig(), scope());
+    for (const invalid of [
+      { memories: [], total: 10, page: 1, page_size: 5 },
+      { memories: [], total: 10, page: 2, page_size: 50 },
+      { memories: [{ project_id: 'project-2' }], total: 10, page: 2, page_size: 5 },
+    ]) {
+      payload = invalid;
+      await assert.rejects(authority.load(undefined, { page: 2, pageSize: 5 }), (error) =>
+        ['project_memories_page_contract_invalid', 'project_memory_scope_conflict'].includes(
+          error.payload?.reason_code,
+        ),
+      );
+    }
+    const controller = new AbortController();
+    onScope = () => controller.abort();
+    const before = requests;
+    await assert.rejects(authority.load(controller.signal, { page: 2 }), { name: 'AbortError' });
+    assert.equal(requests, before + 1, 'cancelled scope must never issue the list request');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

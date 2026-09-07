@@ -99,7 +99,7 @@ function BoundRoute({
     );
   }
   const { model, retry } = useController(binding.controller, binding.scope);
-  return <Page model={model} onRetry={retry} />;
+  return <Page model={model} onRetry={retry} onPageChange={binding.controller.goToPage} />;
 }
 
 function normalizeContext(context: DesktopRouteContext): ProjectKnowledgeRouteContext | null {

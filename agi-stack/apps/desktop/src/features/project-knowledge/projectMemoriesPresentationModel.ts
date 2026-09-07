@@ -5,7 +5,7 @@ import { PROJECT_MEMORIES_ROUTE_ID, type ProjectMemoriesSnapshot } from './proje
 export function buildProjectMemoriesPresentation(
   input: ProjectKnowledgePresentationInput<ProjectMemoriesSnapshot>,
 ) {
-  return buildProjectKnowledgePresentation(PROJECT_MEMORIES_ROUTE_ID, input, (snapshot) =>
+  const model = buildProjectKnowledgePresentation(PROJECT_MEMORIES_ROUTE_ID, input, (snapshot) =>
     Object.freeze({
       items: Object.freeze(
         snapshot.memories.map((memory) =>
@@ -20,4 +20,12 @@ export function buildProjectMemoriesPresentation(
       total: snapshot.total,
     }),
   );
+  if (input.kind !== 'snapshot') return model;
+  return Object.freeze({
+    ...model,
+    pagination: Object.freeze({
+      page: input.snapshot.page,
+      pages: Math.max(1, Math.ceil(input.snapshot.total / input.snapshot.pageSize)),
+    }),
+  });
 }

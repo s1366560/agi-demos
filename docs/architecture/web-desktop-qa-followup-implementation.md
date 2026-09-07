@@ -108,6 +108,21 @@ can run after the predecessor reaches terminal state. The new regression failed 
 the change; all 27 automation tests then passed. Desktop recognizes/localizes `skipped`;
 its model regression passed in the ongoing Desktop batch verification. No schema change.
 
+I2.3 adds cloud memory pagination through the operation lease, HTTP projection, vault/main
+broker, controller and page controls. Defaults remain page 1 / size 50; request and response
+page metadata must agree, scope/cancellation checks remain enforced, and shrinking totals
+allow navigation back to a valid page. Final focused tests: 68 passed, including the
+concurrent-deletion correction. A prior full Desktop snapshot had 4252 passed, one failed,
+zero skipped; the sole failure required committed source bytes to match HEAD. That full
+snapshot predates the final two-line pagination correction, so it is not final acceptance.
+Native Electron pagination QA remains pending.
+
+I1.2 adds explicit reviewed-module artifact refresh to the protocol generator. It validates
+all declared repository source languages and paths, refuses unselected drift and signed
+artifact changes, and never writes in check mode. Only the reviewed memories module digest
+was refreshed, followed by generated catalogs/bootstrap. Seventeen toolchain tests, Ruff
+and generator check passed. Generated metadata is not a substitute for runtime acceptance.
+
 - Knowledge: tenant/project-scoped reads and deletes, CAS writes, atomic processing
   outbox, index recovery, per-action availability and cloud pagination/mutations.
 - Sync: explicit project association, stable IDs, revisions, change IDs, cursor,

@@ -26,6 +26,7 @@ export type ProjectKnowledgeViewModel = Readonly<{
   allowedActions: readonly string[];
   items: readonly ProjectKnowledgeItem[];
   total: number;
+  pagination?: Readonly<{ page: number; pages: number }>;
 }>;
 export type ProjectKnowledgePresentationInput<TSnapshot extends ProjectKnowledgeSnapshotBase> =
   | Readonly<{ kind: 'loading'; scope: ProjectKnowledgeScope; scopeSwitch: boolean }>

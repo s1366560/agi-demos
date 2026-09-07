@@ -8,6 +8,7 @@ import {
 import type {
   ProjectMemoriesClient,
   ProjectMemoriesSnapshot,
+  ProjectMemoriesPageOptions,
 } from '../features/project-knowledge/projectMemoriesClient';
 import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
@@ -15,6 +16,7 @@ import { createDesktopProjectMemoriesHttpAuthorityV2 } from './desktopProjectMem
 import {
   prepareDesktopProjectMemoriesAuthorityOperationV2,
   requireDesktopProjectMemoriesSnapshotV2,
+  normalizeDesktopProjectMemoriesPageV2,
   type DesktopProjectMemoriesAuthorityOperationInputV2,
   type DesktopProjectMemoriesLoadOperationInputV2,
   type PreparedDesktopProjectMemoriesAuthorityOperationV2,
@@ -36,7 +38,10 @@ export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_SERVICE_V2 =
 export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_VERSION_V2 = '1.0.0';
 
 export interface DesktopProjectMemoriesAuthorityV2 {
-  readonly load: (signal?: AbortSignal) => Promise<ProjectMemoriesSnapshot>;
+  readonly load: (
+    signal?: AbortSignal,
+    options?: ProjectMemoriesPageOptions
+  ) => Promise<ProjectMemoriesSnapshot>;
 }
 
 export interface DesktopProjectMemoriesAuthorityServiceV2 {
@@ -110,7 +115,7 @@ export function createDesktopProjectMemoriesOperationsV2(
       return runDesktopProjectMemoriesAuthorityOperationV2(
         requireGenerationActionsV2(resolveActions()),
         prepared,
-        (authority) => authority.load(prepared.signal)
+        (authority) => authority.load(prepared.signal, prepared)
       );
     },
   });
@@ -129,6 +134,8 @@ export function createDesktopProjectMemoriesClientV2(
       return operations.loadProjectMemories({
         config: operationConfig,
         scope,
+        ...(options?.page === undefined ? {} : { page: options.page }),
+        ...(options?.pageSize === undefined ? {} : { pageSize: options.pageSize }),
         ...(options?.signal === undefined ? {} : { signal: options.signal }),
       });
     },
@@ -197,11 +204,14 @@ function createRevocableProjectMemoriesAuthorityV2(
   isOperationActive: () => boolean
 ): DesktopProjectMemoriesAuthorityV2 {
   return Object.freeze({
-    async load(signal?: AbortSignal) {
+    async load(signal?: AbortSignal, options?: ProjectMemoriesPageOptions) {
       requireOperationActiveV2(isOperationActive);
-      const result = await authority.load(signal);
+      const pagination = normalizeDesktopProjectMemoriesPageV2(options);
+      signal?.throwIfAborted();
+      const result = await authority.load(signal, pagination);
       requireOperationActiveV2(isOperationActive);
-      return requireDesktopProjectMemoriesSnapshotV2(result, scope);
+      signal?.throwIfAborted();
+      return requireDesktopProjectMemoriesSnapshotV2(result, scope, pagination);
     },
   });
 }

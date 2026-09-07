@@ -693,11 +693,26 @@ def _write_or_check(path: Path, content: str, *, check: bool) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--refresh-artifacts",
+        action="append",
+        default=[],
+        metavar="MODULE_REF",
+        help="refresh one explicitly reviewed repository artifact (repeat for multiple modules)",
+    )
     args = parser.parse_args()
 
     schema = _schema()
     definitions = schema["$defs"]
     schema_hash = hashlib.sha256(SCHEMA_PATH.read_bytes()).hexdigest()
+    from scripts.refresh_plugin_artifacts_v2 import refresh_declared_artifacts_v2
+
+    _builtin_manifest(schema, artifact_root=None)
+    changes = refresh_declared_artifacts_v2(
+        ROOT, BUILTIN_MANIFEST_DIRECTORY, frozenset(args.refresh_artifacts), check=args.check
+    )
+    for change in changes:
+        print(json.dumps(change, sort_keys=True))
     manifests = _builtin_manifest(schema)
     catalog = build_catalog_v2(manifests)
     snapshot = _snapshot_fixture()

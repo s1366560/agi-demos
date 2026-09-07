@@ -458,6 +458,8 @@ function memorySnapshot(scope, title) {
       },
     ],
     total: 1,
+    page: 1,
+    pageSize: 50,
   };
 }
 
@@ -511,6 +513,8 @@ function injectedProjectMemoriesClient(scopeRevision) {
         allowedActions: Object.freeze(['view', 'list']),
         memories: Object.freeze([]),
         total: 0,
+        page: 1,
+        pageSize: 50,
       });
     },
   });

@@ -1,13 +1,14 @@
 import {
   type ProjectKnowledgeClient,
   type ProjectKnowledgeSnapshotBase,
+  type ProjectKnowledgeReadOptions,
+  type ProjectKnowledgeScope,
 } from './projectKnowledgeClient';
 
 export const PROJECT_MEMORIES_ROUTE_ID = 'project-project-memories' as const;
 export const PROJECT_MEMORIES_LOCAL_REASON =
   'local_project_memories_authority_unavailable' as const;
-export const PROJECT_MEMORIES_DEGRADED_REASON =
-  'desktop_project_memories_actions_partial' as const;
+export const PROJECT_MEMORIES_DEGRADED_REASON = 'desktop_project_memories_actions_partial' as const;
 
 export type ProjectMemory = Readonly<{
   id: string;
@@ -22,5 +23,11 @@ export type ProjectMemory = Readonly<{
   updatedAt: string | null;
 }>;
 export type ProjectMemoriesSnapshot = ProjectKnowledgeSnapshotBase &
-  Readonly<{ memories: readonly ProjectMemory[]; total: number }>;
-export type ProjectMemoriesClient = ProjectKnowledgeClient<ProjectMemoriesSnapshot>;
+  Readonly<{ memories: readonly ProjectMemory[]; total: number; page: number; pageSize: number }>;
+export type ProjectMemoriesPageOptions = Readonly<{ page?: number; pageSize?: number }>;
+export interface ProjectMemoriesClient extends ProjectKnowledgeClient<ProjectMemoriesSnapshot> {
+  load(
+    scope: ProjectKnowledgeScope,
+    options?: ProjectKnowledgeReadOptions & ProjectMemoriesPageOptions,
+  ): Promise<ProjectMemoriesSnapshot>;
+}

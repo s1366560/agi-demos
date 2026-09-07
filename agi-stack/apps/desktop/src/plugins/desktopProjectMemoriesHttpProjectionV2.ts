@@ -3,6 +3,7 @@ import {
   PROJECT_MEMORIES_LOCAL_REASON,
   type ProjectMemoriesSnapshot,
   type ProjectMemory,
+  type ProjectMemoriesPageOptions,
 } from '../features/project-knowledge/projectMemoriesClient';
 import {
   isRecord,
@@ -20,12 +21,16 @@ import type { DesktopRuntimeConfig } from '../types';
 import {
   cloneDesktopProjectMemoriesRuntimeConfigV2,
   cloneDesktopProjectMemoriesScopeV2,
+  normalizeDesktopProjectMemoriesPageV2,
 } from './desktopProjectMemoriesOperationContractV2';
 
 const ACTIONS_V2 = Object.freeze(['view', 'list']);
 
 export type DesktopProjectMemoriesHttpAuthorityV2 = Readonly<{
-  load: (signal?: AbortSignal) => Promise<ProjectMemoriesSnapshot>;
+  load: (
+    signal?: AbortSignal,
+    options?: ProjectMemoriesPageOptions
+  ) => Promise<ProjectMemoriesSnapshot>;
 }>;
 
 export function createDesktopProjectMemoriesHttpAuthorityV2(
@@ -35,7 +40,9 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
   const runtimeConfig = cloneDesktopProjectMemoriesRuntimeConfigV2(config);
   const operationScope = cloneDesktopProjectMemoriesScopeV2(scope, runtimeConfig);
   return Object.freeze({
-    async load(signal) {
+    async load(signal, options) {
+      const pagination = normalizeDesktopProjectMemoriesPageV2(options);
+      signal?.throwIfAborted();
       const currentScope = requireProjectKnowledgeScope(
         runtimeConfig,
         operationScope,
@@ -44,12 +51,14 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
       const scopeRevision = await observeProjectKnowledgeScope(runtimeConfig, currentScope, {
         signal,
       });
+      signal?.throwIfAborted();
       const payload = await requestProjectKnowledgeJson(
         runtimeConfig,
-        memoryListPathV2(currentScope),
+        memoryListPathV2(currentScope, pagination),
         { signal }
       );
-      const page = parseMemoryPageV2(payload, currentScope);
+      signal?.throwIfAborted();
+      const page = parseMemoryPageV2(payload, currentScope, pagination);
       return Object.freeze({
         scope: currentScope,
         scopeRevision,
@@ -63,21 +72,27 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
   });
 }
 
-function memoryListPathV2(scope: ProjectKnowledgeScope): string {
+function memoryListPathV2(
+  scope: ProjectKnowledgeScope,
+  pagination: Readonly<{ page: number; pageSize: number }>
+): string {
   return (
-    '/api/v1/memories/?project_id=' + encodeURIComponent(scope.projectId) + '&page=1&page_size=50'
+    '/api/v1/memories/?project_id=' + encodeURIComponent(scope.projectId) +
+    `&page=${pagination.page}&page_size=${pagination.pageSize}`
   );
 }
 
 function parseMemoryPageV2(
   payload: unknown,
-  scope: ProjectKnowledgeScope
-): Readonly<{ memories: readonly ProjectMemory[]; total: number }> {
+  scope: ProjectKnowledgeScope,
+  pagination: Readonly<{ page: number; pageSize: number }>
+): Readonly<{ memories: readonly ProjectMemory[]; total: number; page: number; pageSize: number }> {
   if (
     !isRecord(payload) ||
     !Array.isArray(payload.memories) ||
-    payload.page !== 1 ||
-    payload.page_size !== 50
+    payload.page !== pagination.page ||
+    payload.page_size !== pagination.pageSize ||
+    payload.memories.length > pagination.pageSize
   ) {
     throw projectKnowledgeError('project_memories_page_contract_invalid');
   }
@@ -86,7 +101,7 @@ function parseMemoryPageV2(
   if (total < memories.length) {
     throw projectKnowledgeError('project_memories_page_contract_invalid');
   }
-  return Object.freeze({ memories, total });
+  return Object.freeze({ memories, total, ...pagination });
 }
 
 function parseMemoryV2(payload: unknown, scope: ProjectKnowledgeScope): ProjectMemory {

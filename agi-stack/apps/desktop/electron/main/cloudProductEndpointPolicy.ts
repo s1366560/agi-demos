@@ -204,8 +204,8 @@ function authorizeProjectKnowledgeCohort(
     request.body === undefined &&
     target.pathname === '/api/v1/memories/' &&
     exactQueryKeys(target.searchParams, new Set(['project_id', 'page', 'page_size'])) &&
-    target.searchParams.get('page') === '1' &&
-    ['5', '50'].includes(target.searchParams.get('page_size') ?? '')
+    validPageQuery(target.searchParams.get('page'), Number.MAX_SAFE_INTEGER) &&
+    validPageQuery(target.searchParams.get('page_size'), 100)
   ) {
     return endpoint(
       'project',
@@ -2289,6 +2289,11 @@ function validSearchInteger(value: unknown, minimum: number, maximum: number): b
     Number(value) >= minimum &&
     Number(value) <= maximum
   );
+}
+
+function validPageQuery(value: string | null, maximum: number): boolean {
+  return value !== null && /^[1-9][0-9]*$/.test(value) &&
+    Number.isSafeInteger(Number(value)) && Number(value) <= maximum;
 }
 
 function validSearchStringList(value: unknown): boolean {

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:c1a1b71409f33de0ad549e4b5bafb554f60641b87bcc874441665773d5',
-  'ade72e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:eea28654fea345fe66b940a39dbe8fa7485c5ed5abc9ab27cf50e10bf7',
+  '3a4d5e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -2007,7 +2007,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '728eb309be604","entrypoint":"applyDesktopProjectMcpServersAuthorityV2","module_ref":',
   '"builtin://memstack/desktop/project-mcp-servers-authority","plugin_id":"memstack-ren',
   'derer-target-hosts","plugin_version":"2.0.0","targets":["desktop-renderer"]},{"artif',
-  'act_digest":"sha256:feb6be54d625637099ab26328f5c9aa860b26c5ce8969520b05ec22b8e63dd9a',
+  'act_digest":"sha256:7609b71e8f3cfefe36d06e40afb06a8acaab91e375d2c78745529e36d2b513de',
   '","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopPro',
   'jectMemoriesAuthorityModuleV2.ts","contract":{"config_schema":{"$schema":"https://js',
   'on-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"stra',
@@ -4766,4 +4766,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:c1a1b71409f33de0ad549e4b5bafb554f60641b87bcc874441665773d5ade72e' as const;
+  'sha256:eea28654fea345fe66b940a39dbe8fa7485c5ed5abc9ab27cf50e10bf73a4d5e' as const;

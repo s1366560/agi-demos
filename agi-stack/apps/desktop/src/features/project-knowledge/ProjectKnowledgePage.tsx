@@ -4,7 +4,12 @@ import type { ProjectKnowledgeViewModel } from './projectKnowledgePresentationMo
 export function ProjectKnowledgePage({
   model,
   onRetry,
-}: Readonly<{ model: ProjectKnowledgeViewModel; onRetry: () => void }>) {
+  onPageChange,
+}: Readonly<{
+  model: ProjectKnowledgeViewModel;
+  onRetry: () => void;
+  onPageChange?: (page: number) => void;
+}>) {
   const { t } = useI18n();
   return (
     <section data-authority={model.scope.authority} data-state={model.state}>
@@ -26,6 +31,27 @@ export function ProjectKnowledgePage({
             </li>
           ))}
         </ol>
+      ) : null}
+      {model.pagination && onPageChange ? (
+        <nav aria-label={t('common.pagination')}>
+          <button
+            type="button"
+            disabled={model.pagination.page <= 1}
+            onClick={() => onPageChange(model.pagination!.page - 1)}
+          >
+            {t('common.previousPage')}
+          </button>
+          <output aria-live="polite">
+            {model.pagination.page} / {model.pagination.pages}
+          </output>
+          <button
+            type="button"
+            disabled={model.pagination.page >= model.pagination.pages}
+            onClick={() => onPageChange(model.pagination!.page + 1)}
+          >
+            {t('common.nextPage')}
+          </button>
+        </nav>
       ) : null}
       {model.retryVisible ? (
         <button type="button" onClick={onRetry}>
