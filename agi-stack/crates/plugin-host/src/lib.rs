@@ -46,6 +46,7 @@ pub mod control_plane;
 pub mod host;
 pub mod manifest;
 pub mod native;
+pub mod permission_binding;
 pub mod protocol_v2;
 pub mod reconcile;
 pub mod registry;

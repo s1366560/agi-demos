@@ -32,6 +32,7 @@ mod artifact_repo;
 mod attachment_repo;
 mod audit_repo;
 mod auth_store;
+mod automation_permission;
 mod backend_store_repo;
 mod billing_repo;
 mod channel_repo;
@@ -90,6 +91,10 @@ pub use audit_repo::{
     RuntimeHookAuditSummaryRecord,
 };
 pub use auth_store::{ApiKeyRecord, PgApiKeyStore, PgProjectStore, ProjectRecord};
+pub use automation_permission::{
+    AutomationPermissionAnswerCommand, AutomationPermissionIntentCommand,
+    AutomationPermissionOutcome, PgAutomationPermissionStore,
+};
 pub use backend_store_repo::{
     BackendStoreAccessError, BackendStoreCreate, BackendStoreRecord, BackendStoreUpdate,
     PgGraphStoreRepository, PgRetrievalStoreRepository,

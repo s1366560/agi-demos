@@ -15,6 +15,7 @@
 //! `wasm32-unknown-unknown`, iOS and Android.
 
 pub mod agent;
+pub mod automation_permission;
 pub mod community;
 pub mod graph;
 pub mod knowledge;

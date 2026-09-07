@@ -660,3 +660,31 @@ removes queries only and retains all records. Evidence:
 `/tmp/knowledge-cloud-recovery-native-all.log`,
 `/tmp/knowledge-cloud-recovery-device-all.log`,
 `/tmp/knowledge-cloud-recovery-clippy.log`.
+
+I4.22 adds exact-invocation permission intent and immutable answer receipts, with
+a one-use consumption ledger that remains awaiting dispatch binding. Host identity
+uses an actual registry snapshot and canonical input digest; it is not a durable
+plugin generation proof. Answer admission locks the persisted run/scope/audience
+and validates active actor/responder membership, write roles and actor key ownership,
+revocation and expiry. Final post-write checks cover run/HITL/intent/key expiry,
+including delayed-trigger regressions. Replayed receipts never reset consumed or
+revoked ledgers and are not dispatch grants. No ordinary resume answer is created.
+Final focused PostgreSQL tests passed (14 permission plus 17 existing HITL/persistence);
+Core/host 126 and migration round-trip/metadata parity 1 passed. Scoped Clippy passed;
+latest all-targets validation waits for the concurrent memory-port change to settle.
+Alembic 72847abc4b82 adds three tables after b353e93ff302. No API/producer/dispatch,
+readiness or owner gate changes. Existing api_keys.permissions has no interpreted
+scope grammar and remains a separate boundary to define. Rollback keeps Cloud Cron
+closed, preserves receipts and pauses consumers before any schema downgrade. Evidence:
+`/tmp/memstack-permission-expiry-red.log`, `/tmp/memstack-permission-expiry-green.log`,
+`/tmp/memstack-permission-scope-clippy.log`, `/tmp/memstack-permission-core-host.log`,
+`/tmp/memstack-permission-migration.log`.
+
+Development DB migration: local memstack-postgres was backed up to a mode-0600
+custom archive and pg_restore --list verified it before upgrade from ce113f52d916
+to committed b353e93ff302. Post-upgrade checks found 8 projects/8 matching fences,
+zero enabled sync projects and 3 memories. Backup manifest:
+`/private/tmp/memstack-knowledge-migration-jqympn2j/manifest.json`.
+Backend startup now reaches ROOT configuration but rejects a stale installed base
+bundle reference; explicit authority-based profile upgrade is pending. No bypass
+of exact-reference validation was made. Permission migration was not applied live.
