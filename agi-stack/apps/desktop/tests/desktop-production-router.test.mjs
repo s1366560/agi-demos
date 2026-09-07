@@ -181,6 +181,7 @@ test('missing authenticated shell contribution prevents every authenticated chil
     markup,
     /data-reason-code="desktop_renderer_authenticated_shell_contribution_missing"/u,
   );
+  assert.match(markup, /data-action="sign-out"[^>]*>Sign out<\/button>/u);
 });
 
 test('ready authenticated shell contribution owns the complete shell child tree', () => {
@@ -674,6 +675,7 @@ function authenticatedShellViewModel({ router = null } = {}) {
   return Object.freeze({
     router,
     shellMarkers,
+    surfaces: { settings: { onSignOut() {} } },
   });
 }
 

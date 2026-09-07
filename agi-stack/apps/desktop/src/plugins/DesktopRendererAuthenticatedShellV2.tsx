@@ -19,16 +19,23 @@ export function DesktopRendererAuthenticatedShellV2({
     const Surface = shell.Surface;
     return <Surface viewModel={viewModel} />;
   }
-  return <DesktopRendererAuthenticatedShellBoundaryV2 composition={shell} />;
+  return (
+    <DesktopRendererAuthenticatedShellBoundaryV2
+      composition={shell}
+      onSignOut={viewModel.surfaces.settings.onSignOut}
+    />
+  );
 }
 
 function DesktopRendererAuthenticatedShellBoundaryV2({
   composition,
+  onSignOut,
 }: Readonly<{
   composition: Exclude<
     DesktopRendererAuthenticatedShellCompositionV2,
     Readonly<{ status: 'ready' }>
   >;
+  onSignOut: () => void | Promise<void>;
 }>) {
   const { t } = useI18n();
   const loading = composition.status === 'loading';
@@ -54,6 +61,11 @@ function DesktopRendererAuthenticatedShellBoundaryV2({
             : 'desktopProductionRouter.unavailable.description',
         )}
       </p>
+      {!loading ? (
+        <button type="button" data-action="sign-out" onClick={() => void onSignOut()}>
+          {t('settings.signOut')}
+        </button>
+      ) : null}
     </section>
   );
 }
