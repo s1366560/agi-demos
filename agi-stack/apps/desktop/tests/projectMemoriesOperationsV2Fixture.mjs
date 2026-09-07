@@ -1,5 +1,8 @@
 export function projectMemoriesOperationsV2Fixture(overrides = {}) {
   return Object.freeze({
+    async executeKnowledgeSync() {
+      throw new Error('native_knowledge_sync_unavailable');
+    },
     async loadProjectMemories({ scope, signal, page = 1, pageSize = 50 }) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       return Object.freeze({

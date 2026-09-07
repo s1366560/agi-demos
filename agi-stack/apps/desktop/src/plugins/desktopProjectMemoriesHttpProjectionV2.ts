@@ -19,6 +19,8 @@ import {
 } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopProjectMemoriesLocalAuthorityV2 } from './desktopProjectMemoriesLocalProjectionV2';
+import type { NativeKnowledgeSyncAuthority } from '../features/project-knowledge/nativeKnowledgeContracts';
+import { createDesktopNativeKnowledgeSyncHttpV2 } from './desktopNativeKnowledgeSyncHttpV2';
 import {
   cloneDesktopProjectMemoriesRuntimeConfigV2,
   cloneDesktopProjectMemoriesScopeV2,
@@ -27,16 +29,17 @@ import {
 
 const ACTIONS_V2 = Object.freeze(['view', 'list']);
 
-export type DesktopProjectMemoriesHttpAuthorityV2 = Readonly<{
-  load: (
-    signal?: AbortSignal,
-    options?: ProjectMemoriesPageOptions
-  ) => Promise<ProjectMemoriesSnapshot>;
-}>;
+export type DesktopProjectMemoriesHttpAuthorityV2 = NativeKnowledgeSyncAuthority &
+  Readonly<{
+    load: (
+      signal?: AbortSignal,
+      options?: ProjectMemoriesPageOptions,
+    ) => Promise<ProjectMemoriesSnapshot>;
+  }>;
 
 export function createDesktopProjectMemoriesHttpAuthorityV2(
   config: DesktopRuntimeConfig,
-  scope: ProjectKnowledgeScope
+  scope: ProjectKnowledgeScope,
 ): DesktopProjectMemoriesHttpAuthorityV2 {
   const runtimeConfig = cloneDesktopProjectMemoriesRuntimeConfigV2(config);
   const operationScope = cloneDesktopProjectMemoriesScopeV2(scope, runtimeConfig);
@@ -44,13 +47,14 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
     return createDesktopProjectMemoriesLocalAuthorityV2(runtimeConfig, operationScope);
   }
   return Object.freeze({
-    async load(signal, options) {
+    ...createDesktopNativeKnowledgeSyncHttpV2(runtimeConfig, operationScope),
+    async load(signal?: AbortSignal, options?: ProjectMemoriesPageOptions) {
       const pagination = normalizeDesktopProjectMemoriesPageV2(options);
       signal?.throwIfAborted();
       const currentScope = requireProjectKnowledgeScope(
         runtimeConfig,
         operationScope,
-        PROJECT_MEMORIES_LOCAL_REASON
+        PROJECT_MEMORIES_LOCAL_REASON,
       );
       const scopeRevision = await observeProjectKnowledgeScope(runtimeConfig, currentScope, {
         signal,
@@ -59,7 +63,7 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
       const payload = await requestProjectKnowledgeJson(
         runtimeConfig,
         memoryListPathV2(currentScope, pagination),
-        { signal }
+        { signal },
       );
       signal?.throwIfAborted();
       const page = parseMemoryPageV2(payload, currentScope, pagination);
@@ -78,10 +82,11 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
 
 function memoryListPathV2(
   scope: ProjectKnowledgeScope,
-  pagination: Readonly<{ page: number; pageSize: number }>
+  pagination: Readonly<{ page: number; pageSize: number }>,
 ): string {
   return (
-    '/api/v1/memories/?project_id=' + encodeURIComponent(scope.projectId) +
+    '/api/v1/memories/?project_id=' +
+    encodeURIComponent(scope.projectId) +
     `&page=${pagination.page}&page_size=${pagination.pageSize}`
   );
 }
@@ -89,7 +94,7 @@ function memoryListPathV2(
 function parseMemoryPageV2(
   payload: unknown,
   scope: ProjectKnowledgeScope,
-  pagination: Readonly<{ page: number; pageSize: number }>
+  pagination: Readonly<{ page: number; pageSize: number }>,
 ): Readonly<{ memories: readonly ProjectMemory[]; total: number; page: number; pageSize: number }> {
   if (
     !isRecord(payload) ||
@@ -122,7 +127,7 @@ function parseMemoryV2(payload: unknown, scope: ProjectKnowledgeScope): ProjectM
     status: requireIdentifier(payload.status, 'project_memory_contract_invalid'),
     processingStatus: requireIdentifier(
       payload.processing_status,
-      'project_memory_contract_invalid'
+      'project_memory_contract_invalid',
     ),
     createdAt: requireIdentifier(payload.created_at, 'project_memory_contract_invalid'),
     updatedAt: optionalText(payload.updated_at, 'project_memory_contract_invalid'),

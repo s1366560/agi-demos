@@ -1,6 +1,7 @@
 import {
   PROJECT_MEMORIES_DEGRADED_REASON,
   type ProjectMemory,
+  type ProjectMemoriesPageOptions,
 } from '../features/project-knowledge/projectMemoriesClient';
 import {
   isRecord,
@@ -14,27 +15,43 @@ import {
 import type { DesktopRuntimeConfig } from '../types';
 import type { DesktopProjectMemoriesHttpAuthorityV2 } from './desktopProjectMemoriesHttpProjectionV2';
 import { normalizeDesktopProjectMemoriesPageV2 } from './desktopProjectMemoriesOperationContractV2';
+import type { NativeKnowledgeScope } from '../features/project-knowledge/nativeKnowledgeContracts';
+import { requireNativeKnowledgeScope } from '../features/project-knowledge/nativeKnowledgeValidation';
+import { createDesktopNativeKnowledgeSyncHttpV2 } from './desktopNativeKnowledgeSyncHttpV2';
 
 const INVALID = 'local_project_memories_contract_invalid';
-const SCOPE_KEYS = ['tenant_id', 'project_id', 'context_revision', 'profile_id', 'generation', 'digest'];
+const SCOPE_KEYS = [
+  'tenant_id',
+  'project_id',
+  'context_revision',
+  'profile_id',
+  'generation',
+  'digest',
+] as const;
 
 export function createDesktopProjectMemoriesLocalAuthorityV2(
   config: DesktopRuntimeConfig,
   scope: ProjectKnowledgeScope,
 ): DesktopProjectMemoriesHttpAuthorityV2 {
   return Object.freeze({
-    async load(signal, options) {
+    ...createDesktopNativeKnowledgeSyncHttpV2(config, scope),
+    async load(signal?: AbortSignal, options?: ProjectMemoriesPageOptions) {
       signal?.throwIfAborted();
       const pagination = normalizeDesktopProjectMemoriesPageV2(options);
       const offset = (pagination.page - 1) * pagination.pageSize;
       if (!Number.isSafeInteger(offset)) throw projectKnowledgeError(INVALID, 422);
-      const context = await requestProjectKnowledgeJson(config, '/api/v1/knowledge/context', { signal });
+      const context = await requestProjectKnowledgeJson(config, '/api/v1/knowledge/context', {
+        signal,
+      });
       const nativeScope = parseContext(context, scope);
       signal?.throwIfAborted();
       const payload = await requestProjectKnowledgeJson(config, '/api/v1/knowledge/query', {
         signal,
         method: 'POST',
-        body: { scope: nativeScope, query: { operation: 'list', offset, limit: pagination.pageSize } },
+        body: {
+          scope: nativeScope,
+          query: { operation: 'list', offset, limit: pagination.pageSize },
+        },
       });
       signal?.throwIfAborted();
       const returnedScope = parseContext(payload, scope);
@@ -43,9 +60,14 @@ export function createDesktopProjectMemoriesLocalAuthorityV2(
       }
       if (!isRecord(payload) || !isRecord(payload.result)) throw projectKnowledgeError(INVALID);
       const page = payload.result;
-      if (!Array.isArray(page.items) || page.items.length > pagination.pageSize ||
-          page.offset !== offset || page.limit !== pagination.pageSize ||
-          typeof page.has_more !== 'boolean' || (page.has_more && page.items.length !== pagination.pageSize)) {
+      if (
+        !Array.isArray(page.items) ||
+        page.items.length > pagination.pageSize ||
+        page.offset !== offset ||
+        page.limit !== pagination.pageSize ||
+        typeof page.has_more !== 'boolean' ||
+        (page.has_more && page.items.length !== pagination.pageSize)
+      ) {
         throw projectKnowledgeError(INVALID);
       }
       const memories = Object.freeze(page.items.map((item) => parseMemory(item, scope)));
@@ -68,21 +90,14 @@ export function createDesktopProjectMemoriesLocalAuthorityV2(
   });
 }
 
-function parseContext(value: unknown, scope: ProjectKnowledgeScope): Readonly<Record<string, unknown>> {
+function parseContext(value: unknown, scope: ProjectKnowledgeScope): NativeKnowledgeScope {
   if (!isRecord(value) || value.contract_version !== '1.0.0' || !isRecord(value.scope)) {
     throw projectKnowledgeError(INVALID);
   }
-  const native = value.scope;
-  if (Object.keys(native).length !== SCOPE_KEYS.length ||
-      !SCOPE_KEYS.every((key) => Object.hasOwn(native, key))) throw projectKnowledgeError(INVALID);
-  if (native.tenant_id !== scope.tenantId || native.project_id !== scope.projectId) {
-    throw projectKnowledgeError('project_knowledge_scope_conflict', 409);
-  }
-  requireNonnegativeInteger(native.context_revision, INVALID);
-  requireNonnegativeInteger(native.generation, INVALID);
-  requireIdentifier(native.profile_id, INVALID);
-  requireIdentifier(native.digest, INVALID);
-  return Object.freeze({ ...native });
+  return requireNativeKnowledgeScope(
+    { contract_version: value.contract_version, scope: value.scope },
+    scope,
+  );
 }
 
 function parseMemory(value: unknown, scope: ProjectKnowledgeScope): ProjectMemory {

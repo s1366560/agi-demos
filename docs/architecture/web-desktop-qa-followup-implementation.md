@@ -747,3 +747,19 @@ races, stale/foreign/removed sources, CAS misses, graph failure and cancellation
 Ruff and targeted helper/workflow mypy passed; router isolated mypy retains its
 existing unrelated errors. Evidence: `/tmp/python-processing-final.log`,
 `/tmp/python-processing-cas-red.log`. No schema or feature readiness changes.
+
+I3.20 adds the typed native knowledge sync client through the existing project
+memories authority and operation lease. Twenty protocol operations have structural
+request/response and ownership validation. Mapping, conflict decisions and resume/
+reconciliation require the exact previously observed six-field native scope before
+transport; late responses, cancelled and released operations are rejected. Cloud
+mode and non-loopback native transports reject before I/O. Protocol receipts remain
+separate from actual remote authorization or completed user-facing sync acceptance.
+Sixteen focused tests and complete Desktop TypeScript checks passed. Full Desktop:
+4289 passed, 2 skipped, 1 stale App.tsx audited-revision parity failure; a formal
+post-source-freeze parity refresh remains required. Generated plugin artifacts were
+refreshed with the generator and its check passed. No UI or release gate opened.
+Evidence: `/tmp/knowledge-native-client-manifest.json`,
+`/tmp/knowledge-native-focused.log`, `/tmp/knowledge-native-desktop-final.log`,
+`/tmp/knowledge-native-artifact-check.log`. Rollback this batch and regenerate
+artifacts together; retain durable outbox and conflict records.

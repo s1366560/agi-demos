@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:d0edd0f63ae73208a93ae7191c49905ae7fd48d881ece449dcd7a4d901bac4",
-    "72\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:5ca05cbbc6fb108748bce30d1c63f3cc98d56dd2444c51e433d97cd68d9e95",
+    "9c\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1908,7 +1908,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "be604\",\"entrypoint\":\"applyDesktopProjectMcpServersAuthorityV2\",\"module_ref\":\"builtin://m",
     "emstack/desktop/project-mcp-servers-authority\",\"plugin_id\":\"memstack-renderer-target-hos",
     "ts\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},{\"artifact_digest\":\"sha256:",
-    "7609b71e8f3cfefe36d06e40afb06a8acaab91e375d2c78745529e36d2b513de\",\"artifact_source\":\"rep",
+    "5e6aeb494b39c0a06e2709272a1cfa4565f0c63d45984222cc53abfe6f2e9020\",\"artifact_source\":\"rep",
     "o+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV",
     "2.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/sche",
     "ma\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"desktop-api-fetch\",\"",
@@ -4536,4 +4536,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "time-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:d0edd0f63ae73208a93ae7191c49905ae7fd48d881ece449dcd7a4d901bac472";
+    "sha256:5ca05cbbc6fb108748bce30d1c63f3cc98d56dd2444c51e433d97cd68d9e959c";

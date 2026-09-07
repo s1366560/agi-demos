@@ -12,6 +12,18 @@ import type {
 } from '../features/project-knowledge/projectMemoriesClient';
 import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
+import type {
+  NativeKnowledgeClient,
+  NativeKnowledgeCommand,
+  NativeKnowledgeResponse,
+  NativeKnowledgeSyncAuthority,
+  NativeKnowledgeSyncOptions,
+} from '../features/project-knowledge/nativeKnowledgeContracts';
+import {
+  prepareNativeKnowledgeCommand,
+  requireNativeKnowledgeCommandOptions,
+  requireNativeKnowledgeResponse,
+} from '../features/project-knowledge/nativeKnowledgeValidation';
 import { createDesktopProjectMemoriesHttpAuthorityV2 } from './desktopProjectMemoriesHttpProjectionV2';
 import {
   prepareDesktopProjectMemoriesAuthorityOperationV2,
@@ -19,6 +31,7 @@ import {
   normalizeDesktopProjectMemoriesPageV2,
   type DesktopProjectMemoriesAuthorityOperationInputV2,
   type DesktopProjectMemoriesLoadOperationInputV2,
+  type DesktopProjectMemoriesSyncOperationInputV2,
   type PreparedDesktopProjectMemoriesAuthorityOperationV2,
 } from './desktopProjectMemoriesOperationContractV2';
 import type {
@@ -29,6 +42,7 @@ import type {
 export type {
   DesktopProjectMemoriesAuthorityOperationInputV2,
   DesktopProjectMemoriesLoadOperationInputV2,
+  DesktopProjectMemoriesSyncOperationInputV2,
 } from './desktopProjectMemoriesOperationContractV2';
 
 export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_MODULE_REF_V2 =
@@ -37,23 +51,26 @@ export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_SERVICE_V2 =
   'service:desktop-renderer.project-memories-authority';
 export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_VERSION_V2 = '1.0.0';
 
-export interface DesktopProjectMemoriesAuthorityV2 {
+export interface DesktopProjectMemoriesAuthorityV2 extends NativeKnowledgeSyncAuthority {
   readonly load: (
     signal?: AbortSignal,
-    options?: ProjectMemoriesPageOptions
+    options?: ProjectMemoriesPageOptions,
   ) => Promise<ProjectMemoriesSnapshot>;
 }
 
 export interface DesktopProjectMemoriesAuthorityServiceV2 {
   readonly bindOperation: (
     config: DesktopRuntimeConfig,
-    scope: ProjectKnowledgeScope
+    scope: ProjectKnowledgeScope,
   ) => DesktopProjectMemoriesAuthorityV2;
 }
 
 export interface DesktopProjectMemoriesOperationsV2 {
+  readonly executeKnowledgeSync: <C extends NativeKnowledgeCommand>(
+    input: DesktopProjectMemoriesSyncOperationInputV2<C>,
+  ) => Promise<NativeKnowledgeResponse<C>>;
   readonly loadProjectMemories: (
-    input: DesktopProjectMemoriesLoadOperationInputV2
+    input: DesktopProjectMemoriesLoadOperationInputV2,
   ) => Promise<ProjectMemoriesSnapshot>;
 }
 
@@ -67,7 +84,7 @@ type GenerationActionsUnavailableV2 = Readonly<{
 }>;
 type AuthorityAdmissionRejectionV2 = ServiceAdmissionRejectionV2 | GenerationActionsUnavailableV2;
 
-const AUTHORITY_KEYS_V2 = new Set(['load']);
+const AUTHORITY_KEYS_V2 = new Set(['load', 'executeSync']);
 
 export class DesktopProjectMemoriesAuthorityUnavailableErrorV2 extends Error {
   readonly reasonCode: AuthorityAdmissionRejectionV2['reasonCode'];
@@ -83,12 +100,12 @@ export class DesktopProjectMemoriesAuthorityUnavailableErrorV2 extends Error {
 
 export function applyDesktopProjectMemoriesAuthorityV2(
   context: ContextV2,
-  config: Readonly<Record<string, unknown>>
+  config: Readonly<Record<string, unknown>>,
 ): void {
   if (Object.keys(config).length !== 1 || config.strategy !== 'desktop-api-fetch') {
     throw new RuntimeV2Error(
       'desktop_project_memories_authority_config_invalid',
-      'desktop project memories authority requires desktop-api-fetch strategy'
+      'desktop project memories authority requires desktop-api-fetch strategy',
     );
   }
   const service: DesktopProjectMemoriesAuthorityServiceV2 = Object.freeze({
@@ -104,9 +121,26 @@ export const desktopProjectMemoriesAuthorityDefinitionV2: PluginDefinitionV2 = O
 });
 
 export function createDesktopProjectMemoriesOperationsV2(
-  resolveActions: () => DesktopRendererGenerationActionsV2 | null
+  resolveActions: () => DesktopRendererGenerationActionsV2 | null,
 ): DesktopProjectMemoriesOperationsV2 {
   return Object.freeze({
+    executeKnowledgeSync<C extends NativeKnowledgeCommand>(
+      input: DesktopProjectMemoriesSyncOperationInputV2<C>,
+    ): Promise<NativeKnowledgeResponse<C>> {
+      const prepared = prepareDesktopProjectMemoriesAuthorityOperationV2({
+        kind: 'sync',
+        ...input,
+      });
+      return runDesktopProjectMemoriesAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) =>
+          authority.executeSync(prepared.command, {
+            signal: prepared.signal,
+            expectedScope: prepared.expectedScope,
+          }),
+      );
+    },
     loadProjectMemories(input: DesktopProjectMemoriesLoadOperationInputV2) {
       const prepared = prepareDesktopProjectMemoriesAuthorityOperationV2({
         kind: 'load',
@@ -115,21 +149,42 @@ export function createDesktopProjectMemoriesOperationsV2(
       return runDesktopProjectMemoriesAuthorityOperationV2(
         requireGenerationActionsV2(resolveActions()),
         prepared,
-        (authority) => authority.load(prepared.signal, prepared)
+        (authority) => authority.load(prepared.signal, prepared),
       );
+    },
+  });
+}
+
+export function createDesktopNativeKnowledgeClientV2(
+  operations: Pick<DesktopProjectMemoriesOperationsV2, 'executeKnowledgeSync'>,
+  config: DesktopRuntimeConfig,
+): NativeKnowledgeClient {
+  const operationConfig = Object.freeze({ ...config });
+  return Object.freeze({
+    execute<C extends NativeKnowledgeCommand>(
+      scope: ProjectKnowledgeScope,
+      command: C,
+      options?: NativeKnowledgeSyncOptions,
+    ): Promise<NativeKnowledgeResponse<C>> {
+      return operations.executeKnowledgeSync({
+        config: operationConfig,
+        scope,
+        command,
+        ...options,
+      });
     },
   });
 }
 
 export function createDesktopProjectMemoriesClientV2(
   operations: Pick<DesktopProjectMemoriesOperationsV2, 'loadProjectMemories'>,
-  config: DesktopRuntimeConfig
+  config: DesktopRuntimeConfig,
 ): ProjectMemoriesClient {
   const operationConfig = Object.freeze({ ...config });
   return Object.freeze({
     load(
       scope: Parameters<ProjectMemoriesClient['load']>[0],
-      options?: Parameters<ProjectMemoriesClient['load']>[1]
+      options?: Parameters<ProjectMemoriesClient['load']>[1],
     ) {
       return operations.loadProjectMemories({
         config: operationConfig,
@@ -145,19 +200,19 @@ export function createDesktopProjectMemoriesClientV2(
 export function withDesktopProjectMemoriesAuthorityOperationV2<TResult>(
   actions: DesktopRendererGenerationActionsV2,
   input: DesktopProjectMemoriesAuthorityOperationInputV2,
-  operation: (authority: DesktopProjectMemoriesAuthorityV2) => TResult | Promise<TResult>
+  operation: (authority: DesktopProjectMemoriesAuthorityV2) => TResult | Promise<TResult>,
 ): Promise<TResult> {
   return runDesktopProjectMemoriesAuthorityOperationV2(
     actions,
     prepareDesktopProjectMemoriesAuthorityOperationV2(input),
-    operation
+    operation,
   );
 }
 
 async function runDesktopProjectMemoriesAuthorityOperationV2<TResult>(
   actions: DesktopRendererGenerationActionsV2,
   prepared: PreparedDesktopProjectMemoriesAuthorityOperationV2,
-  operation: (authority: DesktopProjectMemoriesAuthorityV2) => TResult | Promise<TResult>
+  operation: (authority: DesktopProjectMemoriesAuthorityV2) => TResult | Promise<TResult>,
 ): Promise<TResult> {
   const admission =
     await actions.acquireServiceOperationLease<DesktopProjectMemoriesAuthorityServiceV2>({
@@ -179,10 +234,10 @@ async function runDesktopProjectMemoriesAuthorityOperationV2<TResult>(
     return await admission.useService((candidate) => {
       const service = requireProjectMemoriesServiceV2(candidate);
       const authority = requireProjectMemoriesAuthorityV2(
-        service.bindOperation(prepared.config, prepared.scope)
+        service.bindOperation(prepared.config, prepared.scope),
       );
       return operation(
-        createRevocableProjectMemoriesAuthorityV2(authority, prepared.scope, () => operationActive)
+        createRevocableProjectMemoriesAuthorityV2(authority, prepared.scope, () => operationActive),
       );
     });
   } catch (error) {
@@ -201,9 +256,22 @@ async function runDesktopProjectMemoriesAuthorityOperationV2<TResult>(
 function createRevocableProjectMemoriesAuthorityV2(
   authority: DesktopProjectMemoriesAuthorityV2,
   scope: ProjectKnowledgeScope,
-  isOperationActive: () => boolean
+  isOperationActive: () => boolean,
 ): DesktopProjectMemoriesAuthorityV2 {
   return Object.freeze({
+    async executeSync<C extends NativeKnowledgeCommand>(
+      command: C,
+      inputOptions?: NativeKnowledgeSyncOptions,
+    ): Promise<NativeKnowledgeResponse<C>> {
+      requireOperationActiveV2(isOperationActive);
+      const prepared = prepareNativeKnowledgeCommand(command);
+      const options = requireNativeKnowledgeCommandOptions(prepared, inputOptions);
+      options.signal?.throwIfAborted();
+      const result = await authority.executeSync(prepared, options);
+      requireOperationActiveV2(isOperationActive);
+      options.signal?.throwIfAborted();
+      return requireNativeKnowledgeResponse(result, prepared, scope, options.expectedScope);
+    },
     async load(signal?: AbortSignal, options?: ProjectMemoriesPageOptions) {
       requireOperationActiveV2(isOperationActive);
       const pagination = normalizeDesktopProjectMemoriesPageV2(options);
@@ -231,7 +299,8 @@ function requireProjectMemoriesAuthorityV2(value: unknown): DesktopProjectMemori
   if (
     !isPlainRecordV2(value) ||
     !hasExactKeysV2(value, AUTHORITY_KEYS_V2) ||
-    typeof value.load !== 'function'
+    typeof value.load !== 'function' ||
+    typeof value.executeSync !== 'function'
   ) {
     throw invalidServiceV2();
   }
@@ -239,7 +308,7 @@ function requireProjectMemoriesAuthorityV2(value: unknown): DesktopProjectMemori
 }
 
 function requireGenerationActionsV2(
-  actions: DesktopRendererGenerationActionsV2 | null
+  actions: DesktopRendererGenerationActionsV2 | null,
 ): DesktopRendererGenerationActionsV2 {
   if (actions !== null) return actions;
   throw new DesktopProjectMemoriesAuthorityUnavailableErrorV2({
@@ -251,14 +320,14 @@ function requireOperationActiveV2(isOperationActive: () => boolean): void {
   if (isOperationActive()) return;
   throw new RuntimeV2Error(
     'desktop_project_memories_operation_released',
-    'desktop project memories operation has been released'
+    'desktop project memories operation has been released',
   );
 }
 
 function invalidServiceV2(): RuntimeV2Error {
   return new RuntimeV2Error(
     'desktop_project_memories_service_invalid',
-    'desktop project memories authority service is invalid'
+    'desktop project memories authority service is invalid',
   );
 }
 
@@ -275,12 +344,12 @@ function isPlainRecordV2(value: unknown): value is Record<string, unknown> {
 
 function generatedContractDigestV2(): string {
   const entry = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    (candidate) => candidate.module_ref === DESKTOP_PROJECT_MEMORIES_AUTHORITY_MODULE_REF_V2
+    (candidate) => candidate.module_ref === DESKTOP_PROJECT_MEMORIES_AUTHORITY_MODULE_REF_V2,
   );
   if (entry === undefined) {
     throw new RuntimeV2Error(
       'desktop_project_memories_authority_catalog_missing',
-      'desktop project memories authority is absent from the generated catalog'
+      'desktop project memories authority is absent from the generated catalog',
     );
   }
   return entry.contract_digest;

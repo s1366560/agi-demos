@@ -75,6 +75,9 @@ function serviceFixture(received, overrides = {}) {
     bindOperation(config, operationScope) {
       received.push({ type: 'bind', config, scope: operationScope });
       return Object.freeze({
+        async executeSync() {
+          throw new Error('native_knowledge_sync_unavailable');
+        },
         async load(signal) {
           received.push({ type: 'load', signal });
           return overrides.result ?? result(operationScope);
@@ -355,6 +358,7 @@ test('old Memories request stays pinned while replacement generation serves new 
     bindOperation(...args) {
       const authority = oldService.bindOperation(...args);
       return Object.freeze({
+        executeSync: authority.executeSync,
         async load(...loadArgs) {
           await gate;
           return authority.load(...loadArgs);
@@ -387,8 +391,14 @@ function jsonResponse(payload, status = 200) {
 
 test('local projection discovers native scope and rejects crossed generation or project results', async () => {
   const originalFetch = globalThis.fetch;
-  const native = { tenant_id: 'tenant-1', project_id: 'project-1', context_revision: 7,
-    profile_id: 'native-profile', generation: 4, digest: 'native-digest' };
+  const native = {
+    tenant_id: 'tenant-1',
+    project_id: 'project-1',
+    context_revision: 7,
+    profile_id: 'native-profile',
+    generation: 4,
+    digest: 'native-digest',
+  };
   const config = runtimeConfig({ mode: 'local', apiBaseUrl: 'http://127.0.0.1:43123' });
   let wrong = null;
   const requests = [];
@@ -401,14 +411,31 @@ test('local projection discovers native scope and rejects crossed generation or 
       return jsonResponse({ contract_version: '1.0.0', scope: native });
     }
     assert.equal(pathname, '/api/v1/knowledge/query');
-    assert.deepEqual(JSON.parse(init.body), { scope: native,
-      query: { operation: 'list', offset: 50, limit: 50 } });
-    return jsonResponse({ contract_version: '1.0.0',
+    assert.deepEqual(JSON.parse(init.body), {
+      scope: native,
+      query: { operation: 'list', offset: 50, limit: 50 },
+    });
+    return jsonResponse({
+      contract_version: '1.0.0',
       scope: { ...native, ...(wrong === 'generation' ? { generation: 5 } : {}) },
-      result: { offset: 50, limit: 50, has_more: false, items: [{ id: 'local-memory',
-        project_id: wrong === 'project' ? 'other-project' : 'project-1', title: 'Local memory',
-        content: 'Local content', content_type: 'text', version: 1, status: 'enabled',
-        created_at_ms: 0 }] } });
+      result: {
+        offset: 50,
+        limit: 50,
+        has_more: false,
+        items: [
+          {
+            id: 'local-memory',
+            project_id: wrong === 'project' ? 'other-project' : 'project-1',
+            title: 'Local memory',
+            content: 'Local content',
+            content_type: 'text',
+            version: 1,
+            status: 'enabled',
+            created_at_ms: 0,
+          },
+        ],
+      },
+    });
   };
   try {
     const authority = createDesktopProjectMemoriesHttpAuthorityV2(config, scope('local'));
@@ -420,7 +447,8 @@ test('local projection discovers native scope and rejects crossed generation or 
     assert.equal(value.memories[0].createdAt, '1970-01-01T00:00:00.000Z');
     assert.equal(value.memories[0].processingStatus, 'unavailable');
     const { requireDesktopProjectMemoriesSnapshotV2: validate } = require(
-      COMPILED_ROOT + '/src/plugins/desktopProjectMemoriesOperationContractV2.js');
+      COMPILED_ROOT + '/src/plugins/desktopProjectMemoriesOperationContractV2.js',
+    );
     assert.deepEqual(validate(value, scope('local'), { page: 2 }), value);
     for (const changed of [{ total: 1 }, { hasMore: true }, { hasMore: undefined }]) {
       assert.throws(() => validate({ ...value, ...changed }, scope('local'), { page: 2 }));
@@ -431,7 +459,9 @@ test('local projection discovers native scope and rejects crossed generation or 
     assert.equal(requests.length, 6);
     globalThis.fetch = async () => jsonResponse({ reason_code: 'knowledge_release_closed' }, 503);
     await assert.rejects(authority.load(), (error) => error.status === 503);
-  } finally { globalThis.fetch = originalFetch; }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('Memories client carries pagination through the leased authority and vault main policy to HTTP', async () => {
@@ -449,17 +479,26 @@ test('Memories client carries pagination through the leased authority and vault 
     }
     return jsonResponse({ memories: [], total: 76, page: 3, page_size: 25 });
   };
-  const { executeVaultBoundCloudRequest } = require(COMPILED_ROOT + '/electron/main/cloudRequestPolicy.js');
+  const { executeVaultBoundCloudRequest } = require(
+    COMPILED_ROOT + '/electron/main/cloudRequestPolicy.js',
+  );
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
-    const response = await executeVaultBoundCloudRequest({ method: init.method, path: url.pathname + url.search }, {
-      loadTrustedSession: async () => ({
-        version: 1, api_base_url: 'https://cloud.memstack.test', runtime_mode: 'cloud',
-        credential_kind: 'cloud_bearer', credential: 'vault-only-pagination-fixture', expires_at: '2099-01-01T00:00:00Z',
-      }),
-      fetch: network,
-      signal: init.signal,
-    });
+    const response = await executeVaultBoundCloudRequest(
+      { method: init.method, path: url.pathname + url.search },
+      {
+        loadTrustedSession: async () => ({
+          version: 1,
+          api_base_url: 'https://cloud.memstack.test',
+          runtime_mode: 'cloud',
+          credential_kind: 'cloud_bearer',
+          credential: 'vault-only-pagination-fixture',
+          expires_at: '2099-01-01T00:00:00Z',
+        }),
+        fetch: network,
+        signal: init.signal,
+      },
+    );
     return jsonResponse(response.body, response.status);
   };
   try {

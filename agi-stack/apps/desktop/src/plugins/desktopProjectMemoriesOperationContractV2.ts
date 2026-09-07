@@ -8,6 +8,15 @@ import {
 } from '../features/project-knowledge/projectMemoriesClient';
 import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
+import type {
+  NativeKnowledgeCommand,
+  NativeKnowledgeSyncOptions,
+} from '../features/project-knowledge/nativeKnowledgeContracts';
+import {
+  prepareNativeKnowledgeCommand,
+  requireNativeKnowledgeCommandOptions,
+} from '../features/project-knowledge/nativeKnowledgeValidation';
+import { requireNativeKnowledgeTransportV2 } from './desktopNativeKnowledgeSyncHttpV2';
 
 export type DesktopProjectMemoriesLoadOperationInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
@@ -17,13 +26,31 @@ export type DesktopProjectMemoriesLoadOperationInputV2 = Readonly<{
   pageSize?: number;
 }>;
 
+export type DesktopProjectMemoriesSyncOperationInputV2<
+  C extends NativeKnowledgeCommand = NativeKnowledgeCommand,
+> = NativeKnowledgeSyncOptions &
+  Readonly<{
+    config: DesktopRuntimeConfig;
+    scope: ProjectKnowledgeScope;
+    command: C;
+  }>;
+
 export type DesktopProjectMemoriesAuthorityOperationInputV2 =
-  DesktopProjectMemoriesLoadOperationInputV2 & Readonly<{ kind: 'load' }>;
+  | (DesktopProjectMemoriesLoadOperationInputV2 & Readonly<{ kind: 'load' }>)
+  | (DesktopProjectMemoriesSyncOperationInputV2 & Readonly<{ kind: 'sync' }>);
 
 export type PreparedDesktopProjectMemoriesAuthorityOperationV2 =
   DesktopProjectMemoriesAuthorityOperationInputV2;
 
 const INPUT_KEYS_V2 = new Set(['kind', 'config', 'scope', 'signal', 'page', 'pageSize']);
+const SYNC_INPUT_KEYS_V2 = new Set([
+  'kind',
+  'config',
+  'scope',
+  'signal',
+  'expectedScope',
+  'command',
+]);
 const SCOPE_KEYS_V2 = new Set(['authority', 'tenantId', 'projectId']);
 const SNAPSHOT_KEYS_V2 = new Set([
   'scope',
@@ -52,12 +79,21 @@ const MEMORY_KEYS_V2 = new Set([
 ]);
 
 export function prepareDesktopProjectMemoriesAuthorityOperationV2(
-  input: DesktopProjectMemoriesAuthorityOperationInputV2
+  input: DesktopProjectMemoriesLoadOperationInputV2 & Readonly<{ kind: 'load' }>,
+): DesktopProjectMemoriesLoadOperationInputV2 & Readonly<{ kind: 'load' }>;
+export function prepareDesktopProjectMemoriesAuthorityOperationV2<C extends NativeKnowledgeCommand>(
+  input: DesktopProjectMemoriesSyncOperationInputV2<C> & Readonly<{ kind: 'sync' }>,
+): DesktopProjectMemoriesSyncOperationInputV2<C> & Readonly<{ kind: 'sync' }>;
+export function prepareDesktopProjectMemoriesAuthorityOperationV2(
+  input: DesktopProjectMemoriesAuthorityOperationInputV2,
+): PreparedDesktopProjectMemoriesAuthorityOperationV2;
+export function prepareDesktopProjectMemoriesAuthorityOperationV2(
+  input: DesktopProjectMemoriesAuthorityOperationInputV2,
 ): PreparedDesktopProjectMemoriesAuthorityOperationV2 {
   if (
     !isPlainRecordV2(input) ||
-    input.kind !== 'load' ||
-    !hasExactOptionalKeysV2(input, INPUT_KEYS_V2) ||
+    (input.kind !== 'load' && input.kind !== 'sync') ||
+    !hasExactOptionalKeysV2(input, input.kind === 'sync' ? SYNC_INPUT_KEYS_V2 : INPUT_KEYS_V2) ||
     !Object.hasOwn(input, 'config') ||
     !Object.hasOwn(input, 'scope') ||
     (input.signal !== undefined && !isAbortSignalV2(input.signal))
@@ -66,6 +102,19 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
   }
   const config = cloneDesktopProjectMemoriesRuntimeConfigV2(input.config);
   const scope = cloneDesktopProjectMemoriesScopeV2(input.scope, config);
+  if (input.kind === 'sync') {
+    requireNativeKnowledgeTransportV2(config);
+    return Object.freeze({
+      kind: 'sync',
+      config,
+      scope,
+      command: prepareNativeKnowledgeCommand(input.command),
+      ...requireNativeKnowledgeCommandOptions(input.command, {
+        signal: input.signal,
+        expectedScope: input.expectedScope,
+      }),
+    });
+  }
   return Object.freeze({
     kind: 'load',
     config,
@@ -76,7 +125,7 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
 }
 
 export function cloneDesktopProjectMemoriesRuntimeConfigV2(
-  config: DesktopRuntimeConfig
+  config: DesktopRuntimeConfig,
 ): DesktopRuntimeConfig {
   if (!isPlainRecordV2(config)) throw invalidInputV2();
   const copy: DesktopRuntimeConfig = {
@@ -104,7 +153,7 @@ export function cloneDesktopProjectMemoriesRuntimeConfigV2(
 
 export function cloneDesktopProjectMemoriesScopeV2(
   scope: ProjectKnowledgeScope,
-  config: DesktopRuntimeConfig
+  config: DesktopRuntimeConfig,
 ): ProjectKnowledgeScope {
   if (
     !isPlainRecordV2(scope) ||
@@ -127,12 +176,15 @@ export function cloneDesktopProjectMemoriesScopeV2(
 export function requireDesktopProjectMemoriesSnapshotV2(
   value: unknown,
   scope: ProjectKnowledgeScope,
-  options: ProjectMemoriesPageOptions = {}
+  options: ProjectMemoriesPageOptions = {},
 ): ProjectMemoriesSnapshot {
   const page = normalizeDesktopProjectMemoriesPageV2(options);
   if (
     !isPlainRecordV2(value) ||
-    !hasExactKeysV2(value, scope.authority === 'local' ? LOCAL_SNAPSHOT_KEYS_V2 : SNAPSHOT_KEYS_V2) ||
+    !hasExactKeysV2(
+      value,
+      scope.authority === 'local' ? LOCAL_SNAPSHOT_KEYS_V2 : SNAPSHOT_KEYS_V2,
+    ) ||
     value.authority !== scope.authority ||
     value.availability !== 'degraded' ||
     value.reasonCode !== PROJECT_MEMORIES_DEGRADED_REASON ||
@@ -144,10 +196,15 @@ export function requireDesktopProjectMemoriesSnapshotV2(
     value.pageSize !== page.pageSize ||
     !Array.isArray(value.memories) ||
     value.memories.length > page.pageSize ||
-    (scope.authority === 'local' && (value.total !== null || typeof value.hasMore !== 'boolean' ||
-      (value.hasMore && value.memories.length !== page.pageSize))) ||
-    !validMemoryPageV2(value.memories,
-      scope.authority === 'local' ? value.memories.length : value.total, scope.projectId)
+    (scope.authority === 'local' &&
+      (value.total !== null ||
+        typeof value.hasMore !== 'boolean' ||
+        (value.hasMore && value.memories.length !== page.pageSize))) ||
+    !validMemoryPageV2(
+      value.memories,
+      scope.authority === 'local' ? value.memories.length : value.total,
+      scope.projectId,
+    )
   ) {
     throw invalidServiceContractV2();
   }
@@ -155,14 +212,17 @@ export function requireDesktopProjectMemoriesSnapshotV2(
 }
 
 export function normalizeDesktopProjectMemoriesPageV2(
-  options: ProjectMemoriesPageOptions = {}
+  options: ProjectMemoriesPageOptions = {},
 ): Readonly<{ page: number; pageSize: number }> {
   if (!isPlainRecordV2(options)) throw invalidInputV2();
   const page = options.page === undefined ? 1 : options.page;
   const pageSize = options.pageSize === undefined ? 50 : options.pageSize;
   if (
-    !Number.isSafeInteger(page) || page < 1 ||
-    !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100
+    !Number.isSafeInteger(page) ||
+    page < 1 ||
+    !Number.isSafeInteger(pageSize) ||
+    pageSize < 1 ||
+    pageSize > 100
   ) {
     throw invalidInputV2();
   }
@@ -172,7 +232,7 @@ export function normalizeDesktopProjectMemoriesPageV2(
 function validMemoryPageV2(
   memoriesValue: unknown,
   totalValue: unknown,
-  projectId: string
+  projectId: string,
 ): boolean {
   if (
     !Array.isArray(memoriesValue) ||
@@ -224,20 +284,20 @@ function exactActionsV2(value: unknown): boolean {
 function invalidInputV2(): RuntimeV2Error {
   return new RuntimeV2Error(
     'desktop_project_memories_operation_input_invalid',
-    'desktop project memories operation input is invalid'
+    'desktop project memories operation input is invalid',
   );
 }
 
 function invalidServiceContractV2(): RuntimeV2Error {
   return new RuntimeV2Error(
     'desktop_project_memories_service_contract_invalid',
-    'desktop project memories authority returned an invalid result'
+    'desktop project memories authority returned an invalid result',
   );
 }
 
 function hasExactOptionalKeysV2(
   value: Record<string, unknown>,
-  allowed: ReadonlySet<string>
+  allowed: ReadonlySet<string>,
 ): boolean {
   return Object.keys(value).every((key) => allowed.has(key));
 }
