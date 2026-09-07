@@ -9,6 +9,7 @@ use crate::model::Memory;
 pub mod index;
 pub mod processing;
 pub mod retrieval;
+pub mod similarity;
 pub mod sync;
 
 /// Explicit ownership supplied by the authenticated authority, never inferred
