@@ -16,7 +16,10 @@ from sqlalchemy.exc import DBAPIError
 from src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_model import (
     LegacyCronAdmissionModel,
 )
-from src.infrastructure.adapters.secondary.persistence.models import CronSchedulerOwnerModel
+from src.infrastructure.adapters.secondary.persistence.models import (
+    CronJobRunModel,
+    CronSchedulerOwnerModel,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_legacy_cron_admission_repository import (
     SqlLegacyCronAdmissionRepository,
 )
@@ -27,6 +30,16 @@ migration = ScriptDirectory.from_config(Config("alembic.ini")).get_revision("b36
 
 
 async def admit(session, suffix="one"):
+    session.add(
+        CronJobRunModel(
+            id=f"run-{suffix}",
+            job_id="job",
+            project_id="project",
+            status="queued",
+            conversation_id="conversation",
+        )
+    )
+    await session.flush()
     return await SqlLegacyCronAdmissionRepository(session).admit(
         tenant_id="tenant",
         project_id="project",

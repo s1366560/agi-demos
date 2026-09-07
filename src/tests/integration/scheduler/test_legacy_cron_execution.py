@@ -285,7 +285,7 @@ async def test_scheduler_commits_running_admission_before_dispatch(
     admitted = []
 
     async def dispatch(job, conversation_id, session, identity):
-        assert recorded == [CronRunStatus.RUNNING]
+        assert recorded == [CronRunStatus.QUEUED]
         async with sessions() as observed:
             assert await SqlLegacyCronAdmissionRepository(observed).matches_active(identity)
         admitted.append(identity)
@@ -295,5 +295,76 @@ async def test_scheduler_commits_running_admission_before_dispatch(
     monkeypatch.setattr(job_executor, "_execute_payload", dispatch)
     await job_executor.execute_cron_job("job")
     assert len(admitted) == 1
+    assert recorded == [CronRunStatus.QUEUED]
     async with sessions() as session:
         assert await SqlLegacyCronAdmissionRepository(session).matches_active(admitted[0])
+
+
+async def test_future_hitl_event_wait_and_answer_project_without_releasing_nonce(
+    database, runtime_io, monkeypatch
+):
+    from src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_model import (
+        LegacyCronAdmissionModel,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import CronJobRunModel
+
+    _, sessions = database
+    monkeypatch.setattr(legacy_cron_admission, "async_session_factory", sessions)
+    async with sessions() as session:
+        identity = await admit(session)
+        await session.commit()
+    waiting, answer, resumed, finish = (asyncio.Event() for _ in range(4))
+
+    class Agent:
+        config = SimpleNamespace(tenant_id="tenant", project_id="project")
+
+        async def execute_chat(self, **kwargs):
+            yield {"type": "clarification_asked", "data": {"request_id": "request"}}
+            waiting.set()
+            await answer.wait()
+            yield {"type": "clarification_answered", "data": {"request_id": "request"}}
+            resumed.set()
+            await finish.wait()
+            yield {"type": "complete", "data": {"content": "finished"}}
+
+    task = asyncio.create_task(
+        execution.execute_project_chat(
+            Agent(),
+            ProjectChatRequest(
+                conversation_id=identity.conversation_id,
+                message_id=identity.message_id,
+                user_message="work",
+                user_id="user",
+                legacy_cron_admission=identity.to_wire(),
+            ),
+        )
+    )
+    try:
+        await asyncio.wait_for(waiting.wait(), 5)
+        async with sessions() as session:
+            run = await session.get(CronJobRunModel, identity.run_id)
+            row = await session.get(LegacyCronAdmissionModel, identity.admission_id)
+            assert run.status == "waiting_human" and run.finished_at is None
+            assert row.status == "active" and row.execution_phase == "running"
+            nonce = row.execution_nonce
+            assert (
+                await SqlLegacyCronAdmissionRepository(session).claim_execution(
+                    identity, resume=True
+                )
+                is None
+            )
+        answer.set()
+        await asyncio.wait_for(resumed.wait(), 5)
+        async with sessions() as session:
+            run = await session.get(CronJobRunModel, identity.run_id)
+            row = await session.get(LegacyCronAdmissionModel, identity.admission_id)
+            assert run.status == "running" and row.execution_nonce == nonce
+        finish.set()
+        await task
+        async with sessions() as session:
+            run = await session.get(CronJobRunModel, identity.run_id)
+            assert run.status == "success" and run.finished_at is not None
+    finally:
+        answer.set()
+        finish.set()
+        await asyncio.gather(task, return_exceptions=True)

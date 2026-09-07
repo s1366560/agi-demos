@@ -44,6 +44,7 @@ from src.infrastructure.agent.actor.legacy_cron_admission import (
     complete_legacy_cron_admission,
     complete_legacy_cron_stream,
     maybe_park_legacy_hitl,
+    project_legacy_cron_hitl,
     request_for_legacy_hitl_resume,
     validate_legacy_cron_admission,
 )
@@ -1008,6 +1009,7 @@ async def execute_project_chat(  # noqa: PLR0915
 
             side_effects = _extract_event_side_effects(event)
             ss.apply_side_effects(side_effects)
+            await project_legacy_cron_hitl(legacy_admission, event)
             if event.get("type") in _HITL_REQUEST_EVENT_TYPES:
                 await _project_automation_runtime_waiting_human(automation_identity)
 
@@ -1368,6 +1370,7 @@ async def continue_project_chat(  # noqa: PLR0912, PLR0915
 
             side_effects = _extract_event_side_effects(event)
             ss.apply_side_effects(side_effects)
+            await project_legacy_cron_hitl(legacy_admission, event)
             if event.get("type") in _HITL_REQUEST_EVENT_TYPES:
                 await _project_automation_runtime_waiting_human(automation_identity)
 

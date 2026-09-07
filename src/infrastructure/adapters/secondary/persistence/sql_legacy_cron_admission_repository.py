@@ -18,12 +18,16 @@ from src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_mod
     LegacyCronAdmissionModel,
 )
 from src.infrastructure.adapters.secondary.persistence.models import CronSchedulerOwnerModel
+from src.infrastructure.adapters.secondary.persistence.sql_legacy_cron_run_projection import (
+    SqlLegacyCronRunProjection,
+)
 
 
 class SqlLegacyCronAdmissionRepository:
     """The caller commits admission before dispatch and terminal only after execution."""
 
     def __init__(self, session: AsyncSession) -> None:
+        super().__init__()
         self._session = session
 
     async def admit(
@@ -36,7 +40,7 @@ class SqlLegacyCronAdmissionRepository:
         message_id: str,
         conversation_id: str,
     ) -> LegacyCronAdmissionIdentity | None:
-        await self._session.execute(
+        _ = await self._session.execute(
             insert(CronSchedulerOwnerModel)
             .values(scope_id="global", owner_kind="python")
             .on_conflict_do_nothing(index_elements=["scope_id"])
@@ -91,6 +95,10 @@ class SqlLegacyCronAdmissionRepository:
         expected_phase = "waiting" if resume else "ready"
         if row is None or row.status != "active" or row.execution_phase != expected_phase:
             return None
+        if not await SqlLegacyCronRunProjection(self._session).progress(
+            identity, waiting=False, initial=not resume
+        ):
+            return None
         nonce = secrets.token_hex(32)
         row.execution_phase = "running"
         row.execution_nonce = nonce
@@ -106,8 +114,33 @@ class SqlLegacyCronAdmissionRepository:
             or row.execution_nonce != ticket.nonce
         ):
             return False
+        if not await SqlLegacyCronRunProjection(self._session).progress(
+            ticket.admission, waiting=True
+        ):
+            return False
         row.execution_phase = "waiting"
         row.execution_nonce = None
+        await self._session.flush()
+        return True
+
+    async def project_hitl(
+        self, ticket: LegacyCronExecutionTicket, request_id: str, *, waiting: bool
+    ) -> bool:
+        """A live Future wait retains its nonce and cannot authorize another execution."""
+        if not request_id:
+            return False
+        row = await self._matched_row(ticket.admission, lock=True)
+        if (
+            row is None
+            or row.status != "active"
+            or row.execution_phase != "running"
+            or row.execution_nonce != ticket.nonce
+        ):
+            return False
+        if not await SqlLegacyCronRunProjection(self._session).hitl(
+            ticket.admission, request_id, waiting=waiting
+        ):
+            return False
         await self._session.flush()
         return True
 
@@ -121,9 +154,14 @@ class SqlLegacyCronAdmissionRepository:
             return row.status == outcome and row.execution_phase == "terminal"
         if row.execution_phase != "running":
             return False
+        terminal_at = await SqlLegacyCronRunProjection(self._session).terminal(
+            ticket.admission, outcome
+        )
+        if terminal_at is None:
+            return False
         row.status = outcome
         row.execution_phase = "terminal"
-        row.terminal_at = datetime.now(UTC)
+        row.terminal_at = terminal_at
         await self._session.flush()
         return True
 

@@ -33,10 +33,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _job_enabled(job: CronJob) -> bool:
-    return job.enabled
-
-
 async def execute_cron_job(job_id: str) -> None:
     """Execute a single cron job.
 
@@ -48,14 +44,12 @@ async def execute_cron_job(job_id: str) -> None:
     )
     from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
         SqlCronJobRepository,
-        SqlCronJobRunRepository,
     )
 
     logger.info("[CronExecutor] Executing job %s", job_id)
 
     async with async_session_factory() as session:
         job_repo = SqlCronJobRepository(session)
-        run_repo = SqlCronJobRunRepository(session)
 
         job = await job_repo.find_by_id(job_id)
         if job is None:
@@ -66,97 +60,70 @@ async def execute_cron_job(job_id: str) -> None:
             logger.info("[CronExecutor] Job %s is disabled -- skipping", job_id)
             return
 
-        # Create run record
         run = CronJobRun(
             job_id=job.id,
             project_id=job.project_id,
-            status=CronRunStatus.RUNNING,
+            status=CronRunStatus.QUEUED,
             trigger_type=TriggerType.SCHEDULED,
             started_at=datetime.now(UTC),
         )
-
+        admission_attempted = False
         try:
             conversation_id = await _resolve_conversation(job, session)
             run.conversation_id = conversation_id
-
+            admission_attempted = True
             admission = await _admit_legacy_execution(job, run, conversation_id, session)
             if admission is None:
                 return
             await _execute_payload(job, conversation_id, session, admission)
+            logger.info("[CronExecutor] Job %s dispatched; awaiting execution terminal", job_id)
+        except Exception:
+            if admission_attempted:
+                # Commit/delivery uncertainty is not proof that execution has stopped.
+                logger.warning("[CronExecutor] Job %s delivery unresolved", job_id)
+                return
+            await session.rollback()
+            await _record_preparation_failure(job, run, session)
+            await session.commit()
+            logger.warning("[CronExecutor] Job %s preparation failed before admission", job_id)
 
-            # Mark success
-            run.mark_finished(
-                status=CronRunStatus.SUCCESS,
-                result_summary={"conversation_id": conversation_id},
-            )
-            job.record_success()
 
-        except TimeoutError:
-            run.mark_finished(
-                status=CronRunStatus.TIMEOUT,
-                error_message=f"Execution timed out after {job.timeout_seconds}s",
-            )
-            job.record_failure(
-                f"Timeout after {job.timeout_seconds}s",
-            )
-            logger.warning(
-                "[CronExecutor] Job %s timed out after %ds",
-                job_id,
-                job.timeout_seconds,
-            )
-        except Exception as exc:
-            error_msg = str(exc)[:500]
-            run.mark_finished(
-                status=CronRunStatus.FAILED,
-                error_message=error_msg,
-            )
-            job.record_failure(error_msg)
-            logger.exception("[CronExecutor] Job %s failed", job_id)
+async def _record_preparation_failure(job: CronJob, run: CronJobRun, session: AsyncSession) -> None:
+    """No admission was attempted, so a fresh scoped job lock can count this failure."""
+    from sqlalchemy import select
 
-        # Persist run + updated job state
-        await run_repo.save(run)
-        await job_repo.save(job)
-
-        # Delete one-shot / delete_after_run jobs on success
-        if run.status == CronRunStatus.SUCCESS and job.should_delete_after_run():
-            await job_repo.delete(job.id)
-            # Also unregister from APScheduler
-            try:
-                from src.infrastructure.scheduler.scheduler_service import (
-                    unregister_job,
-                )
-
-                await unregister_job(job.id)
-            except Exception:
-                logger.debug(
-                    "[CronExecutor] Could not unregister deleted job %s from APScheduler",
-                    job.id,
-                )
-            logger.info("[CronExecutor] Deleted one-shot job %s after success", job.id)
-
-        # If job got disabled by record_failure (max retries), unregister
-        if not _job_enabled(job):
-            try:
-                from src.infrastructure.scheduler.scheduler_service import (
-                    unregister_job,
-                )
-
-                await unregister_job(job.id)
-            except Exception:
-                pass
-            logger.warning(
-                "[CronExecutor] Job %s disabled after %d consecutive failures",
-                job.id,
-                job.max_retries,
-            )
-
-        await session.commit()
-
-    logger.info(
-        "[CronExecutor] Job %s completed with status %s",
-        job_id,
-        run.status.value,
+    from src.infrastructure.adapters.secondary.persistence.models import CronJobModel
+    from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
+        SqlCronJobRunRepository,
     )
+
+    current = await session.scalar(
+        select(CronJobModel)
+        .where(
+            CronJobModel.id == job.id,
+            CronJobModel.tenant_id == job.tenant_id,
+            CronJobModel.project_id == job.project_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if current is None:
+        return
+    run.mark_finished(status=CronRunStatus.FAILED, error_message="legacy_preparation_failed")
+    policy = CronJob(
+        id=current.id,
+        tenant_id=current.tenant_id,
+        project_id=current.project_id,
+        name=current.name,
+        enabled=current.enabled,
+        max_retries=current.max_retries,
+        state=dict(current.state or {}),
+    )
+    policy.record_failure("legacy_preparation_failed", run.finished_at)
+    current.state = policy.state
+    current.enabled = policy.enabled
+    current.updated_at = run.finished_at
+    _ = await SqlCronJobRunRepository(session).save(run)
 
 
 async def _admit_legacy_execution(
@@ -182,7 +149,21 @@ async def _admit_legacy_execution(
         await session.rollback()
         logger.info("[CronExecutor] Scheduler ownership denies job %s", job.id)
         return None
-    await SqlCronJobRunRepository(session).save(run)
+    if job.conversation_mode == ConversationMode.REUSE:
+        from sqlalchemy import update
+
+        from src.infrastructure.adapters.secondary.persistence.models import CronJobModel
+
+        _ = await session.execute(
+            update(CronJobModel)
+            .where(
+                CronJobModel.id == job.id,
+                CronJobModel.tenant_id == job.tenant_id,
+                CronJobModel.project_id == job.project_id,
+            )
+            .values(conversation_id=conversation_id)
+        )
+    _ = await SqlCronJobRunRepository(session).save(run)
     await session.commit()
     return admission
 

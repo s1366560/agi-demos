@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from src.domain.model.agent.hitl.hitl_types import HITLPendingException
 from src.infrastructure.agent.actor.types import ProjectChatRequest
@@ -23,6 +23,55 @@ from src.infrastructure.adapters.secondary.persistence.sql_legacy_cron_admission
 )
 
 logger = logging.getLogger(__name__)
+
+_HITL_WAIT_EVENTS = frozenset(
+    {
+        "clarification_asked",
+        "decision_asked",
+        "env_var_requested",
+        "permission_asked",
+        "a2ui_action_asked",
+        "elicitation_asked",
+    }
+)
+_HITL_ANSWER_EVENTS = frozenset(
+    {
+        "clarification_answered",
+        "decision_answered",
+        "env_var_provided",
+        "permission_replied",
+        "a2ui_action_answered",
+        "elicitation_answered",
+    }
+)
+
+
+async def project_legacy_cron_hitl(
+    ticket: LegacyCronExecutionTicket | None, event: Mapping[str, object]
+) -> None:
+    """Project typed protocol events while a coordinator Future keeps execution alive."""
+    if ticket is None:
+        return
+    kind = event.get("type")
+    if not isinstance(kind, str):
+        return
+    if kind not in _HITL_WAIT_EVENTS and kind not in _HITL_ANSWER_EVENTS:
+        return
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return
+    request_id = cast(Mapping[str, object], data).get("request_id")
+    if not isinstance(request_id, str) or not request_id:
+        return
+    try:
+        async with async_session_factory() as session:
+            matched = await SqlLegacyCronAdmissionRepository(session).project_hitl(
+                ticket, request_id, waiting=kind in _HITL_WAIT_EVENTS
+            )
+            if matched:
+                await session.commit()
+    except Exception:
+        logger.warning("Legacy cron HITL projection failed; admission remains unresolved")
 
 
 async def validate_legacy_cron_admission(
