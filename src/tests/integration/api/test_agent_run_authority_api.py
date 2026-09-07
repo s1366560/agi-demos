@@ -53,7 +53,14 @@ async def _agent_run_authority_v2_runtime(test_app: FastAPI) -> AsyncIterator[No
             provider_adapter=cast(Any, ProviderAdapter()),
         )
 
+    async def empty_cache_keys(*_args: object, **_kwargs: object) -> AsyncIterator[str]:
+        for key in ():
+            yield key
+
     redis_client = AsyncMock()
+    redis_client.scan_iter = empty_cache_keys
+    redis_client.delete = AsyncMock(return_value=0)
+    redis_client.xadd = AsyncMock(return_value="1-0")
     test_app.state.container._redis_client = redis_client
     await initialize_plugin_runtime_v2(
         test_app,
