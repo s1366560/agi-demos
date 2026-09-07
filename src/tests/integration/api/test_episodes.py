@@ -1,24 +1,41 @@
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import status
+from fastapi import FastAPI, status
 from httpx import ASGITransport, AsyncClient
 
 from src.domain.model.memory.episode import Episode, SourceType
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_graph_store,
-    get_graphiti_client,
-)
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     verify_api_key_dependency,
 )
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.models import APIKey
 
-# NOTE: These tests use production app instead of test_app fixture
-# They need refactoring to use test_app for proper database isolation
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+async def _episodes_v2_runtime(
+    test_app: FastAPI,
+    mock_graphiti_service: object,
+) -> AsyncIterator[None]:
+    """Publish the graph test adapter through the production generation."""
+
+    async def graph_runtime_factory() -> object:
+        return mock_graphiti_service
+
+    await initialize_plugin_runtime_v2(test_app, graph_runtime_factory=graph_runtime_factory)
+    assert "episodes" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 @pytest.fixture
@@ -46,7 +63,6 @@ def mock_episode_data():
 async def test_create_episode(
     test_app, mock_graphiti_service, mock_api_key_dependency, mock_episode_data
 ):
-    test_app.dependency_overrides[get_graphiti_client] = lambda: mock_graphiti_service
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
 
     created_episode_id = str(uuid4())
@@ -59,9 +75,6 @@ async def test_create_episode(
             valid_at=datetime.now(UTC),
         )
     )
-    # Mock driver for health queries
-    mock_graphiti_service.driver = Mock()
-    mock_graphiti_service.driver.execute_query = AsyncMock(return_value=Mock(records=[]))
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
         response = await ac.post("/api/v1/episodes/", json=mock_episode_data)
@@ -80,7 +93,6 @@ async def test_create_episode(
 
 @pytest.mark.asyncio
 async def test_health_check(test_app, mock_graphiti_service):
-    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
     mock_graphiti_service.health_probe = AsyncMock(return_value=True)
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
@@ -94,7 +106,6 @@ async def test_health_check(test_app, mock_graphiti_service):
 
 @pytest.mark.asyncio
 async def test_health_check_unhealthy(test_app, mock_graphiti_service):
-    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
     mock_graphiti_service.health_probe = AsyncMock(side_effect=Exception("Connection error"))
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:

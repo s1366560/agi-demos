@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
-from fastapi import status
+import pytest
+from fastapi import FastAPI, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityProfile,
     WorkspaceAuthorityUnavailableError,
+)
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -23,6 +29,45 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     ensure_plan_run_authority,
 )
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
+
+
+@pytest.fixture
+async def _session_projection_v2_runtime(
+    test_app: FastAPI,
+) -> AsyncIterator[Callable[[], Awaitable[None]]]:
+    """Resolve the test workspace adapter through the real generation service."""
+
+    class ProviderAdapter:
+        async def wait_until_idle(self) -> None:
+            return None
+
+    async def workspace_core_runtime_factory() -> WorkspaceCoreRuntimeServiceV2:
+        marker = cast(Any, object())
+        return WorkspaceCoreRuntimeServiceV2(
+            settings=marker,
+            client=marker,
+            authority=test_app.state.workspace_authority,
+            context_judge=marker,
+            plan_judge=marker,
+            autonomy_judge=marker,
+            access_verifier=marker,
+            event_sink=marker,
+            agent_runtime_provider=marker,
+            provider_adapter=cast(Any, ProviderAdapter()),
+        )
+
+    async def initialize() -> None:
+        await initialize_plugin_runtime_v2(
+            test_app,
+            workspace_core_runtime_factory=workspace_core_runtime_factory,
+        )
+        assert "agent" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+
+    try:
+        yield initialize
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 class _ProjectionWorkspaceAuthority:
@@ -184,6 +229,7 @@ def _projection_authority(
 
 async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtime_fields(
     authenticated_async_client,
+    _session_projection_v2_runtime,
     test_app,
     test_db,
     test_project_db,
@@ -364,6 +410,7 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         task_id=task_id,
     )
     test_app.state.workspace_authority = authority
+    await _session_projection_v2_runtime()
 
     response = await authenticated_async_client.get(
         f"/api/v1/agent/conversations/{conversation.id}/session",
@@ -450,6 +497,7 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
 
 async def test_workspace_session_projection_fails_closed_when_core_is_unavailable(
     authenticated_async_client,
+    _session_projection_v2_runtime,
     test_app,
     test_db,
     test_project_db,
@@ -478,6 +526,7 @@ async def test_workspace_session_projection_fails_closed_when_core_is_unavailabl
             raise WorkspaceAuthorityUnavailableError
 
     test_app.state.workspace_authority = _UnavailableAuthority()
+    await _session_projection_v2_runtime()
 
     response = await authenticated_async_client.get(
         f"/api/v1/agent/conversations/{conversation.id}/session",
@@ -500,6 +549,7 @@ async def test_workspace_session_projection_fails_closed_when_core_is_unavailabl
 
 async def test_standalone_session_projection_allows_omitted_workspace(
     authenticated_async_client,
+    _session_projection_v2_runtime,
     test_db,
     test_project_db,
     test_user,
@@ -520,6 +570,8 @@ async def test_standalone_session_projection_allows_omitted_workspace(
     )
     test_db.add(conversation)
     await test_db.commit()
+
+    await _session_projection_v2_runtime()
 
     response = await authenticated_async_client.get(
         f"/api/v1/agent/conversations/{conversation.id}/session",
