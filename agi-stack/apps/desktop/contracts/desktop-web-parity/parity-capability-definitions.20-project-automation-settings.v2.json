@@ -32,7 +32,8 @@
       "web_actions": [
         "view",
         "list",
-        "view-history"
+        "view-history",
+        "inspect-capabilities"
       ],
       "web_status": "partial",
       "web_reason_code": "web_cron_mutation_and_run_authority_unavailable",
@@ -58,6 +59,12 @@
           "surface": "web",
           "method": "GET",
           "path": "/api/v1/projects/{project_id}/cron-jobs",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/capabilities",
           "authority": "web_service"
         },
         {
@@ -223,7 +230,8 @@
           "actions": [
             "view",
             "list",
-            "view-history"
+            "view-history",
+            "inspect-capabilities"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -307,7 +315,7 @@
         "agi-stack/apps/desktop/src/features/automations/automationClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/automation.rs"
       ],
-      "judgment_rationale": "The production Web page renders create, update, delete, toggle and legacy run-now controls, but every corresponding Cloud application-service mutation deterministically returns structured unavailable authority and the Web client does not consume the Cron capability endpoint. Web therefore has effective view, list and view-history authority only. Cloud Desktop now binds the native Automations surface to the canonical project route and retains the structured Cloud capability authority, which currently allows reads and denies mutations. Local Desktop accepts the sidecar schema_version 2 capability envelope, binds the same canonical native route, and exposes guarded mutations only when the sidecar and automation-run authorities allow them. Web, Cloud and Local remain partial until current matched-state Electron evidence exists and the remaining pagination, filtering, history retry, editor DTO and authority-specific mutation transport differences are closed."
+      "judgment_rationale": "The production Web page consumes the Cron capability endpoint through useCronCapabilities and gates create, update, delete, toggle and run-now controls using its structured action flags, with an unavailable or retry banner. Every corresponding Cloud application-service mutation still deterministically returns structured unavailable authority. Web therefore has effective view, list, view-history and inspect-capabilities authority only, enforced by project membership. Cloud Desktop now binds the native Automations surface to the canonical project route and retains the structured Cloud capability authority, which currently allows reads and denies mutations. Local Desktop accepts the sidecar schema_version 2 capability envelope, binds the same canonical native route, and exposes guarded mutations only when the sidecar and automation-run authorities allow them. Web, Cloud and Local remain partial until current matched-state Electron evidence exists and the remaining pagination, filtering, history retry, editor DTO and authority-specific mutation transport differences are closed."
     },
     {
       "id": "project-project-settings",
@@ -480,7 +488,9 @@
       ],
       "cloud_status": "partial",
       "cloud_reason_code": "desktop_project_settings_actions_unwired",
-      "cloud_actions": ["view"],
+      "cloud_actions": [
+        "view"
+      ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",

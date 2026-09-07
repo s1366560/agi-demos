@@ -250,7 +250,7 @@ test("Project Cron Jobs separates effective Web reads from unavailable mutations
     "view-history",
     "inspect-capabilities",
   ];
-  const expectedWebActions = ["view", "list", "view-history"];
+  const expectedWebActions = ["view", "list", "view-history", "inspect-capabilities"];
   const readActions = [
     "view",
     "list",
@@ -276,8 +276,8 @@ test("Project Cron Jobs separates effective Web reads from unavailable mutations
     contractKeys(capability, "web").includes(
       "GET /api/v1/projects/{project_id}/cron-jobs/capabilities",
     ),
-    false,
-    "Web must not claim the unconsumed Cron capabilities endpoint",
+    true,
+    "Web must declare the consumed Cron capabilities endpoint",
   );
   assert.equal(
     requirementsForAction(
@@ -285,8 +285,8 @@ test("Project Cron Jobs separates effective Web reads from unavailable mutations
       "web",
       "inspect-capabilities",
     ).length,
-    0,
-    "Web must not claim the unconsumed inspect-capabilities action",
+    1,
+    "Web capability inspection requires its project member permission row",
   );
   for (const action of expectedWebActions) {
     const requirements = requirementsForAction(capability, "web", action);
