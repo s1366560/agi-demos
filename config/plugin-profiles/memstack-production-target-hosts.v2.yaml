@@ -103,6 +103,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-sidecar-knowledge-authority
+      parent_entry_id: builtin-desktop-sidecar-local-capability
+      plugin_ref: memstack-local-knowledge
+      module_ref: builtin://memstack/desktop-sidecar/knowledge-authority
+      enabled: false
+      config:
+        release_contract: knowledge-and-sync-v1
+        release_state: closed
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-web-renderer-host
       parent_entry_id: null
       plugin_ref: memstack-renderer-target-hosts

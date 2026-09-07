@@ -84,6 +84,7 @@ mod conversation_llm_route;
 mod execution_profile;
 mod execution_selection;
 mod fan_out_tool_host;
+mod knowledge_authority_v2;
 #[cfg(test)]
 mod local_route_parity_tests;
 #[cfg(test)]
@@ -3173,6 +3174,7 @@ fn local_router_with_generation_admission(
         .route("/mcp/tools/list", get(mcp_tools_list))
         .route("/mcp/tools/call", post(mcp_tools_call))
         .merge(platform_plugin_marketplace_v2::router())
+        .merge(knowledge_authority_v2::router())
         .merge(parity_routes::router())
         .fallback(workspace_core_bridge::proxy_workspace_fallback)
         .layer(middleware::from_fn_with_state(

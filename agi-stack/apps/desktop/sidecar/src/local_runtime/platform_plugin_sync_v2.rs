@@ -329,17 +329,19 @@ fn log_reconcile_failure(error: &str) {
 
 fn desktop_reconciler(state: &LocalRuntimeState) -> PluginSnapshotReconcilerV2 {
     PluginSnapshotReconcilerV2::new_with_manager(
-        desktop_loader(),
+        desktop_loader(state.app_data_dir.clone()),
         state.platform_plugin_authority_v2.manager(),
     )
 }
 
-fn desktop_loader() -> LoaderV2 {
+fn desktop_loader(app_data_dir: Option<std::path::PathBuf>) -> LoaderV2 {
     LoaderV2::for_target(
         DataPlaneTargetV2::DesktopSidecar,
         [
             desktop_sidecar_http_routes_definition_v2(),
             desktop_sidecar_host_definition_v2(),
+            super::knowledge_authority_v2::definition(app_data_dir)
+                .expect("the built-in knowledge contract is statically valid"),
         ],
     )
 }
@@ -1790,7 +1792,7 @@ mod tests {
         let fingerprint = data_plane_authority_fingerprint_v2(&base_url, &record.data_plane_id)
             .expect("authority fingerprint");
         let distribution = bootstrap_distribution(8, "cloud-session-appeared");
-        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader());
+        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader(None));
         let receipt = seed.apply(&distribution).await;
         assert_eq!(receipt.status, ApplyStatusV2::Ack);
         {
@@ -1936,7 +1938,7 @@ mod tests {
     async fn cloud_to_local_switch_is_atomic_and_keeps_the_old_lease_pinned() {
         let state = test_state();
         let cloud_distribution = bootstrap_distribution(7, "cloud-last-good");
-        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader());
+        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader(None));
         let receipt = seed.apply(&cloud_distribution).await;
         assert_eq!(receipt.status, ApplyStatusV2::Ack);
         {
@@ -2000,7 +2002,7 @@ mod tests {
 
     #[tokio::test]
     async fn desktop_reconciler_activates_the_generated_local_capability_module() {
-        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader());
+        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader(None));
         let requested = bootstrap_distribution(18, "nonce-18");
 
         assert_eq!(
@@ -2049,7 +2051,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejected_route_candidate_preserves_the_last_good_desktop_generation() {
-        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader());
+        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader(None));
         let accepted = bootstrap_distribution(18, "nonce-last-good");
         assert_eq!(reconciler.apply(&accepted).await.status, ApplyStatusV2::Ack);
         let accepted_digest = accepted.snapshot.digest.clone();

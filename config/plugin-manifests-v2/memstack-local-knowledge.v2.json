@@ -1,0 +1,57 @@
+{
+  "schema_version": 2,
+  "plugin_id": "memstack-local-knowledge",
+  "version": "2.0.0",
+  "runtime": "rust-native",
+  "trust": "builtin",
+  "modules": [
+    {
+      "module_ref": "builtin://memstack/desktop-sidecar/knowledge-authority",
+      "entrypoint": "KnowledgeModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:1f6cd962f576d470d66e12058dd441486e9915cb445dbdb1eae0cd50d5b89e21",
+        "source": "repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/knowledge_authority_v2.rs"
+      },
+      "targets": [
+        "desktop-sidecar"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-sidecar.knowledge-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "release_contract": {
+              "type": "string",
+              "const": "knowledge-and-sync-v1"
+            },
+            "release_state": {
+              "type": "string",
+              "const": "closed"
+            }
+          },
+          "required": [
+            "release_contract",
+            "release_state"
+          ]
+        }
+      },
+      "contract_digest": "sha256:21ee561395bcaa76eb4c4e251d9cf6588fd9a9aadb6ecd4f28e7b177d12c6a0f"
+    }
+  ],
+  "permissions": [],
+  "quotas": {}
+}

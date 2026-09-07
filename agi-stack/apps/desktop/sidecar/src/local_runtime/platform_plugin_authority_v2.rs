@@ -208,6 +208,7 @@ impl PlatformPluginGenerationAcquireV2Error {
 pub(super) struct ActivePlatformPluginGenerationLeaseV2 {
     projection: Arc<ActivePlatformPluginGenerationV2>,
     http_routes: Arc<DesktopSidecarHttpRouteContributionV2>,
+    runtime_generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     _release_guard: GenerationReleaseGuardV2,
 }
 
@@ -221,6 +222,21 @@ impl fmt::Debug for ActivePlatformPluginGenerationLeaseV2 {
 }
 
 impl ActivePlatformPluginGenerationLeaseV2 {
+    pub(super) fn knowledge_authority(
+        &self,
+        scope: &ScopeV2,
+    ) -> Result<
+        Arc<super::knowledge_authority_v2::KnowledgeAuthorityV2>,
+        agistack_plugin_host::RuntimeV2Error,
+    > {
+        self.runtime_generation.resolve_versioned(
+            super::knowledge_authority_v2::SERVICE,
+            super::knowledge_authority_v2::VERSION,
+            scope,
+            None,
+        )
+    }
+
     pub(super) fn descriptor(&self) -> &ActivePlatformPluginGenerationDescriptorV2 {
         self.projection.descriptor()
     }
@@ -412,8 +428,10 @@ impl PlatformPluginAuthorityV2 {
         drop(active_generation);
         let http_routes =
             runtime_generation_matches_projection(&lease, published.projection.descriptor());
+        let runtime_generation = lease.generation().ok().cloned();
         let release_guard = spawn_release_owner(lease);
-        let Some(http_routes) = http_routes else {
+        let (Some(http_routes), Some(runtime_generation)) = (http_routes, runtime_generation)
+        else {
             drop(release_guard);
             return Err(PlatformPluginGenerationAcquireV2Error {
                 reason: PlatformPluginAvailabilityV2Error::GenerationMismatch,
@@ -423,6 +441,7 @@ impl PlatformPluginAuthorityV2 {
         Ok(ActivePlatformPluginGenerationLeaseV2 {
             projection: Arc::clone(&published.projection),
             http_routes,
+            runtime_generation,
             _release_guard: release_guard,
         })
     }

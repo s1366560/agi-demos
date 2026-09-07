@@ -24,6 +24,8 @@ struct LocalRouteContract {
     contract_version: String,
     routes: Vec<LocalRouteProbe>,
     #[serde(default)]
+    negative_routes: Vec<LocalRouteProbe>,
+    #[serde(default)]
     manifest_pending_routes: Vec<RouteFixtureNotApplicable>,
     #[serde(default)]
     catalog_fixture_not_applicable: Vec<RouteFixtureNotApplicable>,
@@ -487,14 +489,22 @@ async fn registered_axum_routes_are_closed_over_the_executable_catalog() {
             .filter(|method| is_standard_http_method(method))
         {
             registered_contracts.insert((method.to_string(), manifest_pattern.clone()));
-            let covered = contract.routes.iter().any(|probe| {
-                probe.method == method && route_path_matches(&manifest_pattern, &probe.uri)
-            }) || contract.manifest_pending_routes.iter().any(|pending| {
-                pending.method == method && route_path_matches(&manifest_pattern, &pending.path)
-            }) || contract
-                .router_fixture_not_applicable
+            let covered = contract
+                .routes
                 .iter()
-                .any(|exception| exception.method == method && exception.path == manifest_pattern);
+                .chain(&contract.negative_routes)
+                .any(|probe| {
+                    probe.method == method && route_path_matches(&manifest_pattern, &probe.uri)
+                })
+                || contract.manifest_pending_routes.iter().any(|pending| {
+                    pending.method == method && route_path_matches(&manifest_pattern, &pending.path)
+                })
+                || contract
+                    .router_fixture_not_applicable
+                    .iter()
+                    .any(|exception| {
+                        exception.method == method && exception.path == manifest_pattern
+                    });
             if !covered {
                 missing_catalog_contracts.push(format!("{method} {manifest_pattern}"));
             }

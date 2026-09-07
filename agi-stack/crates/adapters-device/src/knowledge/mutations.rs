@@ -127,6 +127,14 @@ fn apply(
             expected_revision,
         } => {
             validate_memory(scope, &memory, expected_revision)?;
+            let previous = payload(tx, scope, &memory.id)?.ok_or(KnowledgeError::NotFound)?;
+            let previous: Memory = serde_json::from_str(&previous).map_err(storage)?;
+            if previous.version != expected_revision {
+                return Err(KnowledgeError::Conflict);
+            }
+            if previous.author_id != memory.author_id {
+                return Err(KnowledgeError::InvalidInput);
+            }
             memory.version = next_revision(expected_revision)?;
             let json = serde_json::to_string(&memory).map_err(storage)?;
             let updated = tx.execute(

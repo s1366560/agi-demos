@@ -1,0 +1,97 @@
+use super::*;
+use rusqlite::Connection;
+
+#[test]
+fn version_upgrade_backs_up_wal_and_validates_before_modifying() {
+    let directory = TestDirectory::new();
+    let knowledge = directory.0.join("knowledge");
+    fs::create_dir_all(&knowledge).unwrap();
+    let database = knowledge.join("memories.db");
+    let source = Connection::open(&database).unwrap();
+    source.execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE knowledge_schema(version INTEGER NOT NULL); INSERT INTO knowledge_schema VALUES(1); CREATE TABLE retained(value TEXT); INSERT INTO retained VALUES('committed in WAL');").unwrap();
+    let repository = storage_lifecycle::open(&directory.0).unwrap();
+    let backups: Vec<_> = fs::read_dir(&knowledge)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains(".backup.db")
+        })
+        .collect();
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    let (version, value): (i64, String) = backup
+        .query_row(
+            "SELECT (SELECT version FROM knowledge_schema),(SELECT value FROM retained)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(version, 1);
+    assert_eq!(value, "committed in WAL");
+    let migrated: i64 = source
+        .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(migrated, 2);
+    drop(repository);
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    assert_eq!(
+        fs::read_dir(&knowledge)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains(".backup.db"))
+            .count(),
+        1
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&knowledge).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(&database).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::metadata(&backups[0]).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+}
+
+#[test]
+fn unknown_schema_and_corruption_never_trigger_migration() {
+    let directory = TestDirectory::new();
+    let knowledge = directory.0.join("knowledge");
+    fs::create_dir_all(&knowledge).unwrap();
+    let database = knowledge.join("memories.db");
+    let source = Connection::open(&database).unwrap();
+    source.execute_batch("CREATE TABLE knowledge_schema(version INTEGER NOT NULL); INSERT INTO knowledge_schema VALUES(999);").unwrap();
+    assert!(storage_lifecycle::open(&directory.0).is_err());
+    let version: i64 = source
+        .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 999);
+    drop(source);
+    fs::write(&database, b"corrupt sqlite bytes").unwrap();
+    assert!(storage_lifecycle::open(&directory.0).is_err());
+    assert_eq!(fs::read(&database).unwrap(), b"corrupt sqlite bytes");
+    assert_eq!(fs::read_dir(&knowledge).unwrap().count(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn symlinked_database_is_rejected_without_touching_target() {
+    let directory = TestDirectory::new();
+    fs::create_dir_all(directory.0.join("knowledge")).unwrap();
+    let target = directory.0.join("target");
+    fs::write(&target, b"unchanged").unwrap();
+    std::os::unix::fs::symlink(&target, directory.0.join("knowledge/memories.db")).unwrap();
+    assert!(storage_lifecycle::open(&directory.0).is_err());
+    assert_eq!(fs::read(target).unwrap(), b"unchanged");
+}

@@ -161,3 +161,19 @@ I4.5 extracts PostgreSQL runtime claim selection and its private row decoder int
 repository below the file-size limit before the serialization fix. All 52 adapter unit
 tests and strict library Clippy passed. Reverting this structural batch has no database
 or runtime behavior effect; live PostgreSQL concurrency checks follow separately.
+
+I2.4 adds the real knowledge plugin definition to the production sidecar loader, a typed
+generation-leased service, and two RPCs behind the existing native admission middleware.
+Default bootstrap remains disabled and the release contract permits only `closed`. Internal
+integration profiles exercise CRUD through the same Loader/publication/lease path; this
+is foundation validation, not a production local knowledge success claim. Independent
+SQLite activation verifies integrity and backs up pre-upgrade WAL data before migration.
+Create author identity is checked at the typed service; updates cannot replace authors.
+
+The first full sidecar run exposed missing executable catalog probes for the new routes.
+After adding real closed-state negative probes, the full suite passed 657/657, with no
+ignored tests. Storage/receipt focused integration passed 9/9; production catalog tests
+passed 7/7. Generator check and contract completeness passed. Strict sidecar Clippy remains
+blocked by existing diagnostics outside this batch. Disabling/reverting the definition
+retains the independent database and receipts; never delete the knowledge directory as
+part of a code rollback. The first product release still requires I3 sync and native QA.

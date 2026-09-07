@@ -2592,5 +2592,43 @@
       "path": "/api/v1/events/types?tenant_id=local",
       "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
     }
+  ],
+  "negative_routes": [
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/query",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/query",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "idempotency_key": "closed-knowledge-probe",
+      "body": {
+        "query": {
+          "operation": "list",
+          "limit": 20,
+          "offset": 0
+        }
+      }
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/mutations",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/mutations",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "idempotency_key": "closed-knowledge-probe",
+      "body": {
+        "mutation": {
+          "operation": "delete",
+          "id": "closed-probe",
+          "expected_revision": 1
+        }
+      }
+    }
   ]
 }
