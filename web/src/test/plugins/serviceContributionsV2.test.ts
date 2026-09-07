@@ -3,7 +3,11 @@ import { parsePluginManifestV2 } from '../../../../agi-stack/packages/plugin-run
 import bootstrap from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
 
 function manifestWithFlag(flag: unknown, present = true) {
-  const manifest = structuredClone(bootstrap.manifests[0]!);
+  const source = bootstrap.manifests.find((candidate) =>
+    candidate.modules.some((item) => item.contract.services.requires.length > 0)
+  );
+  expect(source, 'bootstrap must contain a declared service requirement').toBeDefined();
+  const manifest = structuredClone(source!);
   const module = manifest.modules.find((item) => item.contract.services.requires.length > 0)!;
   const requirement = module.contract.services.requires[0]! as Record<string, unknown>;
   if (present) requirement.contributes = flag;

@@ -798,3 +798,27 @@ remove the v8 objects before upgrade. Evidence: `/tmp/rust-processing-device.log
 `/tmp/knowledge-processing-sidecar-clippy.log`. Rollback must use the verified
 pre-v8 backup with an older binary; v8 user content must be exported or retained
 before any restore. Disabling processing does not delete source or sync records.
+
+I0.6 repairs test preparation without weakening production attestation. Global
+Backend collection imported four optional plugin entrypoints for string constants;
+its first eight real generation fixtures correctly rejected those unverified imports.
+Tests now declare expected protocol IDs and a fresh-process regression stages the
+real generation after collecting the spine test. The spine activates SkillEvolution
+through the published ROOT authority. Full collection 16879 with all eight member
+tests plus ACP selected passed; spine 3/3 and negative attestation 8/8 passed. The
+initial full-tree run was stopped after 49 passed/8 setup errors, not a full pass.
+Web's service-contribution fixture now selects an actual declared requirement rather
+than assuming the first manifest contains one. Initial 8 failures became green;
+a default-concurrency rerun had one 5-second Cron timeout, whose focused 7 tests
+passed. Four-worker full Web then passed all 3656 tests; TypeScript passed.
+Full current Sidecar passed 698 tests. Native canonical rebuild restored nine
+conversations; a manual QA automation succeeded in 10854 ms and produced a new
+19:58 Kimi reply NATIVE_AUTOMATION_REUSE_20260907_OK. Knowledge remains closed.
+ROOT desired bundle CAS revision 6-to-7 preserved the profile; restarted API health,
+login and projects returned 200. These results do not close I0's same-commit full
+Backend gate or the combined knowledge/cloud automation release. Evidence:
+`/tmp/memstack-collection-global-member-acp.log`,
+`/tmp/memstack-web-frozen-four-workers.log`, `/tmp/memstack-web-frozen-types.log`,
+`/tmp/memstack-sidecar-frozen.log`, and
+[Native rebuild evidence](qa-evidence/2026-09-07/followup-native-rebuild.json).
+Rollback affects test setup only; no production behavior or stored data migration.

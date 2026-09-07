@@ -72,21 +72,6 @@ from src.infrastructure.plugins.v2.agent_skill_mcp_service import (
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
-from src.infrastructure.plugins.v2.darwinian_evolver_capability import (
-    DARWINIAN_EVOLVER_SKILL_MODULE_V2,
-)
-from src.infrastructure.plugins.v2.docker_compose_capabilities import (
-    DOCKER_COMPOSE_SKILL_MODULE_V2,
-    DOCKER_COMPOSE_TOOL_MODULE_V2,
-)
-from src.infrastructure.plugins.v2.drone_capabilities import (
-    DRONE_SKILL_MODULE_V2,
-    DRONE_TOOL_MODULE_V2,
-)
-from src.infrastructure.plugins.v2.github_capabilities import (
-    GITHUB_SKILL_MODULE_V2,
-    GITHUB_TOOL_MODULE_V2,
-)
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.session_event_log import (
@@ -112,13 +97,15 @@ _SCOPE = ScopeV2(
 )
 _OPTIONAL_AGENT_CAPABILITY_MODULES = frozenset(
     {
-        GITHUB_TOOL_MODULE_V2,
-        GITHUB_SKILL_MODULE_V2,
-        DOCKER_COMPOSE_TOOL_MODULE_V2,
-        DOCKER_COMPOSE_SKILL_MODULE_V2,
-        DRONE_TOOL_MODULE_V2,
-        DRONE_SKILL_MODULE_V2,
-        DARWINIAN_EVOLVER_SKILL_MODULE_V2,
+        # Protocol identities only: importing the artifact implementations here
+        # would execute unverified entrypoints during global pytest collection.
+        "builtin://memstack/agent/tool/github",
+        "builtin://memstack/agent/skill/github",
+        "builtin://memstack/agent/tool/docker-compose",
+        "builtin://memstack/agent/skill/docker-compose",
+        "builtin://memstack/agent/tool/drone",
+        "builtin://memstack/agent/skill/drone",
+        "builtin://memstack/agent/skill/darwinian-evolver",
     }
 )
 
@@ -394,7 +381,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
     store = _MemorySessionEventLogStore()
     monkeypatch.setattr(store_module, "SqlSessionEventLogStoreV2", lambda: store)
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    await host.bootstrap(
+    publication = await host.bootstrap(
         profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
         manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
         generation=11,
@@ -402,6 +389,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
         nonce="agent-spine-integration",
         profile_projector=_agent_spine_test_profile,
     )
+    assert publication.accepted, publication.receipt
 
     llm_messages: list[list[dict[str, Any]]] = []
 
@@ -444,6 +432,20 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
     )
 
     try:
+        # Publication leaves background consumers paused. Admit the actual
+        # scheduler through this generation before testing its tool-event hook.
+        from src.infrastructure.plugins.v2.skill_evolution_runtime import (
+            SkillEvolutionActivationProtocolV2,
+        )
+
+        async with pin_operation_context_v2(
+            host,
+            operation_id="agent-spine-activation",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ) as activation:
+            scheduler = activation.require("service:runtime.skill-evolution-scheduler")
+            assert isinstance(scheduler, SkillEvolutionActivationProtocolV2)
+            await scheduler.activate(activation)
         async with pin_operation_context_v2(
             host,
             operation_id="agent-spine-turn",

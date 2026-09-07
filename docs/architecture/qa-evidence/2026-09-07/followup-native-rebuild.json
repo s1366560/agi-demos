@@ -1,0 +1,25 @@
+{
+  "source_revision": "2786be19c",
+  "observed_at": "2026-09-07T19:58:00+08:00",
+  "launch_command": "make -C agi-stack run-desktop",
+  "launch_log": "/tmp/knowledge-processing-native-launch.log",
+  "scope": {
+    "tenant": "northstar",
+    "project": "desktop-client",
+    "workspace": "QA Native 20260907"
+  },
+  "persisted_conversations": 9,
+  "automation": "QA Native Reuse 20260907",
+  "trigger": "manual via native UI",
+  "observed_status": "succeeded",
+  "duration_ms": 10854,
+  "model_reply": "NATIVE_AUTOMATION_REUSE_20260907_OK",
+  "reply_observed_time": "19:58",
+  "runtime_status": "ready and connected",
+  "ax_evidence_sha256": "031adc7348ecb163b8dbd0bcc28ef292ff429e5b863fe344e1e416a6c40ade10",
+  "limitations": [
+    "Knowledge release remains closed",
+    "No signed or cross-platform package acceptance",
+    "PTY ordering has test evidence; no terminal UI exercised in this pass"
+  ]
+}
