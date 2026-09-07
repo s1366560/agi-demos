@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -226,10 +227,34 @@ async def test_delete_episode_by_memory_id_returns_true(graph_adapter, test_proj
 # ---------------------------------------------------------------------------
 
 
-async def test_vector_search_returns_node_and_score(graph_adapter, test_project_db):
+@pytest_asyncio.fixture(loop_scope="session")
+async def search_graph_adapter(graph_adapter, test_project_db, monkeypatch):
+    """Fix extraction input while exercising real graph persistence and indexes."""
+    from src.infrastructure.graph.schemas import EntityNode
+
+    entity = EntityNode(
+        name=f"ContractSearch{uuid.uuid4().hex}",
+        entity_type="Person",
+        summary="A known entity for search result shape contracts.",
+        tenant_id=str(test_project_db.tenant_id),
+        project_id=str(test_project_db.id),
+    )
+    extractor = Mock()
+    extractor.extract = AsyncMock(return_value=[entity])
+    extractor.deduplicate_entity_nodes = AsyncMock(return_value=([entity], {}))
+    relationships = Mock()
+    relationships.extract_from_entity_nodes = AsyncMock(return_value=[])
+    monkeypatch.setattr(graph_adapter, "_entity_extractor", extractor)
+    monkeypatch.setattr(graph_adapter, "_relationship_extractor", relationships)
+    monkeypatch.setattr(graph_adapter, "_enable_reflexion", False)
+    return graph_adapter
+
+
+async def test_vector_search_returns_node_and_score(search_graph_adapter, test_project_db):
     """The vector_search primitive must return [{"node": dict, "score": float}] sorted desc."""
     from src.domain.model.memory.episode import Episode, SourceType
 
+    graph_adapter = search_graph_adapter
     project_id = str(test_project_db.id)
     episode = Episode(
         content="Contract test: vector search shape check with entities.",
@@ -293,10 +318,11 @@ async def test_vector_search_returns_node_and_score(graph_adapter, test_project_
         await graph_adapter.remove_episode(str(episode.id))
 
 
-async def test_fulltext_search_returns_node_and_score(graph_adapter, test_project_db):
+async def test_fulltext_search_returns_node_and_score(search_graph_adapter, test_project_db):
     """The fulltext_search primitive must return [{"node": dict, "score": float}]."""
     from src.domain.model.memory.episode import Episode, SourceType
 
+    graph_adapter = search_graph_adapter
     project_id = str(test_project_db.id)
     episode = Episode(
         content="Contract test: fulltext search shape verification prose.",
