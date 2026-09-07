@@ -1,0 +1,22 @@
+{
+  "date": "2026-09-07",
+  "cause": "Graph API omitted structural node type required by Desktop parser. Exact graph GET was allowed by main broker and returned HTTP 200; payload replay rejected with project_graph_node_contract_invalid.",
+  "change": "Graph and subgraph nodes expose the unique Entity/Episodic/Community label as type; absent or ambiguous kinds remain null. Names and descriptions do not select kinds.",
+  "red": {
+    "failed": 12,
+    "passed": 9,
+    "source_log_name": "graph-node-type-red.log"
+  },
+  "green": {
+    "passed": 47,
+    "failed": 0,
+    "source_log_name": "backend-graph-final.log",
+    "report_name": "backend-graph-reports.jsonl"
+  },
+  "native_after_restart": {
+    "status": "read_pass",
+    "evidence_name": "native-cloud-graph-success.txt",
+    "observed_nodes": 4,
+    "scope": "Native node list with names/summaries and explicit partial-actions notice; no claim of complete interactive graph editing."
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "conversation_id": "5a6c6808-9454-4838-9131-0deae9338e56",
+  "status_http": 200,
+  "is_running": false,
+  "current_message_id": null,
+  "history_http": 200,
+  "persisted_assistant_marker": "NATIVE_CLOUD_QA_20260907_OK",
+  "marker_present": true,
+  "scope": "Native cloud reply terminal projection; does not establish knowledge or collaboration UI acceptance."
+}

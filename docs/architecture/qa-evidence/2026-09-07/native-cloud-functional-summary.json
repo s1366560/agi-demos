@@ -1,0 +1,70 @@
+{
+  "date": "2026-09-07",
+  "method": "real Electron Computer Use after canonical Make launch",
+  "production_commit": "a79ea6c7b",
+  "knowledge": {
+    "memories_read": 1,
+    "entities_read": 3,
+    "communities_read": 1,
+    "graph_nodes_read": 4,
+    "graph_edges_decoded": 6,
+    "scope": "native cloud reads; partial actions; graph UI renders a node list"
+  },
+  "collaboration": {
+    "workspace_id": "b30bf32d-36f0-4832-bcca-252a8df18b15",
+    "read_surfaces": [
+      "goals",
+      "discussion",
+      "status",
+      "collaboration",
+      "members",
+      "genes",
+      "files",
+      "notes",
+      "topology",
+      "settings"
+    ],
+    "reply_marker": "NATIVE_CLOUD_COLLAB_QA_20260907_OK",
+    "reply_count": 1,
+    "revision_before": 8,
+    "revision_after": 9,
+    "refresh_preserved_reply": true,
+    "reply_id": "c8522b46-ac76-59f6-a0c9-2deeba64bcdb"
+  },
+  "boundaries": [
+    "local knowledge authority remains unimplemented",
+    "member and trust changes not exercised",
+    "empty gene and topology pages prove reads only",
+    "native interactive graph editing not exercised"
+  ],
+  "source_evidence": [
+    {
+      "name": "native-cloud-memories-success.txt",
+      "sha256": "3c31c46ad2b14a49f80a30d92aceb91a91d34b8095f250d4fc440784a52549db"
+    },
+    {
+      "name": "native-cloud-entities-success.txt",
+      "sha256": "b0ef68ec0a24c7afb051dcd2b9e916bb2af9a6e815a3c32cddc978b0d0a701ba"
+    },
+    {
+      "name": "native-cloud-communities-read.txt",
+      "sha256": "493597a93156288f5cf6e34814a2c03b17b5231217cfa61b3c62705aba605ea9"
+    },
+    {
+      "name": "native-cloud-graph-success.txt",
+      "sha256": "f4594b3439aa22b93215a78407bf3615fa4ffd8f2743516abfaa4888be2e1dbd"
+    },
+    {
+      "name": "native-cloud-collaboration-goals-read.txt",
+      "sha256": "7ecf0a95d9d97c06490301301e7031bcdd8aa9443f21c5f38946dbcf8b02c3b1"
+    },
+    {
+      "name": "native-cloud-discussion-read.txt",
+      "sha256": "d2d9e1a08e76864238b004e750ec8db949e6294e28d893650666f3f7bac648af"
+    },
+    {
+      "name": "native-cloud-collaboration-reply-refreshed.txt",
+      "sha256": "9c37903431b3f323a079555d789a40ef43436b861a8d5878d509110eb442715b"
+    }
+  ]
+}

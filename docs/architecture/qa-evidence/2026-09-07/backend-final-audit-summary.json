@@ -1,0 +1,11 @@
+{
+  "original_collected": 16044,
+  "current_collected": 16095,
+  "current_passed_unique": 16095,
+  "current_missing": [],
+  "removed_nodes": [],
+  "updated_at": "2026-09-07T05:35:23.578721+00:00",
+  "note": "Combined nodeid evidence across baseline, completed resumed tests, and focused retests; current collection includes 51 added nodes. Not one uninterrupted current-HEAD full-suite run.",
+  "new_focused_passed": 2,
+  "historical_failed_nodes_without_later_pass": 0
+}

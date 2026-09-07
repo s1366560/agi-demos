@@ -1,0 +1,111 @@
+{
+  "date": "2026-09-07",
+  "web": {
+    "test_files_passed": 397,
+    "tests_passed": 3656,
+    "tests_failed": 0,
+    "duration_seconds": 56.74,
+    "run_scope": "one complete run",
+    "source_log_name": "memstack-qa-20260907-web-identity-final.log",
+    "source_log_sha256": "36953229ab4c2d484e8581822e18af5363c707f854a1df09f257032a0ee2370e"
+  },
+  "rust_sidecar": {
+    "tests_passed": 641,
+    "tests_failed": 0,
+    "tests_ignored": 0,
+    "duration_seconds": 9.33,
+    "source_log_name": "memstack-qa-20260907-sidecar-final.log",
+    "source_log_sha256": "f54f7901cff475536ba6eb681081d3bb3cafe27cd908e534dc3d634da4d201b6"
+  },
+  "desktop_final": {
+    "tests": 4238,
+    "pass": 4238,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "status": "passed",
+    "run_commit": "aef301278",
+    "production_commit": "a79ea6c7b",
+    "duration_ms": 124849.168125,
+    "run_scope": "one complete run after committing the generated evidence",
+    "real_sidecar_and_workspace_core_binaries": true,
+    "security_coverage": [
+      "Electron trusted origin and named IPC",
+      "private authenticated control pipe and process recovery",
+      "encrypted vault and renderer credential isolation",
+      "cloud HTTP and socket scope checks",
+      "file permissions, navigation, media, and update policy boundaries"
+    ],
+    "source_log_name": "memstack-qa-20260907-desktop-final-committed.log",
+    "source_log_sha256": "d3dfcb62a01086616dd3265b4e8a13571093c48cb35005b1898bd4a4bd44dc13"
+  },
+  "native_cloud_knowledge_collaboration": {
+    "status": "verified_with_explicit_partial_boundaries",
+    "evidence": "native-cloud-functional-summary.json"
+  },
+  "electron_build": {
+    "status": "passed",
+    "production_commit": "a79ea6c7b",
+    "command": "corepack pnpm --dir agi-stack/apps/desktop run build:electron",
+    "checks": [
+      "renderer TypeScript",
+      "Electron TypeScript",
+      "main/preload/renderer production build"
+    ],
+    "source_log_name": "memstack-qa-20260907-desktop-build-final.log",
+    "source_log_sha256": "680863cc4accf99bdfb3334c1b0bc40f1081bd491a93fc0e7cb63aacc07800b0"
+  },
+  "parity_and_implementation": {
+    "status": "passed",
+    "production_commit": "a79ea6c7b",
+    "v2": {
+      "capabilities": 66,
+      "routes": 178,
+      "routed_sources": 96
+    },
+    "v3": {
+      "capabilities": 66,
+      "journeys": 73,
+      "structural_closure": "passed"
+    },
+    "v4": {
+      "capabilities": 67,
+      "journeys": 74,
+      "authority_overrides": 24,
+      "structural_closure": "passed"
+    },
+    "inventory_tests_passed": 16,
+    "implementation_gates_passed": 6,
+    "implemented_routes": 95,
+    "ledger_consumers_passed": 9,
+    "boundaries": [
+      "Browser Bridge native-only partial/degraded",
+      "checks do not establish production signed release or all browser matrix acceptance"
+    ],
+    "source_logs": [
+      {
+        "name": "memstack-qa-20260907-parity-final-checks-a79ea.log",
+        "sha256": "121a9f229615a2363c64c7e2f40e1fb8ac670a10ff260d203b8a34d03df63123"
+      },
+      {
+        "name": "memstack-qa-20260907-inventory-tests-a79ea.log",
+        "sha256": "33e8c5c4ff66c0dd9b2e443358dd43307d5ed690a3729f3ca2734a694659bccb"
+      },
+      {
+        "name": "memstack-qa-20260907-implementation-evidence-a79ea.log",
+        "sha256": "786cdf429afd68f9ea7964dbc75ae4568ff43bf16c25667383e765812eed6e40"
+      }
+    ]
+  },
+  "resolved_precommit_verification_failures": {
+    "tests": 4238,
+    "passed": 4236,
+    "failed": 2,
+    "skipped": 0,
+    "reasons": [
+      "generated contract was not yet committed",
+      "Cron capability inspection action absent from the old test expectation"
+    ],
+    "resolution": "committed generated evidence and aligned the test with the verified implemented action, then repeated the complete run"
+  }
+}

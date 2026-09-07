@@ -1,0 +1,26 @@
+{
+  "resolved_regressions": [
+    {
+      "nodeid": "src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py::test_implementation_ledger_matches_complete_capabilities",
+      "regression": "95-route manifest exposed obsolete capability declarations/counts",
+      "final_outcome": "passed",
+      "final_evidence_log_name": "backend-ledger95-reports.jsonl",
+      "final_pass_report_line": 2
+    },
+    {
+      "nodeid": "src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py::test_ledger_becomes_complete_only_with_a_current_passing_attestation",
+      "regression": "95-route manifest exposed obsolete capability declarations/counts",
+      "final_outcome": "passed",
+      "final_evidence_log_name": "backend-ledger95-reports.jsonl",
+      "final_pass_report_line": 20
+    },
+    {
+      "nodeid": "src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py::test_ledger_check_fails_when_execution_evidence_is_missing",
+      "regression": "95-route manifest exposed obsolete capability declarations/counts",
+      "final_outcome": "passed",
+      "final_evidence_log_name": "backend-ledger95-reports.jsonl",
+      "final_pass_report_line": 26
+    }
+  ],
+  "resolved_count": 3
+}
