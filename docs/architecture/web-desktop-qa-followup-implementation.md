@@ -100,6 +100,14 @@ captures its dependency overrides. All 15 member tests have passing focused evid
 (14 passed in the first run; the corrected authentication test then passed). No production
 authentication or route behavior changed. Revert only affects test coverage setup.
 
+I4.2 records overlapping scheduled fires as terminal `skipped` history with
+`local_automation_previous_run_active`, without creating an executable operation.
+Cursor advancement and the history record share the existing immediate transaction.
+Queued, running and waiting-human predecessors block scheduled admission; a later fire
+can run after the predecessor reaches terminal state. The new regression failed before
+the change; all 27 automation tests then passed. Desktop recognizes/localizes `skipped`;
+its model regression passed in the ongoing Desktop batch verification. No schema change.
+
 - Knowledge: tenant/project-scoped reads and deletes, CAS writes, atomic processing
   outbox, index recovery, per-action availability and cloud pagination/mutations.
 - Sync: explicit project association, stable IDs, revisions, change IDs, cursor,

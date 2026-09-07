@@ -35,6 +35,7 @@ export type AutomationRunStatus =
   | 'failed'
   | 'timeout'
   | 'cancelled'
+  | 'skipped'
   | 'unknown';
 
 export type AutomationRunTrigger = 'manual' | 'scheduled' | 'event' | 'unknown';
@@ -220,7 +221,8 @@ export function automationRunStatus(status: string): AutomationRunStatus {
     status === 'success' ||
     status === 'failed' ||
     status === 'timeout' ||
-    status === 'cancelled'
+    status === 'cancelled' ||
+    status === 'skipped'
   ) {
     return status;
   }

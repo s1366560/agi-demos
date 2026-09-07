@@ -133,6 +133,17 @@ pub(super) fn dispatch_due_schedules(
             format!("operation:{cursor}").as_bytes(),
         )
         .to_string();
+        let active_run: bool = transaction
+            .query_row(
+                "SELECT EXISTS (
+                   SELECT 1 FROM desktop_automation_runs
+                   WHERE tenant_id = ?1 AND project_id = ?2 AND job_id = ?3
+                     AND status IN ('queued', 'running', 'waiting_human')
+                 )",
+                params![required_string(&job, "tenant_id")?, project_id, job_id],
+                |row| row.get(0),
+            )
+            .map_err(storage)?;
         if insert_scheduled_run(
             &transaction,
             &job,
@@ -142,6 +153,7 @@ pub(super) fn dispatch_due_schedules(
             &occurrence_key,
             scheduled_for,
             now,
+            active_run.then_some("local_automation_previous_run_active"),
         )? {
             summary.enqueued += 1;
         }
@@ -170,6 +182,7 @@ fn insert_scheduled_run(
     occurrence_key: &str,
     scheduled_for: DateTime<Utc>,
     observed_at: DateTime<Utc>,
+    skip_reason: Option<&str>,
 ) -> Result<bool, AutomationLedgerError> {
     let project_id = required_string(job, "project_id")?;
     let job_id = required_string(job, "id")?;
@@ -223,6 +236,27 @@ fn insert_scheduled_run(
         )
         .map_err(storage)?;
     if inserted == 0 {
+        return Ok(false);
+    }
+    if let Some(reason) = skip_reason {
+        transaction
+            .execute(
+                "UPDATE desktop_automation_runs
+                 SET status = 'skipped', error_code = ?2, finished_at = ?3,
+                     result_summary_json = ?4, event_count = 0, execution_time_ms = 0
+                 WHERE id = ?1",
+                params![
+                    run_id,
+                    reason,
+                    accepted_at,
+                    serde_json::json!({
+                        "authority": "local_durable_ledger",
+                        "reason_code": reason,
+                    })
+                    .to_string(),
+                ],
+            )
+            .map_err(storage)?;
         return Ok(false);
     }
     transaction

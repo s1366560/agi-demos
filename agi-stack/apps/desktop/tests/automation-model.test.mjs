@@ -247,6 +247,7 @@ test('unknown capability reasons map to a stable localized fallback', () => {
 
 test('run protocol values map to stable localized identifiers', () => {
   assert.equal(automationRunStatus('waiting_human'), 'waiting_human');
+  assert.equal(automationRunStatus('skipped'), 'skipped');
   assert.equal(automationRunStatus('unexpected'), 'unknown');
   assert.equal(automationRunTrigger('scheduled'), 'scheduled');
   assert.equal(automationRunTrigger('webhook'), 'unknown');

@@ -500,6 +500,59 @@ mod tests {
         );
     }
 
+    #[test]
+    fn overlapping_schedule_is_recorded_without_dispatch() {
+        let created = FixedAutomationClock::at("2099-07-01T09:30:00Z");
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        seed_job(&store, "job-overlap", 1, 1, true, created.now());
+        dispatch_due_schedules(&store, &created, 8).expect("initialize cursor");
+        let first_fire = FixedAutomationClock::at("2099-07-01T09:31:00Z");
+        assert_eq!(
+            dispatch_due_schedules(&store, &first_fire, 8)
+                .unwrap()
+                .enqueued,
+            1
+        );
+        let overlap = FixedAutomationClock::at("2099-07-01T09:32:00Z");
+        assert_eq!(
+            dispatch_due_schedules(&store, &overlap, 8)
+                .unwrap()
+                .enqueued,
+            0
+        );
+        assert_eq!(dispatch_due_schedules(&store, &overlap, 8).unwrap().due, 0);
+        let (runs, total) = list_runs(&store, "local-project", "job-overlap", 50, 0).unwrap();
+        assert_eq!(total, 2);
+        let skipped = runs
+            .iter()
+            .find(|run| run["status"] == "skipped")
+            .expect("skip history");
+        assert_eq!(
+            skipped["error_message"],
+            "local_automation_previous_run_active"
+        );
+        assert!(skipped["finished_at"].is_string());
+        let operations: i64 = store
+            .connection()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM desktop_automation_operations",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(operations, 1);
+        let claim = claim_next_operation(&store, "worker", Duration::from_secs(60), &overlap)
+            .unwrap()
+            .unwrap();
+        settle_operation(&store, &claim, AutomationRunStatus::Success, None, &overlap).unwrap();
+        let next = FixedAutomationClock::at("2099-07-01T09:33:00Z");
+        assert_eq!(
+            dispatch_due_schedules(&store, &next, 8).unwrap().enqueued,
+            1
+        );
+    }
+
     fn schedule_cursor(
         store: &DesktopSessionStore,
         job_id: &str,
