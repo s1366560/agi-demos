@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "259dc96d26c5e3f16d2330384b068670bfd6cee0",
+  "source_revision": "c181945815fb5d6617b21046bb88301110130d2f",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -36,7 +36,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:3332f8554967b292faddc11646adc34361f95f54b90620676205e2c468918d31"
+      "sha256": "sha256:4f07b4e35579d0ec7a1b3c271ea8995aac0588d5f8fe3b95a53bb85123fa8e75"
     },
     {
       "source_entry": "web/pnpm-lock.yaml",
@@ -834,7 +834,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:e916c921a941402f04814af3a361d24ac227f102a2bf21fc8686413c3aa6951f"
+      "sha256": "sha256:c229d35e034f10a292a3f9375b035f02ee0f0e546c7fe7f22939a8db3d54e54e"
     },
     {
       "source_entry": "web/src/components/agent/sandbox/RemoteDesktopViewer.tsx",
@@ -5077,7 +5077,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:12aba4b7d7a71c1440502f8b474136d8d51531a5389396e7e8a1a971f1d56797"
+      "sha256": "sha256:cf2671ee1cfb8585557cd739a8374b2e7b3737ac6d7c4a01361649c5d3a1f13f"
     }
   ],
   "canonical_navigation_targets": [
