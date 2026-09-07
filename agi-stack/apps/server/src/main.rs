@@ -48,6 +48,7 @@ mod conversation_authority;
 mod conversation_session_api;
 mod cron_api;
 mod cron_automation_runtime;
+mod cron_execution_contract;
 mod cron_hitl_resume;
 mod cron_readiness_v2;
 mod cron_schedule_fire;

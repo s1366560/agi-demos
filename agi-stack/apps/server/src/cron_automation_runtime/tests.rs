@@ -452,6 +452,7 @@ impl AutomationHitlStore for FakeHitlStore {
 
 fn hitl_observer(store: Arc<FakeHitlStore>) -> AutomationHitlObserver {
     AutomationHitlObserver {
+        execution_contract: None,
         store: Some(store),
         tenant_id: "tenant-1".to_string(),
         project_id: "project-1".to_string(),

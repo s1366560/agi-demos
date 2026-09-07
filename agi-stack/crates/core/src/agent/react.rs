@@ -28,6 +28,8 @@ use crate::agent::types::{
 use crate::automation_permission::{self as permission, PermissionSuspensionPort};
 use crate::ports::{CheckpointStore, Clock, CoreError, CoreResult, LlmPort, ToolHost};
 
+mod permission_config;
+
 /// Receives non-mutating observations at ReAct run boundaries.
 ///
 /// The observer is deliberately side-effect shaped and optional: it lets hosts
@@ -177,11 +179,6 @@ impl ReActEngine {
     /// its model, tools, budgets and supervisor configuration.
     pub fn with_checkpoint_store(mut self, checkpoints: Arc<dyn CheckpointStore>) -> Self {
         self.checkpoints = checkpoints;
-        self
-    }
-
-    pub fn with_permission_suspension(mut self, port: Arc<dyn PermissionSuspensionPort>) -> Self {
-        self.permission_suspension = Some(port);
         self
     }
 

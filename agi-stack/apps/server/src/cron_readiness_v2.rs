@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::cron_execution_contract::CronExecutionCapabilities;
 use crate::worker_lifecycle_v2::WorkerLifecycleObserverV2;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -43,6 +44,7 @@ pub(crate) enum CronReadinessBlockerV2 {
     PostgresPersistenceUnavailable,
     PersistentCheckpointUnavailable,
     RealModelUnavailable,
+    PureToolAuthorityNotComposed,
     OrdinaryHitlResumeNotComposed,
     PermissionResumeNotComposed,
     SealedEnvironmentResumeNotComposed,
@@ -54,20 +56,32 @@ pub(crate) enum CronReadinessBlockerV2 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct CronRuntimeDependenciesV2 {
     pub(crate) provenance: CronRuntimeProvenanceV2,
+    capabilities: CronExecutionCapabilities,
     blockers: Vec<CronReadinessBlockerV2>,
 }
 
 impl CronRuntimeDependenciesV2 {
-    /// Matches the production driver: durable stores and pure tools are wired,
-    /// while resume coordination and broader tool authority are not composed.
-    pub(crate) fn postgres(provenance: CronRuntimeProvenanceV2) -> Self {
-        let mut blockers = vec![
-            CronReadinessBlockerV2::OrdinaryHitlResumeNotComposed,
-            CronReadinessBlockerV2::PermissionResumeNotComposed,
-            CronReadinessBlockerV2::SealedEnvironmentResumeNotComposed,
-            CronReadinessBlockerV2::ScopedToolReadsNotComposed,
-            CronReadinessBlockerV2::MutationAuthorityNotComposed,
-        ];
+    /// Readiness is scoped to the contract installed by the actual driver.
+    /// Unsupported capabilities are reported separately and remain rejected.
+    pub(crate) fn postgres(
+        provenance: CronRuntimeProvenanceV2,
+        capabilities: CronExecutionCapabilities,
+    ) -> Self {
+        let mut blockers = Vec::new();
+        if !capabilities.pure_tools {
+            blockers.push(CronReadinessBlockerV2::PureToolAuthorityNotComposed);
+        }
+        if !capabilities.ordinary_hitl_resume {
+            blockers.push(CronReadinessBlockerV2::OrdinaryHitlResumeNotComposed);
+        }
+        if capabilities.contract.is_none() {
+            blockers.extend([
+                CronReadinessBlockerV2::PermissionResumeNotComposed,
+                CronReadinessBlockerV2::SealedEnvironmentResumeNotComposed,
+                CronReadinessBlockerV2::ScopedToolReadsNotComposed,
+                CronReadinessBlockerV2::MutationAuthorityNotComposed,
+            ]);
+        }
         if provenance.model != CronModelBackendV2::HttpConfigured {
             blockers.push(CronReadinessBlockerV2::RealModelUnavailable);
         }
@@ -76,12 +90,16 @@ impl CronRuntimeDependenciesV2 {
         }
         Self {
             provenance,
+            capabilities,
             blockers,
         }
     }
 
     pub(crate) fn unavailable() -> Self {
-        let mut result = Self::postgres(CronRuntimeProvenanceV2::default());
+        let mut result = Self::postgres(
+            CronRuntimeProvenanceV2::default(),
+            CronExecutionCapabilities::default(),
+        );
         result
             .blockers
             .push(CronReadinessBlockerV2::PostgresPersistenceUnavailable);
@@ -96,6 +114,7 @@ impl CronRuntimeDependenciesV2 {
                 checkpoint: CronCheckpointBackendV2::Postgres,
             },
             blockers: Vec::new(),
+            capabilities: CronExecutionCapabilities::pure_tools_ordinary_hitl(),
         }
     }
 }
@@ -122,6 +141,7 @@ pub(crate) struct CronReadinessSnapshotV2 {
     pub(crate) ready: bool,
     pub(crate) loop_started: bool,
     pub(crate) provenance: CronRuntimeProvenanceV2,
+    pub(crate) capabilities: CronExecutionCapabilities,
     pub(crate) blockers: Vec<CronReadinessBlockerV2>,
 }
 
@@ -138,6 +158,7 @@ impl CronReadinessV2 {
                 ready: false,
                 loop_started: false,
                 provenance: dependencies.provenance,
+                capabilities: dependencies.capabilities,
                 blockers: dependencies.blockers,
             }),
         }

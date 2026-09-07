@@ -9,10 +9,23 @@ use test_fixture::Fixture;
 
 fn driver(pool: PgPool, kind: HitlKind, request: &str) -> PgCronSchedulerDriver {
     let registry = HotPlugRegistry::new();
+    let mut human_request = HitlRequest::new(request, kind, "Choose a value");
+    if kind == HitlKind::A2uiAction {
+        human_request = human_request.with_a2ui_action(agistack_core::agent::A2uiActionAuthority {
+            surface_id: "surface".into(),
+            block_id: "block".into(),
+            title: None,
+            timeout_seconds: Some(300),
+            allowed_actions: vec![agistack_core::agent::A2uiAllowedAction {
+                source_component_id: "button".into(),
+                action_name: "approve".into(),
+            }],
+        });
+    }
     let engine = Arc::new(ReActEngine::new(
         Arc::new(ScriptedLlm::new(vec![
             AgentAction::RequestHuman {
-                request: HitlRequest::new(request, kind, "Choose a value"),
+                request: human_request,
             },
             AgentAction::Finish {
                 answer: "driver resume completed".into(),
@@ -128,11 +141,32 @@ async fn postgres_driver_excludes_permission_before_the_candidate_limit() {
         return;
     };
     fixture.seed("permission").await;
-    let permission = driver(
+    let mut permission = driver(
         fixture.pool.clone(),
         HitlKind::Permission,
         "permission-request",
     );
+    // Reproduce an already-existing unsupported request from the internal
+    // composition. Released execution cannot create this pending state.
+    let registry = HotPlugRegistry::new();
+    let engine = Arc::new(ReActEngine::new(
+        Arc::new(ScriptedLlm::new(vec![AgentAction::RequestHuman {
+            request: HitlRequest::new("permission-request", HitlKind::Permission, "Approve?"),
+        }])),
+        Arc::new(registry.clone()),
+        Arc::new(InMemoryCheckpointStore::new()),
+        Arc::new(SystemClock),
+    ));
+    let executor = ReActAutomationRunExecutor::new(engine)
+        .with_run_persistence_factory(Arc::new(PgAutomationRunPersistenceFactory::new(
+            fixture.pool.clone(),
+        )))
+        .with_tool_host_factory(Arc::new(RegistryAutomationToolHostFactory::new(registry)));
+    permission.runtime = Arc::new(CronAutomationRuntimeWorker::new(
+        Arc::new(PgCronAutomationRuntimeRepository::new(fixture.pool.clone())),
+        Arc::new(executor),
+        CronSchedulerConfig::default().runtime_worker_config(),
+    ));
     permission.drive_runtime_scope(&scope()).await.unwrap();
     answer(&fixture.pool, "permission-request").await;
     let waiting = run_state(&fixture.pool, "permission").await;
@@ -175,3 +209,35 @@ async fn postgres_driver_does_not_claim_when_resume_admission_storage_is_unavail
 
 #[path = "permission_tests.rs"]
 mod permission_tests;
+
+#[path = "release_tests.rs"]
+mod release_tests;
+
+#[tokio::test]
+async fn released_driver_rejects_unsupported_hitl_before_durable_pending() {
+    let Some(fixture) = Fixture::open().await else {
+        return;
+    };
+    for (id, kind) in [
+        ("unsupported-permission", HitlKind::Permission),
+        ("unsupported-env", HitlKind::EnvVar),
+        ("unsupported-a2ui", HitlKind::A2uiAction),
+    ] {
+        fixture.seed(id).await;
+        driver(fixture.pool.clone(), kind, id)
+            .drive_runtime_scope(&scope())
+            .await
+            .unwrap();
+        assert_eq!(run_state(&fixture.pool, id).await.0, "failed");
+        let pending: i64 = sqlx::query_scalar("SELECT count(*) FROM hitl_requests WHERE id=$1")
+            .bind(id)
+            .fetch_one(&fixture.pool)
+            .await
+            .unwrap();
+        assert_eq!(pending, 0, "unsupported request must never become durable");
+        let checkpoints: i64 = sqlx::query_scalar("SELECT count(*) FROM agistack_checkpoints WHERE session_id=$1 AND state->'pending_hitl' IS NOT NULL AND state->'pending_hitl' <> 'null'::jsonb")
+            .bind(id).fetch_one(&fixture.pool).await.unwrap();
+        assert_eq!(checkpoints, 0);
+    }
+    fixture.close().await;
+}

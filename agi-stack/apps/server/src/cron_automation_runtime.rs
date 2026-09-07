@@ -2,8 +2,8 @@
 //!
 //! Operation dispatch and Agent execution intentionally use separate leases:
 //! dispatch is short-lived, while the runtime lease spans ReAct checkpoints and
-//! HITL suspension. Startup remains fail-closed until schedule reconciliation,
-//! scoped tool authority, and encrypted HITL resume are all composed.
+//! HITL suspension. The released driver explicitly limits execution to pure
+//! tools and ordinary HITL; broader internal ports do not expand that contract.
 
 #![allow(dead_code)]
 
@@ -24,6 +24,7 @@ use serde_json::json;
 use tokio::time::{interval, sleep};
 use uuid::Uuid;
 
+use crate::cron_execution_contract::CronExecutionContract;
 use crate::cron_tool_authority::{
     AutomationToolHostFactory, PgAutomationPermissionProducerFactory,
 };
@@ -179,6 +180,7 @@ pub(crate) struct ReActAutomationRunExecutor {
     persistence: Option<Arc<dyn AutomationRunPersistenceFactory>>,
     tool_hosts: Option<Arc<dyn AutomationToolHostFactory>>,
     permission_producers: Option<PgAutomationPermissionProducerFactory>,
+    execution_contract: Option<CronExecutionContract>,
 }
 
 impl ReActAutomationRunExecutor {
@@ -188,6 +190,7 @@ impl ReActAutomationRunExecutor {
             persistence: None,
             tool_hosts: None,
             permission_producers: None,
+            execution_contract: None,
         }
     }
 
@@ -214,11 +217,21 @@ impl ReActAutomationRunExecutor {
         self.permission_producers = Some(factory);
         self
     }
+
+    pub(crate) fn with_execution_contract(mut self, contract: CronExecutionContract) -> Self {
+        self.execution_contract = Some(contract);
+        self
+    }
 }
 
 #[async_trait]
 impl AutomationRunExecutor for ReActAutomationRunExecutor {
     async fn execute(&self, lease: &AutomationRunLease) -> CoreResult<AutomationExecutionResult> {
+        if self.execution_contract.is_some() && self.permission_producers.is_some() {
+            return Err(CoreError::Tool(
+                "permission producer is outside the automation execution contract".into(),
+            ));
+        }
         let started = Instant::now();
         let tools = self
             .tool_hosts
@@ -249,7 +262,11 @@ impl AutomationRunExecutor for ReActAutomationRunExecutor {
         if let Some(producer) = producer.as_ref() {
             engine = engine.with_permission_suspension(producer.clone());
         }
+        if self.execution_contract.is_some() {
+            engine = engine.without_permission_suspension();
+        }
         let observer = Arc::new(AutomationHitlObserver {
+            execution_contract: self.execution_contract,
             store: Some(persistence.hitl),
             tenant_id: lease.context.tenant_id.clone(),
             project_id: lease.context.project_id.clone(),
@@ -297,6 +314,7 @@ impl AutomationRunExecutor for ReActAutomationRunExecutor {
 }
 
 struct AutomationHitlObserver {
+    execution_contract: Option<CronExecutionContract>,
     store: Option<Arc<dyn AutomationHitlStore>>,
     tenant_id: String,
     project_id: String,
@@ -314,6 +332,9 @@ impl ReActObserver for AutomationHitlObserver {
         _round: u64,
         request: &HitlRequest,
     ) -> CoreResult<()> {
+        if let Some(contract) = self.execution_contract {
+            contract.validate_hitl(request)?;
+        }
         let (request_type, a2ui_authority) = match request.kind {
             HitlKind::Clarification => ("clarification", None),
             HitlKind::Decision => ("decision", None),

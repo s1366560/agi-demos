@@ -19,14 +19,13 @@ use crate::cron_automation_runtime::{
     CronAutomationRuntimeWorker, ExecuteRunDispatchHandler, PgAutomationRunPersistenceFactory,
     ReActAutomationRunExecutor, UuidConversationIdFactory,
 };
+use crate::cron_execution_contract::{CronExecutionCapabilities, CronExecutionContract};
 use crate::cron_hitl_resume::{CronHitlResumeCoordinator, PgAutomationHitlResumeStore};
 use crate::cron_readiness_v2::{CronRuntimeDependenciesV2, CronRuntimeProvenanceV2};
 use crate::cron_schedule_fire::CronScheduleFireCoordinator;
 use crate::cron_schedule_reconcile::ReconcileScheduleHandler;
 use crate::cron_scheduler_ownership::{CronSchedulerLeaseStore, CronSchedulerOwnershipStore};
-use crate::cron_tool_authority::{
-    PgAutomationPermissionProducerFactory, RegistryAutomationToolHostFactory,
-};
+use crate::cron_tool_authority::RegistryAutomationToolHostFactory;
 use crate::cron_worker::{
     CronOperationHandler, CronOperationStore, CronOperationWorker, CronWorkerClock,
     CronWorkerScope, UtcCronWorkerClock,
@@ -52,12 +51,13 @@ pub(crate) fn build_pg_cron_scheduler(
         ownership_store,
         Arc::clone(&clock),
     ));
+    let dependencies = CronRuntimeDependenciesV2::postgres(provenance, driver.capabilities());
     Arc::new(CronScheduler::with_dependencies(
         lease_store,
         driver,
         clock,
         config,
-        CronRuntimeDependenciesV2::postgres(provenance),
+        dependencies,
     ))
 }
 
@@ -89,10 +89,7 @@ impl PgCronSchedulerDriver {
                 .with_run_persistence_factory(Arc::new(PgAutomationRunPersistenceFactory::new(
                     pool.clone(),
                 )))
-                .with_permission_producer_factory(PgAutomationPermissionProducerFactory::new(
-                    pool.clone(),
-                    registry.clone(),
-                ))
+                .with_execution_contract(CronExecutionContract::PureToolsOrdinaryHitlV1)
                 .with_tool_host_factory(Arc::new(RegistryAutomationToolHostFactory::new(registry))),
         );
         let runtime = Arc::new(CronAutomationRuntimeWorker::new(
@@ -119,6 +116,12 @@ impl PgCronSchedulerDriver {
             ))),
             config,
         }
+    }
+
+    fn capabilities(&self) -> CronExecutionCapabilities {
+        // This driver constructs both the restricted tool host/executor and
+        // the ordinary resume coordinator above. Broader ports stay excluded.
+        CronExecutionCapabilities::pure_tools_ordinary_hitl()
     }
 
     fn operation_worker(&self, scope: &CronControlScope) -> CronOperationWorker {

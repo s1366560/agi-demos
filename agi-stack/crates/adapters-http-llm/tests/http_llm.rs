@@ -454,7 +454,8 @@ impl agistack_core::automation_permission::PermissionSuspensionPort for Permissi
 
 #[tokio::test]
 async fn permission_protocol_is_advertised_only_by_an_engine_with_the_host_port() {
-    for enabled in [false, true] {
+    for (installed, cleared) in [(false, false), (true, false), (true, true)] {
+        let enabled = installed && !cleared;
         let mut packet = serde_json::json!({"kind":"request_human","request":{
             "id":"permission","kind":"permission","prompt":"Write?",
             "decision":{"action":{"name":"write","label":"Write"},"target":{"kind":"file","id":"file"},
@@ -480,8 +481,11 @@ async fn permission_protocol_is_advertised_only_by_an_engine_with_the_host_port(
             runtime.clone(),
             runtime.clone(),
         );
-        if enabled {
+        if installed {
             engine = engine.with_permission_suspension(runtime);
+        }
+        if cleared {
+            engine = engine.without_permission_suspension();
         }
         let state = engine
             .run("session", "write the file", Some("project"))

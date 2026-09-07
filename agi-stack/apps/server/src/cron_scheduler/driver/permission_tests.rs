@@ -5,6 +5,16 @@ use agistack_plugin_host::{Tool, ToolAccessClass, Trust};
 use serde_json::json;
 
 use super::*;
+use crate::cron_tool_authority::PgAutomationPermissionProducerFactory;
+
+struct InheritedPermissionPort;
+
+#[async_trait]
+impl agistack_core::automation_permission::PermissionSuspensionPort for InheritedPermissionPort {
+    async fn suspend(&self, _: &SessionState) -> CoreResult<()> {
+        panic!("restricted driver must clear inherited permission authority")
+    }
+}
 
 struct ProposedTool {
     access: ToolAccessClass,
@@ -60,7 +70,7 @@ async fn permission_schema(pool: &PgPool) {
 
 #[tokio::test]
 async fn postgres_driver_permission_producer_resolves_host_identity_and_never_dispatches() {
-    for case in 0..4 {
+    for case in 0..5 {
         let Some(f) = Fixture::open().await else {
             return;
         };
@@ -99,6 +109,16 @@ async fn postgres_driver_permission_producer_resolves_host_identity_and_never_di
             Arc::new(InMemoryCheckpointStore::new()),
             Arc::new(SystemClock),
         ));
+        let engine = if case == 4 {
+            Arc::new(
+                engine
+                    .as_ref()
+                    .clone()
+                    .with_permission_suspension(Arc::new(InheritedPermissionPort)),
+            )
+        } else {
+            engine
+        };
         if case == 0 {
             sqlx::raw_sql("CREATE FUNCTION slow_permission_intent() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.1); RETURN NEW; END $$; CREATE TRIGGER slow_permission_intent AFTER INSERT ON agistack_automation_permission_intents FOR EACH ROW EXECUTE FUNCTION slow_permission_intent();")
                 .execute(&f.pool).await.unwrap();
@@ -107,14 +127,34 @@ async fn postgres_driver_permission_producer_resolves_host_identity_and_never_di
             runtime_heartbeat: std::time::Duration::from_millis(1),
             ..CronSchedulerConfig::default()
         };
-        let driver = PgCronSchedulerDriver::new(
+        let mut driver = PgCronSchedulerDriver::new(
             f.pool.clone(),
-            engine,
-            registry,
-            config,
+            engine.clone(),
+            registry.clone(),
+            config.clone(),
             Arc::new(PgCronSchedulerOwnerRepository::new(f.pool.clone())),
             Arc::new(UtcCronWorkerClock),
         );
+        if case != 4 {
+            // The bound producer remains testable through an explicit internal
+            // composition; it is never installed by the released driver.
+            let executor = ReActAutomationRunExecutor::new(engine)
+                .with_run_persistence_factory(Arc::new(PgAutomationRunPersistenceFactory::new(
+                    f.pool.clone(),
+                )))
+                .with_tool_host_factory(Arc::new(RegistryAutomationToolHostFactory::new(
+                    registry.clone(),
+                )))
+                .with_permission_producer_factory(PgAutomationPermissionProducerFactory::new(
+                    f.pool.clone(),
+                    registry,
+                ));
+            driver.runtime = Arc::new(CronAutomationRuntimeWorker::new(
+                Arc::new(PgCronAutomationRuntimeRepository::new(f.pool.clone())),
+                Arc::new(executor),
+                config.runtime_worker_config(),
+            ));
+        }
         tokio::time::timeout(
             std::time::Duration::from_secs(2),
             driver.drive_runtime_scope(&scope()),
@@ -158,6 +198,9 @@ async fn postgres_driver_permission_producer_resolves_host_identity_and_never_di
                 .await
                 .unwrap();
             assert_eq!(requests, 0);
+            if case == 4 {
+                assert_eq!(run_state(&f.pool, "bound").await.0, "failed");
+            }
         }
         f.close().await;
     }

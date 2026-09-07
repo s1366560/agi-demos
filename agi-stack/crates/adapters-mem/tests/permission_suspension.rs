@@ -136,3 +136,23 @@ fn ordinary_resume_and_recorded_answer_replay_cannot_release_bound_request() {
         }
     });
 }
+
+#[test]
+fn clearing_inherited_permission_port_rejects_bound_request_before_checkpoint() {
+    block_on(async {
+        let checkpoints = Arc::new(InMemoryCheckpointStore::new());
+        let capture = Arc::new(Capture::default());
+        let engine = engine(request(), checkpoints.clone())
+            .with_permission_suspension(capture.clone())
+            .without_permission_suspension();
+        let error = engine
+            .run("session", "write", Some("project"))
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("atomic permission suspension is unavailable"));
+        assert!(capture.0.lock().unwrap().is_empty());
+        assert!(checkpoints.load("session").await.unwrap().is_none());
+    });
+}

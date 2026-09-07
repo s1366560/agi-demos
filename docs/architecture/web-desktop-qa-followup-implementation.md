@@ -822,3 +822,23 @@ Backend gate or the combined knowledge/cloud automation release. Evidence:
 `/tmp/memstack-sidecar-frozen.log`, and
 [Native rebuild evidence](qa-evidence/2026-09-07/followup-native-rebuild.json).
 Rollback affects test setup only; no production behavior or stored data migration.
+
+I4.24 defines the production driver's first execution contract as pure tools and
+ordinary clarification/decision HITL. Unsupported permission/environment/A2UI
+requests fail before durable pending state. The driver clears any inherited
+permission producer and reports supported/unsupported capabilities separately from
+model, checkpoint, loop and production-gate readiness. Bound permission producer
+tests keep their explicit internal composition; they do not grant release authority.
+Validation: server reports 656 passed (some existing environment tests self-skip);
+37 PostgreSQL boundary tests and one generation owner/disposal test actually ran and
+passed. HTTP prompt/repair and inherited-port rejection tests passed. Strict Clippy
+reported three existing lint classes outside this patch; the final all-target run
+allowing only those classes passed with existing dead-code warnings. Evidence:
+`/tmp/memstack-release-readiness-sha256.txt`, `/tmp/memstack-release-server-final.log`,
+`/tmp/memstack-release-pg-authority.log`, `/tmp/memstack-release-generation-pg.log`,
+`/tmp/memstack-release-clippy-final.log`. Production admission remains closed.
+Rollback must retain closed admission and durable intents; it must not silently
+restore unsupported waiting-human requests to the released driver.
+
+Further fixture corrections and the disk/Docker interruption are recorded in
+[validation recovery](qa-evidence/2026-09-07/followup-validation-recovery.md).

@@ -17,6 +17,7 @@ fn cron_readiness_stub_and_missing_runtime_dependencies_are_explicitly_blocked()
             model: CronModelBackendV2::Stub,
             checkpoint: CronCheckpointBackendV2::Postgres,
         },
+        CronExecutionCapabilities::default(),
     ));
     readiness.published();
     assert!(!readiness.confirm_loop_started());
@@ -62,6 +63,7 @@ fn cron_readiness_http_configuration_cannot_hide_in_memory_or_uncomposed_depende
             model: CronModelBackendV2::HttpConfigured,
             checkpoint: CronCheckpointBackendV2::InMemory,
         },
+        CronExecutionCapabilities::default(),
     ));
     readiness.published();
     let snapshot = readiness.snapshot();
@@ -75,6 +77,65 @@ fn cron_readiness_http_configuration_cannot_hide_in_memory_or_uncomposed_depende
     assert!(!snapshot
         .blockers
         .contains(&CronReadinessBlockerV2::RealModelUnavailable));
+}
+
+#[test]
+fn released_contract_reports_unsupported_scope_without_claiming_global_readiness() {
+    let readiness = CronReadinessV2::new(CronRuntimeDependenciesV2::postgres(
+        CronRuntimeProvenanceV2 {
+            model: CronModelBackendV2::HttpConfigured,
+            checkpoint: CronCheckpointBackendV2::Postgres,
+        },
+        CronExecutionCapabilities::pure_tools_ordinary_hitl(),
+    ));
+    readiness.blocked(CronReadinessBlockerV2::ProductionGateClosed);
+    readiness.published();
+    let snapshot = readiness.snapshot();
+    assert_eq!(
+        snapshot.blockers,
+        vec![CronReadinessBlockerV2::ProductionGateClosed]
+    );
+    assert!(!snapshot.ready);
+    assert!(!readiness.confirm_loop_started());
+    let wire = serde_json::to_value(snapshot).unwrap();
+    assert_eq!(
+        wire["capabilities"]["contract"],
+        "pure_tools_ordinary_hitl_v1"
+    );
+    assert_eq!(
+        wire["capabilities"]["supported_hitl"],
+        serde_json::json!(["clarification", "decision"])
+    );
+    assert_eq!(
+        wire["capabilities"]["unsupported_hitl"],
+        serde_json::json!(["permission", "env_var", "a2ui_action"])
+    );
+    assert_eq!(wire["capabilities"]["mutations"], false);
+    assert_eq!(wire["capabilities"]["scoped_tool_reads"], false);
+}
+
+#[test]
+fn released_contract_still_requires_actual_supported_dependencies() {
+    let mut capabilities = CronExecutionCapabilities::pure_tools_ordinary_hitl();
+    capabilities.ordinary_hitl_resume = false;
+    capabilities.pure_tools = false;
+    let readiness = CronReadinessV2::new(CronRuntimeDependenciesV2::postgres(
+        CronRuntimeProvenanceV2 {
+            model: CronModelBackendV2::Stub,
+            checkpoint: CronCheckpointBackendV2::InMemory,
+        },
+        capabilities,
+    ));
+    readiness.published();
+    assert!(!readiness.confirm_loop_started());
+    for blocker in [
+        CronReadinessBlockerV2::OrdinaryHitlResumeNotComposed,
+        CronReadinessBlockerV2::PureToolAuthorityNotComposed,
+        CronReadinessBlockerV2::RealModelUnavailable,
+        CronReadinessBlockerV2::PersistentCheckpointUnavailable,
+    ] {
+        assert!(readiness.snapshot().blockers.contains(&blocker));
+    }
 }
 
 #[tokio::test]
