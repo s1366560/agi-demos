@@ -246,3 +246,30 @@ impl KnowledgeRetrievalRepository for SqliteKnowledgeRepository {
         self.search_text_durable(scope, literal, request, &|| Ok(0))
     }
 }
+
+/// Shared audited-source reader for derived index reconciliation. Keep the same
+/// integrity checks as graph/text reads; callers own the transaction snapshot.
+pub(super) fn audited_sources(
+    tx: &Transaction<'_>,
+    scope: &KnowledgeScope,
+) -> KnowledgeResult<Vec<(ProcessingSource, u32, Memory)>> {
+    let mut statement = tx.prepare(query::CURRENT_PROJECTIONS).map_err(storage)?;
+    let mut rows = statement
+        .query(params![
+            scope.tenant_id,
+            scope.project_id,
+            Option::<String>::None,
+            Option::<u32>::None,
+            Option::<u64>::None,
+            i64::MAX,
+            0,
+            Option::<String>::None
+        ])
+        .map_err(storage)?;
+    let mut current = Vec::new();
+    while let Some(row) = rows.next().map_err(storage)? {
+        let value = query::decode(row, scope)?;
+        current.push((value.source, value.attempt, value.memory));
+    }
+    Ok(current)
+}

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Memory;
 
+pub mod index;
 pub mod processing;
 pub mod retrieval;
 pub mod sync;

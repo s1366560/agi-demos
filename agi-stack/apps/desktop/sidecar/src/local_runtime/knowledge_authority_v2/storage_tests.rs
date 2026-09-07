@@ -346,7 +346,7 @@ async fn v8_to_v9_backup_contains_committed_wal_source_and_lease_before_audit_mi
         db.query_row("SELECT version FROM knowledge_schema", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
-        9
+        agistack_adapters_device::knowledge::KNOWLEDGE_SCHEMA_VERSION
     );
     let saved = upgraded.get(&scope, &source.id).await.unwrap().unwrap();
     assert_eq!(saved.version, source.version);
@@ -364,4 +364,67 @@ async fn v8_to_v9_backup_contains_committed_wal_source_and_lease_before_audit_mi
         .is_none());
     let renewed = upgraded.renew(&scope, &lease, 200, 500).await.unwrap();
     assert_eq!(renewed.token, lease.token);
+}
+
+#[test]
+fn index_upgrade_backs_up_v9_before_schema_creation_and_reopens_idempotently() {
+    let directory = TestDirectory::new();
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    let knowledge = directory.0.join("knowledge");
+    let connection = Connection::open(knowledge.join("memories.db")).unwrap();
+    connection
+        .execute_batch(
+            "DROP TABLE knowledge_index_vectors;
+        DROP TABLE knowledge_index_jobs; DROP TABLE knowledge_index_active;
+        DROP TABLE knowledge_index_builds; UPDATE knowledge_schema SET version=9;
+        CREATE TABLE index_upgrade_retained(value TEXT);
+        INSERT INTO index_upgrade_retained VALUES('preserve v9 payload');",
+        )
+        .unwrap();
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    let backups: Vec<_> = fs::read_dir(&knowledge)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("pre-v9-")
+        })
+        .collect();
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    let (version, tables, value): (i64, i64, String) = backup
+        .query_row(
+            "SELECT (SELECT version FROM knowledge_schema),
+         (SELECT count(*) FROM sqlite_master WHERE name LIKE 'knowledge_index_%'),
+         (SELECT value FROM index_upgrade_retained)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        (version, tables, value),
+        (9, 0, "preserve v9 payload".into())
+    );
+    let upgraded: i64 = connection
+        .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(
+        upgraded,
+        agistack_adapters_device::knowledge::KNOWLEDGE_SCHEMA_VERSION
+    );
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    assert_eq!(
+        fs::read_dir(&knowledge)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("pre-v9-"))
+            .count(),
+        1
+    );
 }
