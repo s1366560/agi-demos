@@ -155,3 +155,9 @@ and candidates must move forward in UTC. Regressions exposed the library's gap s
 and backward candidate in a repeated hour before the fix. All 30 automation tests passed,
 including gap, fold and ordinary timezone transitions. Cloud projection still needs the
 same policy before the joint release gate can close. No storage schema changed.
+
+I4.5 extracts PostgreSQL runtime claim selection and its private row decoder into
+`cron_runtime_claim.rs` without changing queries or behavior. This keeps the existing
+repository below the file-size limit before the serialization fix. All 52 adapter unit
+tests and strict library Clippy passed. Reverting this structural batch has no database
+or runtime behavior effect; live PostgreSQL concurrency checks follow separately.

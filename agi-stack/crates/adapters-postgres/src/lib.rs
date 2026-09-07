@@ -41,6 +41,7 @@ mod conversation_repo;
 mod cron_control_repo;
 mod cron_operation_repo;
 mod cron_repo;
+mod cron_runtime_claim;
 mod cron_runtime_projection_support;
 mod cron_runtime_repo;
 mod cron_runtime_types;
