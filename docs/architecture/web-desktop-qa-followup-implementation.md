@@ -688,3 +688,13 @@ zero enabled sync projects and 3 memories. Backup manifest:
 Backend startup now reaches ROOT configuration but rejects a stale installed base
 bundle reference; explicit authority-based profile upgrade is pending. No bypass
 of exact-reference validation was made. Permission migration was not applied live.
+
+I3.17 repairs the shared knowledge HTTP protocol before typed sync wiring: local
+requests carry the launch capability separately from identity, cloud requests omit
+it, and mutation options permit only validated idempotency and revision headers.
+Native structured errors retain their original payload and recovery ID. Five new
+wire tests passed after failing against the old helper; renderer TypeScript passed.
+Desktop full suite: 4273 passed, 2 skipped, 1 audited-revision parity failure pending
+final source freeze. No authority, readiness, catalog or UI changes. Evidence:
+`/tmp/knowledge-wire-red.log`, `/tmp/knowledge-wire-green.log`,
+`/tmp/knowledge-wire-tsc.log`, `/tmp/knowledge-wire-desktop-all.log`.

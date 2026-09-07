@@ -1,8 +1,5 @@
-import { DesktopApiError, desktopApiCredential } from '../../api/client';
-import {
-  desktopApiAuthenticationAvailable,
-  desktopApiFetch,
-} from '../../api/cloudRequestBroker';
+import { DesktopApiError, desktopApiCredential, desktopLaunchCapability } from '../../api/client';
+import { desktopApiAuthenticationAvailable, desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 
 export type ProjectKnowledgeAuthority = 'cloud' | 'local';
@@ -24,10 +21,16 @@ export interface ProjectKnowledgeClient<TSnapshot extends ProjectKnowledgeSnapsh
   load(scope: ProjectKnowledgeScope, options?: ProjectKnowledgeReadOptions): Promise<TSnapshot>;
 }
 
+export type ProjectKnowledgeMutationHeaders = Readonly<{
+  idempotencyKey: string;
+  expectedRevision?: number;
+}>;
+
 type RequestOptions = ProjectKnowledgeReadOptions &
   Readonly<{
     method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     body?: Readonly<Record<string, unknown>>;
+    mutation?: ProjectKnowledgeMutationHeaders;
   }>;
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -59,11 +62,7 @@ export async function observeProjectKnowledgeScope(
   scope: ProjectKnowledgeScope,
   options?: ProjectKnowledgeReadOptions,
 ): Promise<number> {
-  const payload = await requestProjectKnowledgeJson(
-    config,
-    '/api/v1/workspace-context',
-    options,
-  );
+  const payload = await requestProjectKnowledgeJson(config, '/api/v1/workspace-context', options);
   if (!isRecord(payload) || !isRecord(payload.context)) {
     throw projectKnowledgeError('project_knowledge_scope_contract_invalid');
   }
@@ -106,6 +105,14 @@ async function request(
   const headers = new Headers({ Accept: 'application/json' });
   const credential = desktopApiCredential(config);
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
+  const launchCapability = desktopLaunchCapability(config);
+  if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
+  if (options.mutation !== undefined) {
+    if (!options.method || options.method === 'GET') {
+      throw projectKnowledgeError('project_knowledge_mutation_headers_invalid', 422);
+    }
+    applyMutationHeaders(headers, options.mutation);
+  }
   if (options.body) headers.set('Content-Type', 'application/json');
   return desktopApiFetch(config, path, {
     method: options.method ?? 'GET',
@@ -114,6 +121,29 @@ async function request(
     signal: options.signal,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
+}
+
+function applyMutationHeaders(headers: Headers, input: ProjectKnowledgeMutationHeaders): void {
+  const reason = 'project_knowledge_mutation_headers_invalid';
+  if (
+    !isRecord(input) ||
+    Object.keys(input).some((key) => key !== 'idempotencyKey' && key !== 'expectedRevision') ||
+    typeof input.idempotencyKey !== 'string' ||
+    !input.idempotencyKey ||
+    input.idempotencyKey !== input.idempotencyKey.trim() ||
+    input.idempotencyKey.length > 512 ||
+    /[^\x20-\x7e]/.test(input.idempotencyKey)
+  ) {
+    throw projectKnowledgeError(reason, 422);
+  }
+  const revision = input.expectedRevision;
+  if (revision !== undefined) {
+    if (!Number.isSafeInteger(revision) || revision < 0 || revision > 4_294_967_295) {
+      throw projectKnowledgeError(reason, 422);
+    }
+    headers.set('X-Expected-Revision', String(revision));
+  }
+  headers.set('Idempotency-Key', input.idempotencyKey);
 }
 
 async function boundedPayload(
@@ -144,10 +174,12 @@ function responseError(
 ): DesktopApiError {
   const value = payload.value;
   const detail = isRecord(value) ? value.detail : null;
+  const nativeError = isRecord(value) ? value.error : null;
   const reasonCode = isRecord(value)
     ? (structuredReason(value.reason_code) ??
       structuredReason(value.code) ??
-      (isRecord(detail) ? structuredReason(detail.code) : null))
+      (isRecord(detail) ? structuredReason(detail.code) : null) ??
+      (isRecord(nativeError) ? structuredReason(nativeError.code) : null))
     : null;
   return new DesktopApiError(reasonCode ?? `HTTP ${status}`, status, value);
 }
