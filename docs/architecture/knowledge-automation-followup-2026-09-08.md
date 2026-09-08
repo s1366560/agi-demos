@@ -385,3 +385,52 @@ deleting immutable builds, attempts or accepted results. Preserve the existing
 versioned knowledge database and pre-upgrade backups; older storage binaries must
 continue to reject a newer schema. This is implementation progress, not completion
 of I0–I6 or permission to open the shared first-release gate.
+
+## Integrated schema commands and local Cron producer control
+
+The portable schema foundation now has isolated native storage and cloud command
+admission. Cloud bootstrap, replacement and the existing entity/edge/mapping
+editing APIs share project locks, revision checks and immutable receipts. Replaying
+an accepted HTTP mutation returns its original response after later edits or
+deletion. Invalid JSON values fail before mutation; database guards reject forged
+materializations and changes to accepted receipts. Native storage retains scoped
+snapshots and receipts across reopen, with authorization and generation checks
+around storage waits and before commit. Public native schema actions and schema
+synchronization are not yet enabled. Full-document transport is a subsequent batch.
+
+Community management and source graph browsing are integrated. Graph selection,
+adjacency and source details use stored extraction provenance; they do not invent
+relationships or silently classify records. Real Electron acceptance of the new
+community and graph pages remains outstanding.
+
+The local Cron closure adapter serializes schedule registration with the persisted
+prepare barrier, including first startup when the global owner row is absent.
+It removes only explicitly identified canonical Cron schedules and preserves the
+shared scheduler, unrelated schedules and accepted executions. PostgreSQL and
+APScheduler tests retain HITL requests/snapshots and resume an accepted execution
+after closure. Administrator-only inspection and close endpoints use the existing
+V2 operation and service authority. Inspection distinguishes the responding process
+from the shared scheduler datastore view. A lost close response is recovered by
+reading current state, not by manufacturing an operation receipt.
+
+These endpoints do not discover a complete worker roster, verify external closure,
+or activate the replacement scheduler. Cross-deployment addressing, trusted source
+identities and the remaining execution/queue/HITL drain still need implementation
+and deployment inputs. Rollback must retain the persisted barrier and receipts;
+reverting UI or control endpoints must not reopen both scheduler authorities.
+
+The completed Backend full run recorded 16,990 passed, 39 failed and 267 skipped
+in 2:02:55 (`/tmp/backend-full-followup-restored.log`). The failures involved obsolete
+V2 test setup, missing PostgreSQL reprocessing fixtures, asynchronous benchmark
+requests and an outdated bootstrap entry count. All affected files plus the new
+Cron closure tests subsequently passed together: 90 tests in 400.40 seconds
+(`/tmp/qa-integrated-backend-repairs.log`). This targeted repair does not change
+the original full run into a pass or replace a later complete run.
+
+Integrated schema regression passed all 274 tests, including the Python/Rust
+differential probe (`/tmp/qa-integrated-schema-full.log`). Desktop passed 4,502
+with zero failures and two optional integrations skipped. Rust sidecar passed 826,
+failed one macOS PTY cleanup test and ignored one optional renderer integration
+(`/tmp/qa-integrated-sidecar-full.log`). The PTY permission error was reproduced
+under stress; an isolated 17-test pass does not resolve it. Real process checks
+and the remaining native acceptance journeys are still required.
