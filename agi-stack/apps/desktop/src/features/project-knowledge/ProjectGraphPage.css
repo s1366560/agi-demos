@@ -1,0 +1,177 @@
+.project-graph-page {
+  margin: 1.5rem;
+  color: var(--gray-12);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.project-graph-page header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.project-graph-page h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+.project-graph-page h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+.project-graph-page header p,
+.project-graph-scope-note {
+  color: var(--gray-11);
+}
+.project-graph-summary {
+  display: flex;
+  gap: 1.5rem;
+  padding-block: 0.75rem;
+}
+.project-graph-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 20rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.project-graph-nodes,
+.project-graph-selected,
+.project-graph-detail > section {
+  padding: 1rem;
+  border: 1px solid var(--gray-6);
+  border-radius: 0.75rem;
+  background: var(--color-panel-solid);
+}
+.project-graph-detail {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.project-graph-page label {
+  display: grid;
+  gap: 0.5rem;
+}
+.project-graph-page button,
+.project-graph-page input {
+  font: inherit;
+  color: inherit;
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-7);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.75rem;
+}
+.project-graph-page button {
+  cursor: pointer;
+  text-align: start;
+}
+.project-graph-page button:hover {
+  background: var(--gray-3);
+}
+.project-graph-page button:focus-visible,
+.project-graph-page input:focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: 2px;
+}
+.project-graph-page button[aria-pressed='true'],
+.project-graph-page tr[aria-selected='true'] {
+  background: var(--accent-3);
+  border-color: var(--accent-8);
+}
+.project-graph-page button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.project-graph-page small,
+.project-graph-nodes button span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--gray-11);
+  margin-top: 0.25rem;
+}
+.project-graph-page ul {
+  list-style: none;
+  padding: 0;
+  margin-block: 0.75rem 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.project-graph-nodes ul {
+  max-height: 65vh;
+  overflow: auto;
+  padding: 0.2rem;
+}
+.project-graph-nodes button {
+  width: 100%;
+}
+.project-graph-edge-list {
+  max-height: 28rem;
+  overflow: auto;
+}
+.project-graph-page table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.project-graph-page th {
+  text-align: start;
+  font-size: 0.8rem;
+  color: var(--gray-11);
+  padding: 0.5rem;
+}
+.project-graph-page td {
+  border-top: 1px solid var(--gray-5);
+  padding: 0.4rem;
+  vertical-align: top;
+}
+.project-graph-page td button {
+  border-color: transparent;
+  background: transparent;
+  max-width: 100%;
+}
+.project-graph-edge-endpoints {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.project-graph-content {
+  white-space: pre-wrap;
+  max-height: 24rem;
+  overflow: auto;
+  padding: 1rem;
+  border-radius: 0.4rem;
+  background: var(--gray-2);
+}
+.project-graph-source {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gray-6);
+}
+.project-graph-page dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.4rem 1rem;
+}
+.project-graph-page dd {
+  margin: 0;
+}
+.project-graph-current-memory {
+  border-top: 1px dashed var(--gray-7);
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+}
+.project-graph-current-memory > code {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+@media (max-width: 760px) {
+  .project-graph-page {
+    margin: 0.75rem;
+  }
+  .project-graph-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-graph-nodes ul {
+    max-height: 16rem;
+  }
+  .project-graph-page td {
+    padding: 0.15rem;
+  }
+}

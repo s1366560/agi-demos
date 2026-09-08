@@ -8,6 +8,7 @@ import {
   type ProjectGraphEdge,
   type ProjectGraphNode,
   type ProjectGraphSnapshot,
+  type ProjectGraphSourceQuery,
 } from '../features/project-knowledge/projectGraphClient';
 import {
   isRecord,
@@ -25,13 +26,18 @@ import type { DesktopRuntimeConfig } from '../types';
 import {
   cloneDesktopProjectGraphRuntimeConfigV2,
   cloneDesktopProjectGraphScopeV2,
+  prepareProjectGraphSourceQuery,
+  requireProjectGraphSourceSnapshot,
 } from './desktopProjectGraphOperationContractV2';
 
 const ACTIONS_V2 = Object.freeze(['view']);
 const NODE_TYPES_V2 = new Set<ProjectGraphNode['type']>(['Entity', 'Episodic', 'Community']);
 
 export type DesktopProjectGraphHttpAuthorityV2 = Readonly<{
-  load: (signal?: AbortSignal) => Promise<ProjectGraphSnapshot>;
+  load: (
+    signal?: AbortSignal,
+    sourceQuery?: ProjectGraphSourceQuery,
+  ) => Promise<ProjectGraphSnapshot>;
 }>;
 
 export function createDesktopProjectGraphHttpAuthorityV2(
@@ -41,7 +47,9 @@ export function createDesktopProjectGraphHttpAuthorityV2(
   const runtimeConfig = cloneDesktopProjectGraphRuntimeConfigV2(config);
   const operationScope = cloneDesktopProjectGraphScopeV2(scope, runtimeConfig);
   return Object.freeze({
-    async load(signal) {
+    async load(signal, sourceQuery) {
+      const query =
+        sourceQuery === undefined ? undefined : prepareProjectGraphSourceQuery(sourceQuery);
       const currentScope = requireProjectKnowledgeScope(
         runtimeConfig,
         operationScope,
@@ -50,11 +58,33 @@ export function createDesktopProjectGraphHttpAuthorityV2(
       const scopeRevision = await observeProjectKnowledgeScope(runtimeConfig, currentScope, {
         signal,
       });
-      const payload = await requestProjectKnowledgeJson(runtimeConfig, graphPathV2(currentScope), {
-        signal,
-      });
+      if (query && query.expectedContextRevision !== scopeRevision)
+        throw projectKnowledgeError('project_graph_source_context_changed', 409);
+      const payload = await requestProjectKnowledgeJson(
+        runtimeConfig,
+        query ? '/api/v1/graph/memory/graph/subgraph' : graphPathV2(currentScope),
+        query
+          ? {
+              signal,
+              method: 'POST',
+              body: {
+                node_uuids: [query.episodeUuid],
+                include_neighbors: false,
+                limit: 1,
+                tenant_id: currentScope.tenantId,
+                project_id: currentScope.projectId,
+              },
+            }
+          : { signal },
+      );
+      if (
+        query &&
+        (await observeProjectKnowledgeScope(runtimeConfig, currentScope, { signal })) !==
+          scopeRevision
+      )
+        throw projectKnowledgeError('project_graph_source_context_changed', 409);
       const graph = parseGraphV2(payload, currentScope);
-      return Object.freeze({
+      const snapshot: ProjectGraphSnapshot = Object.freeze({
         scope: currentScope,
         scopeRevision,
         authority: 'cloud',
@@ -63,6 +93,7 @@ export function createDesktopProjectGraphHttpAuthorityV2(
         allowedActions: ACTIONS_V2,
         ...graph,
       });
+      return query ? requireProjectGraphSourceSnapshot(snapshot, query) : snapshot;
     },
   });
 }

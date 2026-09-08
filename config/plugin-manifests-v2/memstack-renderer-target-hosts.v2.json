@@ -2850,7 +2850,7 @@
       "module_ref": "builtin://memstack/desktop/project-graph-authority",
       "entrypoint": "applyDesktopProjectGraphAuthorityV2",
       "artifact": {
-        "digest": "sha256:ef4098e785a57f2c891db3e6f030bec7dcb6b54eaaf2e13cdb096c01a0f6f4d2",
+        "digest": "sha256:c3b6d0eb1c6f6f4f65128c490f59922a275ff2ff67de019cdac4ea5b225577ac",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectGraphAuthorityModuleV2.ts"
       },
       "targets": [

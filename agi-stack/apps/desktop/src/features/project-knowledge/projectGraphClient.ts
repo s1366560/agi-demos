@@ -5,6 +5,7 @@ import type {
 import {
   type ProjectKnowledgeClient,
   type ProjectKnowledgeSnapshotBase,
+  type ProjectKnowledgeScope,
 } from './projectKnowledgeClient';
 
 export const PROJECT_GRAPH_ROUTE_ID = 'project-project-graph' as const;
@@ -29,4 +30,15 @@ export type ProjectGraphEdge = ProjectGraphEdgeProvenance &
   }>;
 export type ProjectGraphSnapshot = ProjectKnowledgeSnapshotBase &
   Readonly<{ nodes: readonly ProjectGraphNode[]; edges: readonly ProjectGraphEdge[] }>;
-export type ProjectGraphClient = ProjectKnowledgeClient<ProjectGraphSnapshot>;
+export type ProjectGraphSourceQuery = Readonly<{
+  episodeUuid: string;
+  expectedContextRevision: number;
+}>;
+export type ProjectGraphClient = ProjectKnowledgeClient<ProjectGraphSnapshot> &
+  Readonly<{
+    loadSource: (
+      scope: ProjectKnowledgeScope,
+      query: ProjectGraphSourceQuery,
+      options?: Readonly<{ signal?: AbortSignal }>,
+    ) => Promise<ProjectGraphSnapshot>;
+  }>;

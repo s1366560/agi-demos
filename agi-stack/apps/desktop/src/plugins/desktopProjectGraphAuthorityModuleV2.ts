@@ -8,6 +8,7 @@ import {
 import type {
   ProjectGraphClient,
   ProjectGraphSnapshot,
+  ProjectGraphSourceQuery,
 } from '../features/project-knowledge/projectGraphClient';
 import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
@@ -16,6 +17,8 @@ import {
   cloneDesktopProjectGraphRuntimeConfigV2,
   prepareDesktopProjectGraphOperationV2,
   requireDesktopProjectGraphSnapshotV2,
+  prepareProjectGraphSourceQuery,
+  requireProjectGraphSourceSnapshot,
   type DesktopProjectGraphOperationInputV2,
   type PreparedDesktopProjectGraphOperationV2,
 } from './desktopProjectGraphOperationContractV2';
@@ -33,7 +36,10 @@ export const DESKTOP_PROJECT_GRAPH_AUTHORITY_SERVICE_V2 =
 export const DESKTOP_PROJECT_GRAPH_AUTHORITY_VERSION_V2 = '1.0.0';
 
 export interface DesktopProjectGraphAuthorityV2 {
-  readonly load: (signal?: AbortSignal) => Promise<ProjectGraphSnapshot>;
+  readonly load: (
+    signal?: AbortSignal,
+    sourceQuery?: ProjectGraphSourceQuery,
+  ) => Promise<ProjectGraphSnapshot>;
 }
 
 export interface DesktopProjectGraphAuthorityServiceV2 {
@@ -57,9 +63,7 @@ type GenerationActionsUnavailableV2 = Readonly<{
   reasonCode: 'desktop_renderer_generation_actions_unavailable';
   runtimeCode?: undefined;
 }>;
-type AuthorityAdmissionRejectionV2 =
-  | ServiceAdmissionRejectionV2
-  | GenerationActionsUnavailableV2;
+type AuthorityAdmissionRejectionV2 = ServiceAdmissionRejectionV2 | GenerationActionsUnavailableV2;
 
 const AUTHORITY_KEYS_V2 = new Set(['load']);
 
@@ -106,7 +110,7 @@ export function createDesktopProjectGraphOperationsV2(
       return runDesktopProjectGraphAuthorityOperationV2(
         requireGenerationActionsV2(resolveActions()),
         prepared,
-        (authority) => authority.load(prepared.signal),
+        (authority) => authority.load(prepared.signal, prepared.sourceQuery),
       );
     },
   });
@@ -118,6 +122,18 @@ export function createDesktopProjectGraphClientV2(
 ): ProjectGraphClient {
   const operationConfig = Object.freeze({ ...config });
   return Object.freeze({
+    loadSource(
+      scope: ProjectKnowledgeScope,
+      query: ProjectGraphSourceQuery,
+      options?: Readonly<{ signal?: AbortSignal }>,
+    ) {
+      return operations.loadProjectGraph({
+        config: operationConfig,
+        scope,
+        sourceQuery: query,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
     load(
       scope: Parameters<ProjectGraphClient['load']>[0],
       options?: Parameters<ProjectGraphClient['load']>[1],
@@ -171,11 +187,7 @@ async function runDesktopProjectGraphAuthorityOperationV2<TResult>(
         service.bindOperation(prepared.config, prepared.scope),
       );
       return operation(
-        createRevocableProjectGraphAuthorityV2(
-          authority,
-          prepared.scope,
-          () => operationActive,
-        ),
+        createRevocableProjectGraphAuthorityV2(authority, prepared.scope, () => operationActive),
       );
     });
   } catch (error) {
@@ -197,18 +209,19 @@ function createRevocableProjectGraphAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopProjectGraphAuthorityV2 {
   return Object.freeze({
-    async load(signal?: AbortSignal) {
+    async load(signal?: AbortSignal, sourceQuery?: ProjectGraphSourceQuery) {
       requireOperationActiveV2(isOperationActive);
-      const result = await authority.load(signal);
+      const query =
+        sourceQuery === undefined ? undefined : prepareProjectGraphSourceQuery(sourceQuery);
+      const result = await authority.load(signal, query);
       requireOperationActiveV2(isOperationActive);
-      return requireDesktopProjectGraphSnapshotV2(result, scope);
+      const snapshot = requireDesktopProjectGraphSnapshotV2(result, scope);
+      return query === undefined ? snapshot : requireProjectGraphSourceSnapshot(snapshot, query);
     },
   });
 }
 
-function requireProjectGraphServiceV2(
-  value: unknown,
-): DesktopProjectGraphAuthorityServiceV2 {
+function requireProjectGraphServiceV2(value: unknown): DesktopProjectGraphAuthorityServiceV2 {
   if (
     !isPlainRecordV2(value) ||
     Object.keys(value).length !== 1 ||
@@ -254,10 +267,7 @@ function invalidServiceV2(): RuntimeV2Error {
   );
 }
 
-function hasExactKeysV2(
-  value: Record<string, unknown>,
-  expected: ReadonlySet<string>,
-): boolean {
+function hasExactKeysV2(value: Record<string, unknown>, expected: ReadonlySet<string>): boolean {
   const keys = Object.keys(value);
   return keys.length === expected.size && keys.every((key) => expected.has(key));
 }

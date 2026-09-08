@@ -10,6 +10,7 @@ import {
   type ProjectGraphEdge,
   type ProjectGraphNode,
   type ProjectGraphSnapshot,
+  type ProjectGraphSourceQuery,
 } from '../features/project-knowledge/projectGraphClient';
 import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
@@ -18,15 +19,17 @@ export type DesktopProjectGraphOperationInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
   scope: ProjectKnowledgeScope;
   signal?: AbortSignal;
+  sourceQuery?: ProjectGraphSourceQuery;
 }>;
 
 export type PreparedDesktopProjectGraphOperationV2 = Readonly<{
   config: DesktopRuntimeConfig;
   scope: ProjectKnowledgeScope;
   signal?: AbortSignal;
+  sourceQuery?: ProjectGraphSourceQuery;
 }>;
 
-const INPUT_KEYS_V2 = new Set(['config', 'scope', 'signal']);
+const INPUT_KEYS_V2 = new Set(['config', 'scope', 'signal', 'sourceQuery']);
 const SCOPE_KEYS_V2 = new Set(['authority', 'tenantId', 'projectId']);
 const SNAPSHOT_KEYS_V2 = new Set([
   'scope',
@@ -74,8 +77,48 @@ export function prepareDesktopProjectGraphOperationV2(
   return Object.freeze({
     config,
     scope,
+    ...(input.sourceQuery === undefined
+      ? {}
+      : { sourceQuery: prepareProjectGraphSourceQuery(input.sourceQuery) }),
     ...(input.signal === undefined ? {} : { signal: input.signal }),
   });
+}
+
+export function prepareProjectGraphSourceQuery(
+  value: ProjectGraphSourceQuery,
+): ProjectGraphSourceQuery {
+  if (
+    !isPlainRecordV2(value) ||
+    !hasExactKeysV2(value, new Set(['episodeUuid', 'expectedContextRevision'])) ||
+    !canonicalIdentifierV2(value.episodeUuid) ||
+    !Number.isSafeInteger(value.expectedContextRevision) ||
+    value.expectedContextRevision < 0
+  )
+    throw invalidInputV2();
+  return Object.freeze({
+    episodeUuid: value.episodeUuid,
+    expectedContextRevision: value.expectedContextRevision,
+  });
+}
+
+export function requireProjectGraphSourceSnapshot(
+  value: ProjectGraphSnapshot,
+  query: ProjectGraphSourceQuery,
+): ProjectGraphSnapshot {
+  if (
+    value.scopeRevision !== query.expectedContextRevision ||
+    value.edges.length !== 0 ||
+    value.nodes.length > 1 ||
+    value.nodes.some(
+      (node) =>
+        node.type !== 'Episodic' ||
+        node.uuid !== query.episodeUuid ||
+        node.project_id !== value.scope.projectId ||
+        node.tenant_id !== value.scope.tenantId,
+    )
+  )
+    throw invalidServiceContractV2();
+  return value;
 }
 
 export function cloneDesktopProjectGraphRuntimeConfigV2(

@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:257acb9b3288b3e11d45184dae016148a4bd217074f8ac0a95d6759be21156'
-    '2e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:094ae72e334bdfd14eb45d85d1e08adfcbf98b694f9b365c077f877a7b88e8'
+    '9e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1883,8 +1883,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'igest":"sha256:48351cc558ec5030d0533ac8d2ca61e95ef4ce46ebba1b7c3429e9cff9c03c81","entryp'
     'oint":"applyDesktopProjectEntitiesAuthorityV2","module_ref":"builtin://memstack/desktop/'
     'project-entities-authority","plugin_id":"memstack-renderer-target-hosts","plugin_version'
-    '":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:ef4098e785a57f2c891'
-    'db3e6f030bec7dcb6b54eaaf2e13cdb096c01a0f6f4d2","artifact_source":"repo+typescript://agi-'
+    '":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:c3b6d0eb1c6f6f4f651'
+    '28c490f59922a275ff2ff67de019cdac4ea5b225577ac","artifact_source":"repo+typescript://agi-'
     'stack/apps/desktop/src/plugins/desktopProjectGraphAuthorityModuleV2.ts","contract":{"con'
     'fig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPropert'
     'ies":false,"properties":{"strategy":{"const":"desktop-api-fetch","type":"string"}},"requ'
@@ -4576,7 +4576,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'chema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:257acb9b3288b3e11d45184dae016148a4bd217074f8ac0a95d6759be211562e"
+    "sha256:094ae72e334bdfd14eb45d85d1e08adfcbf98b694f9b365c077f877a7b88e89e"
 )
 # fmt: on
 

@@ -1,3 +1,4 @@
+import { projectGraphEnUS, projectGraphZhCN } from './features/project-knowledge/locales/projectGraphMessages';
 import { type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
@@ -114,6 +115,7 @@ const enUS: Record<string, string> = {
   ...nativeMemoriesEnUS,
   ...nativeKnowledgeCloudConnectionEnUS,
   ...cloudMemoriesEnUS,
+  ...projectGraphEnUS,
   ...deadLetterQueueEnUS,
   ...deviceApprovalEnUS,
   ...tenantCreationEnUS,
@@ -4185,6 +4187,7 @@ const zhCN: Record<string, string> = {
   ...nativeMemoriesZhCN,
   ...nativeKnowledgeCloudConnectionZhCN,
   ...cloudMemoriesZhCN,
+  ...projectGraphZhCN,
   ...tenantCreationZhCN,
   ...invitationAcceptanceZhCN,
   ...deadLetterQueueZhCN,

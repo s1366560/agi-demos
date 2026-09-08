@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:257acb9b3288b3e11d45184dae016148a4bd217074f8ac0a95d6759be2',
-  '11562e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:094ae72e334bdfd14eb45d85d1e08adfcbf98b694f9b365c077f877a7b',
+  '88e89e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1990,7 +1990,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '429e9cff9c03c81","entrypoint":"applyDesktopProjectEntitiesAuthorityV2","module_ref":',
   '"builtin://memstack/desktop/project-entities-authority","plugin_id":"memstack-render',
   'er-target-hosts","plugin_version":"2.0.0","targets":["desktop-renderer"]},{"artifact',
-  '_digest":"sha256:ef4098e785a57f2c891db3e6f030bec7dcb6b54eaaf2e13cdb096c01a0f6f4d2","',
+  '_digest":"sha256:c3b6d0eb1c6f6f4f65128c490f59922a275ff2ff67de019cdac4ea5b225577ac","',
   'artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjec',
   'tGraphAuthorityModuleV2.ts","contract":{"config_schema":{"$schema":"https://json-sch',
   'ema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":',
@@ -4815,4 +4815,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:257acb9b3288b3e11d45184dae016148a4bd217074f8ac0a95d6759be211562e' as const;
+  'sha256:094ae72e334bdfd14eb45d85d1e08adfcbf98b694f9b365c077f877a7b88e89e' as const;
