@@ -30,20 +30,30 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-async def test_real_desktop_http_memory_commands_are_scoped_and_replayable(http_memory, enabled):
-    client, sessions, scope, graph, _ = http_memory
-    graph.get_memory_graph_context.return_value = ([], [])
-    if enabled:
-        await enroll(sessions, scope)
-    app = client._transport.app
-    observed = []
-
+def install_identity_fixture(app, scope):
     @app.get("/api/v1/workspace-context")
     async def context():
         return {
             "context": {"tenant_id": scope.tenant_id, "project_id": scope.project_id, "revision": 1}
         }
+
+    @app.get("/api/v1/auth/me")
+    async def identity():
+        return {"user_id": scope.actor_id}
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("scoped", [False, True])
+async def test_real_desktop_http_memory_commands_are_scoped_and_replayable(
+    http_memory, enabled, scoped
+):
+    client, sessions, scope, graph, _ = http_memory
+    graph.get_memory_graph_context.return_value = ([], [])
+    if enabled:
+        await enroll(sessions, scope)
+    app = client._transport.app
+    install_identity_fixture(app, scope)
+    observed = []
 
     @app.middleware("http")
     async def observe(request, call_next):
@@ -80,6 +90,7 @@ async def test_real_desktop_http_memory_commands_are_scoped_and_replayable(http_
             os.environ["CLOUD_MEMORY_HTTP_DIST"],
             address,
             "enabled" if enabled else "disabled",
+            "scoped" if scoped else "legacy",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

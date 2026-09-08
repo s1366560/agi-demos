@@ -8,6 +8,7 @@ import {
   type CloudMemoryMutation,
 } from './cloudMemoryCommandContract';
 import type { DesktopRuntimeConfig } from '../types';
+import { requireCloudMemoryRequestScope, type CloudMemoryRequestScope } from './cloudMemoryScopeContract';
 
 export type VaultBoundCloudMutation =
   | CloudMemoryMutation
@@ -48,6 +49,7 @@ export type VaultBoundCloudRequest = Readonly<{
   mutation?: VaultBoundCloudMutation;
   response?: VaultBoundCloudResponsePolicy;
   signal?: AbortSignal;
+  memory_scope?: CloudMemoryRequestScope;
 }>;
 
 export type DesktopApiFetchOptions = Readonly<{
@@ -152,6 +154,9 @@ function compactRequest(input: VaultBoundCloudRequest): Readonly<Record<string, 
     ...(input.form === undefined ? {} : { form: input.form }),
     ...(input.mutation === undefined ? {} : { mutation: input.mutation }),
     ...(input.response === undefined ? {} : { response: input.response }),
+    ...(input.memory_scope === undefined ? {} : {
+      memory_scope: requireCloudMemoryRequestScope(input.memory_scope),
+    }),
   });
 }
 

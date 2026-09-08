@@ -6,6 +6,10 @@ import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
 import { authorizeCloudMemoryEndpoint } from './cloudMemoryEndpointPolicy';
 import {
+  assertCloudMemoryActor, assertCloudMemoryContext, requireCloudMemoryRequestScope,
+  type CloudMemoryRequestScope,
+} from '../../src/api/cloudMemoryScopeContract';
+import {
   CLOUD_MEMORY_REVISION_HEADER,
   requireCloudMemoryMutation,
   type CloudMemoryMutation,
@@ -23,6 +27,7 @@ export type VaultBoundCloudRequestInput = Readonly<{
   form?: readonly VaultBoundCloudFormPart[];
   mutation?: VaultBoundCloudMutation;
   response?: VaultBoundCloudResponsePolicy;
+  memory_scope?: CloudMemoryRequestScope;
 }>;
 
 type VaultBoundCloudMutation =
@@ -114,7 +119,7 @@ type AuthorizedEndpoint = Readonly<{
   workspaceId?: string | null;
 }>;
 
-const REQUEST_KEYS = new Set(['path', 'method', 'body', 'form', 'mutation', 'response']);
+const REQUEST_KEYS = new Set(['path', 'method', 'body', 'form', 'mutation', 'response', 'memory_scope']);
 const MUTATION_KEYS = new Set(['expected_revision', 'idempotency_key']);
 const IDEMPOTENCY_MUTATION_KEYS = new Set(['kind', 'idempotency_key']);
 const FORM_TEXT_KEYS = new Set(['kind', 'name', 'value']);
@@ -271,6 +276,16 @@ export async function executeVaultBoundCloudRequest(
     endpoint, parseObservedContext(contextBody), session, dependencies,
   );
   assertEndpointScope(endpoint, context);
+  if (request.memory_scope !== undefined) {
+    assertCloudMemoryContext(request.memory_scope, contextBody);
+    const identityResponse = await authorizedFetch(session, dependencies, {
+      path: '/api/v1/auth/me', method: 'GET',
+    });
+    const identityBody = await boundedJson(identityResponse, false, session.credential);
+    dependencies.signal?.throwIfAborted();
+    if (!identityResponse.ok) return Object.freeze({ status: identityResponse.status, body: identityBody });
+    assertCloudMemoryActor(request.memory_scope, identityBody);
+  }
   if (endpoint.kind === 'workspace-context-switch') {
     const switchContext = async (): Promise<VaultBoundCloudRequestResult> => {
       dependencies.signal?.throwIfAborted();
@@ -621,6 +636,9 @@ function parseRequest(input: unknown): VaultBoundCloudRequestInput {
     ...(form === null ? {} : { form }),
     ...(mutation === null ? {} : { mutation }),
     ...(response === null ? {} : { response }),
+    ...(record.memory_scope === undefined ? {} : {
+      memory_scope: requireCloudMemoryRequestScope(record.memory_scope),
+    }),
   });
 }
 
@@ -754,7 +772,8 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
   ) {
     throw new Error('cloud request endpoint is not allowed');
   }
-  if (request.mutation && 'kind' in request.mutation && request.mutation.kind === 'memory-command') {
+  if (request.memory_scope !== undefined ||
+      (request.mutation && 'kind' in request.mutation && request.mutation.kind === 'memory-command')) {
     const memory = authorizeCloudMemoryEndpoint(request, target);
     if (memory) return memory;
     throw new Error('cloud request memory endpoint is not allowed');
