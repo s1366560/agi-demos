@@ -1080,3 +1080,6 @@ changed. The attestation and ledger are generated from the successful rerun.
 Continuous owner renewal, authenticated deployment verification, reverse drain
 and joint native/cloud execution acceptance remain pending. No live deployment was
 prepared or activated by these tests.
+
+Subsequent cloud/native route, processing UI and continuous-owner implementation
+evidence is recorded in [the September 8 follow-up](knowledge-automation-followup-2026-09-08.md).
