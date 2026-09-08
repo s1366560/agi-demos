@@ -99,12 +99,14 @@ describe('MemoryStore', () => {
   });
 
   it('deleteMemory should remove memory from list', async () => {
-    useMemoryStore.setState({ memories: [{ id: '1', title: 'Memory 1' } as any] });
+    useMemoryStore.setState({
+      memories: [{ id: '1', project_id: 'project-1', version: 3, title: 'Memory 1' } as any],
+    });
     (memoryAPI.delete as any).mockResolvedValue({});
 
     await useMemoryStore.getState().deleteMemory('project-1', '1');
 
-    expect(memoryAPI.delete).toHaveBeenCalledWith('project-1', '1');
+    expect(memoryAPI.delete).toHaveBeenCalledWith('project-1', '1', 3);
     expect(useMemoryStore.getState().memories).toHaveLength(0);
   });
 

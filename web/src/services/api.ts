@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { httpClient } from './client/httpClient';
 import { kernelHttpClient } from './client/kernelHttpClient';
+import { memoryCommandTransport } from './memoryCommandTransport';
 
 import type {
   ProjectCreate,
@@ -11,8 +12,6 @@ import type {
   BackendStoreTestResponse,
   BackendStoreTypeInfo,
   BackendStoreUpdate,
-  MemoryCreate,
-  MemoryUpdate,
   MemoryQuery,
   TenantCreate,
   TenantUpdate,
@@ -370,15 +369,9 @@ export const memoryAPI = {
   list: async (projectId: string, params = {}): Promise<MemoryListResponse> => {
     return await api.get('/memories/', { params: { ...params, project_id: projectId } });
   },
-  create: async (projectId: string, data: MemoryCreate): Promise<Memory> => {
-    return await api.post('/memories/', { ...data, project_id: projectId });
-  },
-  update: async (_projectId: string, memoryId: string, data: MemoryUpdate): Promise<Memory> => {
-    return await api.patch(`/memories/${memoryId}`, data);
-  },
-  delete: async (_projectId: string, memoryId: string): Promise<void> => {
-    await api.delete(`/memories/${memoryId}`);
-  },
+  create: memoryCommandTransport.create,
+  update: memoryCommandTransport.update,
+  delete: memoryCommandTransport.delete,
   search: async (projectId: string, query: MemoryQuery): Promise<MemorySearchResponse> => {
     return await api.post('/memory/search', { ...query, project_id: projectId });
   },

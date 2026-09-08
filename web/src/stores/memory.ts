@@ -167,9 +167,15 @@ export const useMemoryStore = create<MemoryState>()(
       },
 
       deleteMemory: async (projectId: string, memoryId: string) => {
+        const observed =
+          get().currentMemory?.id === memoryId && get().currentMemory?.project_id === projectId
+            ? get().currentMemory
+            : get().memories.find(
+                (memory) => memory.id === memoryId && memory.project_id === projectId
+              );
         set({ isLoading: true, error: null });
         try {
-          await memoryAPI.delete(projectId, memoryId);
+          await memoryAPI.delete(projectId, memoryId, observed?.version);
           const { memories } = get();
           set({
             memories: memories.filter((memory) => memory.id !== memoryId),

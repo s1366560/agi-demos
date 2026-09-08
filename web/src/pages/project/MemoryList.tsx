@@ -530,7 +530,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
     if (!memoryToDelete || !projectId) return;
     setDeletingId(memoryToDelete.id);
     try {
-      await memoryAPI.delete(projectId, memoryToDelete.id);
+      await memoryAPI.delete(projectId, memoryToDelete.id, memoryToDelete.version);
       await fetchMemories();
       message.success(texts.deleteSuccess);
       setIsDeleteModalOpen(false);

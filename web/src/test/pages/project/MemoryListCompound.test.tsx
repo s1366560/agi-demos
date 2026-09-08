@@ -58,6 +58,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 const mockMemories = [
   {
     id: 'memory-1',
+    version: 6,
     title: 'Meeting Notes',
     content: 'Discussed project roadmap and milestones',
     content_type: 'text',
@@ -516,6 +517,10 @@ describe('MemoryList Compound Component', () => {
         expect(
           screen.getByText((_content, element) => element?.textContent === '“Meeting Notes”')
         ).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await waitFor(() => {
+        expect(memoryAPI.delete).toHaveBeenCalledWith('test-project-1', 'memory-1', 6);
       });
     });
   });

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -155,6 +155,20 @@ describe('MemoryDetail', () => {
     expect(clickSpy).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:memory-export');
     expect(messageMocks.success).toHaveBeenCalledWith('Memory exported');
+  });
+
+  it('deletes with the displayed revision and retains content on a conflict', async () => {
+    vi.mocked(memoryAPI.delete).mockRejectedValue(new Error('revision conflict'));
+    renderDetail();
+    await screen.findAllByText('Memory One');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(memoryAPI.delete).toHaveBeenCalledWith('project-1', 'memory-1', 1);
+      expect(messageMocks.error).toHaveBeenCalled();
+    });
+    expect(screen.getAllByText('Memory One').length).toBeGreaterThan(0);
+    expect(memoryAPI.get).toHaveBeenCalledTimes(1);
   });
 
   it('ignores stale detail responses after the route changes', async () => {

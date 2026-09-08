@@ -233,7 +233,7 @@ export const MemoryDetail: React.FC = () => {
 
     setIsDeleting(true);
     try {
-      await memoryAPI.delete(projectId, memoryId);
+      await memoryAPI.delete(projectId, memoryId, memory.version);
       void navigate(`${projectBasePath}/memories`);
     } catch (error) {
       logger.error('[MemoryDetail] Failed to delete memory:', error);

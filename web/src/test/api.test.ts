@@ -330,19 +330,20 @@ describe('API Services', () => {
     it('update should update memory', async () => {
       const mockData = { id: '1' };
       mockApiInstance.patch.mockResolvedValue({ data: mockData });
-      await memoryAPI.update('p1', 'm1', { title: 'M2' } as MemoryUpdate);
+      await memoryAPI.update('p1', 'm1', { title: 'M2', version: 1 } as MemoryUpdate);
       expect(mockApiInstance.patch).toHaveBeenCalledWith(
         '/memories/m1',
-        { title: 'M2' },
-        { signal: expect.any(AbortSignal) }
+        { title: 'M2', version: 1 },
+        { signal: expect.any(AbortSignal), params: { project_id: 'p1' } }
       );
     });
 
     it('delete should delete memory', async () => {
       mockApiInstance.delete.mockResolvedValue({});
-      await memoryAPI.delete('p1', 'm1');
+      await memoryAPI.delete('p1', 'm1', 1);
       expect(mockApiInstance.delete).toHaveBeenCalledWith('/memories/m1', {
         signal: expect.any(AbortSignal),
+        params: { project_id: 'p1' },
       });
     });
 
