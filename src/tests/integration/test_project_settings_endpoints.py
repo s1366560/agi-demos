@@ -3,11 +3,18 @@ Integration tests for Project Settings endpoints.
 Tests PUT /{project_id}, DELETE /{project_id}
 """
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
     Conversation,
@@ -20,6 +27,26 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
+
+
+@pytest.fixture(autouse=True)
+async def _project_settings_v2_runtime(test_app, monkeypatch):
+    from src.infrastructure.agent.plugins.skill_evolution.scheduler import EvolutionScheduler
+    from src.infrastructure.plugins.v2 import sandbox_projection
+
+    monkeypatch.setattr(EvolutionScheduler, "start", AsyncMock())
+    purge = AsyncMock()
+    monkeypatch.setattr(
+        sandbox_projection,
+        "current_sandbox_application_services_v2",
+        lambda: SimpleNamespace(adapter=SimpleNamespace(purge_project_resources=purge)),
+    )
+    await initialize_plugin_runtime_v2(test_app)
+    try:
+        assert "projects" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 @pytest.mark.asyncio

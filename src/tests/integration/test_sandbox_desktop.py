@@ -10,9 +10,39 @@ TDD: Tests written before implementation.
 
 import logging
 from datetime import datetime
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
+
+
+@pytest.fixture(autouse=True)
+async def _sandbox_desktop_v2_runtime(test_app, monkeypatch):
+    from src.infrastructure.adapters.secondary.sandbox import mcp_sandbox_adapter
+    from src.infrastructure.agent.plugins.skill_evolution.scheduler import EvolutionScheduler
+    from src.infrastructure.plugins.v2 import sandbox_runtime
+    from src.infrastructure.plugins.v2.builtin_sandbox_http_routes import SANDBOX_HTTP_ROUTES_ROW_V2
+
+    monkeypatch.setattr(EvolutionScheduler, "start", AsyncMock())
+    monkeypatch.setattr(mcp_sandbox_adapter._DOCKER_CLIENT_FACTORY, "from_env", Mock())
+    adapter = mcp_sandbox_adapter.MCPSandboxAdapter()
+    monkeypatch.setattr(adapter, "sync_from_docker", AsyncMock(return_value=0))
+    monkeypatch.setattr(adapter, "close", AsyncMock())
+    monkeypatch.setattr(sandbox_runtime, "_start_idle_reaper_v2", AsyncMock(return_value=None))
+    await initialize_plugin_runtime_v2(test_app, sandbox_runtime_factory=lambda: adapter)
+    try:
+        assert (
+            SANDBOX_HTTP_ROUTES_ROW_V2
+            in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+        )
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+
 
 # --- Test Data ---
 
@@ -31,6 +61,7 @@ def create_mock_sandbox_instance(sandbox_id: str):
     mock_instance.status = SandboxStatus.RUNNING
     mock_instance.config = SandboxConfig(image="sandbox-mcp-server:latest")
     mock_instance.project_path = f"/tmp/{sandbox_id}"
+    mock_instance.project_id = "desktop-test-project"
     mock_instance.endpoint = "ws://localhost:8765"
     mock_instance.created_at = datetime.now()
     mock_instance.websocket_url = "ws://localhost:8765"
