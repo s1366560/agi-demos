@@ -96,4 +96,12 @@ describe('MemoryGraph', () => {
 
     expect(screen.queryByText('Test Entity')).not.toBeInTheDocument();
   });
+  it('clears selected graph details when the project route changes', () => {
+    const { rerender } = render(<MemoryGraph />);
+    fireEvent.click(screen.getByText('Simulate Node Click'));
+    expect(screen.getByText('Test Entity')).toBeInTheDocument();
+    vi.mocked(useParams).mockReturnValue({ tenantId: 't2', projectId: 'p2' });
+    rerender(<MemoryGraph />);
+    expect(screen.queryByText('Test Entity')).not.toBeInTheDocument();
+  });
 });

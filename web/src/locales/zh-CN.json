@@ -5186,6 +5186,23 @@
           "click_prompt": "从列表中点击一个实体以查看其详情和关系",
           "relationships_error": "加载关系失败"
         }
+      },
+      "provenance": {
+        "title": "关系与来源",
+        "partial": "当前视图仅包含部分图谱，关系和来源可能不完整。",
+        "relationships": "有向关系",
+        "noRelationships": "当前视图中没有关系。",
+        "sources": "支持来源",
+        "noSources": "当前视图中没有已记录的来源引用。",
+        "openSource": "读取来源 {{uuid}}",
+        "unavailable": "当前项目中无法读取此来源。",
+        "captured": "提取时的来源内容",
+        "created": "创建时间：{{time}}",
+        "valid": "生效时间：{{time}}",
+        "noContent": "没有可用的来源内容。",
+        "currentNotice": "当前记忆可能在提取后发生了变化，也可能已无法访问。",
+        "currentMemory": "打开当前记忆",
+        "relationship": "关系"
       }
     },
     "maintenance": {

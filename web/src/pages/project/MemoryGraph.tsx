@@ -7,7 +7,9 @@ import { Building2, Fingerprint, X } from 'lucide-react';
 
 import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph';
 import { getNodeConnectionCount } from '@/components/graph/CytoscapeGraph/nodeDetails';
-import type { NodeData } from '@/components/graph/CytoscapeGraph/types';
+import type { NodeData, EdgeData, GraphSnapshot } from '@/components/graph/CytoscapeGraph/types';
+
+import { GraphProvenancePanel } from './GraphProvenancePanel';
 
 const NODE_TYPE_CLASSES: Record<NodeData['type'], string> = {
   Entity:
@@ -19,13 +21,43 @@ const NODE_TYPE_CLASSES: Record<NodeData['type'], string> = {
 };
 
 export const MemoryGraph: React.FC = () => {
+  const { projectId, tenantId } = useParams();
+  return (
+    <MemoryGraphContent
+      key={`${tenantId ?? ''}/${projectId ?? ''}`}
+      projectId={projectId}
+      tenantId={tenantId}
+    />
+  );
+};
+
+const MemoryGraphContent: React.FC<{
+  projectId: string | undefined;
+  tenantId: string | undefined;
+}> = ({ projectId, tenantId }) => {
   const { t } = useTranslation();
-  const { projectId } = useParams();
   const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<EdgeData | null>(null);
+  const [graph, setGraph] = useState<GraphSnapshot>({ nodes: [], edges: [] });
+  const selection = selectedNode
+    ? { kind: 'node' as const, data: selectedNode }
+    : selectedEdge
+      ? { kind: 'edge' as const, data: selectedEdge }
+      : null;
+  const handleGraphData = useCallback((next: GraphSnapshot) => {
+    setGraph(next);
+    setSelectedNode(null);
+    setSelectedEdge(null);
+  }, []);
+  const handleEdgeClick = useCallback((edge: EdgeData | null) => {
+    setSelectedEdge(edge);
+    setSelectedNode(null);
+  }, []);
   const connectionCount = selectedNode ? getNodeConnectionCount(selectedNode) : null;
 
   const handleNodeClick = useCallback((node: NodeData | null) => {
     setSelectedNode(node);
+    setSelectedEdge(null);
   }, []);
 
   return (
@@ -36,6 +68,9 @@ export const MemoryGraph: React.FC = () => {
       <CytoscapeGraph>
         <CytoscapeGraph.Viewport
           projectId={projectId}
+          tenantId={tenantId}
+          onEdgeClick={handleEdgeClick}
+          onGraphData={handleGraphData}
           includeCommunities={true}
           minConnections={0}
           onNodeClick={handleNodeClick}
@@ -44,23 +79,25 @@ export const MemoryGraph: React.FC = () => {
 
       <div
         data-testid="graph-node-detail-panel"
-        aria-hidden={!selectedNode}
-        className={`absolute inset-x-4 bottom-4 top-auto z-20 flex max-h-[70%] w-auto flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg transition-transform duration-200 motion-reduce:transition-none dark:border-slate-700 dark:bg-slate-900 sm:bottom-6 sm:left-auto sm:right-6 sm:top-6 sm:max-h-none sm:w-80 ${selectedNode ? 'translate-y-0 sm:translate-x-0' : 'translate-y-[120%] sm:translate-x-[120%] sm:translate-y-0'}`}
+        aria-hidden={!selection}
+        className={`absolute inset-x-4 bottom-4 top-auto z-20 flex max-h-[70%] w-auto flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg transition-transform duration-200 motion-reduce:transition-none dark:border-slate-700 dark:bg-slate-900 sm:bottom-6 sm:left-auto sm:right-6 sm:top-6 sm:max-h-none sm:w-80 ${selection ? 'translate-y-0 sm:translate-x-0' : 'translate-y-[120%] sm:translate-x-[120%] sm:translate-y-0'}`}
       >
-        {selectedNode ? (
+        {selection ? (
           <>
             <div className="border-b border-slate-200 bg-slate-100 p-5 dark:border-slate-700 dark:bg-slate-800">
               <div className="flex justify-between items-start mb-2">
                 <div
-                  className={`px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border ${NODE_TYPE_CLASSES[selectedNode.type]}`}
+                  className={`px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border ${selectedNode ? NODE_TYPE_CLASSES[selectedNode.type] : NODE_TYPE_CLASSES.Entity}`}
                 >
-                  {selectedNode.type}
+                  {selectedNode?.type ??
+                    t('project.graph.provenance.relationship', { defaultValue: 'Relationship' })}
                 </div>
                 <button
                   type="button"
                   aria-label={t('common.close', { defaultValue: 'Close' })}
                   onClick={() => {
                     setSelectedNode(null);
+                    setSelectedEdge(null);
                   }}
                   className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                 >
@@ -68,9 +105,9 @@ export const MemoryGraph: React.FC = () => {
                 </button>
               </div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 leading-tight">
-                {selectedNode.name}
+                {selectedNode?.name ?? selectedEdge?.label ?? selectedEdge?.id}
               </h2>
-              {selectedNode.uuid && (
+              {selectedNode?.uuid && (
                 <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
                   <Fingerprint size={14} />
                   <span className="font-mono text-slate-500">{selectedNode.uuid.slice(0, 8)}…</span>
@@ -79,6 +116,15 @@ export const MemoryGraph: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              <GraphProvenancePanel
+                key={`${selection.kind}/${selection.data.id}`}
+                graph={graph}
+                selection={selection}
+                tenantId={tenantId}
+                projectId={projectId}
+                onNode={handleNodeClick}
+                onEdge={handleEdgeClick}
+              />
               {connectionCount !== null && (
                 <div>
                   <div className="flex justify-between items-end mb-1">
@@ -93,7 +139,7 @@ export const MemoryGraph: React.FC = () => {
               )}
 
               {/* Entity Type */}
-              {selectedNode.entity_type && (
+              {selectedNode?.entity_type && (
                 <div>
                   <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
                     {t('project.graph.node_detail.type')}
@@ -105,7 +151,7 @@ export const MemoryGraph: React.FC = () => {
               )}
 
               {/* Summary */}
-              {selectedNode.summary && (
+              {selectedNode?.summary && (
                 <div>
                   <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
                     {t('project.graph.node_detail.description')}
@@ -117,7 +163,7 @@ export const MemoryGraph: React.FC = () => {
               )}
 
               {/* Member Count */}
-              {selectedNode.member_count !== undefined && (
+              {selectedNode?.member_count !== undefined && (
                 <div>
                   <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
                     {t('project.graph.node_detail.members')}
@@ -131,7 +177,7 @@ export const MemoryGraph: React.FC = () => {
               )}
 
               {/* Context Info */}
-              {selectedNode.tenant_id && (
+              {selectedNode?.tenant_id && (
                 <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
                   <div className="space-y-2 text-xs text-slate-500">
                     <div className="flex items-center gap-2">

@@ -862,3 +862,92 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
     });
   });
 });
+
+describe('graph provenance projection', () => {
+  it('preserves edge provenance, exposes directed edge selection, and removes edges whose nodes are filtered out', async () => {
+    vi.clearAllMocks();
+    const node = {
+      id: 'n1',
+      label: 'Episodic',
+      type: 'Episodic',
+      name: 'Captured',
+      uuid: 'episode-a',
+      content: 'Captured content',
+      memory_id: 'memory-a',
+    };
+    const edge = {
+      id: 'self',
+      source: 'n1',
+      target: 'n1',
+      label: 'RELATED_TO',
+      fact: 'Actual fact',
+      episodes: ['episode-a'],
+    };
+    graphService.getGraphData.mockResolvedValueOnce({
+      elements: {
+        nodes: [{ data: node }, { data: { id: 'hidden', label: 'Community', name: 'Hidden' } }],
+        edges: [
+          { data: edge },
+          { data: { id: 'dangling', source: 'n1', target: 'hidden', label: 'BELONGS_TO' } },
+        ],
+      },
+    });
+    const onGraphData = vi.fn();
+    const onEdgeClick = vi.fn();
+    render(
+      <CytoscapeGraph>
+        <CytoscapeGraph.Viewport
+          projectId="p1"
+          includeCommunities={false}
+          onGraphData={onGraphData}
+          onEdgeClick={onEdgeClick}
+        />
+      </CytoscapeGraph>
+    );
+    await waitFor(() =>
+      expect(onGraphData).toHaveBeenLastCalledWith({
+        nodes: [expect.objectContaining(node)],
+        edges: [edge],
+      })
+    );
+    expect(mockCytoscapeInstance.add).toHaveBeenLastCalledWith([
+      expect.objectContaining({ group: 'nodes', data: expect.objectContaining(node) }),
+      expect.objectContaining({ group: 'edges', data: edge }),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Captured → RELATED_TO → Captured' }));
+    expect(onEdgeClick).toHaveBeenLastCalledWith(edge);
+    const handler = mockCytoscapeInstance.on.mock.calls.find(
+      (call) => call[0] === 'tap' && call[1] === 'edge'
+    )?.[2];
+    handler?.({ target: { data: () => edge } });
+    expect(onEdgeClick).toHaveBeenCalledTimes(2);
+  });
+  it('ignores an earlier project graph response after scope changes', async () => {
+    vi.clearAllMocks();
+    let resolveOld!: (value: ReturnType<typeof createDefaultGraphData>) => void;
+    graphService.getGraphData.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        })
+    );
+    graphService.getGraphData.mockResolvedValueOnce({ elements: { nodes: [], edges: [] } });
+    const onGraphData = vi.fn();
+    const { rerender } = render(
+      <CytoscapeGraph>
+        <CytoscapeGraph.Viewport projectId="old" onGraphData={onGraphData} />
+      </CytoscapeGraph>
+    );
+    await waitFor(() => expect(graphService.getGraphData).toHaveBeenCalledTimes(1));
+    rerender(
+      <CytoscapeGraph>
+        <CytoscapeGraph.Viewport projectId="new" onGraphData={onGraphData} />
+      </CytoscapeGraph>
+    );
+    await waitFor(() => expect(graphService.getGraphData).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onGraphData).toHaveBeenLastCalledWith({ nodes: [], edges: [] }));
+    resolveOld(createDefaultGraphData());
+    await waitFor(() => expect(screen.queryByText('Test Entity')).not.toBeInTheDocument());
+    expect(onGraphData.mock.calls.every(([data]) => data.nodes.length === 0)).toBe(true);
+  });
+});

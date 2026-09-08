@@ -22,7 +22,7 @@ import { CytoscapeGraphControls as ControlsComponent } from './Controls';
 import { CytoscapeGraphNodeInfoPanel as NodeInfoPanelComponent } from './NodeInfoPanel';
 import { CytoscapeGraphViewport } from './Viewport';
 
-import type { GraphConfig, NodeData, GraphActions } from './types';
+import type { GraphConfig, NodeData, EdgeData, GraphSnapshot, GraphActions } from './types';
 import type cytoscape from 'cytoscape';
 import type { TFunction } from 'i18next';
 
@@ -69,6 +69,8 @@ const CONTROLS_SYMBOL = Symbol('CytoscapeGraphControls');
 const NODE_INFO_PANEL_SYMBOL = Symbol('CytoscapeGraphNodeInfoPanel');
 
 interface ViewportMarkerProps {
+  onEdgeClick?: ((edge: EdgeData | null) => void) | undefined;
+  onGraphData?: ((graph: GraphSnapshot) => void) | undefined;
   projectId?: string | undefined;
   tenantId?: string | undefined;
   includeCommunities?: boolean | undefined;
@@ -388,6 +390,8 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
             <CytoscapeGraphViewport
               config={mergedConfig}
               onNodeClick={viewportProps?.onNodeClick || handleNodeClick}
+              onEdgeClick={viewportProps?.onEdgeClick}
+              onGraphData={viewportProps?.onGraphData}
               onStateChange={handleViewportStateChange}
               setCyInstance={setCyInstance}
             />

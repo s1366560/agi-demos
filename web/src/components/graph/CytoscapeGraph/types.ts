@@ -31,6 +31,11 @@ export interface NodeData {
 /**
  * Edge data structure returned by the graph service
  */
+export interface GraphSnapshot {
+  nodes: readonly NodeData[];
+  edges: readonly EdgeData[];
+}
+
 export interface EdgeData {
   id: string;
   source: string;
@@ -172,6 +177,8 @@ export interface ViewportProps {
   subgraphNodeIds?: string[] | undefined;
   /** Node click callback */
   onNodeClick?: ((node: NodeData | null) => void) | undefined;
+  onEdgeClick?: ((edge: EdgeData | null) => void) | undefined;
+  onGraphData?: ((graph: GraphSnapshot) => void) | undefined;
   /** Highlight specific nodes */
   highlightNodeIds?: string[] | undefined;
 }

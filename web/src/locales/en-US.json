@@ -5175,6 +5175,23 @@
           "click_prompt": "Click on an entity from the list to view its details and relationships",
           "relationships_error": "Failed to load relationships"
         }
+      },
+      "provenance": {
+        "title": "Relationships and sources",
+        "partial": "This view contains a limited graph subset. Relationships and sources may be incomplete.",
+        "relationships": "Directed relationships",
+        "noRelationships": "No relationships in this view.",
+        "sources": "Supporting sources",
+        "noSources": "No recorded source references in this view.",
+        "openSource": "Read source {{uuid}}",
+        "unavailable": "This source is unavailable in the current project.",
+        "captured": "Captured source content",
+        "created": "Created: {{time}}",
+        "valid": "Valid from: {{time}}",
+        "noContent": "No captured content is available.",
+        "currentNotice": "The current memory may have changed since extraction or may no longer be available.",
+        "currentMemory": "Open current memory",
+        "relationship": "Relationship"
       }
     },
     "maintenance": {

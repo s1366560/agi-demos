@@ -17,7 +17,7 @@ import type { GraphData, GraphEdge, GraphNode } from '@/services/graphService';
 
 import { toCytoscapeLayoutOptions, generateCytoscapeStyles, THEME_COLORS } from './Config';
 
-import type { GraphConfig, NodeData } from './types';
+import type { GraphConfig, NodeData, EdgeData, GraphSnapshot } from './types';
 import type cytoscape from 'cytoscape';
 
 type CytoscapeFactory = (options?: cytoscape.CytoscapeOptions) => cytoscape.Core;
@@ -112,6 +112,8 @@ const ViewportLoading: React.FC = () => {
 // ========================================
 
 interface ViewportProps {
+  onEdgeClick?: ((edge: EdgeData | null) => void) | undefined;
+  onGraphData?: ((graph: GraphSnapshot) => void) | undefined;
   config: GraphConfig;
   onNodeClick?: ((node: NodeData | null) => void) | undefined;
   onStateChange?:
@@ -128,6 +130,7 @@ interface ViewportProps {
 
 type AccessibleGraphEdge = Readonly<{
   id: string;
+  data: EdgeData;
   sourceName: string;
   targetName: string;
   label: string;
@@ -140,6 +143,8 @@ type AccessibleGraphEdge = Readonly<{
 export function CytoscapeGraphViewport({
   config,
   onNodeClick,
+  onEdgeClick,
+  onGraphData,
   onStateChange,
   setCyInstance,
   onNodeSelect,
@@ -162,6 +167,11 @@ export function CytoscapeGraphViewport({
   const [edgeCount, setEdgeCount] = useState(0);
   const [accessibleNodes, setAccessibleNodes] = useState<readonly NodeData[]>([]);
   const [accessibleEdges, setAccessibleEdges] = useState<readonly AccessibleGraphEdge[]>([]);
+  const requestId = useRef(0);
+  const callbacks = useRef({ onEdgeClick, onGraphData });
+  useEffect(() => {
+    callbacks.current = { onEdgeClick, onGraphData };
+  }, [onEdgeClick, onGraphData]);
   const onNodeClickRef = useRef(onNodeClick);
 
   useEffect(() => {
@@ -173,6 +183,7 @@ export function CytoscapeGraphViewport({
 
     return () => {
       isMountedRef.current = false;
+      requestId.current += 1;
     };
   }, []);
 
@@ -225,8 +236,12 @@ export function CytoscapeGraphViewport({
 
   // Load Graph Data
   const loadGraphData = useCallback(async () => {
+    const request = ++requestId.current;
     setLoading(true);
     setError(null);
+    setAccessibleNodes([]);
+    setAccessibleEdges([]);
+    callbacks.current.onGraphData?.({ nodes: [], edges: [] });
 
     try {
       let data: GraphData;
@@ -246,6 +261,7 @@ export function CytoscapeGraphViewport({
         });
       }
 
+      if (!isMountedRef.current || request !== requestId.current) return;
       const elements: cytoscape.ElementDefinition[] = [];
 
       // Nodes
@@ -263,11 +279,12 @@ export function CytoscapeGraphViewport({
         elements.push({
           group: 'nodes',
           data: {
+            ...node,
             id: node.id,
             label: nodeType,
             name: getNodeName(node),
             type: nodeType,
-            uuid: node.uuid,
+            uuid: node.uuid ?? undefined,
             summary: node.summary,
             entity_type: node.entity_type,
             member_count: node.member_count,
@@ -278,11 +295,14 @@ export function CytoscapeGraphViewport({
         });
       });
 
+      const visibleIds = new Set(elements.map((element) => element.data.id));
       // Edges
       data.elements.edges.forEach(({ data: edge }) => {
+        if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) return;
         elements.push({
           group: 'edges',
           data: {
+            ...edge,
             id: edge.id,
             source: edge.source,
             target: edge.target,
@@ -292,7 +312,7 @@ export function CytoscapeGraphViewport({
       });
 
       const cy = cyRef.current;
-      if (!isMountedRef.current || !cy || cy.destroyed()) {
+      if (!cy || cy.destroyed()) {
         return;
       }
 
@@ -316,13 +336,18 @@ export function CytoscapeGraphViewport({
             nodeNames.has(edge.target)
         )
         .map((edge) => ({
+          data: edge as EdgeData,
           id: edge.id as string,
-          sourceName: nodeNames.get(edge.source as string)!,
-          targetName: nodeNames.get(edge.target as string)!,
+          sourceName: nodeNames.get(edge.source as string) ?? (edge.source as string),
+          targetName: nodeNames.get(edge.target as string) ?? (edge.target as string),
           label: typeof edge.label === 'string' && edge.label ? edge.label : 'RELATED_TO',
         }));
       setAccessibleNodes(nextAccessibleNodes);
       setAccessibleEdges(nextAccessibleEdges);
+      callbacks.current.onGraphData?.({
+        nodes: nextAccessibleNodes,
+        edges: nextAccessibleEdges.map((edge) => edge.data),
+      });
 
       const layoutOpts = {
         ...toCytoscapeLayoutOptions(config.layout),
@@ -343,13 +368,13 @@ export function CytoscapeGraphViewport({
       const fallbackMessage = t('graph.cytoscapeViewport.loadDataFailed', {
         defaultValue: 'Failed to load graph data',
       });
-      if (isMountedRef.current) {
+      if (isMountedRef.current && request === requestId.current) {
         setAccessibleNodes([]);
         setAccessibleEdges([]);
         setError(getErrorMessage(err, fallbackMessage));
       }
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && request === requestId.current) {
         setLoading(false);
       }
     }
@@ -398,8 +423,13 @@ export function CytoscapeGraphViewport({
       }
       onNodeClickRef.current?.(null);
       onNodeSelect?.(null);
+      callbacks.current.onEdgeClick?.(null);
     };
 
+    const handleEdgeTap = (evt: cytoscape.EventObjectEdge) => {
+      callbacks.current.onEdgeClick?.(evt.target.data() as EdgeData);
+    };
+    cy.on('tap', 'edge', handleEdgeTap);
     cy.on('tap', 'node', handleNodeTap);
     cy.on('tap', handleBackgroundTap);
     cy.boxSelectionEnabled(true);
@@ -414,6 +444,7 @@ export function CytoscapeGraphViewport({
       window.removeEventListener('cytoscape-reload', handleReload);
       activeLayoutRef.current?.stop();
       activeLayoutRef.current = null;
+      cy.off('tap', 'edge', handleEdgeTap);
       cy.off('tap', 'node', handleNodeTap);
       cy.off('tap', handleBackgroundTap);
       if (cyRef.current === cy) {
@@ -549,7 +580,9 @@ export function CytoscapeGraphViewport({
         <ul>
           {accessibleEdges.map((edge) => (
             <li key={edge.id}>
-              {edge.sourceName} {edge.label} {edge.targetName}
+              <button type="button" onClick={() => callbacks.current.onEdgeClick?.(edge.data)}>
+                {edge.sourceName} → {edge.label} → {edge.targetName}
+              </button>
             </li>
           ))}
         </ul>
