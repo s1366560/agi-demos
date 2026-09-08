@@ -1,33 +1,23 @@
-//! The renderer can request a push, but cannot supply URLs, credentials or
-//! remote receipts. Those come exclusively from the trusted application session
-//! and a verified cloud HTTP response held for this operation.
-
-use std::time::Duration;
-
+//! Renderer input cannot supply cloud credentials, origins or remote receipts.
+//! Every data operation authenticates its actor/project and observes enrollment
+//! before sending the server's request-pinned generation as a condition.
 use agistack_core::knowledge::sync::push::{KnowledgeSyncTarget, PreparedKnowledgePush};
 use agistack_core::knowledge::sync::KnowledgeSyncLink;
-use futures_util::StreamExt;
-use reqwest::{Client, Response, StatusCode, Url};
+use reqwest::{Method, StatusCode, Url};
 use serde_json::Value;
 
+use super::contracts::SyncCloudGeneration;
+use super::trusted_cloud_connection::TrustedCloudConnection;
 use super::KnowledgeAuthorityErrorV2;
-use crate::local_runtime::platform_plugin_sync_v2::{
-    control_plane_url, load_cloud_authority, CloudAuthorityV2,
-};
-use crate::trusted_session::{
-    TrustedSessionBroker, TrustedSessionCredentialKind, TrustedSessionRuntimeMode,
-    TrustedSessionSnapshot,
-};
+use crate::trusted_session::TrustedSessionBroker;
 
 #[path = "cloud_transport.rs"]
 mod cloud_transport;
 pub(super) use cloud_transport::CloudResolutionResponse;
 
 pub(super) struct VerifiedCloudTransport {
-    client: Client,
-    authority: CloudAuthorityV2,
-    broker: TrustedSessionBroker,
-    epoch: u64,
+    connection: TrustedCloudConnection,
+    pub(super) generation: SyncCloudGeneration,
     pub(super) target: KnowledgeSyncTarget,
 }
 
@@ -36,102 +26,40 @@ impl VerifiedCloudTransport {
         broker: &TrustedSessionBroker,
         link: KnowledgeSyncLink,
     ) -> Result<Self, KnowledgeAuthorityErrorV2> {
-        let snapshot = broker
-            .snapshot()
-            .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
-        let authority = load_cloud_authority(broker)
-            .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?
-            .ok_or(KnowledgeAuthorityErrorV2::TransportUnavailable)?;
-        let client = Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
-        let transport = Self {
-            client,
-            broker: broker.clone(),
-            epoch: snapshot.epoch,
+        let connection = TrustedCloudConnection::open(broker).await?;
+        if connection.actor_id != link.remote_actor_id {
+            return Err(KnowledgeAuthorityErrorV2::ScopeMismatch);
+        }
+        connection
+            .verify_project(&link.remote_tenant_id, &link.remote_project_id)
+            .await?;
+        let enrollment = connection
+            .enrollment(&link.remote_tenant_id, &link.remote_project_id, None)
+            .await?;
+        if !enrollment.enabled {
+            return Err(KnowledgeAuthorityErrorV2::SyncNotEnrolled);
+        }
+        Ok(Self {
             target: KnowledgeSyncTarget {
-                authority: control_plane_url(&authority.base_url, "")
-                    .as_str()
-                    .trim_end_matches('/')
-                    .to_owned(),
+                authority: connection.canonical_authority.clone(),
                 link,
             },
-            authority,
-        };
-        transport.ensure_current()?;
-        let user = transport
-            .get(control_plane_url(&transport.authority.base_url, "auth/me"))
-            .await?;
-        // /auth/me serializes auth.User with user_id, not the id alias of
-        // other user projections. Never infer identity from those projections.
-        let actor = user["user_id"]
-            .as_str()
-            .filter(|actor| !actor.is_empty() && actor.trim() == *actor)
-            .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
-        if actor != transport.target.link.remote_actor_id {
-            return Err(KnowledgeAuthorityErrorV2::ScopeMismatch);
-        }
-        if user["is_active"].as_bool() != Some(true) {
-            return Err(KnowledgeAuthorityErrorV2::Forbidden);
-        }
-        let mut project_url = transport.project_url(&[])?;
-        project_url
-            .query_pairs_mut()
-            .append_pair("tenant_id", &transport.target.link.remote_tenant_id);
-        let project = transport.get(project_url).await?;
-        if project["id"] != transport.target.link.remote_project_id
-            || project["tenant_id"] != transport.target.link.remote_tenant_id
-        {
-            return Err(KnowledgeAuthorityErrorV2::ScopeMismatch);
-        }
-        Ok(transport)
+            generation: enrollment.generation,
+            connection,
+        })
     }
 
     fn project_url(&self, suffix: &[&str]) -> Result<Url, KnowledgeAuthorityErrorV2> {
-        let mut url = control_plane_url(&self.authority.base_url, "projects");
-        {
-            let mut path = url
-                .path_segments_mut()
-                .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
-            path.push(&self.target.link.remote_project_id);
-            for segment in suffix {
-                path.push(segment);
-            }
-        }
-        Ok(url)
+        self.connection
+            .project_url(&self.target.link.remote_project_id, suffix)
     }
 
     async fn get(&self, url: Url) -> Result<Value, KnowledgeAuthorityErrorV2> {
-        self.ensure_current()?;
-        let response = self
-            .client
-            .get(url)
-            .bearer_auth(&self.authority.credential)
-            .send()
-            .await
-            .map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)?;
-        self.ensure_current()?;
-        if matches!(
-            response.status(),
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
-        ) {
-            return Err(KnowledgeAuthorityErrorV2::Forbidden);
-        }
-        if response.status() != StatusCode::OK {
-            return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
-        }
-        let result = bounded_json(response).await?;
-        self.ensure_current()?;
-        Ok(result)
+        self.connection.get(url, Some(&self.generation)).await
     }
 
     pub(super) async fn pull(&self, after: u64) -> Result<Value, KnowledgeAuthorityErrorV2> {
         let mut url = self.project_url(&["knowledge-sync", "changes"])?;
-        // One maximum-size memory, including JSON escaping and metadata, fits
-        // within bounded_json. The receipt's has_more drives subsequent calls.
         url.query_pairs_mut()
             .append_pair("after", &after.to_string())
             .append_pair("limit", "1");
@@ -142,23 +70,19 @@ impl VerifiedCloudTransport {
         &self,
         prepared: &PreparedKnowledgePush,
     ) -> Result<(Value, Option<Value>), KnowledgeAuthorityErrorV2> {
-        self.ensure_current()?;
-        let response = self
-            .client
-            .post(self.project_url(&["knowledge-sync", "mutations"])?)
-            .bearer_auth(&self.authority.credential)
+        let request = self
+            .connection
+            .request(
+                Method::POST,
+                self.project_url(&["knowledge-sync", "mutations"])?,
+                Some(&self.generation),
+            )?
             .header("content-type", "application/json")
-            .body(prepared.request_json.clone())
-            .send()
-            .await
-            .map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)?;
-        self.ensure_current()?;
-        let status = response.status();
-        if !matches!(status, StatusCode::OK | StatusCode::CONFLICT) {
-            return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
-        }
-        let response = bounded_json(response).await?;
-        self.ensure_current()?;
+            .body(prepared.request_json.clone());
+        let (status, response) = self
+            .connection
+            .send(request, &[StatusCode::OK, StatusCode::CONFLICT])
+            .await?;
         let conflict = if status == StatusCode::CONFLICT {
             if response["receipt"]["status"] != "conflict" {
                 return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
@@ -180,68 +104,14 @@ impl VerifiedCloudTransport {
         Ok((response, conflict))
     }
 
-    fn check_snapshot(
-        &self,
-        snapshot: TrustedSessionSnapshot,
-    ) -> Result<(), KnowledgeAuthorityErrorV2> {
-        let record = snapshot
-            .record
-            .ok_or(KnowledgeAuthorityErrorV2::TransportUnavailable)?;
-        if snapshot.epoch != self.epoch
-            || record.runtime_mode != TrustedSessionRuntimeMode::Cloud
-            || record.credential_kind != TrustedSessionCredentialKind::CloudBearer
-            || record.credential != self.authority.credential
-        {
-            return Err(KnowledgeAuthorityErrorV2::TransportUnavailable);
-        }
-        let base = Url::parse(&record.api_base_url)
-            .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
-        if control_plane_url(&base, "").as_str().trim_end_matches('/') != self.target.authority {
-            return Err(KnowledgeAuthorityErrorV2::TransportUnavailable);
-        }
-        if let Some(expires_at) = record.expires_at {
-            let expiry = chrono::DateTime::parse_from_rfc3339(&expires_at)
-                .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
-            if expiry <= chrono::Utc::now() {
-                return Err(KnowledgeAuthorityErrorV2::TransportUnavailable);
-            }
-        }
-        Ok(())
-    }
-
     pub(super) fn ensure_current(&self) -> Result<(), KnowledgeAuthorityErrorV2> {
-        self.with_current_session(|| Ok(()))
+        self.connection.ensure_current()
     }
 
     pub(super) fn with_current_session<T>(
         &self,
         action: impl FnOnce() -> Result<T, KnowledgeAuthorityErrorV2>,
     ) -> Result<T, KnowledgeAuthorityErrorV2> {
-        self.broker
-            .with_snapshot(|snapshot| {
-                self.check_snapshot(snapshot)?;
-                action()
-            })
-            .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?
+        self.connection.with_current_session(action)
     }
-}
-
-async fn bounded_json(response: Response) -> Result<Value, KnowledgeAuthorityErrorV2> {
-    const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
-    {
-        return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
-    }
-    let mut stream = response.bytes_stream();
-    let mut bytes = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)?;
-        if bytes.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
-            return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    serde_json::from_slice(&bytes).map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)
 }

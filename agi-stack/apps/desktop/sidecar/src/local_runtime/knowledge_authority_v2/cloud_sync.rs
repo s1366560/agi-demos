@@ -20,7 +20,7 @@ impl KnowledgeOperationV2 {
             .await?
             .link
             .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
-        let transport = VerifiedCloudTransport::connect(broker, link).await?;
+        let transport = self.connect_sync_transport(broker, link).await?;
         Ok((repository, transport))
     }
     async fn dispatch_cloud_resolution(

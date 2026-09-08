@@ -11,10 +11,10 @@ from typing import Any, cast
 
 if __package__:
     from .native_knowledge_capability_catalog import render_capability_catalog
-    from .native_knowledge_runtime_schema import render_processing_schema
+    from .native_knowledge_runtime_schema import render_connection_schema, render_processing_schema
 else:
     from native_knowledge_capability_catalog import render_capability_catalog
-    from native_knowledge_runtime_schema import render_processing_schema
+    from native_knowledge_runtime_schema import render_connection_schema, render_processing_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "shared/schemas/knowledge/native-knowledge.v1.schema.json"
@@ -202,6 +202,9 @@ def main() -> int:
         RUST.with_name("capabilities_generated.rs"): capability_rust,
         TYPESCRIPT.with_name("nativeKnowledgeCapabilityActionsGenerated.ts"): capability_ts,
         RUST: render_rust(definitions),
+        TYPESCRIPT.with_name(
+            "nativeKnowledgeConnectionSchemaGenerated.ts"
+        ): render_connection_schema(definitions),
         TYPESCRIPT.with_name(
             "nativeKnowledgeProcessingSchemaGenerated.ts"
         ): render_processing_schema(definitions),

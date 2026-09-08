@@ -451,3 +451,9 @@ mod local_acceptance_tests;
 
 #[path = "sync_auth_tests.rs"]
 mod sync_auth_tests;
+
+#[path = "sync_cloud_fixture.rs"]
+mod sync_cloud_fixture;
+
+#[path = "sync_connection_tests.rs"]
+mod sync_connection_tests;

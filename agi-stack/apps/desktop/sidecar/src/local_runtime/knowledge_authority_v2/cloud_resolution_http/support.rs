@@ -162,6 +162,12 @@ pub(super) async fn cloud() -> (Arc<Cloud>, String, tokio::task::JoinHandle<()>)
         release: Notify::new(),
     });
     let app = Router::new()
+        .route(
+            "/api/v1/projects/remote-project/knowledge-sync/enrollment",
+            get(
+                crate::local_runtime::knowledge_authority_v2::tests::sync_cloud_fixture::enrollment,
+            ),
+        )
         .route("/api/v1/auth/me", get(auth))
         .route("/api/v1/projects/remote-project", get(project))
         .route(

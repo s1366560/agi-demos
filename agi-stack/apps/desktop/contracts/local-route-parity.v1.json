@@ -2829,6 +2829,72 @@
           "config_revision": 1
         }
       }
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-connection",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-connection",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-tenants",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-tenants",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-projects",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-projects",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-enrollment",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-enrollment",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-enroll",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-enroll",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-bind",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-bind",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {}
     }
   ]
 }

@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memstack.local/schemas/native-knowledge-definitions-11.v1.schema.json",
+  "title": "Native knowledge definitions 11",
+  "$defs": {
+    "NativeKnowledgeSyncConnectionRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeScope"
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SyncConnectionRequest"
+    },
+    "NativeKnowledgeSyncTenantsRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeScope"
+        },
+        "expected_connection_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "scope",
+        "expected_connection_revision"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SyncTenantsRequest"
+    },
+    "NativeKnowledgeSyncProjectsRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeScope"
+        },
+        "expected_connection_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "scope",
+        "expected_connection_revision",
+        "tenant_id"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SyncProjectsRequest"
+    },
+    "NativeKnowledgeSyncEnrollmentRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeScope"
+        },
+        "expected_connection_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "project_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "scope",
+        "expected_connection_revision",
+        "tenant_id",
+        "project_id"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SyncEnrollmentRequest"
+    },
+    "NativeKnowledgeSyncTargetRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeScope"
+        },
+        "expected_connection_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "project_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "expected_generation": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCloudGeneration"
+        }
+      },
+      "required": [
+        "scope",
+        "expected_connection_revision",
+        "tenant_id",
+        "project_id",
+        "expected_generation"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SyncTargetRequest"
+    },
+    "NativeKnowledgeSyncConnectionResult": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncConnection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "connection"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeSyncTenantsResult": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncConnection"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncTenant"
+          }
+        }
+      },
+      "required": [
+        "connection",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeSyncProjectsResult": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncConnection"
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncProject"
+          }
+        }
+      },
+      "required": [
+        "connection",
+        "tenant_id",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeSyncEnrollmentResult": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncConnection"
+        },
+        "enrollment": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollment"
+        }
+      },
+      "required": [
+        "connection",
+        "enrollment"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeSyncBindingResult": {
+      "type": "object",
+      "properties": {
+        "connection": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncConnection"
+        },
+        "enrollment": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollment"
+        },
+        "status": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeStatus"
+        },
+        "association_state": {
+          "type": "string",
+          "const": "verified"
+        }
+      },
+      "required": [
+        "connection",
+        "enrollment",
+        "status",
+        "association_state"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

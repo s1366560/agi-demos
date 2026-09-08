@@ -80,6 +80,7 @@ async fn cloud(phase: Phase) -> (Arc<Cloud>, String, tokio::task::JoinHandle<()>
         conflict_id: Uuid::new_v4().to_string(),
     });
     let app = Router::new()
+        .route("/api/v1/projects/remote-project/knowledge-sync/enrollment", get(crate::local_runtime::knowledge_authority_v2::tests::sync_cloud_fixture::enrollment))
         .route("/api/v1/auth/me", get(auth))
         .route("/api/v1/projects/remote-project", get(project))
         .route(
@@ -90,6 +91,7 @@ async fn cloud(phase: Phase) -> (Arc<Cloud>, String, tokio::task::JoinHandle<()>
             "/api/v1/projects/remote-project/knowledge-sync/conflicts/:id",
             get(conflict),
         )
+        .layer(axum::middleware::from_fn(crate::local_runtime::knowledge_authority_v2::tests::sync_cloud_fixture::require_generation))
         .with_state(Arc::clone(&cloud));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());

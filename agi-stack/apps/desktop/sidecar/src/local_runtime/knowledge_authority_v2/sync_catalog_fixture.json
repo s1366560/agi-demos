@@ -1,0 +1,68 @@
+{
+  "tenants": {
+    "tenants": [
+      {
+        "id": "remote-tenant",
+        "name": "Remote tenant",
+        "slug": "remote",
+        "description": null,
+        "owner_id": "remote-actor",
+        "plan": "free",
+        "max_projects": 3,
+        "max_users": 10,
+        "max_storage": 1073741824,
+        "created_at": "2026-09-08T00:00:00Z",
+        "updated_at": null
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 100
+  },
+  "projects": {
+    "projects": [
+      {
+        "id": "remote-project",
+        "tenant_id": "remote-tenant",
+        "name": "Remote project",
+        "description": null,
+        "owner_id": "remote-actor",
+        "member_ids": [],
+        "memory_rules": {
+          "max_episodes": 1000,
+          "retention_days": 30,
+          "auto_refresh": true,
+          "refresh_interval": 24
+        },
+        "graph_config": {
+          "layout_algorithm": "force-directed",
+          "node_size": 20,
+          "edge_width": 2,
+          "colors": {},
+          "animations": true,
+          "max_nodes": 1000,
+          "max_edges": 10000,
+          "similarity_threshold": 0.7,
+          "community_detection": true
+        },
+        "graph_store_id": null,
+        "retrieval_store_id": null,
+        "graph_store": null,
+        "retrieval_store": null,
+        "sandbox_config": {
+          "sandbox_type": "cloud",
+          "local_config": null
+        },
+        "is_public": false,
+        "agent_conversation_mode": "single_agent",
+        "created_at": "2026-09-08T00:00:00Z",
+        "updated_at": null,
+        "stats": null
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 100,
+    "owner_ids": []
+  }
+}

@@ -17,31 +17,24 @@ impl VerifiedCloudTransport {
         &self,
         record: &KnowledgeCloudResolutionRecord,
     ) -> Result<CloudResolutionResponse, KnowledgeAuthorityErrorV2> {
-        self.ensure_current()?;
-        let response = self
-            .client
-            .post(self.project_url(&[
-                "knowledge-sync",
-                "conflicts",
-                &record.command.conflict_id,
-                "resolve",
-            ])?)
-            .bearer_auth(&self.authority.credential)
+        let request = self
+            .connection
+            .request(
+                Method::POST,
+                self.project_url(&[
+                    "knowledge-sync",
+                    "conflicts",
+                    &record.command.conflict_id,
+                    "resolve",
+                ])?,
+                Some(&self.generation),
+            )?
             .header("content-type", "application/json")
-            .body(record.request_json.clone())
-            .send()
-            .await
-            .map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)?;
-        self.ensure_current()?;
-        let status = response.status();
-        if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
-            return Err(KnowledgeAuthorityErrorV2::Forbidden);
-        }
-        if !matches!(status, StatusCode::OK | StatusCode::CONFLICT) {
-            return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
-        }
-        let response = bounded_json(response).await?;
-        self.ensure_current()?;
+            .body(record.request_json.clone());
+        let (status, response) = self
+            .connection
+            .send(request, &[StatusCode::OK, StatusCode::CONFLICT])
+            .await?;
         match status {
             StatusCode::OK => Ok(CloudResolutionResponse::Success(response)),
             StatusCode::CONFLICT

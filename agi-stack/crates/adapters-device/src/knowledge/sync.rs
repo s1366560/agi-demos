@@ -84,16 +84,22 @@ pub(super) fn enqueue_local(tx: &Transaction<'_>, sequence: u64) -> KnowledgeRes
     Ok(())
 }
 
-fn status(conn: &Connection, scope: &KnowledgeScope) -> KnowledgeResult<KnowledgeSyncStatus> {
+pub(super) fn status(
+    conn: &Connection,
+    scope: &KnowledgeScope,
+) -> KnowledgeResult<KnowledgeSyncStatus> {
     let link = conn.query_row(
         "SELECT remote_tenant_id,remote_project_id,remote_actor_id FROM knowledge_sync_links WHERE tenant_id=?1 AND project_id=?2",
         params![scope.tenant_id, scope.project_id],
         |row| Ok(KnowledgeSyncLink { remote_tenant_id: row.get(0)?, remote_project_id: row.get(1)?, remote_actor_id: row.get(2)? }),
     ).optional().map_err(storage)?;
-    let pending_changes = conn.query_row(
-        "SELECT count(*) FROM knowledge_pending_outbox WHERE tenant_id=?1 AND project_id=?2",
-        params![scope.tenant_id, scope.project_id], |row| row.get(0),
-    ).map_err(storage)?;
+    let pending_changes = conn
+        .query_row(
+            "SELECT count(*) FROM knowledge_pending_outbox WHERE tenant_id=?1 AND project_id=?2",
+            params![scope.tenant_id, scope.project_id],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
     Ok(KnowledgeSyncStatus {
         replica_id: replica(conn)?.to_string(),
         link,
@@ -101,7 +107,7 @@ fn status(conn: &Connection, scope: &KnowledgeScope) -> KnowledgeResult<Knowledg
     })
 }
 
-fn validate_identifier(value: &str) -> KnowledgeResult<()> {
+pub(super) fn validate_identifier(value: &str) -> KnowledgeResult<()> {
     if value.is_empty() || value.trim() != value || value.chars().count() > 512 {
         return Err(KnowledgeError::InvalidInput);
     }

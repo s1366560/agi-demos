@@ -20,6 +20,7 @@ mod push;
 mod resolution;
 mod retrieval;
 mod sync;
+mod sync_binding;
 
 pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 11;
 

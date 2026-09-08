@@ -16,6 +16,29 @@ mod cloud_sync;
 pub(super) use cloud_sync::CloudResolutionDispatch;
 
 impl KnowledgeOperationV2 {
+    async fn connect_sync_transport(
+        &self,
+        broker: &TrustedSessionBroker,
+        link: KnowledgeSyncLink,
+    ) -> Result<super::sync_transport::VerifiedCloudTransport, KnowledgeAuthorityErrorV2> {
+        self.authority.require_sync_release()?;
+        let transport =
+            super::sync_transport::VerifiedCloudTransport::connect(broker, link).await?;
+        let descriptor = &transport.generation.descriptor;
+        self.authority.require_sync_cloud_profile(
+            &descriptor.profile_id,
+            descriptor.generation,
+            &descriptor.digest,
+        )?;
+        transport.with_current_session(|| {
+            Ok(self
+                .authority
+                .repository()?
+                .require_verified_sync_target_durable(&self.scope, &transport.target)?)
+        })?;
+        Ok(transport)
+    }
+
     pub(super) async fn resolve_pull_conflicts(
         &self,
         broker: &TrustedSessionBroker,
@@ -31,8 +54,7 @@ impl KnowledgeOperationV2 {
             .await?
             .link
             .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
-        let transport =
-            super::sync_transport::VerifiedCloudTransport::connect(broker, link).await?;
+        let transport = self.connect_sync_transport(broker, link).await?;
         transport.with_current_session(|| {
             Ok(repository.resolve_pull_conflicts_durable(
                 &self.scope,
@@ -80,8 +102,7 @@ impl KnowledgeOperationV2 {
             .await?
             .link
             .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
-        let transport =
-            super::sync_transport::VerifiedCloudTransport::connect(broker, link).await?;
+        let transport = self.connect_sync_transport(broker, link).await?;
         let after = repository
             .pull_cursor(&self.scope, &transport.target)
             .await?;
@@ -120,8 +141,7 @@ impl KnowledgeOperationV2 {
             .await?
             .link
             .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
-        let transport =
-            super::sync_transport::VerifiedCloudTransport::connect(broker, link).await?;
+        let transport = self.connect_sync_transport(broker, link).await?;
         let Some(prepared) = repository
             .prepare_push(&self.scope, &transport.target)
             .await?

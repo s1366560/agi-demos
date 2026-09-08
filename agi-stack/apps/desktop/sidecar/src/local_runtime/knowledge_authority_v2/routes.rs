@@ -24,6 +24,8 @@ mod processing_routes;
 mod resolution_routes;
 #[path = "sync_admission.rs"]
 mod sync_admission;
+#[path = "sync_connection_routes.rs"]
+mod sync_connection_routes;
 
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
@@ -44,6 +46,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .route("/api/v1/knowledge/mutations", post(mutate))
         .merge(
             Router::new()
+                .merge(sync_connection_routes::router())
                 .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
                 .route("/api/v1/knowledge/sync-push", post(push_once))
                 .route("/api/v1/knowledge/sync-pull", post(pull_once))
@@ -331,6 +334,21 @@ impl IntoResponse for KnowledgeAuthorityErrorV2 {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "knowledge_processing_provider_unavailable",
                 "the workspace extraction provider is unavailable",
+            ),
+            Self::CloudConnectionMismatch => (
+                StatusCode::CONFLICT,
+                "knowledge_sync_connection_mismatch",
+                "the cloud connection must be observed again",
+            ),
+            Self::CloudGenerationMismatch => (
+                StatusCode::PRECONDITION_FAILED,
+                "knowledge_sync_cloud_generation_mismatch",
+                "the cloud synchronization generation must be observed again",
+            ),
+            Self::SyncNotEnrolled => (
+                StatusCode::CONFLICT,
+                "knowledge_sync_not_enrolled",
+                "the cloud project must be explicitly enrolled",
             ),
             Self::TransportUnavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,

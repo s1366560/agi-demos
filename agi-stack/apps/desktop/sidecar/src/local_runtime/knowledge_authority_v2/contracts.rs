@@ -197,6 +197,99 @@ pub(crate) struct ProcessingCommandRequest {
     pub(crate) command: ProcessingCommand,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncCloudGenerationDescriptor {
+    pub(crate) profile_id: String,
+    pub(crate) generation: u64,
+    pub(crate) digest: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncCloudGeneration {
+    pub(crate) contract_version: String,
+    pub(crate) descriptor: SyncCloudGenerationDescriptor,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncCloudConnectionProjection {
+    pub(crate) connection_revision: String,
+    pub(crate) authority: String,
+    pub(crate) actor_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncCloudTenant {
+    pub(crate) id: String,
+    pub(crate) name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncCloudProject {
+    pub(crate) id: String,
+    pub(crate) tenant_id: String,
+    pub(crate) name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncCloudEnrollment {
+    pub(crate) contract_version: String,
+    pub(crate) tenant_id: String,
+    pub(crate) project_id: String,
+    pub(crate) actor_id: String,
+    pub(crate) enabled: bool,
+    pub(crate) can_enroll: bool,
+    pub(crate) bootstrap_count: u64,
+    pub(crate) next_cursor: u64,
+    pub(crate) replayed: bool,
+    pub(crate) generation: SyncCloudGeneration,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncConnectionRequest {
+    pub(crate) scope: KnowledgeOperationScopeV2,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncTenantsRequest {
+    pub(crate) scope: KnowledgeOperationScopeV2,
+    pub(crate) expected_connection_revision: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncProjectsRequest {
+    pub(crate) scope: KnowledgeOperationScopeV2,
+    pub(crate) expected_connection_revision: String,
+    pub(crate) tenant_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncEnrollmentRequest {
+    pub(crate) scope: KnowledgeOperationScopeV2,
+    pub(crate) expected_connection_revision: String,
+    pub(crate) tenant_id: String,
+    pub(crate) project_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SyncTargetRequest {
+    pub(crate) scope: KnowledgeOperationScopeV2,
+    pub(crate) expected_connection_revision: String,
+    pub(crate) tenant_id: String,
+    pub(crate) project_id: String,
+    pub(crate) expected_generation: SyncCloudGeneration,
+}
+
 fn required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,

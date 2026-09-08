@@ -7,12 +7,8 @@ use std::{
 };
 
 use super::*;
-use crate::application_vault::ApplicationCredentialVault;
 use crate::local_runtime::local_router_with_generation_required;
-use crate::trusted_session::{
-    TrustedSessionBroker, TrustedSessionCredentialKind, TrustedSessionRecord,
-    TrustedSessionRuntimeMode,
-};
+use crate::trusted_session::TrustedSessionBroker;
 use agistack_core::knowledge::sync::KnowledgeSyncLink;
 use axum::{
     body::{to_bytes, Body},
@@ -99,6 +95,7 @@ async fn conflict(
 async fn cloud() -> (Arc<Cloud>, String, tokio::task::JoinHandle<()>) {
     let cloud = Arc::new(Cloud::default());
     let app = Router::new()
+        .route("/api/v1/projects/remote-project/knowledge-sync/enrollment", get(crate::local_runtime::knowledge_authority_v2::tests::sync_cloud_fixture::enrollment))
         .route("/api/v1/auth/me", get(user))
         .route("/api/v1/projects/remote-project", get(project))
         .route(
@@ -109,6 +106,7 @@ async fn cloud() -> (Arc<Cloud>, String, tokio::task::JoinHandle<()>) {
             "/api/v1/projects/remote-project/knowledge-sync/conflicts/:id",
             get(conflict),
         )
+        .layer(axum::middleware::from_fn(crate::local_runtime::knowledge_authority_v2::tests::sync_cloud_fixture::require_generation))
         .with_state(Arc::clone(&cloud));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -122,22 +120,35 @@ pub(super) fn install_broker(
     directory: &TestDirectory,
     base: String,
 ) -> TrustedSessionBroker {
-    let broker = TrustedSessionBroker::native(
-        ApplicationCredentialVault::open(&directory.0.join("test-vault")).unwrap(),
+    let broker = super::sync_cloud_fixture::install_unbound(state, directory, base.clone());
+    // Existing transport/replay tests start with an explicitly bound mock cloud.
+    // New connection tests install_unbound and exercise the production bind RPC.
+    let auth = authenticated(state);
+    let lease = Arc::new(
+        state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .unwrap(),
     );
-    broker
-        .save(TrustedSessionRecord {
-            version: 1,
-            api_base_url: base,
-            runtime_mode: TrustedSessionRuntimeMode::Cloud,
-            credential_kind: TrustedSessionCredentialKind::CloudBearer,
-            credential: "cloud-test-credential".into(),
-            expires_at: None,
-        })
+    let operation =
+        KnowledgeOperationV2::admit(lease.clone(), &auth, &operation_scope(&auth, &lease)).unwrap();
+    operation
+        .authority
+        .repository()
+        .unwrap()
+        .bind_verified_sync_target_durable(
+            &operation.scope,
+            &agistack_core::knowledge::sync::push::KnowledgeSyncTarget {
+                authority: format!("{}/api/v1", base.trim_end_matches('/')),
+                link: KnowledgeSyncLink {
+                    remote_tenant_id: "remote-tenant".into(),
+                    remote_project_id: "remote-project".into(),
+                    remote_actor_id: "remote-actor".into(),
+                },
+            },
+            &|| Ok(()),
+        )
         .unwrap();
-    state
-        .platform_plugin_authority_v2
-        .install_trusted_sessions(broker.clone());
     broker
 }
 pub(super) async fn setup(

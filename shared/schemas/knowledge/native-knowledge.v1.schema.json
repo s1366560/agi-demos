@@ -252,6 +252,54 @@
     },
     "NativeKnowledgeCapabilitiesResponse": {
       "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilitiesResponse"
+    },
+    "NativeKnowledgeCloudGenerationDescriptor": {
+      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeCloudGenerationDescriptor"
+    },
+    "NativeKnowledgeCloudGeneration": {
+      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeCloudGeneration"
+    },
+    "NativeKnowledgeSyncConnection": {
+      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncConnection"
+    },
+    "NativeKnowledgeSyncTenant": {
+      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncTenant"
+    },
+    "NativeKnowledgeSyncProject": {
+      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncProject"
+    },
+    "NativeKnowledgeSyncEnrollment": {
+      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollment"
+    },
+    "NativeKnowledgeSyncConnectionRequest": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncConnectionRequest"
+    },
+    "NativeKnowledgeSyncTenantsRequest": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTenantsRequest"
+    },
+    "NativeKnowledgeSyncProjectsRequest": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncProjectsRequest"
+    },
+    "NativeKnowledgeSyncEnrollmentRequest": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollmentRequest"
+    },
+    "NativeKnowledgeSyncTargetRequest": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTargetRequest"
+    },
+    "NativeKnowledgeSyncConnectionResult": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncConnectionResult"
+    },
+    "NativeKnowledgeSyncTenantsResult": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTenantsResult"
+    },
+    "NativeKnowledgeSyncProjectsResult": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncProjectsResult"
+    },
+    "NativeKnowledgeSyncEnrollmentResult": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollmentResult"
+    },
+    "NativeKnowledgeSyncBindingResult": {
+      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncBindingResult"
     }
   },
   "x-routes": {
@@ -405,6 +453,78 @@
       "method": "GET",
       "response": {
         "$ref": "#/$defs/NativeKnowledgeCapabilitiesResponse"
+      }
+    },
+    "/api/v1/knowledge/sync-connection": {
+      "method": "POST",
+      "request": {
+        "$ref": "#/$defs/NativeKnowledgeSyncConnectionRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/NativeKnowledgeEnvelope"
+      },
+      "result": {
+        "$ref": "#/$defs/NativeKnowledgeSyncConnectionResult"
+      }
+    },
+    "/api/v1/knowledge/sync-tenants": {
+      "method": "POST",
+      "request": {
+        "$ref": "#/$defs/NativeKnowledgeSyncTenantsRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/NativeKnowledgeEnvelope"
+      },
+      "result": {
+        "$ref": "#/$defs/NativeKnowledgeSyncTenantsResult"
+      }
+    },
+    "/api/v1/knowledge/sync-projects": {
+      "method": "POST",
+      "request": {
+        "$ref": "#/$defs/NativeKnowledgeSyncProjectsRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/NativeKnowledgeEnvelope"
+      },
+      "result": {
+        "$ref": "#/$defs/NativeKnowledgeSyncProjectsResult"
+      }
+    },
+    "/api/v1/knowledge/sync-enrollment": {
+      "method": "POST",
+      "request": {
+        "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/NativeKnowledgeEnvelope"
+      },
+      "result": {
+        "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentResult"
+      }
+    },
+    "/api/v1/knowledge/sync-enroll": {
+      "method": "POST",
+      "request": {
+        "$ref": "#/$defs/NativeKnowledgeSyncTargetRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/NativeKnowledgeEnvelope"
+      },
+      "result": {
+        "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentResult"
+      }
+    },
+    "/api/v1/knowledge/sync-bind": {
+      "method": "POST",
+      "request": {
+        "$ref": "#/$defs/NativeKnowledgeSyncTargetRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/NativeKnowledgeEnvelope"
+      },
+      "result": {
+        "$ref": "#/$defs/NativeKnowledgeSyncBindingResult"
       }
     }
   },

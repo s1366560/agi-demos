@@ -39,9 +39,11 @@ mod routes;
 mod semantic_query;
 mod storage_lifecycle;
 mod sync;
+mod sync_connection;
 mod sync_transport;
 #[cfg(test)]
 mod tests;
+mod trusted_cloud_connection;
 
 pub(super) const MODULE_REF: &str = "builtin://memstack/desktop-sidecar/knowledge-authority";
 pub(super) const SERVICE: &str = "service:desktop-sidecar.knowledge-authority";
@@ -161,6 +163,7 @@ impl PluginModuleRuntimeV2 for KnowledgeModuleV2 {
         }));
         let service = KnowledgeAuthorityV2 {
             inner: Arc::clone(&inner),
+            sync_connection_nonce: uuid::Uuid::new_v4(),
         };
         context.effect(
             "knowledge-storage-lifetime",
@@ -189,6 +192,7 @@ struct KnowledgeState {
 }
 
 pub(super) struct KnowledgeAuthorityV2 {
+    sync_connection_nonce: uuid::Uuid,
     inner: Arc<Mutex<KnowledgeState>>,
 }
 
@@ -227,6 +231,12 @@ pub(super) enum KnowledgeAuthorityErrorV2 {
     TransportUnavailable,
     #[error("cloud synchronization request failed")]
     RemoteRejected,
+    #[error("cloud connection observation is no longer current")]
+    CloudConnectionMismatch,
+    #[error("cloud synchronization generation is no longer current")]
+    CloudGenerationMismatch,
+    #[error("cloud project is not enrolled for synchronization")]
+    SyncNotEnrolled,
     #[error("knowledge and synchronization release is closed")]
     ReleaseClosed,
     #[error("knowledge authority is disposed")]

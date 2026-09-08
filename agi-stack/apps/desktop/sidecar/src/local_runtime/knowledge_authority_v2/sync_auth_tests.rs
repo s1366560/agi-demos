@@ -1,5 +1,5 @@
 //! The fixture is serialized by the production Python auth.User schema.
-use super::push_http_tests::install_broker;
+use super::sync_cloud_fixture::install_unbound;
 use super::*;
 use crate::local_runtime::knowledge_authority_v2::sync_transport::VerifiedCloudTransport;
 use agistack_core::knowledge::sync::KnowledgeSyncLink;
@@ -14,6 +14,10 @@ async fn verify(user: Value, actor: &str) -> (bool, usize) {
     let project_calls = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&project_calls);
     let app = Router::new()
+        .route(
+            "/api/v1/projects/remote-project/knowledge-sync/enrollment",
+            get(super::sync_cloud_fixture::enrollment),
+        )
         .route("/api/v1/auth/me", get(move || async move { Json(user) }))
         .route(
             "/api/v1/projects/remote-project",
@@ -27,7 +31,7 @@ async fn verify(user: Value, actor: &str) -> (bool, usize) {
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let directory = TestDirectory::new();
     let state = test_state(TOKEN);
-    let broker = install_broker(&state, &directory, base);
+    let broker = install_unbound(&state, &directory, base);
     let result = VerifiedCloudTransport::connect(
         &broker,
         KnowledgeSyncLink {

@@ -469,3 +469,82 @@ export type NativeKnowledgeCapabilityEntry = {
   readonly supporting_authority_sources: readonly ("cloud_service" | "sidecar" | "electron" | "native_runtime" | "renderer")[];
   readonly provenance: "observed" | "declared";
 };
+
+// prettier-ignore
+export type NativeKnowledgeCloudGenerationDescriptor = {
+  readonly profile_id: string;
+  readonly generation: number;
+  readonly digest: string;
+};
+
+// prettier-ignore
+export type NativeKnowledgeCloudGeneration = {
+  readonly contract_version: "1.0.0";
+  readonly descriptor: NativeKnowledgeCloudGenerationDescriptor;
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncConnection = {
+  readonly connection_revision: string;
+  readonly authority: string;
+  readonly actor_id: string;
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncTenant = {
+  readonly id: string;
+  readonly name: string;
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncProject = {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly name: string;
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncEnrollment = {
+  readonly contract_version: "1.0.0";
+  readonly tenant_id: string;
+  readonly project_id: string;
+  readonly actor_id: string;
+  readonly enabled: boolean;
+  readonly can_enroll: boolean;
+  readonly bootstrap_count: number;
+  readonly next_cursor: number;
+  readonly replayed: boolean;
+  readonly generation: NativeKnowledgeCloudGeneration;
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncConnectionResult = {
+  readonly connection: (NativeKnowledgeSyncConnection) | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncTenantsResult = {
+  readonly connection: NativeKnowledgeSyncConnection;
+  readonly items: readonly (NativeKnowledgeSyncTenant)[];
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncProjectsResult = {
+  readonly connection: NativeKnowledgeSyncConnection;
+  readonly tenant_id: string;
+  readonly items: readonly (NativeKnowledgeSyncProject)[];
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncEnrollmentResult = {
+  readonly connection: NativeKnowledgeSyncConnection;
+  readonly enrollment: NativeKnowledgeSyncEnrollment;
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncBindingResult = {
+  readonly connection: NativeKnowledgeSyncConnection;
+  readonly enrollment: NativeKnowledgeSyncEnrollment;
+  readonly status: NativeKnowledgeStatus;
+  readonly association_state: "verified";
+};

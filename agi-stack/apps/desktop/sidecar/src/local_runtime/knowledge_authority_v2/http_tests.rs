@@ -161,7 +161,10 @@ async fn executable_catalog_negative_routes_enforce_closed_release() {
         assert_eq!(probe["expected_reason_code"], "knowledge_release_closed");
         let uri = probe["uri"].as_str().unwrap();
         assert_eq!(probe["source_marker"], uri);
-        assert!(include_str!("routes.rs").contains(uri));
+        assert!(
+            include_str!("routes.rs").contains(uri)
+                || include_str!("sync_connection_routes.rs").contains(uri)
+        );
         assert!(observed.insert(uri));
         let mut body = probe["body"].clone();
         body["scope"] = serde_json::to_value(request_scope(&state)).unwrap();
@@ -186,6 +189,12 @@ async fn executable_catalog_negative_routes_enforce_closed_release() {
             "/api/v1/knowledge/query",
             "/api/v1/knowledge/mutations",
             "/api/v1/knowledge/sync-link",
+            "/api/v1/knowledge/sync-connection",
+            "/api/v1/knowledge/sync-tenants",
+            "/api/v1/knowledge/sync-projects",
+            "/api/v1/knowledge/sync-enrollment",
+            "/api/v1/knowledge/sync-enroll",
+            "/api/v1/knowledge/sync-bind",
             "/api/v1/knowledge/sync-push",
             "/api/v1/knowledge/sync-pull",
             "/api/v1/knowledge/sync-resolve-pull",
