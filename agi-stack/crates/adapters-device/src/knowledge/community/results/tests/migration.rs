@@ -83,7 +83,7 @@ fn upgrade_preserves_b1_input_lease_and_existing_sources_and_audits() {
         .sql()
         .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 14);
+    assert_eq!(version, crate::knowledge::KNOWLEDGE_SCHEMA_VERSION);
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn missing_result_schema_and_future_versions_fail_closed() {
     for sql in [
         "DROP TABLE knowledge_community_selection",
         "DROP TRIGGER knowledge_community_audit_no_delete",
-        "UPDATE knowledge_schema SET version=15",
+        "UPDATE knowledge_schema SET version=version+1",
     ] {
         let db = Database::new();
         drop(db.open());

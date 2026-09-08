@@ -72,7 +72,7 @@ fn missing_current_community_objects_and_future_schema_fail_closed() {
     for damage in [
         "DROP TABLE knowledge_community_jobs",
         "DROP TRIGGER knowledge_community_member_immutable",
-        "UPDATE knowledge_schema SET version=15",
+        "UPDATE knowledge_schema SET version=version+1",
     ] {
         let db = Database::new();
         drop(db.open());

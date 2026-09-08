@@ -18,6 +18,7 @@ mod index;
 mod metadata;
 mod mutations;
 mod processing;
+pub mod project_schema;
 mod pull;
 mod push;
 mod resolution;
@@ -25,7 +26,7 @@ mod retrieval;
 mod sync;
 mod sync_binding;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 14;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 15;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -105,6 +106,7 @@ impl SqliteKnowledgeRepository {
         index::configuration::migrate(&tx, version)?;
         metadata::migrate(&tx, version)?;
         community::migrate(&tx, version)?;
+        project_schema::migrate(&tx, version)?;
         tx.execute(
             "UPDATE knowledge_schema SET version=?1",
             [KNOWLEDGE_SCHEMA_VERSION],
