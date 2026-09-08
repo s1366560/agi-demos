@@ -1,13 +1,55 @@
-"""Performance benchmarks comparing old (server/) vs new (src/) architecture."""
+"""In-process HTTP benchmarks with SQLite and mocked external graph services."""
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
-# NOTE: Performance tests require special infrastructure and are out of scope for unit/integration test coverage
-# These should be run separately in a CI/CD pipeline with performance baselines
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
+from src.infrastructure.agent.plugins.skill_evolution.scheduler import EvolutionScheduler
+from src.infrastructure.plugins.v2.builtin_enhanced_search_http_routes import (
+    ENHANCED_SEARCH_HTTP_ROUTES_ROW_V2,
+)
+from src.infrastructure.plugins.v2.builtin_episodes_http_routes import EPISODES_HTTP_ROUTES_ROW_V2
+from src.infrastructure.plugins.v2.builtin_memories_http_routes import MEMORIES_HTTP_ROUTES_ROW_V2
+from src.infrastructure.plugins.v2.builtin_projects_http_routes import PROJECTS_HTTP_ROUTES_ROW_V2
+
+
+@pytest.fixture
+async def client(
+    test_app: FastAPI, mock_graph_service: object, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[AsyncClient]:
+    """Measure in-process HTTP with real V2 routes and mocked external graph work."""
+
+    async def graph_runtime_factory() -> object:
+        return mock_graph_service
+
+    monkeypatch.setattr(EvolutionScheduler, "start", AsyncMock())
+    await initialize_plugin_runtime_v2(test_app, graph_runtime_factory=graph_runtime_factory)
+    try:
+        assert {
+            EPISODES_HTTP_ROUTES_ROW_V2,
+            MEMORIES_HTTP_ROUTES_ROW_V2,
+            PROJECTS_HTTP_ROUTES_ROW_V2,
+            ENHANCED_SEARCH_HTTP_ROUTES_ROW_V2,
+        } <= set(test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids)
+        async with AsyncClient(
+            transport=ASGITransport(app=test_app), base_url="http://test"
+        ) as client:
+            yield client
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+
+
+# These measure application HTTP overhead with test adapters, not PostgreSQL pool
+# throughput or external graph/model latency. Run separately against stable CI baselines.
 
 
 @pytest.mark.performance
@@ -15,7 +57,6 @@ import pytest
 class TestPerformanceBenchmarks:
     """Performance benchmarks for API endpoints."""
 
-    @pytest.mark.asyncio
     async def test_episode_creation_performance(
         self, client, mock_graphiti_client, test_project_db
     ):
@@ -31,13 +72,13 @@ class TestPerformanceBenchmarks:
             "tenant_id": test_project_db.tenant_id,
         }
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         for _ in range(iterations):
-            response = client.post("/api/v1/episodes/", json=sample_data)
+            response = await client.post("/api/v1/episodes/", json=sample_data)
             assert response.status_code == 202
 
-        end_time = time.time()
+        end_time = time.perf_counter()
         total_time = end_time - start_time
         avg_time = (total_time / iterations) * 1000  # Convert to ms
 
@@ -47,23 +88,23 @@ class TestPerformanceBenchmarks:
         print(f"  Throughput: {iterations / total_time:.2f} req/s")
 
         # Performance assertions
+        assert mock_graphiti_client.add_episode.await_count == iterations
         assert avg_time < 100, f"Average response time too high: {avg_time:.2f}ms"
 
-    @pytest.mark.asyncio
-    async def test_search_performance(self, client, test_project_db):
+    async def test_search_performance(self, client, test_project_db, mock_graph_service):
         """Benchmark search endpoint."""
         iterations = 50
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         for _ in range(iterations):
-            response = client.post(
+            response = await client.post(
                 "/api/v1/search-enhanced/advanced",
                 json={"query": "test search", "limit": 20, "project_id": test_project_db.id},
             )
             assert response.status_code == 200
 
-        end_time = time.time()
+        end_time = time.perf_counter()
         total_time = end_time - start_time
         avg_time = (total_time / iterations) * 1000
 
@@ -72,23 +113,23 @@ class TestPerformanceBenchmarks:
         print(f"  Average time: {avg_time:.2f}ms")
         print(f"  Throughput: {iterations / total_time:.2f} req/s")
 
+        assert mock_graph_service.search.await_count == iterations
         assert avg_time < 200, f"Search response time too high: {avg_time:.2f}ms"
 
-    @pytest.mark.asyncio
     async def test_list_episodes_performance(self, client, test_project_db):
         """Benchmark list episodes endpoint."""
         iterations = 100
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         for _ in range(iterations):
-            response = client.get(
+            response = await client.get(
                 f"/api/v1/episodes/?limit=50&tenant_id={test_project_db.tenant_id}"
                 f"&project_id={test_project_db.id}"
             )
             assert response.status_code == 200
 
-        end_time = time.time()
+        end_time = time.perf_counter()
         total_time = end_time - start_time
         avg_time = (total_time / iterations) * 1000
 
@@ -99,21 +140,20 @@ class TestPerformanceBenchmarks:
 
         assert avg_time < 50, f"List response time too high: {avg_time:.2f}ms"
 
-    @pytest.mark.asyncio
     async def test_concurrent_requests(self, client):
         """Benchmark concurrent request handling."""
 
         async def make_request(client):
-            response = client.get("/api/v1/episodes/health")
+            response = await client.get("/api/v1/episodes/health")
             return response
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         # Make 50 concurrent requests
         tasks = [make_request(client) for _ in range(50)]
         responses = await asyncio.gather(*tasks)
 
-        end_time = time.time()
+        end_time = time.perf_counter()
         total_time = end_time - start_time
 
         successful = sum(1 for r in responses if r.status_code == 200)
@@ -126,7 +166,6 @@ class TestPerformanceBenchmarks:
 
         assert successful == 50, f"Some requests failed: {successful}/50"
 
-    @pytest.mark.asyncio
     async def test_memory_crud_performance(self, client, test_project_db):
         """Benchmark memory CRUD operations."""
         # Create
@@ -138,21 +177,27 @@ class TestPerformanceBenchmarks:
             "tenant_id": test_project_db.tenant_id,
         }
 
-        start_time = time.time()
-        response = client.post("/api/v1/memories/", json=create_data)
-        create_time = (time.time() - start_time) * 1000
+        start_time = time.perf_counter()
+        response = await client.post("/api/v1/memories/", json=create_data)
+        create_time = (time.perf_counter() - start_time) * 1000
 
         # Read
-        memory_id = response.json().get("id", "bench_id")
-        start_time = time.time()
-        response = client.get(f"/api/v1/memories/{memory_id}")
-        read_time = (time.time() - start_time) * 1000
+        assert response.status_code == 201
+        memory_id = response.json()["id"]
+        start_time = time.perf_counter()
+        response = await client.get(f"/api/v1/memories/{memory_id}")
+        read_time = (time.perf_counter() - start_time) * 1000
+        assert response.status_code == 200
+        assert response.json()["title"] == create_data["title"]
 
         # Update
-        update_data = {"title": "Updated Bench Memory"}
-        start_time = time.time()
-        response = client.patch(f"/api/v1/memories/{memory_id}", json=update_data)
-        update_time = (time.time() - start_time) * 1000
+        update_data = {"title": "Updated Bench Memory", "version": response.json()["version"]}
+        start_time = time.perf_counter()
+        response = await client.patch(f"/api/v1/memories/{memory_id}", json=update_data)
+        update_time = (time.perf_counter() - start_time) * 1000
+        assert response.status_code == 200
+        assert response.json()["title"] == update_data["title"]
+        assert response.json()["version"] == update_data["version"] + 1
 
         print("\nMemory CRUD Performance:")
         print(f"  Create: {create_time:.2f}ms")
@@ -166,7 +211,7 @@ class TestPerformanceBenchmarks:
 
 @pytest.mark.performance
 class TestArchitectureComparison:
-    """Compare performance between old (server/) and new (src/) architecture."""
+    """Legacy descriptive comparisons, not measured performance results."""
 
     def test_old_vs_new_episode_creation(self):
         """
@@ -240,12 +285,11 @@ class TestArchitectureComparison:
 class TestScalabilityBenchmarks:
     """Test scalability characteristics of the new architecture."""
 
-    @pytest.mark.asyncio
     async def test_memory_leak_check(self, client, mock_graphiti_client):
         """Check for memory leaks with repeated requests."""
         import gc
 
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=Mock(records=[]))
+        mock_graphiti_client.health_probe = AsyncMock(return_value=True)
 
         # Force garbage collection
         gc.collect()
@@ -255,8 +299,10 @@ class TestScalabilityBenchmarks:
 
         # Make many requests
         for _ in range(100):
-            response = client.get("/api/v1/episodes/health")
+            response = await client.get("/api/v1/episodes/health")
             assert response.status_code == 200
+
+        assert mock_graphiti_client.health_probe.await_count == 100
 
         # Force garbage collection again
         gc.collect()
@@ -276,27 +322,26 @@ class TestScalabilityBenchmarks:
         # Allow some growth but not excessive
         assert growth_percent < 20, f"Possible memory leak: {growth_percent:.2f}% growth"
 
-    @pytest.mark.asyncio
     async def test_database_connection_pool(self, client):
-        """Test database connection pool under load."""
+        """Exercise concurrent database-backed HTTP requests using the SQLite test engine."""
 
         # Make many concurrent database requests
         async def db_request():
-            response = client.get("/api/v1/projects/")
+            response = await client.get("/api/v1/projects/")
             return response
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         # 100 concurrent requests
         tasks = [db_request() for _ in range(100)]
         responses = await asyncio.gather(*tasks)
 
-        end_time = time.time()
+        end_time = time.perf_counter()
 
         successful = sum(1 for r in responses if r.status_code == 200)
         avg_time = ((end_time - start_time) / 100) * 1000
 
-        print("\nDatabase Connection Pool Test:")
+        print("\nConcurrent SQLite HTTP Request Test:")
         print("  Concurrent requests: 100")
         print(f"  Successful: {successful}/100")
         print(f"  Average time: {avg_time:.2f}ms")
@@ -322,9 +367,9 @@ def run_benchmark(func: callable, iterations: int = 100) -> dict:
     times = []
 
     for _ in range(iterations):
-        start = time.time()
+        start = time.perf_counter()
         func()
-        end = time.time()
+        end = time.perf_counter()
         times.append((end - start) * 1000)  # Convert to ms
 
     return {
