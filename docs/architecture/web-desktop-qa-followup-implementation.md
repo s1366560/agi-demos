@@ -930,3 +930,28 @@ passed after the branch's catalog re-digest. Rollback: revert the five
 cherry-picks together; schema v9/v10 databases and their backups are
 retained, and older binaries refuse the newer schema instead of rewriting
 it.
+
+I2.6 integrates `codex/knowledge-crud-client` (cherry-picked as `58eb560b4`,
+`a8183af64`, `7d816e84c`; conflict-free, one disjoint auto-merge in the
+sidecar test module list) plus the follow-up token fix `462096138`. The
+renderer gains a typed native memory CRUD client (create forces
+`version === 1`, update pins `memory.version === expected_revision`, receipt
+cross-field invariants, 422/409 scope guards) and a scoped native memory
+editing interface (controller state machine with uncertain-retry and
+conflict/contextChanged handling, route surface selected only when the
+binding's authority is local, every transport call re-fetching and comparing
+the observed scope). A cross-process producer/consumer contract test covers
+replay, late-write generation mismatch and restart, and stays
+`#[ignore]`-gated until acceptance supplies `KNOWLEDGE_RENDERER_COMPILED_ROOT`.
+The release contract remains closed in production, so the interface renders
+its unavailable state outside validation. The merged CSS initially used five
+hardcoded hex literals; the design-token gate (migrated-literal and
+zero-budget tests) failed first, and `462096138` moved the declarations onto
+existing tokens. Validation: full Desktop suite 4315 passed, 2 binary-gated
+skips, 1 known failure — the revision-bound parity audit still references
+`a5c1e631f` while the merged batch changed `App.tsx`; formal regeneration is
+scheduled at the next source freeze (same disposition as earlier batches),
+not weakened. Sidecar suite 716/716 with the contract test ignored by
+design; renderer TypeScript passed. Rollback: revert the three cherry-picks
+and the token fix together; persisted memories and receipts are untouched
+because the closed gate never reached storage.
