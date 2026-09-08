@@ -3,29 +3,36 @@ import {
   isRecord,
   optionalText,
   projectKnowledgeError,
-  requireIdentifier,
   requireNonnegativeInteger,
   requireText,
   type ProjectKnowledgeScope,
 } from './projectKnowledgeClient';
 
 export function parseMemoryV2(payload: unknown, scope: ProjectKnowledgeScope): ProjectMemory {
-  if (!isRecord(payload) || payload.project_id !== scope.projectId) {
+  if (!isRecord(payload)) {
+    throw projectKnowledgeError('project_memory_contract_invalid');
+  }
+  const projectId = responseIdentifier(payload.project_id);
+  if (projectId !== scope.projectId) {
     throw projectKnowledgeError('project_memory_scope_conflict', 409);
   }
   return Object.freeze({
-    id: requireIdentifier(payload.id, 'project_memory_contract_invalid'),
+    id: responseIdentifier(payload.id),
     projectId: scope.projectId,
-    title: requireIdentifier(payload.title, 'project_memory_contract_invalid'),
+    title: responseIdentifier(payload.title),
     content: requireText(payload.content, 'project_memory_contract_invalid'),
-    contentType: requireIdentifier(payload.content_type, 'project_memory_contract_invalid'),
+    contentType: responseIdentifier(payload.content_type),
     version: requireNonnegativeInteger(payload.version, 'project_memory_contract_invalid'),
-    status: requireIdentifier(payload.status, 'project_memory_contract_invalid'),
-    processingStatus: requireIdentifier(
-      payload.processing_status,
-      'project_memory_contract_invalid',
-    ),
-    createdAt: requireIdentifier(payload.created_at, 'project_memory_contract_invalid'),
+    status: responseIdentifier(payload.status),
+    processingStatus: responseIdentifier(payload.processing_status),
+    createdAt: responseIdentifier(payload.created_at),
     updatedAt: optionalText(payload.updated_at, 'project_memory_contract_invalid'),
   });
+}
+
+function responseIdentifier(value: unknown): string {
+  if (typeof value !== 'string' || !value || value !== value.trim()) {
+    throw projectKnowledgeError('project_memory_contract_invalid');
+  }
+  return value;
 }

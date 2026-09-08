@@ -271,7 +271,9 @@ export async function executeVaultBoundCloudRequest(
     Object.freeze({ path: '/api/v1/workspace-context', method: 'GET' }),
   );
   const contextBody = await boundedJson(contextResponse, false, session.credential);
-  if (!contextResponse.ok) throw new Error('cloud request scope observation failed');
+  if (!contextResponse.ok) {
+    return Object.freeze({ status: contextResponse.status, body: contextBody });
+  }
   const context = await observeEndpointWorkspaceScope(
     endpoint, parseObservedContext(contextBody), session, dependencies,
   );
