@@ -17,14 +17,20 @@ Approved baseline: `e9ae3a1d3`, 2026-09-07. Evidence source:
 
 ## Iteration ledger
 
+Current delivery verification follows `AGENTS.md`: executable unit and integration
+tests, compilation, application authorization, signing and updater artifact checks.
+Historical parity manifests, route inventories, judgment ledgers, source/revision
+binding and manual evidence promotion requirements below are superseded and must
+not be recreated.
+
 | Iteration | Work | Status | Release gate |
 | --- | --- | --- | --- |
-| I0 | Cron admission, coherent test evidence, credential recovery | In progress | No orphan admission; same-revision full checks |
+| I0 | Cron admission, full test suites, credential recovery | In progress | No orphan admission; executable full checks |
 | I1 | Shared contracts, snapshot isolation, entrypoint extraction | In progress | Cross-process positive and negative contracts |
 | I2 | Scoped local knowledge, CRUD/CAS, jobs, cloud operations | In progress | Scope, revision, durability; release with I3 |
 | I3 | Local extraction/retrieval, entities/community, bidirectional sync | In progress | Offline runtime and conflict/recovery acceptance |
-| I4 | Single cloud scheduler authority and local execution parity | In progress | Real runs and recovery in all three client modes |
-| I5 | Graph navigation, processing/sync diagnostics, populated governance QA | Pending | Actionable diagnosis and recovery |
+| I4 | Single cloud scheduler authority and consistent local execution | In progress | Real runs and recovery in all three client modes |
+| I5 | Graph navigation, processing/sync diagnostics, populated governance QA | In progress | Actionable diagnosis and recovery |
 | I6 | Identity, external integrations and signed/platform releases | Pending | Per-platform and per-integration evidence |
 
 ## Batch I0.1: command admission

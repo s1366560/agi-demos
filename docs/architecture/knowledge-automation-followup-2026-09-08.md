@@ -314,3 +314,41 @@ had a timing failure (MCP delete timeout, then PTY EOF); those failures remain i
 their logs. Desktop full at this revision had 4,718 passed, two failed and two
 skipped: stale parity evidence and an obsolete aggregate lease-event assertion.
 This is not a completed shared release gate.
+
+## Portable metadata, native recovery and community storage
+
+Current verification follows executable tests and native behavior checks. The
+historical parity and manual promotion requirements above were retired; they are
+not prerequisites and must not be recreated.
+
+Native and Web editing now preserve user metadata as a JSON object, separately
+from record tags. Invalid objects retain the draft without sending a mutation.
+Web's detail sidebar also reads the persisted record tags rather than an unrelated
+`metadata.tags` field. The editor submits the displayed revision through the
+existing memory command path; a conflict retains the draft.
+
+The isolated native memory `Native Metadata QA 20260908` was created with nested
+arrays, a boolean, a decimal and null, then pushed to the real Web memory page.
+The Web editor added a record tag and changed the nested object; incremental
+pull advanced the local memory to revision 3 without a conflict. The native
+detail showed `WEB_METADATA_V3`, `approved: true`, `score: 3.75` and the added
+`web-reviewed` label. A complete application quit and canonical Make restart
+preserved those values. The native storage lifecycle produced a schema-12 backup
+before migrating to schema 13; both databases passed SQLite integrity checks
+and retained the same scoped QA memory payload. A new semantic query after restart
+again returned the Cedar source and its exact revision and extraction attempt.
+
+The portable schema document foundation has matching Python/Rust structural and
+revision validation, but is not yet connected to persistence or synchronization.
+Community storage now captures immutable graph inputs, candidate memberships,
+jobs and leases. Its trait clock advances while waiting for locks, so a lease
+that expires during a wait cannot be renewed or failed using stale time. This
+storage batch cannot name, summarize or publish nonempty communities; the audited
+Agent worker and product entry remain in progress.
+
+Validation completed: Web 3,692 tests; Desktop 4,435 tests plus two separately
+executed real-process integrations; schema Python/Rust differential suite 92
+tests; community storage 24 focused tests. Web types, focused lint and formatting
+checks passed. The metadata editor/detail regression set contains 13 tests.
+GitNexus remained unavailable with `Transport closed`; source and diff inspection
+bounded these changes. This is implementation progress, not completion of I0–I6.
