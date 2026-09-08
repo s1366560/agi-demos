@@ -126,8 +126,11 @@ async fn supervise(
     // Clearing the local capability stops new scopes. Exact DB release fences
     // concurrent transactions; it never changes an operation, Agent run or HITL.
     published.send_replace(None);
-    if ownership.release(&lease, clock.now()).await.is_err() {
-        eprintln!("[agistack] cron owner release failed; storage lease remains fenced by expiry");
+    match tokio::time::timeout(heartbeat, ownership.release(&lease, clock.now())).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(_)) | Err(_) => {
+            eprintln!("[agistack] cron owner release failed or timed out; storage lease remains fenced by expiry");
+        }
     }
 }
 

@@ -14,6 +14,11 @@ driver future is allowed to settle; neither owner loss nor cancellation of a cal
 Dropping the scheduler runtime also requests owner-task shutdown, preventing an
 orphan heartbeat from retaining control indefinitely after a driver panic.
 
+Exact release has the same third-of-TTL deadline as renewal. A stuck cleanup query
+cannot retain a settled generation forever; local capability is already withdrawn.
+On cleanup timeout the database lease may remain until expiry. That uncertainty is
+not a successful release or proof of deployment drain.
+
 ## Stable generation and lease snapshots
 
 Control admission requires the same global scope, owner id, epoch and nonce. The

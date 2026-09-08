@@ -2,6 +2,8 @@ use super::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::sync::{Notify, Semaphore};
 
+mod cancellation;
+
 #[derive(Default)]
 struct Ownership {
     current: Mutex<Option<CronSchedulerLease>>,
