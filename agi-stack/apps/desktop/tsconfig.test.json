@@ -514,6 +514,7 @@
     "src/features/workspace/workspaceExecutionModel.ts",
     "src/i18nContext.ts",
     "src/theme.tsx",
-    "src/types.ts"
+    "src/types.ts",
+    "src/plugins/desktopNativeKnowledgeProcessingHttpV2.ts"
   ]
 }
