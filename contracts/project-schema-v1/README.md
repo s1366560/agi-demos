@@ -4,6 +4,10 @@ Status: standalone domain contract only. No database, API, local authority,
 sync transport, generated native-knowledge artifact, or extraction integration
 uses this document yet. Metadata synchronization is a separate existing feature.
 
+The separately delivered [closed cloud storage foundation](storage-foundation.md)
+adds inactive Alembic tables and read-only inspection; its database rollback
+requirements are documented there.
+
 ## Identity and structure
 
 The required envelope is `format_version: 1`, `tenant_id`, `project_id`,

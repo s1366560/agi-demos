@@ -460,6 +460,9 @@ class ACPRunnerSessionModel(IdGeneratorMixin, Base):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (
+        UniqueConstraint("id", "tenant_id", name="uq_projects_schema_scope"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, ForeignKey("tenants.id"), nullable=False)
