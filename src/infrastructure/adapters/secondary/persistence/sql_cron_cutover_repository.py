@@ -15,6 +15,8 @@ from src.domain.model.cron.cutover import (
     CronCutoverSnapshot,
     CronDeploymentManifest,
     CronDeploymentObservation,
+    CronDeploymentParticipant,
+    CronDeploymentParticipantKind,
     CronDeploymentReceipt,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -59,6 +61,58 @@ class SqlCronCutoverRepository:
                 blockers=(_VERIFIER_UNAVAILABLE,),
             )
         return self._snapshot(row)
+
+    async def lock_registration_boundary(self) -> CronCutoverSnapshot:
+        """Hold prepare's initialization/row lock until the caller commits.
+
+        Inserting the default Python row also fences prepare on first startup,
+        when SELECT FOR UPDATE alone could not lock an absent row.
+        """
+        _ = await self._session.execute(
+            insert(CronSchedulerOwnerModel)
+            .values(scope_id="global", owner_kind="python")
+            .on_conflict_do_nothing(index_elements=["scope_id"])
+        )
+        row = await self._session.scalar(
+            select(CronSchedulerOwnerModel)
+            .where(CronSchedulerOwnerModel.scope_id == "global")
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if row is None:
+            raise CronCutoverConflictError("scheduler owner unavailable")
+        return self._snapshot(row)
+
+    async def require_prepared_deployment(
+        self,
+        *,
+        deployment_id: str,
+        source_generation: str,
+        expected_revision: int,
+        producer_id: str,
+    ) -> CronDeploymentManifest:
+        """Read the exact persisted boundary; never acquire, release or mutate it."""
+        if type(expected_revision) is not int or expected_revision < 1:
+            raise CronCutoverConflictError("invalid prepared deployment revision")
+        row = await self._session.scalar(
+            select(CronSchedulerOwnerModel)
+            .where(CronSchedulerOwnerModel.scope_id == "global")
+            .execution_options(populate_existing=True)
+        )
+        if row is None or row.cutover_revision != expected_revision:
+            raise CronCutoverConflictError("scheduler cutover revision changed")
+        _, manifest, _ = self._prepared_evidence(row)
+        participant = CronDeploymentParticipant(
+            kind=CronDeploymentParticipantKind.PRODUCER,
+            participant_id=producer_id,
+        )
+        if (
+            manifest.deployment_id != deployment_id
+            or manifest.source_generation != source_generation
+            or participant not in manifest.participants
+        ):
+            raise CronCutoverConflictError("local producer does not belong to prepared deployment")
+        return manifest
 
     async def prepare(
         self, manifest: CronDeploymentManifest, expected_revision: int

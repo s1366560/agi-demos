@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -30,6 +32,7 @@ logger = logging.getLogger(__name__)
 _scheduler: AsyncScheduler | None = None
 _scheduler_owner: SchedulerOwner | None = None
 _scheduler_lock = asyncio.Lock()
+_cron_registration_seal: tuple[str, int] | None = None
 
 
 def get_scheduler() -> AsyncScheduler:
@@ -131,6 +134,23 @@ async def register_job(
     schedule_config: dict[str, Any],
     timezone: str = "UTC",
 ) -> None:
+    """Register only while the persisted Python producer boundary is open."""
+    async with _scheduler_lock, _require_cron_registration_open():
+        await _register_job_unlocked(
+            job_id=job_id,
+            schedule_type=schedule_type,
+            schedule_config=schedule_config,
+            timezone=timezone,
+        )
+
+
+async def _register_job_unlocked(
+    *,
+    job_id: str,
+    schedule_type: str,
+    schedule_config: dict[str, Any],
+    timezone: str = "UTC",
+) -> None:
     """Add or replace an APScheduler schedule for a cron job.
 
     Translates the domain ``CronSchedule`` representation into the matching
@@ -196,43 +216,70 @@ async def register_job(
 
 async def unregister_job(job_id: str) -> None:
     """Remove an APScheduler schedule for a cron job (idempotent)."""
-    scheduler = get_scheduler()
-    try:
-        await scheduler.remove_schedule(job_id)
-        logger.info("Unregistered APScheduler schedule for job %s", job_id)
-    except Exception:
-        # Schedule may not exist (already removed, never registered, etc.)
-        logger.debug("Schedule %s not found in APScheduler -- nothing to remove", job_id)
+    async with _scheduler_lock:
+        scheduler = get_scheduler()
+        try:
+            await scheduler.remove_schedule(job_id)
+            logger.info("Unregistered APScheduler schedule for job %s", job_id)
+        except Exception:
+            # Compatibility cleanup is not a deployment closure acknowledgement.
+            logger.debug("Schedule %s could not be removed from APScheduler", job_id)
+
+
+class CronProducerRegistrationClosed(RuntimeError):
+    """The durable cutover boundary does not permit Python schedule registration."""
+
+
+@asynccontextmanager
+async def _require_cron_registration_open() -> AsyncIterator[None]:
+    """Keep the durable owner lock through the external schedule write."""
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.sql_cron_cutover_repository import (
+        SqlCronCutoverRepository,
+    )
+
+    global _cron_registration_seal
+    async with async_session_factory() as session, session.begin():
+        state = await SqlCronCutoverRepository(session).lock_registration_boundary()
+        if state.phase != "unverified" or state.owner_kind != "python":
+            raise CronProducerRegistrationClosed("Python cron schedule registration is fenced")
+        if _cron_registration_seal is not None:
+            if state.revision <= _cron_registration_seal[1]:
+                raise CronProducerRegistrationClosed("Local cron producer remains sealed")
+            _cron_registration_seal = None
+        yield
 
 
 async def sync_all_jobs() -> None:
-    """Load all enabled cron jobs from the DB and register them in APScheduler.
-
-    Called once at startup to hydrate the scheduler with existing schedules.
-    """
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
+    """Hydrate enabled jobs only before the persisted deployment barrier closes."""
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
     from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
         SqlCronJobRepository,
     )
 
-    async with async_session_factory() as session:
-        repo = SqlCronJobRepository(session)
-        # find_due_jobs returns enabled jobs not in backoff
-        jobs = await repo.find_due_jobs(now=datetime.now(UTC))
-
-    registered = 0
-    for job in jobs:
+    async with _scheduler_lock:
         try:
-            await register_job(
-                job_id=job.id,
-                schedule_type=job.schedule.kind.value,
-                schedule_config=job.schedule.config,
-                timezone=job.timezone,
-            )
-            registered += 1
-        except Exception:
-            logger.exception("Failed to register schedule for job %s", job.id)
-
-    logger.info("Synced %d / %d cron jobs to APScheduler", registered, len(jobs))
+            async with _require_cron_registration_open():
+                pass
+        except CronProducerRegistrationClosed:
+            logger.info("Python cron schedule synchronization is fenced")
+            return
+        async with async_session_factory() as session:
+            jobs = await SqlCronJobRepository(session).find_due_jobs(now=datetime.now(UTC))
+        registered = 0
+        for job in jobs:
+            try:
+                # A different process may have committed prepare during hydration.
+                async with _require_cron_registration_open():
+                    await _register_job_unlocked(
+                        job_id=job.id,
+                        schedule_type=job.schedule.kind.value,
+                        schedule_config=job.schedule.config,
+                        timezone=job.timezone,
+                    )
+                registered += 1
+            except CronProducerRegistrationClosed:
+                break
+            except Exception:
+                logger.exception("Failed to register schedule for job %s", job.id)
+        logger.info("Synced %d / %d cron jobs to APScheduler", registered, len(jobs))

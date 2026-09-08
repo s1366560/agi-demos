@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 import pytest
 
 from src.infrastructure.scheduler import scheduler_service
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def open_registration(monkeypatch):
+    # These cases exercise trigger normalization, not the durable cutover boundary.
+    @asynccontextmanager
+    async def allow():
+        yield
+
+    monkeypatch.setattr(scheduler_service, "_require_cron_registration_open", allow)
 
 
 class FakeScheduler:

@@ -84,6 +84,41 @@ A `cron-deployment-drain-receipt.v1` observation contains `receipt_id`,
 (`closed` or `unresolved`), and a lowercase SHA-256 `evidence_sha256`. The external
 artifact remains outside the owner row. Both protocol parsers reject unknown fields.
 
+## Local Python producer closure
+
+`close_local_cron_producer(CronProducerCloseRequest(...))` is an in-process adapter
+for the initialized APScheduler instance. The caller supplies the exact prepared
+deployment id, source generation, producer identity, current cutover revision, and
+an explicit tuple of schedule ids obtained from deployment discovery. The producer
+must be listed in the persisted manifest and match the scheduler's actual identity.
+There is no HTTP or CLI endpoint for invoking this adapter in another process.
+
+Registration and startup synchronization now acquire the same global owner row lock
+as `prepare`, holding the transaction through `add_schedule`. Both use the existing
+default Python row initialization before locking, so the first registration cannot
+race preparation when the owner row is absent. Once preparation commits, registration
+is fenced even after a process restart. This adds a database transaction to each
+registration; a slow scheduler datastore write delays preparation until it settles.
+
+The adapter serializes with local registration, synchronization and lifecycle calls.
+It removes only requested schedules whose task reference, callable reference, empty
+positional arguments and structured `job_id` match the canonical cron binding.
+It checks the persisted boundary before removal and again before returning success.
+Unlisted cron schedules, changed bindings or revision, unavailable storage, and
+cancellation leave the observation `unresolved`. Its local registration latch remains
+sealed after failure; only a later explicit persisted Python/unverified revision could
+reopen it. This adapter supplies no rollback writer.
+
+The returned `cron-local-producer-close.v1` observation has
+`boundary=local_cron_schedule_production` and `verified=false`. It does not append a
+deployment receipt, mutate the prepared barrier or owner epoch, stop the shared
+scheduler context, clear its datastore, remove queued jobs, or terminate admitted
+executions. Existing HITL requests and snapshots remain available for exact-capability
+resume. A `closed` observation covers the local schedule producer only. Older binaries
+and external writers that bypass registration fencing still require deployment control
+and authenticated closure evidence; APScheduler's public remove API provides no
+cross-process compare-and-delete guarantee for a concurrent schedule rebinding.
+
 ## Required two-phase deployment integration
 
 The subsequent deployment verifier must implement the following ordering:
@@ -124,8 +159,8 @@ semantic judgment or an activation decision.
 - Connect the real deployment control plane and obtain a representative, complete
   multi-worker inventory plus signed/authenticated closure artifacts. The required
   external sample and verifier are not available in this repository batch.
-- Implement controlled APScheduler producer shutdown/removal and the authenticated
-  verification writer. Define an audited abort/rollback protocol before using a
+- Integrate the local APScheduler closure adapter with deployment discovery and the
+  authenticated verification writer. Define an audited abort/rollback protocol before using a
   prepared deployment in production; dropping barrier evidence is not rollback.
 - The [continuous Rust owner lifecycle](cron-owner-lifecycle.md) now renews control
   ownership independently of admitted work and preserves separate run leases.

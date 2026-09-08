@@ -150,9 +150,12 @@ async def test_terminal_last_run_timestamp_does_not_move_apscheduler_next_fire(
 ):
     from apscheduler import AsyncScheduler
 
+    from src.infrastructure.adapters.secondary.persistence import database as database_module
     from src.infrastructure.scheduler import scheduler_service
 
     _, sessions = database
+    monkeypatch.setattr(database_module, "async_session_factory", sessions)
+    monkeypatch.setattr(scheduler_service, "_cron_registration_seal", None)
     async with AsyncScheduler() as scheduler:
         monkeypatch.setattr(scheduler_service, "_scheduler", scheduler)
         await scheduler_service.register_job(
