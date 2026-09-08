@@ -1,3 +1,15 @@
+import type {
+  CloudMemoryClient,
+  CloudMemoryCommand,
+  CloudMemoryOptions,
+  CloudMemoryResponse,
+} from '../features/project-knowledge/cloudMemoryClient';
+import {
+  prepareCloudMemoryCommand,
+  prepareCloudMemoryOptions,
+} from '../features/project-knowledge/cloudMemoryValidation';
+import { requireCloudMemoryResponse } from '../features/project-knowledge/cloudMemoryResponse';
+import type { DesktopProjectMemoriesCloudOperationInputV2 } from './desktopProjectMemoriesOperationContractV2';
 import {
   PLUGIN_MODULE_CATALOG_V2,
   RuntimeV2Error,
@@ -52,6 +64,10 @@ export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_SERVICE_V2 =
 export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_VERSION_V2 = '1.0.0';
 
 export interface DesktopProjectMemoriesAuthorityV2 extends NativeKnowledgeSyncAuthority {
+  readonly executeCloudMemory?: <C extends CloudMemoryCommand>(
+    command: C,
+    options: CloudMemoryOptions,
+  ) => Promise<CloudMemoryResponse<C>>;
   readonly load: (
     signal?: AbortSignal,
     options?: ProjectMemoriesPageOptions,
@@ -66,6 +82,9 @@ export interface DesktopProjectMemoriesAuthorityServiceV2 {
 }
 
 export interface DesktopProjectMemoriesOperationsV2 {
+  readonly executeCloudMemory: <C extends CloudMemoryCommand>(
+    input: DesktopProjectMemoriesCloudOperationInputV2<C>,
+  ) => Promise<CloudMemoryResponse<C>>;
   readonly executeKnowledgeSync: <C extends NativeKnowledgeCommand>(
     input: DesktopProjectMemoriesSyncOperationInputV2<C>,
   ) => Promise<NativeKnowledgeResponse<C>>;
@@ -84,7 +103,7 @@ type GenerationActionsUnavailableV2 = Readonly<{
 }>;
 type AuthorityAdmissionRejectionV2 = ServiceAdmissionRejectionV2 | GenerationActionsUnavailableV2;
 
-const AUTHORITY_KEYS_V2 = new Set(['load', 'executeSync']);
+const AUTHORITY_KEYS_V2 = new Set(['load', 'executeSync', 'executeCloudMemory']);
 
 export class DesktopProjectMemoriesAuthorityUnavailableErrorV2 extends Error {
   readonly reasonCode: AuthorityAdmissionRejectionV2['reasonCode'];
@@ -124,6 +143,26 @@ export function createDesktopProjectMemoriesOperationsV2(
   resolveActions: () => DesktopRendererGenerationActionsV2 | null,
 ): DesktopProjectMemoriesOperationsV2 {
   return Object.freeze({
+    executeCloudMemory<C extends CloudMemoryCommand>(
+      input: DesktopProjectMemoriesCloudOperationInputV2<C>,
+    ): Promise<CloudMemoryResponse<C>> {
+      const prepared = prepareDesktopProjectMemoriesAuthorityOperationV2({
+        kind: 'cloud',
+        ...input,
+      });
+      return runDesktopProjectMemoriesAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) => {
+          if (!authority.executeCloudMemory) throw new Error('cloud_memory_authority_unavailable');
+          return authority.executeCloudMemory(prepared.command, {
+            expectedActorId: prepared.expectedActorId,
+            expectedContextRevision: prepared.expectedContextRevision,
+            signal: prepared.signal,
+          });
+        },
+      );
+    },
     executeKnowledgeSync<C extends NativeKnowledgeCommand>(
       input: DesktopProjectMemoriesSyncOperationInputV2<C>,
     ): Promise<NativeKnowledgeResponse<C>> {
@@ -151,6 +190,22 @@ export function createDesktopProjectMemoriesOperationsV2(
         prepared,
         (authority) => authority.load(prepared.signal, prepared),
       );
+    },
+  });
+}
+
+export function createDesktopCloudMemoryClientV2(
+  operations: Pick<DesktopProjectMemoriesOperationsV2, 'executeCloudMemory'>,
+  config: DesktopRuntimeConfig,
+): CloudMemoryClient {
+  const operationConfig = Object.freeze({ ...config });
+  return Object.freeze({
+    async execute<C extends CloudMemoryCommand>(
+      scope: ProjectKnowledgeScope,
+      command: C,
+      options: CloudMemoryOptions,
+    ): Promise<CloudMemoryResponse<C>> {
+      return operations.executeCloudMemory({ config: operationConfig, scope, command, ...options });
     },
   });
 }
@@ -259,6 +314,23 @@ function createRevocableProjectMemoriesAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopProjectMemoriesAuthorityV2 {
   return Object.freeze({
+    ...(authority.executeCloudMemory
+      ? {
+          async executeCloudMemory<C extends CloudMemoryCommand>(
+            command: C,
+            inputOptions: CloudMemoryOptions,
+          ): Promise<CloudMemoryResponse<C>> {
+            requireOperationActiveV2(isOperationActive);
+            const prepared = prepareCloudMemoryCommand(command);
+            const options = prepareCloudMemoryOptions(inputOptions);
+            options.signal?.throwIfAborted();
+            const result = await authority.executeCloudMemory!(prepared, options);
+            requireOperationActiveV2(isOperationActive);
+            options.signal?.throwIfAborted();
+            return requireCloudMemoryResponse(result, prepared, scope);
+          },
+        }
+      : {}),
     async executeSync<C extends NativeKnowledgeCommand>(
       command: C,
       inputOptions?: NativeKnowledgeSyncOptions,
@@ -298,7 +370,9 @@ function requireProjectMemoriesServiceV2(value: unknown): DesktopProjectMemories
 function requireProjectMemoriesAuthorityV2(value: unknown): DesktopProjectMemoriesAuthorityV2 {
   if (
     !isPlainRecordV2(value) ||
-    !hasExactKeysV2(value, AUTHORITY_KEYS_V2) ||
+    Object.keys(value).some((key) => !AUTHORITY_KEYS_V2.has(key)) ||
+    (Object.hasOwn(value, 'executeCloudMemory') &&
+      typeof value.executeCloudMemory !== 'function') ||
     typeof value.load !== 'function' ||
     typeof value.executeSync !== 'function'
   ) {
@@ -329,11 +403,6 @@ function invalidServiceV2(): RuntimeV2Error {
     'desktop_project_memories_service_invalid',
     'desktop project memories authority service is invalid',
   );
-}
-
-function hasExactKeysV2(value: Record<string, unknown>, expected: ReadonlySet<string>): boolean {
-  const keys = Object.keys(value);
-  return keys.length === expected.size && keys.every((key) => expected.has(key));
 }
 
 function isPlainRecordV2(value: unknown): value is Record<string, unknown> {

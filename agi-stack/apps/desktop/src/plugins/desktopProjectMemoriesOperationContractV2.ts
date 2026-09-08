@@ -1,3 +1,11 @@
+import type {
+  CloudMemoryCommand,
+  CloudMemoryOptions,
+} from '../features/project-knowledge/cloudMemoryClient';
+import {
+  prepareCloudMemoryCommand,
+  prepareCloudMemoryOptions,
+} from '../features/project-knowledge/cloudMemoryValidation';
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 import { validCloudMemoryCapabilitySnapshot } from '../features/project-knowledge/cloudMemoryCapabilities';
 
@@ -36,13 +44,28 @@ export type DesktopProjectMemoriesSyncOperationInputV2<
     command: C;
   }>;
 
+export type DesktopProjectMemoriesCloudOperationInputV2<
+  C extends CloudMemoryCommand = CloudMemoryCommand,
+> = CloudMemoryOptions &
+  Readonly<{ config: DesktopRuntimeConfig; scope: ProjectKnowledgeScope; command: C }>;
+
 export type DesktopProjectMemoriesAuthorityOperationInputV2 =
+  | (DesktopProjectMemoriesCloudOperationInputV2 & Readonly<{ kind: 'cloud' }>)
   | (DesktopProjectMemoriesLoadOperationInputV2 & Readonly<{ kind: 'load' }>)
   | (DesktopProjectMemoriesSyncOperationInputV2 & Readonly<{ kind: 'sync' }>);
 
 export type PreparedDesktopProjectMemoriesAuthorityOperationV2 =
   DesktopProjectMemoriesAuthorityOperationInputV2;
 
+const CLOUD_INPUT_KEYS_V2 = new Set([
+  'kind',
+  'config',
+  'scope',
+  'command',
+  'signal',
+  'expectedActorId',
+  'expectedContextRevision',
+]);
 const INPUT_KEYS_V2 = new Set(['kind', 'config', 'scope', 'signal', 'page', 'pageSize']);
 const SYNC_INPUT_KEYS_V2 = new Set([
   'kind',
@@ -80,6 +103,9 @@ const MEMORY_KEYS_V2 = new Set([
   'updatedAt',
 ]);
 
+export function prepareDesktopProjectMemoriesAuthorityOperationV2<C extends CloudMemoryCommand>(
+  input: DesktopProjectMemoriesCloudOperationInputV2<C> & Readonly<{ kind: 'cloud' }>,
+): DesktopProjectMemoriesCloudOperationInputV2<C> & Readonly<{ kind: 'cloud' }>;
 export function prepareDesktopProjectMemoriesAuthorityOperationV2(
   input: DesktopProjectMemoriesLoadOperationInputV2 & Readonly<{ kind: 'load' }>,
 ): DesktopProjectMemoriesLoadOperationInputV2 & Readonly<{ kind: 'load' }>;
@@ -94,8 +120,15 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
 ): PreparedDesktopProjectMemoriesAuthorityOperationV2 {
   if (
     !isPlainRecordV2(input) ||
-    (input.kind !== 'load' && input.kind !== 'sync') ||
-    !hasExactOptionalKeysV2(input, input.kind === 'sync' ? SYNC_INPUT_KEYS_V2 : INPUT_KEYS_V2) ||
+    (input.kind !== 'load' && input.kind !== 'sync' && input.kind !== 'cloud') ||
+    !hasExactOptionalKeysV2(
+      input,
+      input.kind === 'cloud'
+        ? CLOUD_INPUT_KEYS_V2
+        : input.kind === 'sync'
+          ? SYNC_INPUT_KEYS_V2
+          : INPUT_KEYS_V2,
+    ) ||
     !Object.hasOwn(input, 'config') ||
     !Object.hasOwn(input, 'scope') ||
     (input.signal !== undefined && !isAbortSignalV2(input.signal))
@@ -104,6 +137,20 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
   }
   const config = cloneDesktopProjectMemoriesRuntimeConfigV2(input.config);
   const scope = cloneDesktopProjectMemoriesScopeV2(input.scope, config);
+  if (input.kind === 'cloud') {
+    if (scope.authority !== 'cloud') throw invalidInputV2();
+    return Object.freeze({
+      kind: 'cloud',
+      config,
+      scope,
+      command: prepareCloudMemoryCommand(input.command),
+      ...prepareCloudMemoryOptions({
+        expectedActorId: input.expectedActorId,
+        expectedContextRevision: input.expectedContextRevision,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      }),
+    });
+  }
   if (input.kind === 'sync') {
     requireNativeKnowledgeTransportV2(config);
     return Object.freeze({

@@ -43,7 +43,7 @@ def install_identity_fixture(app, scope):
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-@pytest.mark.parametrize("scoped", [False, True])
+@pytest.mark.parametrize("scoped", [False, True, "typed"])
 async def test_real_desktop_http_memory_commands_are_scoped_and_replayable(
     http_memory, enabled, scoped
 ):
@@ -82,7 +82,12 @@ async def test_real_desktop_http_memory_commands_are_scoped_and_replayable(
                 await asyncio.sleep(0.01)
         runner = (
             Path(__file__).parents[3]
-            / "agi-stack/apps/desktop/tests/cloud-memory-command-http-runner.cjs"
+            / "agi-stack/apps/desktop/tests"
+            / (
+                "cloud-memory-typed-http-runner.cjs"
+                if scoped == "typed"
+                else "cloud-memory-command-http-runner.cjs"
+            )
         )
         process = await asyncio.create_subprocess_exec(
             "node",

@@ -1,3 +1,9 @@
+import type {
+  CloudMemoryCommand,
+  CloudMemoryOptions,
+  CloudMemoryResponse,
+} from '../features/project-knowledge/cloudMemoryClient';
+import { createDesktopCloudMemoryHttpV2 } from './desktopCloudMemoryHttpV2';
 import { parseMemoryV2 } from '../features/project-knowledge/cloudMemoryProjection';
 import {
   PROJECT_MEMORIES_DEGRADED_REASON,
@@ -32,6 +38,10 @@ const ACTIONS_V2 = Object.freeze(['view', 'list']);
 
 export type DesktopProjectMemoriesHttpAuthorityV2 = NativeKnowledgeSyncAuthority &
   Readonly<{
+    executeCloudMemory?: <C extends CloudMemoryCommand>(
+      command: C,
+      options: CloudMemoryOptions,
+    ) => Promise<CloudMemoryResponse<C>>;
     load: (
       signal?: AbortSignal,
       options?: ProjectMemoriesPageOptions,
@@ -47,7 +57,14 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
   if (runtimeConfig.mode === 'local') {
     return createDesktopProjectMemoriesLocalAuthorityV2(runtimeConfig, operationScope);
   }
+  const cloud = createDesktopCloudMemoryHttpV2(runtimeConfig);
   return Object.freeze({
+    executeCloudMemory<C extends CloudMemoryCommand>(
+      command: C,
+      options: CloudMemoryOptions,
+    ): Promise<CloudMemoryResponse<C>> {
+      return cloud.execute(operationScope, command, options);
+    },
     ...createDesktopNativeKnowledgeSyncHttpV2(runtimeConfig, operationScope),
     async load(signal?: AbortSignal, options?: ProjectMemoriesPageOptions) {
       const pagination = normalizeDesktopProjectMemoriesPageV2(options);
