@@ -76,6 +76,12 @@ function createGeneratorFixture(t, { mutateOverrides = null, mutateV3 = null } =
     'agi-stack/apps/desktop/contracts/desktop-web-parity',
   );
   mkdirSync(fixtureContractRoot, { recursive: true });
+  const gitEnvironmentPath = 'web/scripts/isolated-git-environment.mjs';
+  mkdirSync(resolve(fixtureRoot, 'web/scripts'), { recursive: true });
+  copyFileSync(
+    resolve(repositoryRoot, gitEnvironmentPath),
+    resolve(fixtureRoot, gitEnvironmentPath),
+  );
   for (const fileName of generatorFixtureFiles) {
     copyFileSync(
       resolve(repositoryRoot, 'agi-stack/apps/desktop/contracts/desktop-web-parity', fileName),

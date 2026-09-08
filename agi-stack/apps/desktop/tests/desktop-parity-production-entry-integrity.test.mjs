@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { isolatedGitEnvironment } from "../../../../web/scripts/isolated-git-environment.mjs";
 
 import { bindProductionEntrySurfaces } from "../contracts/desktop-web-parity/production-entry-integrity.mjs";
 
@@ -49,6 +50,7 @@ function runGit(repository, args, options = {}) {
     cwd: repository,
     encoding: "utf8",
     ...options,
+    env: isolatedGitEnvironment(options.env),
   }).trim();
 }
 
@@ -166,6 +168,12 @@ function createGeneratorFixture(t) {
     "agi-stack/apps/desktop/contracts/desktop-web-parity",
   );
   cpSync(contractRoot, fixtureContractRoot, { recursive: true });
+  const gitEnvironmentPath = "web/scripts/isolated-git-environment.mjs";
+  mkdirSync(join(fixtureRoot, "web/scripts"), { recursive: true });
+  copyFileSync(
+    join(repositoryRoot, gitEnvironmentPath),
+    join(fixtureRoot, gitEnvironmentPath),
+  );
   for (const sourcePath of collectDeclaredProductionSourcePaths(fixtureContractRoot)) {
     const target = join(fixtureRoot, sourcePath);
     mkdirSync(dirname(target), { recursive: true });
@@ -290,7 +298,7 @@ test("Desktop production entries bind repository paths and source-only SHA-256 m
               execFileSync(
                 "git",
                 ["show", `${metadata.references.audit_revision}:${entry.path}`],
-                { cwd: repositoryRoot },
+                { cwd: repositoryRoot, env: isolatedGitEnvironment() },
               ),
             )
             .digest("hex")}`,
@@ -471,7 +479,7 @@ test("production entries bind audited revision, current HEAD, and live bytes", (
       execFileSync(
         "git",
         ["show", `${fixture.auditRevision}:${revisionFixturePaths.source}`],
-        { cwd: fixture.fixtureRoot },
+        { cwd: fixture.fixtureRoot, env: isolatedGitEnvironment() },
       ),
     )
     .digest("hex")}`;
@@ -492,7 +500,7 @@ test("declarations bind their audited definition fragment without manifest self-
       execFileSync(
         "git",
         ["show", `${fixture.auditRevision}:${revisionFixturePaths.definition}`],
-        { cwd: fixture.fixtureRoot },
+        { cwd: fixture.fixtureRoot, env: isolatedGitEnvironment() },
       ),
     )
     .digest("hex")}`;

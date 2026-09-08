@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, posix, relative, resolve, win32 } from "node:path";
+import { isolatedGitEnvironment } from "../../../../../web/scripts/isolated-git-environment.mjs";
 
 const DECLARATION_PREFIXES = ["planned:", "not_applicable:"];
 const GIT_REVISION_PATTERN = /^[0-9a-f]{40}$/u;
@@ -138,6 +139,7 @@ function resolveRevisionBinding(repositoryRoot, sourceRevision) {
       ["merge-base", "--is-ancestor", auditedRevision, headRevision],
       {
         cwd: canonicalRepositoryRoot,
+        env: isolatedGitEnvironment(),
         stdio: "pipe",
       },
     );
@@ -160,6 +162,7 @@ function resolveGitCommit(repositoryRoot, revision, label) {
       ["rev-parse", "--verify", `${revision}^{commit}`],
       {
         cwd: repositoryRoot,
+        env: isolatedGitEnvironment(),
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       },
@@ -229,6 +232,7 @@ function readGitRegularFile(
       ],
       {
         cwd: repositoryRoot,
+        env: isolatedGitEnvironment(),
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       },
@@ -264,6 +268,7 @@ function readGitRegularFile(
   try {
     return execFileSync("git", ["show", `${revision}:${sourcePath}`], {
       cwd: repositoryRoot,
+      env: isolatedGitEnvironment(),
       encoding: "buffer",
       maxBuffer: MAX_GIT_BLOB_BYTES,
       stdio: ["ignore", "pipe", "pipe"],
