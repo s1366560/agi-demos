@@ -8,6 +8,8 @@ import { AppModal } from '@/components/common';
 
 import { memoryAPI } from '../../services/api';
 
+import { parseMemoryMetadata } from './memoryMetadata';
+
 import type { Memory } from '../../types/memory';
 
 interface EditMemoryModalProps {
@@ -29,6 +31,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [metadataText, setMetadataText] = useState('{}');
   const [newTag, setNewTag] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +42,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
       setTitle(memory.title);
       setContent(memory.content);
       setTags(memory.tags);
+      setMetadataText(JSON.stringify(memory.metadata, null, 2));
     }
   }, [memory]);
 
@@ -58,6 +62,12 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
 
     if (!memory) return;
 
+    const metadata = parseMemoryMetadata(metadataText);
+    if (metadata === null) {
+      setError(t('memory.edit.metadataInvalid'));
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
 
@@ -73,6 +83,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
         title,
         content,
         tags,
+        metadata,
         version: memory.version, // Include version for optimistic locking
       });
 
@@ -258,6 +269,27 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
               {t('memory.edit.addTag')}
             </button>
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="memory-metadata" className="block text-sm font-medium mb-2">
+            {t('memory.edit.metadataLabel')}
+          </label>
+          <textarea
+            id="memory-metadata"
+            value={metadataText}
+            onChange={(event) => {
+              setMetadataText(event.target.value);
+            }}
+            rows={8}
+            disabled={isSaving}
+            spellCheck={false}
+            aria-describedby="memory-metadata-help"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <p id="memory-metadata-help" className="mt-1 text-sm text-gray-500">
+            {t('memory.edit.metadataHelp')}
+          </p>
         </div>
 
         {/* Optimistic locking notice */}
