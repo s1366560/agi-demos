@@ -107,10 +107,12 @@ impl SqliteKnowledgeRepository {
             }
             let current = current_inputs(tx, build)?;
             let (coverage, vectors) = vectors(tx, build, &current)?;
+            let processing = processing_coverage(tx, build, current.len())?;
             Ok((
                 IndexRead {
                     build: build.clone(),
                     coverage,
+                    processing,
                     vectors,
                 },
                 None,

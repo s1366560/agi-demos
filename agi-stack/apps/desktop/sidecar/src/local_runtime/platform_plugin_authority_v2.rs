@@ -405,6 +405,22 @@ impl PlatformPluginAuthorityV2 {
         self.retire_current().dispose().await;
     }
 
+    /// Linearize a synchronous transaction with generation publication. Callers
+    /// already hold any outer auth lock; this callback must not reacquire auth,
+    /// acquire another generation lease, or await. Publication takes only this
+    /// write lock and defers effect disposal until after releasing it.
+    pub(super) fn with_current_generation<T>(
+        &self,
+        expected: &ActivePlatformPluginGenerationDescriptorV2,
+        action: impl FnOnce() -> T,
+    ) -> Option<T> {
+        let active = read_lock(&self.active_generation);
+        if active.as_ref()?.projection.descriptor() != expected {
+            return None;
+        }
+        Some(action())
+    }
+
     pub(super) fn acquire_generation(
         &self,
     ) -> Result<ActivePlatformPluginGenerationLeaseV2, PlatformPluginGenerationAcquireV2Error> {

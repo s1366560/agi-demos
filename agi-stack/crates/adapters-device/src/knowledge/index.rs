@@ -188,3 +188,33 @@ fn vectors(
     }
     Ok((coverage, output))
 }
+
+fn processing_coverage(
+    tx: &Transaction<'_>,
+    build: &IndexBuild,
+    applied_sources: usize,
+) -> KnowledgeResult<ProcessingCoverage> {
+    let current_sources: usize = tx.query_row(
+        "SELECT count(*) FROM knowledge_memories WHERE tenant_id=?1 AND project_id=?2 AND deleted=0",
+        params![build.scope.tenant_id,build.scope.project_id], |row|row.get(0),
+    ).map_err(storage)?;
+    let failed_sources: usize = tx.query_row(
+        "SELECT count(*) FROM knowledge_memories m
+         JOIN knowledge_processing_changes c ON c.tenant_id=m.tenant_id AND c.project_id=m.project_id
+           AND c.memory_id=m.id AND c.revision=m.revision AND c.operation='upsert' AND c.payload=m.payload
+         JOIN knowledge_processing_jobs j ON j.change_sequence=c.sequence AND j.tenant_id=m.tenant_id
+           AND j.project_id=m.project_id AND j.memory_id=m.id AND j.revision=m.revision AND j.state='failed'
+         WHERE m.tenant_id=?1 AND m.project_id=?2 AND m.deleted=0",
+        params![build.scope.tenant_id,build.scope.project_id], |row|row.get(0),
+    ).map_err(storage)?;
+    let pending_sources = current_sources
+        .checked_sub(applied_sources)
+        .and_then(|count| count.checked_sub(failed_sources))
+        .ok_or(KnowledgeError::Conflict)?;
+    Ok(ProcessingCoverage {
+        current_sources,
+        applied_sources,
+        pending_sources,
+        failed_sources,
+    })
+}

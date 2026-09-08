@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:a93747f742474a9cd9ba35f9677269c48ad20c1e3d535ec9634b6c7215',
-  '6e7a9a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:86dc1af0aab535517db9fc71bd2e3a4ec1063bfa7d862ff58a492b4a07',
+  'daafdf","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1686,8 +1686,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'contract_digest":"sha256:aca3c6333f9094d591c3be9313b7e95be51385485b551a36281cd221e44',
   '0ea5d","entrypoint":"DesktopSidecarHttpRoutesModuleV2::apply","module_ref":"builtin:',
   '//memstack/desktop-sidecar/http-routes","plugin_id":"memstack-native-target-hosts","',
-  'plugin_version":"2.0.0","targets":["desktop-sidecar"]},{"artifact_digest":"sha256:da',
-  'd25a43bbc65e9d117120635c56feca39af17a3882c3cbbcdac6a583b0628a5","artifact_source":"r',
+  'plugin_version":"2.0.0","targets":["desktop-sidecar"]},{"artifact_digest":"sha256:c0',
+  'ec91048f01c8017a513e56554717d8d5b3f5bcff42792007921af1592915f9","artifact_source":"r',
   'epo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/knowledge_authority_v2.r',
   's","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/sch',
   'ema","additionalProperties":false,"properties":{"release_contract":{"const":"knowled',
@@ -4777,4 +4777,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:a93747f742474a9cd9ba35f9677269c48ad20c1e3d535ec9634b6c72156e7a9a' as const;
+  'sha256:86dc1af0aab535517db9fc71bd2e3a4ec1063bfa7d862ff58a492b4a07daafdf' as const;

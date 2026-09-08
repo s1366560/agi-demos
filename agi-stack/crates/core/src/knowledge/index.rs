@@ -75,6 +75,15 @@ pub struct IndexJobStatus {
     pub failure: Option<IndexFailure>,
 }
 
+/// Current raw sources are counted independently of their vector coverage.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessingCoverage {
+    pub current_sources: usize,
+    pub applied_sources: usize,
+    pub pending_sources: usize,
+    pub failed_sources: usize,
+}
+
 /// Coverage is recalculated against current Applied audits on every read. A
 /// promoted build can become partial when a source is added or finishes late.
 /// This counts only successfully processed sources. Project-level readiness must
@@ -101,5 +110,6 @@ pub struct IndexedVector {
 pub struct IndexRead {
     pub build: IndexBuild,
     pub coverage: IndexCoverage,
+    pub processing: ProcessingCoverage,
     pub vectors: Vec<IndexedVector>,
 }

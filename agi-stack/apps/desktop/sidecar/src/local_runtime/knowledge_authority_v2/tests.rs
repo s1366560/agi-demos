@@ -437,3 +437,6 @@ mod processing_tests;
 
 #[path = "retrieval_tests.rs"]
 mod retrieval_tests;
+
+#[path = "indexing_tests.rs"]
+mod indexing_tests;

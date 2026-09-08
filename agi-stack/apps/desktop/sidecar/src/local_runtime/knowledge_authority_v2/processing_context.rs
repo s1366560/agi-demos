@@ -14,7 +14,7 @@ pub(super) fn with_current<T>(
         &dyn Fn() -> agistack_core::knowledge::KnowledgeResult<i64>,
     ) -> agistack_core::knowledge::KnowledgeResult<T>,
 ) -> Result<T, KnowledgeAuthorityErrorV2> {
-    with_access(operation, state, authenticated, true, action)
+    with_access(operation, state, authenticated, true, |_| Ok(()), action)
 }
 
 pub(super) fn with_read_current<T>(
@@ -25,9 +25,40 @@ pub(super) fn with_read_current<T>(
         &dyn Fn() -> agistack_core::knowledge::KnowledgeResult<i64>,
     ) -> agistack_core::knowledge::KnowledgeResult<T>,
 ) -> Result<T, KnowledgeAuthorityErrorV2> {
+    with_read_current_checked(operation, state, authenticated, false, |_| Ok(()), action)
+}
+
+/// Extra durable configuration validation executes under the existing auth
+/// connection lock. Callers may hold the Provider runtime lock outside this
+/// wrapper, but must never reacquire auth or runtime locks from `check`.
+pub(super) fn with_read_current_checked<T>(
+    operation: &KnowledgeOperationV2,
+    state: &LocalRuntimeState,
+    authenticated: &AuthenticatedContext,
+    write: bool,
+    check: impl FnOnce(&rusqlite::Connection) -> agistack_core::knowledge::KnowledgeResult<()>,
+    action: impl FnOnce(
+        &dyn Fn() -> agistack_core::knowledge::KnowledgeResult<i64>,
+    ) -> agistack_core::knowledge::KnowledgeResult<T>,
+) -> Result<T, KnowledgeAuthorityErrorV2> {
     ensure_current_generation(operation, state)?;
     let mut generation_error = None;
-    let result = with_access(operation, state, authenticated, false, |clock| {
+    let result = with_access(operation, state, authenticated, write, check, |clock| {
+        if write {
+            // Auth precedes generation, matching read finalization. Hold the
+            // generation read lock until the storage transaction has committed;
+            // detecting retirement afterwards could not undo a published vector.
+            return match state
+                .platform_plugin_authority_v2
+                .with_current_generation(operation._lease.descriptor(), || action(clock))
+            {
+                Some(result) => result,
+                None => {
+                    generation_error = Some(KnowledgeAuthorityErrorV2::GenerationMismatch);
+                    Err(KnowledgeError::Conflict)
+                }
+            };
+        }
         let value = action(clock)?;
         if let Err(error) = ensure_current_generation(operation, state) {
             generation_error = Some(error);
@@ -63,6 +94,7 @@ fn with_access<T>(
     state: &LocalRuntimeState,
     authenticated: &AuthenticatedContext,
     write: bool,
+    check: impl FnOnce(&rusqlite::Connection) -> agistack_core::knowledge::KnowledgeResult<()>,
     action: impl FnOnce(
         &dyn Fn() -> agistack_core::knowledge::KnowledgeResult<i64>,
     ) -> agistack_core::knowledge::KnowledgeResult<T>,
@@ -106,6 +138,7 @@ fn with_access<T>(
     let Some(expires_at_ms) = expires_at_ms else {
         return Err(KnowledgeAuthorityErrorV2::Forbidden);
     };
+    check(&connection)?;
     // Status, membership and context cannot change while this outer auth lock
     // is held. Time still advances while waiting on knowledge storage, so its
     // transaction invokes this clock after lock acquisition and before commit.

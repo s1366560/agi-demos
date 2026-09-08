@@ -26,11 +26,14 @@ use super::{
     platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
 };
 
+mod embedding_provider;
+mod indexing;
 mod processing;
 mod processing_context;
 mod processing_provider;
 mod retrieval;
 mod routes;
+mod semantic_query;
 mod storage_lifecycle;
 mod sync;
 mod sync_transport;
