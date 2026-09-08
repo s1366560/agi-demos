@@ -1,3 +1,4 @@
+import { createNativeKnowledgeProcessingRetryController } from './nativeKnowledgeProcessingRetryController';
 import type { NativeMemoriesRouteBinding } from './NativeMemoriesRouteContext';
 import { createNativeMemoriesController } from './nativeMemoriesController';
 import { createProjectMemoriesController } from './projectMemoriesController';
@@ -33,6 +34,7 @@ export function createNativeMemoriesRouteControllers(binding: NativeMemoriesRout
     if (binding.authority.allowedActions.includes('list')) void list.retry();
     sync.invalidateSources();
     processing.invalidateSources();
+    processingRetry.invalidateSources();
     refreshDerived();
   };
   const editor = createNativeMemoriesController({
@@ -67,6 +69,15 @@ export function createNativeMemoriesRouteControllers(binding: NativeMemoriesRout
     authority: binding.authority,
     onAccepted: refreshDerived,
   });
+  const processingRetry = createNativeKnowledgeProcessingRetryController({
+    queryClient: binding.processingClient,
+    commandClient: binding.processingCommandClient,
+    authority: binding.authority,
+    onRefresh: () => {
+      processing.invalidateSources();
+      refreshDerived();
+    },
+  });
   return Object.freeze({
     list,
     editor,
@@ -74,6 +85,7 @@ export function createNativeMemoriesRouteControllers(binding: NativeMemoriesRout
     conflicts,
     retrieval,
     processing,
+    processingRetry,
     diagnostics,
     connection,
   });

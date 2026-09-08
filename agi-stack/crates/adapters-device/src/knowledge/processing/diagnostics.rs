@@ -4,6 +4,52 @@ use agistack_core::knowledge::diagnostics::*;
 use agistack_core::knowledge::processing::audit::*;
 
 impl SqliteKnowledgeRepository {
+    pub fn processing_task_durable(
+        &self,
+        scope: &KnowledgeScope,
+        source: &ProcessingSource,
+        clock: &dyn Fn() -> KnowledgeResult<i64>,
+    ) -> KnowledgeResult<ProcessingTaskSnapshot> {
+        validate_source(scope, source)?;
+        transact_timed(self, clock, |tx, _| {
+            let current = current_source(tx, source)?;
+            let task = if current {
+                let (state, attempt, failure): (String, u32, Option<String>) = tx
+                    .query_row(
+                        "SELECT state,attempt,failure_json FROM knowledge_processing_jobs
+                     WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3
+                       AND revision=?4 AND change_sequence=?5",
+                        params![
+                            scope.tenant_id,
+                            scope.project_id,
+                            source.memory_id,
+                            source.revision,
+                            source.change_sequence
+                        ],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )
+                    .map_err(storage)?;
+                Some(ProcessingTask {
+                    state: serde_json::from_value(serde_json::Value::String(state))
+                        .map_err(storage)?,
+                    attempt,
+                    failure: failure
+                        .map(|value| serde_json::from_str(&value).map_err(storage))
+                        .transpose()?,
+                })
+            } else {
+                None
+            };
+            Ok((
+                ProcessingTaskSnapshot {
+                    source: source.clone(),
+                    current,
+                    task,
+                },
+                None,
+            ))
+        })
+    }
     pub fn failed_processing_durable(
         &self,
         scope: &KnowledgeScope,

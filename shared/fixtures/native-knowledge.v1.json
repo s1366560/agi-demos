@@ -535,6 +535,55 @@
           "workspace_id": "explicit-workspace"
         }
       }
+    },
+    {
+      "name": "processing_task",
+      "path": "/api/v1/knowledge/processing-query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "processing_task",
+          "source": {
+            "tenant_id": "tenant",
+            "project_id": "project",
+            "memory_id": "memory",
+            "revision": 1,
+            "change_sequence": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "retry_processing",
+      "path": "/api/v1/knowledge/processing-command",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "command": {
+          "operation": "retry_processing",
+          "source": {
+            "tenant_id": "tenant",
+            "project_id": "project",
+            "memory_id": "memory",
+            "revision": 1,
+            "change_sequence": 1
+          },
+          "expected_attempt": 1
+        }
+      }
     }
   ]
 }

@@ -20,7 +20,7 @@ import type {
 import type { NativeMemoriesAuthority } from './nativeMemoriesController';
 import type { NativeKnowledgeConfigurationSnapshot } from './nativeKnowledgeRetrievalController';
 
-type SupportedOperation = NativeKnowledgeProcessingCommand['operation'];
+type SupportedOperation = Exclude<NativeKnowledgeProcessingCommand['operation'], 'retry_processing'>;
 type SupportedCommand = Extract<
   NativeKnowledgeProcessingCommand,
   { operation: SupportedOperation }

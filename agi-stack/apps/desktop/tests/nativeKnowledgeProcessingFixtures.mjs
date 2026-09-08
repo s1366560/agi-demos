@@ -104,6 +104,8 @@ export const results = {
   },
   promote_index: { configuration: embedding, active_build_id: 'build' },
   retry_index: { accepted: true, input, attempt: 1 },
+  retry_processing: { accepted: true, source, attempt: 1 },
+  processing_task: { source, current: true, task: { state: 'failed', attempt: 1, failure: 'provider_unavailable' } },
   process_one: {
     receipt: { source, attempt: 1, status: 'applied', failure: null },
   },

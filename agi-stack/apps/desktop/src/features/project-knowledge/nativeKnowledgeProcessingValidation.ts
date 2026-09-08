@@ -35,7 +35,9 @@ export function prepareNativeKnowledgeProcessingQuery<Q extends NativeKnowledgeP
   scope: ProjectKnowledgeScope,
 ): Q {
   if (!s.jsonValue(value) || !definitions.NativeKnowledgeProcessingQuery!(value)) throw invalid();
-  if (value.operation === 'semantic') {
+  if (value.operation === 'processing_task') {
+    if (!validProcessingSource(value.source, scope)) throw invalid();
+  } else if (value.operation === 'semantic') {
     if (
       !s.identifier(value.build_id) ||
       !boundedText(value.query) ||
@@ -69,7 +71,10 @@ export function prepareNativeKnowledgeProcessingCommand<C extends NativeKnowledg
   scope: ProjectKnowledgeScope,
 ): C {
   if (!s.jsonValue(value) || !definitions.NativeKnowledgeProcessingCommand!(value)) throw invalid();
-  if (value.operation === 'process_one') {
+  if (value.operation === 'retry_processing') {
+    if (!validProcessingSource(value.source, scope) || !s.localRevision(value.expected_attempt))
+      throw invalid();
+  } else if (value.operation === 'process_one') {
     if (!s.identifier(value.workspace_id)) throw invalid();
   } else {
     if (!s.identifier(value.build_id)) throw invalid();

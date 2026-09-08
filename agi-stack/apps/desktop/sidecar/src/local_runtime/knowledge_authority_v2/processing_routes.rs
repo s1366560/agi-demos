@@ -41,6 +41,19 @@ pub(super) async fn query(
             json!({"configuration":configuration,"active_build_id":status.active_build_id,
                 "processing":processing_coverage(&status.processing),"index":status.index.as_ref().map(index_coverage)})
         }
+        ProcessingQuery::ProcessingTask { source } => {
+            validate_retry_source(&source).map_err(IntoResponse::into_response)?;
+            let result =
+                processing_context::with_read_current(&operation, &state, &auth, |clock| {
+                    operation
+                        .authority
+                        .repository()
+                        .map_err(|_| KnowledgeError::Conflict)?
+                        .processing_task_durable(&operation.scope, &source, clock)
+                })
+                .map_err(IntoResponse::into_response)?;
+            serde_json::to_value(result).map_err(serialization_error)?
+        }
         ProcessingQuery::FailedProcessing { request } => {
             let result =
                 processing_context::with_read_current(&operation, &state, &auth, |clock| {
@@ -179,4 +192,16 @@ fn index_coverage(value: &IndexCoverage) -> Value {
 }
 fn serialization_error(_: serde_json::Error) -> Response {
     KnowledgeAuthorityErrorV2::Knowledge(KnowledgeError::InvalidInput).into_response()
+}
+
+fn validate_retry_source(
+    source: &agistack_core::knowledge::processing::ProcessingSource,
+) -> Result<(), KnowledgeAuthorityErrorV2> {
+    if source.revision == 0
+        || source.change_sequence == 0
+        || source.change_sequence > MAX_WIRE_INTEGER
+    {
+        return Err(KnowledgeError::InvalidInput.into());
+    }
+    Ok(())
 }

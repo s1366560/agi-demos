@@ -44,6 +44,9 @@ pub(crate) enum ProcessingQuery {
         source: agistack_core::knowledge::processing::ProcessingSource,
         request: agistack_core::knowledge::diagnostics::DiagnosticRequest,
     },
+    ProcessingTask {
+        source: agistack_core::knowledge::processing::ProcessingSource,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -80,6 +83,10 @@ pub(crate) enum ProcessingCommand {
     },
     ProcessOne {
         workspace_id: String,
+    },
+    RetryProcessing {
+        source: agistack_core::knowledge::processing::ProcessingSource,
+        expected_attempt: u32,
     },
 }
 

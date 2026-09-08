@@ -4,6 +4,7 @@ import type {
   NativeKnowledgeScope,
   NativeKnowledgeProcessingResultMap,
   NativeKnowledgeIndexFailureDetail,
+  NativeKnowledgeProcessingFailureDetail,
   NativeKnowledgeEmbeddingConfiguration,
 } from './nativeKnowledgeContracts';
 import type { NativeMemoriesAuthority } from './nativeMemoriesController';
@@ -12,6 +13,10 @@ export type DiagnosticIndexSelection = Readonly<{
   scope: NativeKnowledgeScope;
   configuration: NativeKnowledgeEmbeddingConfiguration;
   failure: NativeKnowledgeIndexFailureDetail;
+}>;
+export type DiagnosticProcessingSelection = Readonly<{
+  scope: NativeKnowledgeScope;
+  failure: NativeKnowledgeProcessingFailureDetail;
 }>;
 type Mode = 'failed_processing' | 'failed_index';
 export type NativeKnowledgeDiagnosticsModel = Readonly<{
@@ -237,6 +242,18 @@ export function createNativeKnowledgeDiagnosticsController({
     refresh,
     inspect,
     next: () => refresh(model.mode, true),
+    processingSelection: (position: number): DiagnosticProcessingSelection | null => {
+      const failure = model.processing?.items[position];
+      return !stopped &&
+        model.phase === 'ready' &&
+        model.mode === 'failed_processing' &&
+        permitted('retry_processing') &&
+        permitted('processing_task') &&
+        failure &&
+        observed
+        ? immutable({ scope: observed, failure })
+        : null;
+    },
     selection: (position: number): DiagnosticIndexSelection | null => {
       const failure = model.index?.items[position];
       return !stopped &&

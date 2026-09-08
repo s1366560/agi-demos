@@ -10,6 +10,7 @@ pub(super) const READ_ACTIONS: &[&str] = &[
     "list",
     "pending_resolutions",
     "processing_audits",
+    "processing_task",
     "pull_conflict_context",
     "pull_conflicts",
     "push_conflicts",
@@ -38,6 +39,7 @@ pub(super) const WRITE_ACTIONS: &[&str] = &[
     "resolve_push",
     "resume_resolution",
     "retry_index",
+    "retry_processing",
     "select_embedding",
     "sync_link",
     "sync_pull",
@@ -57,9 +59,11 @@ pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &[
     "list",
     "process_one",
     "processing_audits",
+    "processing_task",
     "promote_index",
     "relationships",
     "retry_index",
+    "retry_processing",
     "select_embedding",
     "semantic",
     "text",
@@ -77,6 +81,7 @@ impl ProcessingQuery {
             Self::FailedProcessing { .. } => "failed_processing",
             Self::FailedIndex { .. } => "failed_index",
             Self::ProcessingAudits { .. } => "processing_audits",
+            Self::ProcessingTask { .. } => "processing_task",
         }
     }
 }
@@ -89,6 +94,7 @@ impl ProcessingCommand {
             Self::PromoteIndex { .. } => "promote_index",
             Self::RetryIndex { .. } => "retry_index",
             Self::ProcessOne { .. } => "process_one",
+            Self::RetryProcessing { .. } => "retry_processing",
         }
     }
 }

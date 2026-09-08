@@ -130,6 +130,21 @@ export function validProcessingResult(
         r.active_build_id === operation.build_id
       );
     }
+    case 'retry_processing': {
+      const r = value as Commands['retry_processing'];
+      return sameJson(r.source, operation.source) && r.attempt === operation.expected_attempt;
+    }
+    case 'processing_task': {
+      const r = value as Results['processing_task'];
+      return (
+        sameJson(r.source, operation.source) &&
+        r.current === (r.task !== null) &&
+        (r.task === null ||
+          ((r.task.state === 'failed') === (r.task.failure !== null) &&
+            r.task.state !== 'superseded' &&
+            (r.task.state === 'pending' || r.task.attempt > 0)))
+      );
+    }
     case 'retry_index': {
       const r = value as Commands['retry_index'];
       return sameJson(r.input, operation.input) && r.attempt === operation.expected_attempt;

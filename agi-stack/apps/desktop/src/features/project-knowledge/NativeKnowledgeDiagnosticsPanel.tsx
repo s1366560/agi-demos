@@ -1,6 +1,7 @@
 import { useI18n } from '../../i18n';
 import type {
   DiagnosticIndexSelection,
+  DiagnosticProcessingSelection,
   NativeKnowledgeDiagnosticsController,
   NativeKnowledgeDiagnosticsModel,
 } from './nativeKnowledgeDiagnosticsController';
@@ -9,11 +10,13 @@ export function NativeKnowledgeDiagnosticsPanel({
   model,
   controller,
   onSelectIndexFailure,
+  onSelectProcessingFailure,
   disabled = false,
 }: Readonly<{
   model: NativeKnowledgeDiagnosticsModel;
   controller: NativeKnowledgeDiagnosticsController;
   onSelectIndexFailure?: (selection: DiagnosticIndexSelection) => void | Promise<void>;
+  onSelectProcessingFailure?: (selection: DiagnosticProcessingSelection) => void | Promise<void>;
   disabled?: boolean;
 }>) {
   const { t } = useI18n();
@@ -60,6 +63,20 @@ export function NativeKnowledgeDiagnosticsPanel({
               {model.allowedActions.includes('processing_audits') ? (
                 <button type="button" onClick={() => void controller.inspect(source)}>
                   {t('nativeDiagnostics.inspect')}
+                </button>
+              ) : null}
+              {'source' in item &&
+              onSelectProcessingFailure &&
+              model.allowedActions.includes('retry_processing') &&
+              model.allowedActions.includes('processing_task') ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const selection = controller.processingSelection(position);
+                    if (selection) void onSelectProcessingFailure(selection);
+                  }}
+                >
+                  {t('nativeProcessingRetry.select')}
                 </button>
               ) : null}
               {'input' in item &&

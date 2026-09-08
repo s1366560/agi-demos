@@ -312,6 +312,9 @@
     },
     "NativeKnowledgeAuditSummary": {
       "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeAuditSummary"
+    },
+    "NativeKnowledgeProcessingTaskSnapshot": {
+      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeProcessingTaskSnapshot"
     }
   },
   "x-routes": {
@@ -581,7 +584,9 @@
     "view": "read",
     "failed_processing": "read",
     "failed_index": "read",
-    "processing_audits": "read"
+    "processing_audits": "read",
+    "retry_processing": "write",
+    "processing_task": "read"
   },
   "x-local-acceptance-actions": [
     "view",
@@ -603,6 +608,8 @@
     "relationships",
     "failed_processing",
     "failed_index",
-    "processing_audits"
+    "processing_audits",
+    "retry_processing",
+    "processing_task"
   ]
 }

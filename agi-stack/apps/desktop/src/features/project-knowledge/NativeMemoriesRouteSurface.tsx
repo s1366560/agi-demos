@@ -1,3 +1,4 @@
+import { NativeKnowledgeProcessingRetryPanel } from './NativeKnowledgeProcessingRetryPanel';
 import { createNativeMemoriesRouteControllers } from './nativeMemoriesRouteControllers';
 import { NativeKnowledgeDiagnosticsPanel } from './NativeKnowledgeDiagnosticsPanel';
 import { NativeKnowledgeCloudConnectionPanel } from './NativeKnowledgeCloudConnectionPanel';
@@ -33,6 +34,11 @@ export function NativeMemoriesRouteSurface({ context }: DesktopRouteSurfaceProps
 
 function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemoriesRouteBinding }>) {
   const controllers = useMemo(() => createNativeMemoriesRouteControllers(binding), [binding]);
+  const processingRetry = useSyncExternalStore(
+    controllers.processingRetry.subscribe,
+    controllers.processingRetry.getSnapshot,
+    controllers.processingRetry.getSnapshot,
+  );
   const diagnostics = useSyncExternalStore(
     controllers.diagnostics.subscribe,
     controllers.diagnostics.getSnapshot,
@@ -82,6 +88,7 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
     controllers.retrieval.activate();
     controllers.processing.activate();
     controllers.diagnostics.activate();
+    controllers.processingRetry.activate();
     void controllers.diagnostics.refresh();
     void controllers.retrieval.refreshConfiguration();
     void controllers.sync.refresh();
@@ -96,10 +103,13 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
       controllers.retrieval.stop();
       controllers.processing.stop();
       controllers.diagnostics.stop();
+      controllers.processingRetry.stop();
     };
   }, [binding, controllers]);
   const editorLocked = editor.phase === 'saving' || editor.phase === 'uncertain';
-  const processingLocked = processing.phase === 'executing' || processing.recoveryRequired;
+  const retryLocked = processingRetry.phase === 'executing' || processingRetry.recoveryRequired;
+  const processingLocked =
+    processing.phase === 'executing' || processing.recoveryRequired || retryLocked;
   const syncLocked = sync.phase === 'syncing' || sync.recoveryRequired;
   const conflictLocked = ['checking', 'saving', 'uncertain'].includes(conflict.phase);
   return (
@@ -165,6 +175,7 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
         model={diagnostics}
         controller={controllers.diagnostics}
         onSelectIndexFailure={controllers.processing.selectDiagnosticFailure}
+        onSelectProcessingFailure={controllers.processingRetry.select}
         disabled={
           editorLocked ||
           syncLocked ||
@@ -173,10 +184,21 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
           processing.phase === 'loading'
         }
       />
+      <NativeKnowledgeProcessingRetryPanel
+        model={processingRetry}
+        controller={controllers.processingRetry}
+        disabled={
+          editorLocked ||
+          syncLocked ||
+          conflictLocked ||
+          processing.phase === 'executing' ||
+          processing.recoveryRequired
+        }
+      />
       <NativeKnowledgeProcessingPanel
         model={processing}
         controller={controllers.processing}
-        disabled={editorLocked || syncLocked || conflictLocked}
+        disabled={editorLocked || syncLocked || conflictLocked || retryLocked}
       />
     </>
   );

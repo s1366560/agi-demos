@@ -519,6 +519,18 @@
             "request"
           ],
           "additionalProperties": false
+        },
+        "processing_task": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -529,7 +541,8 @@
         "semantic",
         "failed_processing",
         "failed_index",
-        "processing_audits"
+        "processing_audits",
+        "processing_task"
       ],
       "additionalProperties": false
     },
@@ -763,6 +776,9 @@
             "next_cursor"
           ],
           "additionalProperties": false
+        },
+        "processing_task": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingTaskSnapshot"
         }
       },
       "required": [
@@ -773,7 +789,8 @@
         "semantic",
         "failed_processing",
         "failed_index",
-        "processing_audits"
+        "processing_audits",
+        "processing_task"
       ],
       "additionalProperties": false
     }

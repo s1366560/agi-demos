@@ -7,6 +7,8 @@ use tower::ServiceExt;
 
 #[path = "processing_rpc_admission_tests.rs"]
 mod admission;
+#[path = "processing_retry_rpc_tests.rs"]
+mod processing_retry;
 #[path = "diagnostics_rpc_tests.rs"]
 mod diagnostics;
 

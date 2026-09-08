@@ -71,7 +71,7 @@ test('closed release is observed from authenticated scoped endpoint without pret
   }
 });
 test('both legacy and processing actions survive the existing memory capability producer', async () => {
-  assert.equal(new Set([...reads, ...writes]).size, 40);
+  assert.equal(new Set([...reads, ...writes]).size, 42);
   assert.ok(reads.includes('sync_status'));
   for (const action of ['failed_processing', 'failed_index', 'processing_audits'])
     assert.ok(reads.includes(action));

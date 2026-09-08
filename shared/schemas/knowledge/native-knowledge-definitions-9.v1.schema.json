@@ -138,7 +138,9 @@
               "sync_status",
               "text",
               "update",
-              "view"
+              "view",
+              "retry_processing",
+              "processing_task"
             ]
           }
         },

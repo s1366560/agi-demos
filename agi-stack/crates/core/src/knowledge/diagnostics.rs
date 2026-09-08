@@ -50,3 +50,18 @@ pub struct AuditSummary {
     pub status: AuditStatus,
     pub failure: Option<ProcessingAuditFailure>,
 }
+
+/// Current source and task state are observed together. An obsolete source has
+/// no task here; this observation never attributes an earlier retry to a caller.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProcessingTaskSnapshot {
+    pub source: ProcessingSource,
+    pub current: bool,
+    pub task: Option<ProcessingTask>,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct ProcessingTask {
+    pub state: super::processing::ProcessingState,
+    pub attempt: u32,
+    pub failure: Option<ProcessingFailure>,
+}

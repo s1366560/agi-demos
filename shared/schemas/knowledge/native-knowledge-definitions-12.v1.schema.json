@@ -181,6 +181,66 @@
         "failure"
       ],
       "additionalProperties": false
+    },
+    "NativeKnowledgeProcessingTaskSnapshot": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+        },
+        "current": {
+          "type": "boolean"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "leased",
+                    "completed",
+                    "failed",
+                    "superseded"
+                  ]
+                },
+                "attempt": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4294967295
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingFailure"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "state",
+                "attempt",
+                "failure"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source",
+        "current",
+        "task"
+      ],
+      "additionalProperties": false
     }
   }
 }

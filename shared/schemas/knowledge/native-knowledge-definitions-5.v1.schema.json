@@ -157,6 +157,25 @@
             "workspace_id"
           ],
           "additionalProperties": false
+        },
+        "retry_processing": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+            },
+            "expected_attempt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295,
+              "x-rust-type": "u32"
+            }
+          },
+          "required": [
+            "source",
+            "expected_attempt"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -165,7 +184,8 @@
         "index_one",
         "promote_index",
         "retry_index",
-        "process_one"
+        "process_one",
+        "retry_processing"
       ],
       "additionalProperties": false
     },
@@ -327,6 +347,22 @@
             "operation",
             "source",
             "request"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "const": "processing_task"
+            },
+            "source": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+            }
+          },
+          "required": [
+            "operation",
+            "source"
           ],
           "additionalProperties": false
         }
@@ -509,6 +545,29 @@
           "required": [
             "operation",
             "workspace_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "const": "retry_processing"
+            },
+            "source": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+            },
+            "expected_attempt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295,
+              "x-rust-type": "u32"
+            }
+          },
+          "required": [
+            "operation",
+            "source",
+            "expected_attempt"
           ],
           "additionalProperties": false
         }

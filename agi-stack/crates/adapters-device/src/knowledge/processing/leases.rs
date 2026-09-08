@@ -118,8 +118,18 @@ pub(super) fn retry(
     source: &ProcessingSource,
     expected_attempt: u32,
 ) -> KnowledgeResult<()> {
+    retry_with_clock(repo, scope, source, expected_attempt, &|| Ok(0))
+}
+
+pub(super) fn retry_with_clock(
+    repo: &SqliteKnowledgeRepository,
+    scope: &KnowledgeScope,
+    source: &ProcessingSource,
+    expected_attempt: u32,
+    clock: &dyn Fn() -> KnowledgeResult<i64>,
+) -> KnowledgeResult<()> {
     validate_source(scope, source)?;
-    transact(repo, |tx| {
+    transact_timed(repo, clock, |tx, _| {
         if !current_source(tx, source)? {
             return Err(KnowledgeError::Conflict);
         }
@@ -132,6 +142,19 @@ pub(super) fn retry(
         if changed != 1 {
             return Err(KnowledgeError::Conflict);
         }
-        Ok(())
+        Ok(((), None))
     })
+}
+
+impl SqliteKnowledgeRepository {
+    /// Exact failed-attempt CAS, fenced by the trusted admission clock at commit.
+    pub fn retry_processing_durable(
+        &self,
+        scope: &KnowledgeScope,
+        source: &ProcessingSource,
+        expected_attempt: u32,
+        clock: &dyn Fn() -> KnowledgeResult<i64>,
+    ) -> KnowledgeResult<()> {
+        retry_with_clock(self, scope, source, expected_attempt, clock)
+    }
 }

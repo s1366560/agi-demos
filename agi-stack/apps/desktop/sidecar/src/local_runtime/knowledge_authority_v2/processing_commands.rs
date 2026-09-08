@@ -114,6 +114,39 @@ pub(crate) async fn command(
                 .map_err(IntoResponse::into_response)?;
             json!({"accepted":true,"input":input,"attempt":expected_attempt})
         }
+        ProcessingCommand::RetryProcessing {
+            source,
+            expected_attempt,
+        } => {
+            validate_retry_source(&source).map_err(IntoResponse::into_response)?;
+            if expected_attempt == 0 {
+                return Err(
+                    KnowledgeAuthorityErrorV2::Knowledge(KnowledgeError::InvalidInput)
+                        .into_response(),
+                );
+            }
+            processing_context::with_read_current_checked(
+                &operation,
+                &state,
+                &auth,
+                true,
+                |_| Ok(()),
+                |clock| {
+                    operation
+                        .authority
+                        .repository()
+                        .map_err(|_| KnowledgeError::Conflict)?
+                        .retry_processing_durable(
+                            &operation.scope,
+                            &source,
+                            expected_attempt,
+                            clock,
+                        )
+                },
+            )
+            .map_err(IntoResponse::into_response)?;
+            json!({"accepted":true,"source":source,"attempt":expected_attempt})
+        }
         ProcessingCommand::ProcessOne { workspace_id } => {
             let receipt = operation
                 .process_one(

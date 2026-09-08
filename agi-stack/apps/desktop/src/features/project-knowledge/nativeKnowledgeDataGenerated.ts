@@ -461,7 +461,7 @@ export type NativeKnowledgeCapabilityEntry = {
   readonly reason_code: (string) | (null);
   readonly service_version: (string) | (null);
   readonly contract_version: (string) | (null);
-  readonly allowed_actions: readonly ("cloud_conflict_context" | "configuration" | "configure_embedding" | "create" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "index_one" | "list" | "pending_resolutions" | "process_one" | "processing_audits" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_index" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view")[];
+  readonly allowed_actions: readonly ("cloud_conflict_context" | "configuration" | "configure_embedding" | "create" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "index_one" | "list" | "pending_resolutions" | "process_one" | "processing_audits" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_index" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view" | "retry_processing" | "processing_task")[];
   readonly scope: NativeKnowledgeCapabilityScope;
   readonly authority_revision: (number) | (null);
   readonly retryable: boolean;
@@ -577,4 +577,15 @@ export type NativeKnowledgeAuditSummary = {
   readonly latency_ms: (number) | (null);
   readonly status: "running" | "applied" | "failed";
   readonly failure: ("provider_unavailable" | "invalid_extraction" | "cancelled" | "lease_lost" | "admission_changed" | "internal_failure") | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeProcessingTaskSnapshot = {
+  readonly source: NativeKnowledgeProcessingSource;
+  readonly current: boolean;
+  readonly task: ({
+    readonly state: "pending" | "leased" | "completed" | "failed" | "superseded";
+    readonly attempt: number;
+    readonly failure: (NativeKnowledgeProcessingFailure) | (null);
+  }) | (null);
 };
