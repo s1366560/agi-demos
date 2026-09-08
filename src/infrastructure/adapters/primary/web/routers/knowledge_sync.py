@@ -97,8 +97,8 @@ def create_knowledge_sync_router(application_dependency: Callable[..., Any]) -> 
         project_id: str,
         after: Annotated[int, Query(ge=0, le=2**63 - 1)] = 0,
         limit: Annotated[int, Query(ge=1, le=500)] = 100,
-        user: User = Depends(get_current_user),
         application: KnowledgeSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
     ) -> JSONResponse:
         try:
             scope = await application.service.resolve_scope(user.id, project_id)
@@ -110,8 +110,8 @@ def create_knowledge_sync_router(application_dependency: Callable[..., Any]) -> 
     async def mutate(
         project_id: str,
         body: SyncMutationBody,
-        user: User = Depends(get_current_user),
         application: KnowledgeSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
     ) -> JSONResponse:
         try:
             scope = await application.service.resolve_scope(user.id, project_id)
@@ -139,8 +139,8 @@ def create_knowledge_sync_router(application_dependency: Callable[..., Any]) -> 
     async def conflict(
         project_id: str,
         conflict_id: str,
-        user: User = Depends(get_current_user),
         application: KnowledgeSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
     ) -> JSONResponse:
         try:
             scope = await application.service.resolve_scope(user.id, project_id)
@@ -152,8 +152,8 @@ def create_knowledge_sync_router(application_dependency: Callable[..., Any]) -> 
         project_id: str,
         conflict_id: str,
         body: SyncResolutionBody,
-        user: User = Depends(get_current_user),
         application: KnowledgeSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
     ) -> JSONResponse:
         try:
             scope = await application.service.resolve_scope(user.id, project_id)

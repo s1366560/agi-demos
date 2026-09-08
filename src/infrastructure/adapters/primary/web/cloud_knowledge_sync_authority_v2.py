@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Request
@@ -11,6 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.knowledge_sync_service import KnowledgeSyncApplication
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.cloud_knowledge_sync_generation_v2 import (
+    observe_cloud_knowledge_sync_generation_v2,
+    require_cloud_knowledge_sync_generation_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
@@ -53,8 +59,30 @@ def _provide(
 async def cloud_knowledge_sync_authority_dependency_v2(
     project_id: str,
     request: Request,
+    generation: PluginGenerationDescriptorV2 = Depends(require_cloud_knowledge_sync_generation_v2),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[CloudKnowledgeSyncServicesV2]:
+    del generation  # The HTTP precondition runs before identity or repository dependencies.
+    async with _scoped_authority(project_id, request, user, db) as authority:
+        yield authority
+
+
+async def cloud_knowledge_sync_observation_dependency_v2(
+    project_id: str,
+    request: Request,
+    generation: PluginGenerationDescriptorV2 = Depends(observe_cloud_knowledge_sync_generation_v2),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[CloudKnowledgeSyncServicesV2]:
+    del generation
+    async with _scoped_authority(project_id, request, user, db) as authority:
+        yield authority
+
+
+@asynccontextmanager
+async def _scoped_authority(
+    project_id: str, request: Request, user: User, db: AsyncSession
 ) -> AsyncIterator[CloudKnowledgeSyncServicesV2]:
     generation = current_generation_v2()
     async with OperationContextV2(

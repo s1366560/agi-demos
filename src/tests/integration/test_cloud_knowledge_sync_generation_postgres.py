@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import replace
 from types import SimpleNamespace
@@ -12,6 +13,9 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select, update
 
+from src.infrastructure.adapters.primary.web.cloud_knowledge_sync_generation_v2 import (
+    KNOWLEDGE_SYNC_GENERATION_HEADER,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
@@ -57,52 +61,66 @@ async def cloud_sync_http(pg_sync, request):
     sessions, scope = pg_sync
     enabled = getattr(request, "param", True)
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-
-    def qualify(document):
-        return replace(
-            document,
-            entries=tuple(
-                replace(entry, enabled=enabled)
-                if entry.entry_id.startswith("builtin-cloud-knowledge-sync-")
-                else entry
-                for entry in document.entries
-            ),
-        )
-
-    publication = await host.bootstrap(
-        profile_path="config/plugin-profiles/memstack-default.v2.yaml",
-        manifest_paths=("config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
-        generation=81,
-        version=81,
-        profile_projector=qualify,
-    )
-    assert publication.accepted
-    async with await host.acquire() as generation:
-        from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-
-        builder = generation.resolve(ROUTE_TABLE_BUILDER_SERVICE_V2, ScopeV2(kind=ScopeKindV2.ROOT))
-        definitions = tuple(
-            item
-            for item in builder.definitions
-            if item.owner_entry_id == CLOUD_KNOWLEDGE_SYNC_HTTP_ENTRY_V2
-        )
-    assert len(definitions) == (6 if enabled else 0)
+    registry = RouteTableRegistryV2()
+    events = SimpleNamespace(auth_calls=0, db_sessions=0, on_auth=None)
     async with sessions() as db:
         actor = await db.get(User, scope.actor_id)
 
     async def database():
+        events.db_sessions += 1
         async with sessions() as db:
             yield db
 
-    private = FastAPI()
-    private.dependency_overrides[get_db] = database
-    private.dependency_overrides[get_current_user] = lambda: actor
-    install_route_definitions_v2(private, definitions)
-    registry = RouteTableRegistryV2()
-    await registry.publish(
-        host.current_distribution.descriptor,
-        RouteTableV2.from_fastapi_graph(private, definitions=definitions),
-    )
+    async def current_user():
+        events.auth_calls += 1
+        if events.on_auth is not None:
+            callback, events.on_auth = events.on_auth, None
+            await callback()
+        return actor
+
+    async def publish(number, *, routes_enabled=True):
+        def qualify(document):
+            return replace(
+                document,
+                entries=tuple(
+                    replace(entry, enabled=routes_enabled)
+                    if entry.entry_id.startswith("builtin-cloud-knowledge-sync-")
+                    else entry
+                    for entry in document.entries
+                ),
+            )
+
+        publication = await host.bootstrap(
+            profile_path="config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=("config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+            generation=number,
+            version=number,
+            profile_projector=qualify,
+        )
+        assert publication.accepted
+        async with await host.acquire() as generation:
+            from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+
+            builder = generation.resolve(
+                ROUTE_TABLE_BUILDER_SERVICE_V2, ScopeV2(kind=ScopeKindV2.ROOT)
+            )
+            definitions = tuple(
+                item
+                for item in builder.definitions
+                if item.owner_entry_id == CLOUD_KNOWLEDGE_SYNC_HTTP_ENTRY_V2
+            )
+        assert len(definitions) == (6 if routes_enabled else 0)
+        private = FastAPI()
+        private.dependency_overrides[get_db] = database
+        private.dependency_overrides[get_current_user] = current_user
+        install_route_definitions_v2(private, definitions)
+        descriptor = host.current_distribution.descriptor
+        await registry.publish(
+            descriptor, RouteTableV2.from_fastapi_graph(private, definitions=definitions)
+        )
+        return descriptor.to_payload()
+
+    await publish(81, routes_enabled=enabled)
     outer = FastAPI()
     outer.state.platform_plugin_route_registry_v2 = registry
     mount_generation_http_dispatcher_v2(outer)
@@ -111,7 +129,20 @@ async def cloud_sync_http(pg_sync, request):
         async with AsyncClient(
             transport=ASGITransport(app=outer), base_url="http://sync.test"
         ) as client:
-            yield SimpleNamespace(client=client, sessions=sessions, scope=scope, host=host)
+            if enabled:
+                observation = await client.get(BASE + "/enrollment")
+                assert observation.status_code == 200, observation.text
+                client.headers[KNOWLEDGE_SYNC_GENERATION_HEADER] = json.dumps(
+                    observation.json()["generation"]
+                )
+            yield SimpleNamespace(
+                client=client,
+                sessions=sessions,
+                scope=scope,
+                host=host,
+                publish=publish,
+                events=events,
+            )
     finally:
         await host.close()
 
@@ -139,6 +170,10 @@ async def test_unenrolled_project_has_status_but_no_sync_reads_or_writes(cloud_s
         "bootstrap_count": 0,
         "next_cursor": 0,
         "replayed": False,
+        "generation": {
+            "contract_version": "1.0.0",
+            "descriptor": f.host.current_distribution.descriptor.to_payload(),
+        },
     }
     for result in (
         await f.client.get(BASE + "/changes"),
