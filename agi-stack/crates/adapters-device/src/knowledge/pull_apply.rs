@@ -119,6 +119,7 @@ pub(super) fn apply_event(
         version: revision,
         status: remote.content.status.clone(),
         created_at_ms: remote.created_at_ms,
+        metadata: remote.content.metadata.clone(),
         embedding: None,
     };
     let payload = serde_json::to_string(&memory).map_err(storage)?;

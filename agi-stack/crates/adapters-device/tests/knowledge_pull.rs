@@ -56,6 +56,10 @@ fn remote_apply_advances_cursor_indexes_without_echo_and_preserves_metadata() {
         let memory = repo.get(&scope(), "memory").await.unwrap().unwrap();
         assert_eq!(memory.project_id, scope().project_id);
         assert_eq!(memory.version, 1);
+        assert_eq!(
+            serde_json::to_value(&memory.metadata).unwrap(),
+            json!({"preserved":true})
+        );
         assert_eq!(repo.changes(&scope(), 0, 10).await.unwrap().len(), 1);
         assert!(repo.sync_outbox(&scope(), 0, 10).await.unwrap().is_empty());
         assert_eq!(

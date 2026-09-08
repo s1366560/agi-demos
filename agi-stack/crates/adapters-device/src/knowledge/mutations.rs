@@ -25,7 +25,20 @@ impl SqliteKnowledgeRepository {
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).optional().map_err(storage)?;
         if let Some((original, receipt)) = previous {
-            let original: serde_json::Value = serde_json::from_str(&original).map_err(storage)?;
+            let mut original: serde_json::Value =
+                serde_json::from_str(&original).map_err(storage)?;
+            // v11 commands had no metadata field; their original bytes remain
+            // immutable while comparison normalizes that historical default.
+            if let Some(memory) = original
+                .get_mut("memory")
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                memory
+                    .entry("metadata")
+                    .or_insert_with(|| serde_json::json!({}));
+            }
+            let original: MemoryMutation = serde_json::from_value(original).map_err(storage)?;
+            let original = serde_json::to_value(original).map_err(storage)?;
             let requested: serde_json::Value = serde_json::from_str(&request).map_err(storage)?;
             if original != requested {
                 return Err(KnowledgeError::IdempotencyConflict);

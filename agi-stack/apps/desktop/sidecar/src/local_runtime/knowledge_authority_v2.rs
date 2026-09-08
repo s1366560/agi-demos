@@ -8,11 +8,11 @@ use std::{
 };
 
 use agistack_adapters_device::knowledge::SqliteKnowledgeRepository;
+use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{
     KnowledgeError, KnowledgeScope, MemoryChange, MemoryMutation, MemoryMutationOutcome,
     ScopedMemoryRepository,
 };
-use agistack_core::Memory;
 use agistack_plugin_host::protocol_v2::{plugin_contract_digest_v2, PluginContractV2};
 use agistack_plugin_host::{
     ContextV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeV2Error, ScopeKindV2, ScopeV2,

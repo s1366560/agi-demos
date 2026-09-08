@@ -128,6 +128,7 @@ pub(super) fn apply(
             .checked_add(1)
             .ok_or(KnowledgeError::InvalidInput)?,
         entities: vec![],
+        metadata: content.metadata.clone(),
         embedding: None,
     };
     let sequence = persist(

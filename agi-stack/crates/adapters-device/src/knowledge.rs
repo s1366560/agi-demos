@@ -3,17 +3,18 @@
 
 use std::sync::Mutex;
 
+use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{
     KnowledgeError, KnowledgeResult, KnowledgeScope, MemoryChange, MemoryMutation,
     MemoryMutationOutcome, ScopedMemoryRepository,
 };
-use agistack_core::Memory;
 use async_trait::async_trait;
 use rusqlite::{params, Connection, OptionalExtension};
 
 mod cloud_resolution;
 mod diagnostics;
 mod index;
+mod metadata;
 mod mutations;
 mod processing;
 mod pull;
@@ -23,7 +24,7 @@ mod retrieval;
 mod sync;
 mod sync_binding;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 11;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 12;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -101,6 +102,7 @@ impl SqliteKnowledgeRepository {
         processing::audit::migrate(&tx, version)?;
         index::migrate(&tx, version)?;
         index::configuration::migrate(&tx, version)?;
+        metadata::migrate(&tx, version)?;
         tx.execute(
             "UPDATE knowledge_schema SET version=?1",
             [KNOWLEDGE_SCHEMA_VERSION],
@@ -129,6 +131,9 @@ fn validate(scope: &KnowledgeScope, id: &str) -> KnowledgeResult<()> {
 
 fn validate_memory(scope: &KnowledgeScope, memory: &Memory, revision: u32) -> KnowledgeResult<()> {
     validate(scope, &memory.id)?;
+    if serde_json::to_vec(&memory.metadata).map_err(storage)?.len() > 65_536 {
+        return Err(KnowledgeError::InvalidInput);
+    }
     if memory.project_id != scope.project_id || revision == 0 || memory.version != revision {
         return Err(KnowledgeError::InvalidInput);
     }

@@ -30,6 +30,7 @@ export const memory = {
   status: 'ENABLED',
   created_at_ms: 100,
   embedding: null,
+  metadata: {},
 };
 export const remote = {
   memory_id: 'memory-1',

@@ -6,8 +6,8 @@ use super::{
     resolution::{KnowledgeConflictChoice, KnowledgeMergeContent},
 };
 use crate::{
+    knowledge::KnowledgeMemory as Memory,
     knowledge::{KnowledgeError, KnowledgeResult, KnowledgeScope},
-    Memory,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

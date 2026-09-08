@@ -490,3 +490,78 @@ fn desired_config_upgrade_backs_up_v10_and_never_infers_selection_from_active_in
         1
     );
 }
+
+#[tokio::test]
+async fn metadata_upgrade_backs_up_v11_bytes_before_recovering_trusted_document_fields() {
+    let directory = TestDirectory::new();
+    let state = test_state(TOKEN);
+    let auth = authenticated(&state);
+    let MemoryMutation::Create { memory } = mutation(&auth) else {
+        panic!("fixture")
+    };
+    let scope = KnowledgeScope {
+        tenant_id: auth.workspace.tenant_id.clone(),
+        project_id: auth.workspace.project_id.clone(),
+    };
+    let repo = storage_lifecycle::open(&directory.0).unwrap();
+    repo.create(&scope, memory.clone()).await.unwrap();
+    drop(repo);
+    let knowledge = directory.0.join("knowledge");
+    let connection = Connection::open(knowledge.join("memories.db")).unwrap();
+    connection.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
+    let original: String = connection
+        .query_row("SELECT payload FROM knowledge_memories", [], |r| r.get(0))
+        .unwrap();
+    let remote = json!({"memory_id":memory.id,"revision":1,"deleted":false,"author_id":memory.author_id,"created_at_ms":memory.created_at_ms,"content":{"title":memory.title,"content":memory.content,"content_type":"text","tags":[],"status":"ENABLED","metadata":{"restored":["可信",null,false]}}});
+    connection
+        .execute(
+            "INSERT INTO knowledge_sync_remote_versions VALUES(?1,?2,?3,?4)",
+            rusqlite::params![
+                scope.tenant_id,
+                scope.project_id,
+                memory.id,
+                remote.to_string()
+            ],
+        )
+        .unwrap();
+    let repo = storage_lifecycle::open(&directory.0).unwrap();
+    assert_eq!(
+        serde_json::to_value(
+            repo.get(&scope, &memory.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .metadata
+        )
+        .unwrap(),
+        remote["content"]["metadata"]
+    );
+    let backups = fs::read_dir(&knowledge)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("pre-v11-")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    let saved:(i64,String)=backup.query_row("SELECT (SELECT version FROM knowledge_schema),(SELECT payload FROM knowledge_memories)",[],|row|Ok((row.get(0)?,row.get(1)?))).unwrap();
+    assert_eq!(saved, (11, original));
+    drop(repo);
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    assert_eq!(
+        fs::read_dir(&knowledge)
+            .unwrap()
+            .filter(|entry| entry
+                .as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("pre-v11-"))
+            .count(),
+        1
+    );
+}

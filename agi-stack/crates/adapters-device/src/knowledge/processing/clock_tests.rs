@@ -1,9 +1,9 @@
 use super::*;
+use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{
     processing::{audit::*, worker::*},
     ScopedMemoryRepository,
 };
-use agistack_core::Memory;
 use std::{
     cell::Cell,
     sync::{
@@ -40,6 +40,7 @@ impl Fixture {
             version: 1,
             status: "ENABLED".into(),
             created_at_ms: 1,
+            metadata: Default::default(),
             embedding: None,
         };
         futures::executor::block_on(repo.create(&scope, memory)).unwrap();

@@ -3,7 +3,7 @@ use agistack_core::knowledge::sync::push::PreparedKnowledgePush;
 
 pub(super) async fn prepared(repo: &SqliteKnowledgeRepository) -> PreparedKnowledgePush {
     let remote = event(1, 1, false, "local");
-    let memory = agistack_core::Memory {
+    let memory = agistack_core::knowledge::KnowledgeMemory {
         id: "memory".into(),
         project_id: scope().project_id,
         title: "Remote".into(),
@@ -15,6 +15,7 @@ pub(super) async fn prepared(repo: &SqliteKnowledgeRepository) -> PreparedKnowle
         version: 1,
         status: "ENABLED".into(),
         created_at_ms: remote["version"]["created_at_ms"].as_i64().unwrap(),
+        metadata: Default::default(),
         embedding: None,
     };
     repo.mutate(

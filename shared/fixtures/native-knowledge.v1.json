@@ -68,7 +68,8 @@
             ],
             "version": 1,
             "status": "ENABLED",
-            "created_at_ms": 1
+            "created_at_ms": 1,
+            "metadata": {}
           }
         }
       }
@@ -103,7 +104,8 @@
             ],
             "version": 1,
             "status": "ENABLED",
-            "created_at_ms": 1
+            "created_at_ms": 1,
+            "metadata": {}
           },
           "expected_revision": 1
         }

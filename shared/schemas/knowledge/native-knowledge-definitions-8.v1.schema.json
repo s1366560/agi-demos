@@ -57,6 +57,12 @@
               "type": "null"
             }
           ]
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeJson"
+          }
         }
       },
       "required": [
@@ -71,7 +77,8 @@
         "version",
         "status",
         "created_at_ms",
-        "embedding"
+        "embedding",
+        "metadata"
       ],
       "additionalProperties": false
     },
@@ -129,6 +136,12 @@
               "type": "null"
             }
           ]
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeJson"
+          }
         }
       },
       "required": [
@@ -142,7 +155,8 @@
         "entities",
         "version",
         "status",
-        "created_at_ms"
+        "created_at_ms",
+        "metadata"
       ],
       "additionalProperties": false
     }

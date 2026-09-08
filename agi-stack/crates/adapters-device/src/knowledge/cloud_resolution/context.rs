@@ -52,26 +52,13 @@ pub(super) fn refresh(
     conn: &Connection,
     scope: &KnowledgeScope,
     ctx: &mut KnowledgeCloudResolutionContext,
-    preserve_metadata: bool,
+    _preserve_metadata: bool,
 ) -> KnowledgeResult<()> {
     let (payload,deleted):(String,bool)=conn.query_row("SELECT payload,deleted FROM knowledge_memories WHERE tenant_id=?1 AND project_id=?2 AND id=?3",params![scope.tenant_id,scope.project_id,ctx.memory_id],|r|Ok((r.get(0)?,r.get(1)?))).map_err(storage)?;
     ctx.local = serde_json::from_str(&payload).map_err(storage)?;
     ctx.local_deleted = deleted;
     ctx.baseline = baseline(conn, scope, &ctx.memory_id)?;
-    let metadata:Option<String>=conn.query_row("SELECT m.metadata_json FROM knowledge_sync_outbox_metadata m JOIN knowledge_pending_outbox o ON o.sequence=m.sequence WHERE o.tenant_id=?1 AND o.project_id=?2 AND o.memory_id=?3 ORDER BY o.sequence DESC LIMIT 1",params![scope.tenant_id,scope.project_id,ctx.memory_id],|r|r.get(0)).optional().map_err(storage)?;
-    let fallback = if preserve_metadata {
-        ctx.local_metadata.clone()
-    } else {
-        ctx.baseline
-            .as_ref()
-            .map(|v| remote(v, &ctx.memory_id).map(|v| v.content.metadata))
-            .transpose()?
-            .unwrap_or_default()
-    };
-    ctx.local_metadata = metadata
-        .map(|v| serde_json::from_str(&v).map_err(storage))
-        .transpose()?
-        .unwrap_or(fallback);
+    ctx.local_metadata = ctx.local.metadata.clone();
     ctx.conflict_sequences=sequences(conn,scope,&ctx.memory_id,"SELECT sequence FROM knowledge_active_pull_conflicts WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3 ORDER BY sequence LIMIT 10001")?;
     ctx.pending_sequences=sequences(conn,scope,&ctx.memory_id,"SELECT sequence FROM knowledge_pending_outbox WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3 ORDER BY sequence LIMIT 10001")?;
     ctx.observed_cursor = conn

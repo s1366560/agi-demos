@@ -166,6 +166,7 @@ export function createNativeMemoriesController({
         version: 1,
         status: 'ENABLED',
         tags: Object.freeze([]),
+        metadata: Object.freeze({}),
         entities: Object.freeze([]),
         embedding: null,
         created_at_ms: now(),

@@ -7,7 +7,7 @@ fn keep_current_null_retains_local_archive_without_inventing_a_remote_version_or
         repo.configure_sync_link(&scope(), target().link)
             .await
             .unwrap();
-        let memory = agistack_core::Memory {
+        let memory = agistack_core::knowledge::KnowledgeMemory {
             id: "memory".into(),
             project_id: scope().project_id,
             title: "Local".into(),
@@ -19,6 +19,7 @@ fn keep_current_null_retains_local_archive_without_inventing_a_remote_version_or
             version: 1,
             status: "ENABLED".into(),
             created_at_ms: 1,
+            metadata: Default::default(),
             embedding: None,
         };
         repo.mutate(

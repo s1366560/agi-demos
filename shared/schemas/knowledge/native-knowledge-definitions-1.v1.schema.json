@@ -180,6 +180,12 @@
               "type": "null"
             }
           ]
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeJson"
+          }
         }
       },
       "required": [
@@ -194,7 +200,8 @@
         "version",
         "status",
         "created_at_ms",
-        "embedding"
+        "embedding",
+        "metadata"
       ],
       "additionalProperties": false
     },

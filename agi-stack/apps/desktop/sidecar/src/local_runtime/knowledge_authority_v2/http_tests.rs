@@ -446,3 +446,57 @@ async fn http_crud_uses_durable_receipts_revisions_and_scoped_change_queries() {
     assert_eq!(changes.1["result"]["items"][2]["deleted"], true);
     state.platform_plugin_authority_v2.deactivate().await;
 }
+
+#[tokio::test]
+async fn raw_metadata_commands_require_an_explicit_object_before_any_write() {
+    let directory = TestDirectory::new();
+    let state = test_state(TOKEN);
+    publish(&state, &directory, 1, true).await;
+    let auth = authenticated(&state);
+    let scope = request_scope(&state);
+    let valid = json!({"scope":scope,"mutation":mutation(&auth)});
+    for invalid in [
+        None,
+        Some(Value::Null),
+        Some(json!([])),
+        Some(json!("text")),
+    ] {
+        let mut body = valid.clone();
+        let memory = body["mutation"]["memory"].as_object_mut().unwrap();
+        if let Some(invalid) = invalid {
+            memory.insert("metadata".into(), invalid);
+        } else {
+            memory.remove("metadata");
+        }
+        let response = local_router_with_generation_required(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/knowledge/mutations")
+                    .header("content-type", "application/json")
+                    .header("x-agistack-launch", TOKEN)
+                    .header("authorization", format!("Bearer {TOKEN}"))
+                    .header("idempotency-key", "metadata-rejected")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    let accepted = request(
+        Arc::clone(&state),
+        "/api/v1/knowledge/mutations",
+        valid,
+        Some("metadata-rejected"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(accepted.0, StatusCode::OK);
+    assert_eq!(
+        accepted.1["result"]["receipt"]["memory"]["metadata"],
+        json!({})
+    );
+    assert_eq!(accepted.1["result"]["receipt"]["memory"]["version"], 1);
+}

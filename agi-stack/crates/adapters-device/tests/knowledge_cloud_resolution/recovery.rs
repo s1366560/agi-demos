@@ -5,7 +5,7 @@ async fn prepare(
     id: &str,
     actor: &str,
 ) -> KnowledgeCloudResolutionRecord {
-    let memory = agistack_core::Memory {
+    let memory = agistack_core::knowledge::KnowledgeMemory {
         id: id.into(),
         project_id: scope().project_id,
         title: "Local".into(),
@@ -17,6 +17,7 @@ async fn prepare(
         version: 1,
         status: "ENABLED".into(),
         created_at_ms: 1,
+        metadata: Default::default(),
         embedding: None,
     };
     repo.mutate(&scope(), actor, id, MemoryMutation::Create { memory })

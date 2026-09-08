@@ -1,7 +1,8 @@
 use agistack_adapters_device::knowledge::SqliteKnowledgeRepository;
 use agistack_core::knowledge::processing::*;
+use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{KnowledgeError, KnowledgeScope, ScopedMemoryRepository};
-use agistack_core::{Entity, Memory};
+use agistack_core::Entity;
 use futures::executor::block_on;
 use rusqlite::Connection;
 use uuid::Uuid;
@@ -49,6 +50,7 @@ fn memory() -> Memory {
         version: 1,
         status: "ENABLED".into(),
         created_at_ms: 1,
+        metadata: Default::default(),
         embedding: None,
     }
 }

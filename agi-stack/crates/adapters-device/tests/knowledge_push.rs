@@ -3,10 +3,10 @@ use agistack_core::knowledge::sync::push::{
     KnowledgePushRepository, KnowledgeSyncTarget, PreparedKnowledgePush, MAX_REMOTE_REVISION,
 };
 use agistack_core::knowledge::sync::{KnowledgeSyncLink, KnowledgeSyncRepository};
+use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{
     KnowledgeError, KnowledgeScope, MemoryMutation, ScopedMemoryRepository,
 };
-use agistack_core::Memory;
 use futures::executor::block_on;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -55,6 +55,7 @@ fn create(id: &str) -> MemoryMutation {
             version: 1,
             status: "ENABLED".into(),
             created_at_ms: 1,
+            metadata: Default::default(),
             embedding: None,
         },
     }
@@ -418,6 +419,22 @@ fn remote_metadata_and_signed_revision_boundary_stay_independent_of_local_revisi
         let conn = rusqlite::Connection::open(&db.0).unwrap();
         let remote = json!({"memory_id":"memory","revision":MAX_REMOTE_REVISION-1,"deleted":false,"author_id":"remote-actor","created_at_ms":100,"content":{"title":"old","content":"remote old","content_type":"text","tags":[],"status":"ENABLED","metadata":{"nested":{"unicode":"知识","values":[null,true,42]}}},"remote_extension":["complete"]});
         conn.execute("INSERT INTO knowledge_sync_remote_versions(tenant_id,project_id,memory_id,version_json) VALUES(?1,?2,'memory',?3)",rusqlite::params![scope().tenant_id,scope().project_id,serde_json::to_string(&remote).unwrap()]).unwrap();
+        // Exercise an actual v11 payload: metadata existed only in the trusted
+        // remote baseline before the document upgrade.
+        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
+        drop(repo);
+        let repo = db.open();
+        assert_eq!(
+            serde_json::to_value(
+                repo.get(&scope(), "memory")
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .metadata
+            )
+            .unwrap(),
+            remote["content"]["metadata"]
+        );
         let push = repo
             .prepare_push(&scope(), &target())
             .await
@@ -462,5 +479,171 @@ fn remote_metadata_and_signed_revision_boundary_stay_independent_of_local_revisi
             repo.prepare_push(&scope(), &target()).await,
             Err(KnowledgeError::Conflict)
         ));
+    });
+}
+
+#[test]
+fn local_metadata_create_edit_clear_and_uncertain_retry_keep_exact_snapshot() {
+    block_on(async {
+        let db = Database::new();
+        let repo = db.open();
+        repo.configure_sync_link(&scope(), target().link)
+            .await
+            .unwrap();
+        let MemoryMutation::Create { mut memory } = create("memory") else {
+            unreachable!()
+        };
+        memory.metadata = json!({"user":{"nested":[1,false,null,"中文"]}})
+            .as_object()
+            .unwrap()
+            .clone();
+        let original = memory.metadata.clone();
+        repo.mutate(
+            &scope(),
+            "local-author",
+            "create",
+            MemoryMutation::Create { memory },
+        )
+        .await
+        .unwrap();
+        let push = repo
+            .prepare_push(&scope(), &target())
+            .await
+            .unwrap()
+            .unwrap();
+        let request: Value = serde_json::from_str(&push.request_json).unwrap();
+        assert_eq!(request["content"]["metadata"], json!(original));
+        let mut edited = repo.get(&scope(), "memory").await.unwrap().unwrap();
+        edited.metadata = json!({"later":2}).as_object().unwrap().clone();
+        repo.update(&scope(), edited, 1).await.unwrap();
+        drop(repo);
+        let repo = db.open();
+        assert_eq!(
+            repo.prepare_push(&scope(), &target())
+                .await
+                .unwrap()
+                .unwrap()
+                .request_json,
+            push.request_json
+        );
+        repo.accept_push_receipt(
+            &scope(),
+            &target(),
+            push.local_sequence,
+            applied(&push),
+            None,
+        )
+        .await
+        .unwrap();
+        let update = repo
+            .prepare_push(&scope(), &target())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&update.request_json).unwrap()["content"]["metadata"],
+            json!({"later":2})
+        );
+        repo.accept_push_receipt(
+            &scope(),
+            &target(),
+            update.local_sequence,
+            applied(&update),
+            None,
+        )
+        .await
+        .unwrap();
+        let mut cleared = repo.get(&scope(), "memory").await.unwrap().unwrap();
+        cleared.metadata.clear();
+        repo.update(&scope(), cleared, 2).await.unwrap();
+        let clear = repo
+            .prepare_push(&scope(), &target())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&clear.request_json).unwrap()["content"]["metadata"],
+            json!({})
+        );
+    });
+}
+
+#[test]
+fn metadata_upgrade_preserves_prepared_bytes_and_recovers_explicit_pending_intent() {
+    block_on(async {
+        let db = Database::new();
+        let repo = db.open();
+        init(&repo).await;
+        let prepared = repo
+            .prepare_push(&scope(), &target())
+            .await
+            .unwrap()
+            .unwrap();
+        let current = repo.get(&scope(), "memory").await.unwrap().unwrap();
+        repo.update(&scope(), current, 1).await.unwrap();
+        let changes = repo.changes(&scope(), 0, 10).await.unwrap();
+        let pending = changes[1].sequence;
+        drop(repo);
+        let conn = rusqlite::Connection::open(&db.0).unwrap();
+        let remote = json!({"memory_id":"memory","revision":1,"deleted":false,"author_id":"remote-actor","created_at_ms":100,"content":{"title":"title","content":"original","content_type":"text","tags":[],"status":"ENABLED","metadata":{"baseline":true}}});
+        conn.execute(
+            "INSERT INTO knowledge_sync_remote_versions VALUES(?1,?2,'memory',?3)",
+            rusqlite::params![scope().tenant_id, scope().project_id, remote.to_string()],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO knowledge_sync_outbox_metadata VALUES(?1,?2)",
+            rusqlite::params![
+                pending,
+                json!({"explicit":{"retain":[false,4,"中文"]}}).to_string()
+            ],
+        )
+        .unwrap();
+        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
+        let before:(String,String)=conn.query_row("SELECT request_json,(SELECT request_json FROM knowledge_mutation_receipts LIMIT 1) FROM knowledge_sync_pushes",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+        let repo = db.open();
+        assert_eq!(
+            repo.prepare_push(&scope(), &target())
+                .await
+                .unwrap()
+                .unwrap()
+                .request_json,
+            prepared.request_json
+        );
+        assert_eq!(
+            serde_json::to_value(
+                repo.get(&scope(), "memory")
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .metadata
+            )
+            .unwrap(),
+            json!({"explicit":{"retain":[false,4,"中文"]}})
+        );
+        assert_eq!(
+            serde_json::to_value(
+                repo.change(&scope(), pending)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .memory
+                    .metadata
+            )
+            .unwrap(),
+            json!({"explicit":{"retain":[false,4,"中文"]}})
+        );
+        let after:(String,String)=conn.query_row("SELECT request_json,(SELECT request_json FROM knowledge_mutation_receipts LIMIT 1) FROM knowledge_sync_pushes",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+        assert_eq!(before, after);
+        drop(repo);
+        let repo = db.open();
+        assert_eq!(
+            repo.prepare_push(&scope(), &target())
+                .await
+                .unwrap()
+                .unwrap()
+                .request_json,
+            prepared.request_json
+        );
     });
 }

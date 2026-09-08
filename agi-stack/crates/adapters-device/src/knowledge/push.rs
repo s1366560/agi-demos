@@ -199,9 +199,7 @@ fn prepared_request(
         content_type: local.content_type.clone(),
         tags: local.tags.clone(),
         status: local.status.clone(),
-        metadata: metadata_override.unwrap_or_else(|| {
-            previous.map_or_else(Default::default, |version| version.content.metadata)
-        }),
+        metadata: metadata_override.unwrap_or_else(|| local.metadata.clone()),
     };
     if !deleted {
         content.validate()?;

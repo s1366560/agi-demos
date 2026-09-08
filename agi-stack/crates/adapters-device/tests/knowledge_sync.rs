@@ -1,9 +1,9 @@
 use agistack_adapters_device::knowledge::SqliteKnowledgeRepository;
 use agistack_core::knowledge::sync::{KnowledgeSyncLink, KnowledgeSyncRepository};
+use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{
     KnowledgeError, KnowledgeScope, MemoryMutation, ScopedMemoryRepository,
 };
-use agistack_core::Memory;
 use futures::executor::block_on;
 use uuid::Uuid;
 
@@ -48,6 +48,7 @@ fn create() -> MemoryMutation {
             version: 1,
             status: "ENABLED".into(),
             created_at_ms: 1,
+            metadata: Default::default(),
             embedding: None,
         },
     }

@@ -1,10 +1,11 @@
 use agistack_adapters_device::knowledge::SqliteKnowledgeRepository;
+use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{
     processing::{audit::*, worker::*, *},
     retrieval::*,
     *,
 };
-use agistack_core::{Entity, Memory};
+use agistack_core::Entity;
 use futures::executor::block_on;
 use rusqlite::Connection;
 
@@ -64,6 +65,7 @@ async fn create(
             version: 1,
             status: "ENABLED".into(),
             created_at_ms: 1,
+            metadata: Default::default(),
             embedding: None,
         },
     )

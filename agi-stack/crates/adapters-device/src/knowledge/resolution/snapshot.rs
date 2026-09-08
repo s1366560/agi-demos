@@ -32,24 +32,13 @@ pub(super) fn context(
     let baseline: Option<Value> = baseline
         .map(|v| serde_json::from_str(&v).map_err(storage))
         .transpose()?;
-    let baseline_metadata = baseline
-        .as_ref()
-        .map(|v| version(v).map(|v| v.content.metadata))
-        .transpose()?
-        .unwrap_or_default();
-    let local_metadata:Option<String>=conn.query_row("SELECT m.metadata_json FROM knowledge_sync_outbox_metadata m
-        JOIN knowledge_pending_outbox c ON c.sequence=m.sequence
-        WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.memory_id=?3
-        ORDER BY m.sequence DESC LIMIT 1",params![scope.tenant_id,scope.project_id,id],|row|row.get(0)).optional().map_err(storage)?;
+    let local_metadata = local.metadata.clone();
     Ok(Some(KnowledgePullConflictContext {
         memory_id: id.into(),
         conflict_sequences: sequences,
         local,
         local_deleted: deleted,
-        local_metadata: local_metadata
-            .map(|v| serde_json::from_str(&v).map_err(storage))
-            .transpose()?
-            .unwrap_or(baseline_metadata),
+        local_metadata,
         baseline,
         remote: conflict["remote"].clone(),
     }))
@@ -84,9 +73,13 @@ pub(super) fn validate_guard(
     if unresolved_push {
         return Err(KnowledgeError::Conflict);
     }
-    let mut statement=tx.prepare("SELECT sequence FROM knowledge_pending_outbox
+    let mut statement = tx
+        .prepare(
+            "SELECT sequence FROM knowledge_pending_outbox
         WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3 AND receipt_json IS NULL
-        ORDER BY sequence").map_err(storage)?;
+        ORDER BY sequence",
+        )
+        .map_err(storage)?;
     let sequences = statement
         .query_map(
             params![scope.tenant_id, scope.project_id, command.memory_id],

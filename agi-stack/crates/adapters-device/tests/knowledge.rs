@@ -1,6 +1,6 @@
 use agistack_adapters_device::knowledge::SqliteKnowledgeRepository;
+use agistack_core::knowledge::KnowledgeMemory as Memory;
 use agistack_core::knowledge::{KnowledgeError, KnowledgeScope, ScopedMemoryRepository};
-use agistack_core::Memory;
 use futures::executor::block_on;
 
 fn scope(tenant: &str, project: &str) -> KnowledgeScope {
@@ -23,6 +23,7 @@ fn memory(project: &str) -> Memory {
         version: 1,
         status: "ENABLED".into(),
         created_at_ms: 1,
+        metadata: Default::default(),
         embedding: None,
     }
 }
@@ -211,4 +212,98 @@ fn concurrent_connections_allow_only_one_revision_winner() {
     assert_eq!(changes, 2);
     drop(connection);
     std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn metadata_crud_is_revisioned_atomic_scoped_and_durable() {
+    use agistack_core::knowledge::MemoryMutation;
+    use serde_json::json;
+    block_on(async {
+        let path = std::env::temp_dir().join(format!("metadata-{}.db", uuid::Uuid::new_v4()));
+        let scope = scope("tenant", "project");
+        let repo = SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap();
+        let mut first = memory("project");
+        first.metadata = json!({"nested":{"list":[1,true,null,"中文"]},"user":"original"})
+            .as_object()
+            .unwrap()
+            .clone();
+        let mutation = MemoryMutation::Create {
+            memory: first.clone(),
+        };
+        let receipt = repo
+            .mutate(&scope, "author", "create", mutation.clone())
+            .await
+            .unwrap();
+        assert_eq!(receipt.receipt.memory.metadata, first.metadata);
+        assert_eq!(
+            repo.list(&scope, 10, 0).await.unwrap()[0].metadata,
+            first.metadata
+        );
+        let mut edited = first.clone();
+        edited.metadata = json!({"replacement":false}).as_object().unwrap().clone();
+        let second = repo.update(&scope, edited, 1).await.unwrap();
+        assert_eq!(second.version, 2);
+        assert_eq!(
+            repo.changes(&scope, 0, 10).await.unwrap()[0]
+                .memory
+                .metadata,
+            first.metadata
+        );
+        assert!(matches!(
+            repo.update(&scope, first.clone(), 1).await,
+            Err(KnowledgeError::Conflict)
+        ));
+        let replay = repo
+            .mutate(&scope, "author", "create", mutation)
+            .await
+            .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.receipt.memory.metadata, first.metadata);
+        drop(repo);
+        let repo = SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap();
+        assert_eq!(
+            repo.get(&scope, &second.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .metadata,
+            second.metadata
+        );
+        let mut cleared = second.clone();
+        cleared.metadata.clear();
+        let third = repo.update(&scope, cleared, 2).await.unwrap();
+        assert!(third.metadata.is_empty());
+        repo.delete(&scope, &third.id, 3).await.unwrap();
+        assert!(repo.get(&scope, &third.id).await.unwrap().is_none());
+        assert!(repo.changes(&scope, 0, 10).await.unwrap()[3]
+            .memory
+            .metadata
+            .is_empty());
+        drop(repo);
+        std::fs::remove_file(path).unwrap();
+    });
+}
+
+#[test]
+fn metadata_requires_object_and_portable_byte_limit_without_partial_writes() {
+    use serde_json::json;
+    block_on(async {
+        let repo = SqliteKnowledgeRepository::in_memory().unwrap();
+        let scope = scope("tenant", "project");
+        let mut document = memory("project");
+        let mut payload = serde_json::to_value(&document).unwrap();
+        for invalid in [json!(null), json!([]), json!("string"), json!(12)] {
+            payload["metadata"] = invalid;
+            assert!(serde_json::from_value::<Memory>(payload.clone()).is_err());
+        }
+        document
+            .metadata
+            .insert("large".into(), json!("界".repeat(22_000)));
+        assert!(matches!(
+            repo.create(&scope, document).await,
+            Err(KnowledgeError::InvalidInput)
+        ));
+        assert!(repo.changes(&scope, 0, 10).await.unwrap().is_empty());
+        assert!(repo.list(&scope, 10, 0).await.unwrap().is_empty());
+    });
 }

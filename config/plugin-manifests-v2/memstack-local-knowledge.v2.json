@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/desktop-sidecar/knowledge-authority",
       "entrypoint": "KnowledgeModuleV2::apply",
       "artifact": {
-        "digest": "sha256:03aa93bedbb460dc4b26f60cb7beb1705b26ca4c6ef26a0a024a1786f6566fb8",
+        "digest": "sha256:1eb14876da7b729b3da4630c3005957c5b157576aff313153dd2293c1af2a152",
         "source": "repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/knowledge_authority_v2.rs"
       },
       "targets": [

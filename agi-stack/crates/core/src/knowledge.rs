@@ -4,7 +4,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::model::Memory;
+pub mod document;
+pub use document::KnowledgeMemory;
+use document::KnowledgeMemory as Memory;
 
 pub mod diagnostics;
 pub mod index;
@@ -41,9 +43,11 @@ pub type KnowledgeResult<T> = Result<T, KnowledgeError>;
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MemoryMutation {
     Create {
+        #[serde(deserialize_with = "document::deserialize_mutation_memory")]
         memory: Memory,
     },
     Update {
+        #[serde(deserialize_with = "document::deserialize_mutation_memory")]
         memory: Memory,
         expected_revision: u32,
     },

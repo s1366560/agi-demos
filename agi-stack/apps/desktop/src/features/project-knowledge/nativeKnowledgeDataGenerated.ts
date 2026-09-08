@@ -48,6 +48,9 @@ export type NativeKnowledgeMemory = {
   readonly status: string;
   readonly created_at_ms: number;
   readonly embedding: (readonly (number)[]) | (null);
+  readonly metadata: {
+    readonly [key: string]: NativeKnowledgeJson;
+  };
 };
 
 // prettier-ignore
@@ -429,6 +432,9 @@ export type NativeKnowledgeStoredMemory = {
   readonly status: string;
   readonly created_at_ms: number;
   readonly embedding: (readonly (number)[]) | (null);
+  readonly metadata: {
+    readonly [key: string]: NativeKnowledgeJson;
+  };
 };
 
 // prettier-ignore
@@ -445,6 +451,9 @@ export type NativeKnowledgeMutationMemory = {
   readonly status: string;
   readonly created_at_ms: number;
   readonly embedding?: (readonly (number)[]) | (null);
+  readonly metadata: {
+    readonly [key: string]: NativeKnowledgeJson;
+  };
 };
 
 // prettier-ignore
