@@ -87,3 +87,87 @@
 .native-memory-editor dd {
   margin: 0;
 }
+
+.native-knowledge-route-boundary {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.native-knowledge-sync,
+.native-knowledge-conflict {
+  margin: 1.25rem;
+  padding: 1rem;
+  min-width: 0;
+  max-width: 64rem;
+  border: 1px solid var(--gray-6);
+  border-radius: 0.5rem;
+  color: var(--gray-12);
+  background: var(--color-panel-solid);
+  overflow-wrap: anywhere;
+}
+.native-knowledge-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+.native-knowledge-comparison section {
+  min-width: 0;
+}
+.native-knowledge-sync pre,
+.native-knowledge-conflict pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 22rem;
+  overflow: auto;
+}
+.native-knowledge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+.native-knowledge-sync button,
+.native-knowledge-conflict button,
+.native-knowledge-conflict input,
+.native-knowledge-conflict textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-7);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+}
+.native-knowledge-sync button:disabled,
+.native-knowledge-conflict button:disabled {
+  opacity: 0.55;
+}
+.native-knowledge-sync button:focus-visible,
+.native-knowledge-conflict button:focus-visible,
+.native-knowledge-conflict input:focus-visible,
+.native-knowledge-conflict textarea:focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: 2px;
+}
+.native-knowledge-conflict button[aria-pressed='true'] {
+  border-color: var(--accent-9);
+  background: var(--accent-3);
+}
+.native-knowledge-conflict label {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+.native-knowledge-conflict textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+.native-knowledge-sync li {
+  margin-block: 0.5rem;
+}
+.native-knowledge-sync li button {
+  margin-inline-start: 0.5rem;
+}
+.native-knowledge-sync li > span {
+  margin-inline-start: 0.5rem;
+}
