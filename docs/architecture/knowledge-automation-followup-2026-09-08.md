@@ -315,7 +315,7 @@ their logs. Desktop full at this revision had 4,718 passed, two failed and two
 skipped: stale parity evidence and an obsolete aggregate lease-event assertion.
 This is not a completed shared release gate.
 
-## Portable metadata, native recovery and community storage
+## Portable metadata, native recovery and community processing
 
 Current verification follows executable tests and native behavior checks. The
 historical parity and manual promotion requirements above were retired; they are
@@ -339,16 +339,49 @@ and retained the same scoped QA memory payload. A new semantic query after resta
 again returned the Cedar source and its exact revision and extraction attempt.
 
 The portable schema document foundation has matching Python/Rust structural and
-revision validation, but is not yet connected to persistence or synchronization.
-Community storage now captures immutable graph inputs, candidate memberships,
-jobs and leases. Its trait clock advances while waiting for locks, so a lease
-that expires during a wait cannot be renewed or failed using stale time. This
-storage batch cannot name, summarize or publish nonempty communities; the audited
-Agent worker and product entry remain in progress.
+revision validation. Its cloud command integration and native persistence are
+separate ongoing batches; schema synchronization is not complete.
 
-Validation completed: Web 3,692 tests; Desktop 4,435 tests plus two separately
-executed real-process integrations; schema Python/Rust differential suite 92
-tests; community storage 24 focused tests. Web types, focused lint and formatting
-checks passed. The metadata editor/detail regression set contains 13 tests.
-GitNexus remained unavailable with `Transport closed`; source and diff inspection
-bounded these changes. This is implementation progress, not completion of I0–I6.
+Community processing now uses the existing scoped knowledge authority and native
+Provider configuration. A structured Agent submission supplies names, summaries,
+rationale and exact source references. The worker persists accepted output and
+sanitized attempt metadata under the same generation, current graph and lease
+checks. Raw rejected model output and credentials are not included in the
+presentation response. Creating or processing candidates never implicitly
+publishes a build: selecting and activating it are separate revision-checked
+commands. Source changes hide stale active output.
+
+The Desktop community page supports candidate and build-history pagination,
+explicit Workspace selection, processing one candidate, retrying a failed attempt,
+activation and audit details. Build history lists immutable creation receipts;
+opening a build reads its current processing state. The history query also makes
+an accepted but unselected build discoverable after application restart or loss
+of its creation response. While the controller retains an uncertain creation
+request, its explicit recovery action uses exactly the same idempotency key and
+parameters. It never silently creates a replacement request.
+
+The new page has executable controller and rendering coverage, but its real
+Electron interaction and community restart journey have not yet been exercised.
+The earlier native metadata/extraction/retrieval results do not establish this
+new community acceptance. The latest metadata source was separately extracted
+and indexed through the native UI, bringing current vector coverage to 3/3.
+
+Validation completed for the community transport/history/page batches: Desktop
+4,491 passed, zero failed, two skipped; sidecar 811 passed, zero failed, one
+ignored; device storage 192 passed; generated contract tests 49 passed. Two
+real sidecar process integrations also passed without skips. The Rust-produced
+four-query/one-command response fixture passes the actual Desktop HTTP consumer
+and negative relationship checks. Electron compilation/build and strict Clippy
+passed. The ongoing full Backend run has a tenant-deletion failure and is not a
+passing full-suite result.
+
+Earlier Web validation remains 3,692 tests, with 13 metadata editor/detail
+regressions; the schema Python/Rust differential foundation passed 92 tests.
+GitNexus remained unavailable with `Transport closed`; source inspection, staged
+diff checks, credential scans and executable tests bounded these changes.
+
+Rollback can remove the community page and transport capabilities without
+deleting immutable builds, attempts or accepted results. Preserve the existing
+versioned knowledge database and pre-upgrade backups; older storage binaries must
+continue to reject a newer schema. This is implementation progress, not completion
+of I0–I6 or permission to open the shared first-release gate.
