@@ -220,6 +220,18 @@ function validateMutation(value: unknown, method: ProviderMethodV2): void {
       value.allowedModels.some((x) => typeof x !== 'string'))
   )
     throw providerErrorV2('tenant_provider_models_invalid');
+  if (value.embeddingModel !== undefined) {
+    if (
+      method === 'testLlmProviderDraft' ||
+      typeof value.embeddingModel !== 'string' ||
+      value.embeddingModel !== value.embeddingModel.trim() ||
+      value.embeddingModel.length > 256 ||
+      (value.embeddingModel !== '' &&
+        value.embeddingModel !== value.primaryModel &&
+        !(value.allowedModels as string[]).includes(value.embeddingModel))
+    )
+      throw providerErrorV2('tenant_provider_embedding_model_invalid');
+  }
   if (method === 'updateLlmProvider') revision(value.expectedRevision);
 }
 function validateRouting(value: unknown): void {

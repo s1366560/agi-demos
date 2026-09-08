@@ -259,6 +259,7 @@ fn mutate_llm_provider(
         environment_variable,
         llm_model,
         allowed_models,
+        embedding_model,
         is_active,
         expected_revision,
     } = request;
@@ -357,6 +358,7 @@ fn mutate_llm_provider(
             "credential_configured": false,
             "llm_model": null,
             "allowed_models": [],
+            "embedding_model": null,
             "secondary_models": [],
             "health_status": "not_configured",
             "revision": 0,
@@ -405,6 +407,11 @@ fn mutate_llm_provider(
     if let Some(is_active) = is_active {
         object.insert("is_active".to_string(), json!(is_active));
     }
+    // The declaration is validated after the same mutation updates the allowed roster.
+    provider_embedding_declaration::apply(&mut provider, embedding_model)?;
+    let object = provider
+        .as_object_mut()
+        .ok_or_else(|| local_store_error("managed provider must be an object".to_string()))?;
     let provider_type = object
         .get("provider_type")
         .and_then(Value::as_str)

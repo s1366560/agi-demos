@@ -1032,6 +1032,7 @@ export function ModelProviderWorkspace({
                   key={`${scopeKey}:${provider.id}`}
                   provider={provider}
                   canManage={canManage}
+                  allowEmbeddingDeclaration={config.mode === 'local'}
                   onLoadCatalog={loadProviderCatalog}
                   onSave={saveProvider}
                 />

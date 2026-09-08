@@ -390,3 +390,31 @@
   .provider-model-row { grid-template-columns: minmax(160px, 1.25fr) minmax(130px, 1fr) 54px 42px; }
   .provider-manual-model { grid-template-columns: 1fr; }
 }
+.provider-embedding-declaration {
+  display: grid;
+  gap: 8px;
+  margin-block: 12px;
+  padding: 12px;
+  border: 1px solid var(--desktop-border-18);
+  border-radius: 6px;
+}
+.provider-embedding-declaration label {
+  display: grid;
+  gap: 8px;
+}
+.provider-embedding-declaration select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px;
+  color: var(--desktop-text-mist);
+  background: var(--desktop-surface-3);
+  border: 1px solid var(--desktop-border-6);
+  border-radius: 5px;
+  font: inherit;
+}
+.provider-embedding-declaration p {
+  margin: 0;
+  color: var(--desktop-gray-5);
+  font-size: 12px;
+  line-height: 1.5;
+}

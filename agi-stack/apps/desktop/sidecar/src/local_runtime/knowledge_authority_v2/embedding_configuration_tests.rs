@@ -120,3 +120,48 @@ async fn model_switch_while_worker_waits_blocks_late_write() {
         0
     );
 }
+
+#[tokio::test]
+async fn explicit_provider_embedding_declaration_still_requires_valid_embedding_api_response() {
+    let f = Fixture::new().await;
+    let endpoint = Endpoint::new().await;
+    let original = f.provider(&endpoint).await;
+    let updated = crate::local_runtime::provider_management::update_llm_provider(
+        State(f.state.clone()),
+        Extension(f.auth.clone()),
+        axum::extract::Path(original.provider_id.clone()),
+        Json(
+            serde_json::from_value(json!({
+                "embedding_model": "other-embedding-model",
+                "expected_revision": original.provider_revision
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap()
+    .0;
+    let route = EmbeddingRoute {
+        provider_id: original.provider_id,
+        provider_revision: updated["revision"].as_u64().unwrap(),
+        model_id: updated["embedding_model"].as_str().unwrap().into(),
+    };
+    assert_eq!(route.provider_revision, original.provider_revision + 1);
+    let build = f
+        .operation
+        .prepare_index_build(&f.state, &f.auth, &route, "declared-build")
+        .await
+        .unwrap();
+    assert_eq!(build.profile.dimensions.get(), 2);
+    assert_eq!(
+        endpoint.state.requests.lock().unwrap()[0]["model"],
+        "other-embedding-model"
+    );
+    *endpoint.state.response.lock().unwrap() =
+        Some(json!({"model":"other-embedding-model", "data":[]}));
+    assert!(f
+        .operation
+        .prepare_index_build(&f.state, &f.auth, &route, "invalid-declared-build")
+        .await
+        .is_err());
+}

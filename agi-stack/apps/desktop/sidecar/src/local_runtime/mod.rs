@@ -106,6 +106,7 @@ pub(crate) use platform_plugin_sync_v2::{
     PlatformPluginAuthorityModeV2, PlatformPluginControlPlaneReconcilerV2,
 };
 mod provider_credentials;
+mod provider_embedding_declaration;
 mod provider_management;
 mod provider_probe;
 mod provider_usage_store;
@@ -3820,6 +3821,8 @@ struct LlmProviderMutation {
     llm_model: Option<String>,
     #[serde(default)]
     allowed_models: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    embedding_model: Option<String>,
     #[serde(default)]
     is_active: Option<bool>,
     #[serde(default)]
@@ -4481,6 +4484,13 @@ async fn validate_llm_provider(
         .selections
         .get(&authenticated.workspace.tenant_id)
         .is_some_and(|selected| selected == &key.provider_id);
+    let catalog = provider_probe_catalog(
+        &result.provider_type,
+        Some(&key.provider_id),
+        &result.outcome,
+        &result.last_check,
+        Some(&result.provider),
+    );
     Ok(Json(json!({
         "provider": provider_with_runtime_state(
             result.provider,
@@ -4496,12 +4506,7 @@ async fn validate_llm_provider(
         "response_time_ms": result.outcome.response_time_ms,
         "error_code": result.outcome.error_code,
         "error_message": result.outcome.error_code.map(|_| result.outcome.detail),
-        "catalog": provider_probe_catalog(
-            &result.provider_type,
-            Some(&key.provider_id),
-            &result.outcome,
-            &result.last_check,
-        ),
+        "catalog": catalog,
     })))
 }
 
@@ -4596,6 +4601,7 @@ async fn validate_llm_provider_draft(
             None,
             &outcome,
             &last_check,
+            None,
         ),
     })))
 }
@@ -4619,6 +4625,7 @@ async fn discover_llm_provider_models(
         Some(&provider_id),
         &result.outcome,
         &result.last_check,
+        Some(&result.provider),
     )))
 }
 
@@ -4833,17 +4840,29 @@ fn provider_probe_catalog(
     provider_id: Option<&str>,
     outcome: &ProviderProbeOutcome,
     discovered_at: &str,
+    provider: Option<&Value>,
 ) -> Value {
+    let embedding = if outcome.healthy() {
+        provider.and_then(provider_embedding_declaration::model)
+    } else {
+        None
+    };
+    let source = outcome.healthy().then_some(if embedding.is_some() {
+        "provider-api+explicit-configuration"
+    } else {
+        "provider-api"
+    });
+    let chat = outcome.models.iter().map(|model| model.id.as_str()).collect::<Vec<_>>();
     json!({
         "provider_type": provider_type,
         "provider_id": provider_id,
         "availability": if outcome.healthy() { "available" } else { "unavailable" },
-        "source": outcome.healthy().then_some("provider-api"),
+        "source": source,
         "discovered_at": discovered_at,
         "detail": outcome.detail,
         "models": {
-            "chat": outcome.models.iter().map(|model| model.id.as_str()).collect::<Vec<_>>(),
-            "embedding": [],
+            "chat": chat,
+            "embedding": embedding.into_iter().collect::<Vec<_>>(),
             "rerank": [],
         },
     })
@@ -9943,6 +9962,11 @@ mod tests {
     mod conversation_llm_route_tests {
         use super::*;
         include!("conversation_llm_route_tests.rs");
+    }
+
+    mod provider_embedding_declaration_tests {
+        use super::*;
+        include!("provider_embedding_declaration_tests.rs");
     }
 
     mod provider_management_tests {

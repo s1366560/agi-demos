@@ -989,6 +989,7 @@ export type LlmProviderMutationInput = {
   authMethod: LlmProviderAuthMethod;
   baseUrl: string;
   primaryModel: string;
+  embeddingModel?: string;
   allowedModels: string[];
   active: boolean;
   expectedRevision: number;

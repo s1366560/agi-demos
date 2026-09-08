@@ -20,10 +20,12 @@ import {
   providerModelCanBeDisabled,
   providerMutationForEnabledModels,
 } from './providerManagementModel';
+import { ProviderEmbeddingDeclarationField } from './ProviderEmbeddingDeclarationField';
 
 type ProviderModelsPanelProps = {
   provider: ManagedLlmProvider;
   canManage: boolean;
+  allowEmbeddingDeclaration?: boolean;
   onLoadCatalog: (provider: ManagedLlmProvider) => Promise<LlmProviderModelCatalog>;
   onSave: (
     provider: ManagedLlmProvider,
@@ -40,11 +42,16 @@ type VisibleModel = {
 export function ProviderModelsPanel({
   provider,
   canManage,
+  allowEmbeddingDeclaration = false,
   onLoadCatalog,
   onSave,
 }: ProviderModelsPanelProps) {
   const { t } = useI18n();
   const [catalog, setCatalog] = useState<LlmProviderModelCatalog | null>(null);
+  const [embeddingModel, setEmbeddingModel] = useState(provider.embedding_model ?? '');
+  useEffect(() => {
+    setEmbeddingModel(provider.embedding_model ?? '');
+  }, [provider.id, provider.revision, canManage, provider.embedding_model]);
   const [query, setQuery] = useState('');
   const [manualModel, setManualModel] = useState('');
   const [enabled, setEnabled] = useState<Set<string>>(
@@ -92,18 +99,19 @@ export function ProviderModelsPanel({
       catalogRequestId.current += 1;
       saveRequestId.current += 1;
     };
-    // The provider identity is the reset boundary; the callback is stable in the parent.
+    // A new persisted revision invalidates catalog results and unsaved selections.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider.id]);
+  }, [provider.id, provider.revision]);
 
   const catalogIsStaticFallback = catalog?.source === 'static-fallback';
 
   const models = useMemo<VisibleModel[]>(() => {
     const byId = new Map<string, VisibleModel>();
+    const catalogSource = catalogIsStaticFallback ? 'staticFallback' : 'catalog';
     for (const model of catalog?.models ?? []) {
       byId.set(model.id, {
         ...model,
-        source: catalogIsStaticFallback ? 'staticFallback' : 'catalog',
+        source: model.id === provider.embedding_model ? 'configured' : catalogSource,
       });
     }
     for (const id of provider.allowed_models ?? []) {
@@ -120,7 +128,14 @@ export function ProviderModelsPanel({
       if (!byId.has(id)) byId.set(id, { id, capability: 'chat', source: 'configured' });
     }
     return [...byId.values()];
-  }, [catalog, catalogIsStaticFallback, enabled, provider.allowed_models, provider.llm_model]);
+  }, [
+    catalog,
+    catalogIsStaticFallback,
+    enabled,
+    provider.allowed_models,
+    provider.llm_model,
+    provider.embedding_model,
+  ]);
 
   const visibleModels = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -130,10 +145,12 @@ export function ProviderModelsPanel({
 
   const configuredModels = provider.allowed_models ?? [];
   const dirty =
-    [...enabled].sort().join('\n') !== [...configuredModels].sort().join('\n');
+    [...enabled].sort().join('\n') !== [...configuredModels].sort().join('\n') ||
+    (allowEmbeddingDeclaration && embeddingModel !== (provider.embedding_model ?? ''));
 
   const toggleModel = (modelId: string) => {
     if (!canManage || !providerModelCanBeDisabled(provider, modelId)) return;
+    if (enabled.has(modelId) && embeddingModel === modelId) setEmbeddingModel('');
     setEnabled((current) => {
       const next = new Set(current);
       if (next.has(modelId)) next.delete(modelId);
@@ -156,20 +173,17 @@ export function ProviderModelsPanel({
     setSaving(true);
     setError(null);
     try {
-      await onSave(provider, providerMutationForEnabledModels(provider, enabled));
+      await onSave(provider, {
+        ...providerMutationForEnabledModels(provider, enabled),
+        ...(allowEmbeddingDeclaration ? { embeddingModel } : {}),
+      });
     } catch (caught) {
-      if (
-        requestId !== saveRequestId.current ||
-        providerId !== activeProviderIdRef.current
-      ) {
+      if (requestId !== saveRequestId.current || providerId !== activeProviderIdRef.current) {
         return;
       }
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      if (
-        requestId === saveRequestId.current &&
-        providerId === activeProviderIdRef.current
-      ) {
+      if (requestId === saveRequestId.current && providerId === activeProviderIdRef.current) {
         setSaving(false);
       }
     }
@@ -216,6 +230,15 @@ export function ProviderModelsPanel({
           </button>
         )}
       </header>
+
+      {allowEmbeddingDeclaration ? (
+        <ProviderEmbeddingDeclarationField
+          value={embeddingModel}
+          models={[...enabled]}
+          disabled={!canManage || saving}
+          onChange={setEmbeddingModel}
+        />
+      ) : null}
 
       <div className="provider-model-tools">
         <label>
@@ -299,7 +322,7 @@ export function ProviderModelsPanel({
                 ? 'providers.discoveryUnavailable'
                 : catalogIsStaticFallback
                   ? 'providers.noSuggestedModels'
-                : 'providers.noModelsReturned',
+                  : 'providers.noModelsReturned',
             )}
           </b>
           <span>
@@ -308,7 +331,7 @@ export function ProviderModelsPanel({
                 ? 'providers.discoveryUnavailableDescription'
                 : catalogIsStaticFallback
                   ? 'providers.noSuggestedModelsDescription'
-                : 'providers.noModelsReturnedDescription',
+                  : 'providers.noModelsReturnedDescription',
             )}
           </span>
         </div>
