@@ -842,3 +842,33 @@ restore unsupported waiting-human requests to the released driver.
 
 Further fixture corrections and the disk/Docker interruption are recorded in
 [validation recovery](qa-evidence/2026-09-07/followup-validation-recovery.md).
+
+I0.7 records the sandbox startup fix `9e40036e4` and the scattered-branch review.
+The interrupted full Backend run had reproduced an MCP sandbox connection failure;
+startup retries are now bounded by the shared connection deadline instead of an
+unbounded retry count, with optional attempt caps inside the budget. The missing
+authentication token guard no longer falls through to a connect attempt. Focused
+retry regressions (167 lines, `test_mcp_sandbox_connect_retry.py`) cover deadline
+exhaustion, backoff budgeting and cancellation. This closes the sandbox failure
+seen during the interrupted run; it is not the same-commit full Backend gate.
+
+Scattered `codex/*` branch review (2026-09-08): eight branches held unmerged
+commits. `codex/sandbox-connect-retry` is byte-identical to `9e40036e4`
+(stable patch-id match) and needs no merge. `codex/knowledge-cosine-ranking`
+has zero tree difference from `codex/knowledge-processing-worker` and is
+deduplicated. `codex/desktop-local-mode-qa` (2026-08-13, 1250 commits behind)
+is superseded by later rewrites and will not be merged; its three original
+issues get targeted probes on current main before any new fix is opened.
+Four branches are queued for integration in dependency order, each verified
+conflict-free against main with `git merge-tree` before cherry-pick:
+`codex/automation-readiness-slice` (legacy cron durable admission fence,
+ordinary-HITL durable resume, truthful legacy run projection — the I4 cutover
+prerequisite), `codex/cloud-memory-command-scope` (explicit project scope on
+cloud memory commands), `codex/knowledge-processing-worker` (audited local
+extraction, projection retrieval, verified embedding, versioned vector index,
+strict cosine ranking), and `codex/knowledge-crud-client` (typed native CRUD
+client and scoped editing interface). Two worktrees also hold uncommitted
+work-in-progress on top of those branches (embedding/index/semantic-query
+worker; conflict editor and sync panel UI); they are completed and committed
+as separate batches before the I3 worker-loop wiring. None of these batches
+opens a release gate.
