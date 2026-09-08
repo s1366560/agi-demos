@@ -12,6 +12,12 @@ import { createNativeKnowledgeSyncController } from './nativeKnowledgeSyncContro
 import { createNativeKnowledgeConflictController } from './nativeKnowledgeConflictController';
 import { NativeKnowledgeSyncPanel } from './NativeKnowledgeSyncPanel';
 import { NativeKnowledgeConflictEditor } from './NativeKnowledgeConflictEditor';
+import { createNativeKnowledgeRetrievalController } from './nativeKnowledgeRetrievalController';
+import { NativeKnowledgeConfigurationPanel } from './NativeKnowledgeConfigurationPanel';
+import {
+  NativeKnowledgeRetrievalPanel,
+  NativeKnowledgeRetrievalUnavailable,
+} from './NativeKnowledgeRetrievalPanel';
 
 export function NativeMemoriesRouteSurface({ context }: DesktopRouteSurfaceProps) {
   const binding = useNativeMemoriesRouteBinding();
@@ -55,7 +61,12 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
         if (binding.authority.allowedActions.includes('list')) void list.retry();
       },
     });
-    return { list, editor, sync, conflicts };
+    const retrieval = createNativeKnowledgeRetrievalController({
+      client: binding.processingClient,
+      sourceClient: binding.client,
+      authority: binding.authority,
+    });
+    return { list, editor, sync, conflicts, retrieval };
   }, [binding]);
   const list = useSyncExternalStore(
     controllers.list.subscribe,
@@ -77,10 +88,17 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
     controllers.conflicts.getSnapshot,
     controllers.conflicts.getSnapshot,
   );
+  const retrieval = useSyncExternalStore(
+    controllers.retrieval.subscribe,
+    controllers.retrieval.getSnapshot,
+    controllers.retrieval.getSnapshot,
+  );
   useLayoutEffect(() => {
     controllers.editor.activate();
     controllers.sync.activate();
     controllers.conflicts.activate();
+    controllers.retrieval.activate();
+    void controllers.retrieval.refreshConfiguration();
     void controllers.sync.refresh();
     if (controllers.editor.getSnapshot().allowedActions.includes('list'))
       void controllers.list.load(binding.authority.scope);
@@ -89,6 +107,7 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
       controllers.list.stop();
       controllers.sync.stop();
       controllers.conflicts.stop();
+      controllers.retrieval.stop();
     };
   }, [binding, controllers]);
   const editorLocked = editor.phase === 'saving' || editor.phase === 'uncertain';
@@ -122,6 +141,25 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
         controller={controllers.conflicts}
         disabled={editorLocked || syncLocked}
       />
+      {!binding.processingClient &&
+      ['configuration', 'text', 'semantic', 'entities', 'relationships'].some((operation) =>
+        binding.authority.allowedActions.includes(operation),
+      ) ? (
+        <NativeKnowledgeRetrievalUnavailable />
+      ) : (
+        <>
+          <NativeKnowledgeConfigurationPanel
+            model={retrieval}
+            controller={controllers.retrieval}
+            disabled={editorLocked || syncLocked || conflictLocked}
+          />
+          <NativeKnowledgeRetrievalPanel
+            model={retrieval}
+            controller={controllers.retrieval}
+            disabled={editorLocked || syncLocked || conflictLocked}
+          />
+        </>
+      )}
     </>
   );
 }

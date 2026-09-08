@@ -1,0 +1,79 @@
+.native-knowledge-retrieval,
+.native-knowledge-configuration {
+  margin: 1.25rem;
+  padding: 1rem;
+  min-width: 0;
+  max-width: 64rem;
+  color: var(--gray-12);
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-6);
+  border-radius: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.native-knowledge-configuration dl,
+.native-knowledge-retrieval dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.5rem 1rem;
+}
+.native-knowledge-configuration dd,
+.native-knowledge-retrieval dd {
+  margin: 0;
+}
+.native-knowledge-configuration table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: 1rem;
+}
+.native-knowledge-configuration th,
+.native-knowledge-configuration td {
+  padding: 0.5rem;
+  text-align: start;
+  border-bottom: 1px solid var(--gray-6);
+}
+.native-knowledge-retrieval form,
+.native-knowledge-retrieval label {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+.native-knowledge-retrieval form {
+  gap: 1rem;
+}
+.native-knowledge-retrieval button,
+.native-knowledge-configuration button,
+.native-knowledge-retrieval input,
+.native-knowledge-retrieval select {
+  font: inherit;
+  color: inherit;
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-7);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+}
+.native-knowledge-retrieval button:disabled,
+.native-knowledge-configuration button:disabled {
+  opacity: 0.55;
+}
+.native-knowledge-retrieval :is(button, input, select):focus-visible,
+.native-knowledge-configuration button:focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: 2px;
+}
+.native-knowledge-retrieval ol {
+  display: grid;
+  gap: 1rem;
+  padding-inline-start: 1.5rem;
+}
+.native-knowledge-retrieval pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 20rem;
+  overflow: auto;
+}
+@media (max-width: 36rem) {
+  .native-knowledge-configuration dl,
+  .native-knowledge-retrieval dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

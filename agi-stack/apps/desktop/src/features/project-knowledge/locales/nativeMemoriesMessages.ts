@@ -1,4 +1,10 @@
+import {
+  nativeKnowledgeRetrievalEnUS,
+  nativeKnowledgeRetrievalZhCN,
+} from './nativeKnowledgeRetrievalMessages';
+
 export const nativeMemoriesEnUS = {
+  ...nativeKnowledgeRetrievalEnUS,
   'nativeSync.title': 'Synchronization',
   'nativeSync.conflictReview': 'Review conflict',
   'nativeSync.working': 'Working…',
@@ -88,6 +94,7 @@ export const nativeMemoriesEnUS = {
 };
 
 export const nativeMemoriesZhCN: Record<keyof typeof nativeMemoriesEnUS, string> = {
+  ...nativeKnowledgeRetrievalZhCN,
   'nativeSync.title': '同步',
   'nativeSync.conflictReview': '审核冲突',
   'nativeSync.working': '正在处理…',
