@@ -83,43 +83,59 @@ fn group_members(group: i32) -> io::Result<Vec<i32>> {
             .map_err(|_| io::Error::other("PTY group membership exceeds buffer limit"))?;
         // PROC_PGRP_ONLY is the libproc selector declared in sys/proc_info.h.
         // SAFETY: the initialized, aligned vector owns the supplied writable range.
-        let written =
-            unsafe { libc::proc_listpids(2, group as u32, members.as_mut_ptr().cast(), bytes) };
-        if written < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if written == bytes {
+        let written = libproc_call(|| unsafe {
+            libc::proc_listpids(2, group as u32, members.as_mut_ptr().cast(), bytes)
+        })?;
+        if written == bytes as usize {
             members.resize(members.len() * 2, 0);
             continue;
         }
-        members.truncate(written as usize / mem::size_of::<i32>());
+        members.truncate(written / mem::size_of::<i32>());
         members.retain(|pid| *pid > 1);
         return Ok(members);
     }
 }
 
-fn process_info(pid: i32) -> io::Result<Option<libc::proc_bsdinfo>> {
-    let mut info = mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-    let bytes = mem::size_of::<libc::proc_bsdinfo>() as i32;
-    // SAFETY: the output pointer owns exactly the requested struct-sized buffer.
-    let written = unsafe {
-        libc::proc_pidinfo(
-            pid,
-            libc::PROC_PIDTBSDINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            bytes,
-        )
-    };
-    if written == bytes {
-        // SAFETY: libproc returned the complete initialized structure.
-        return Ok(Some(unsafe { info.assume_init() }));
+fn libproc_call(call: impl FnOnce() -> i32) -> io::Result<usize> {
+    // libproc maps syscall failure to zero, which also represents an empty list.
+    // errno is thread-local; capture it before any other call or formatting.
+    // SAFETY: __error returns this thread's valid errno storage on macOS.
+    unsafe { *libc::__error() = 0 };
+    let written = call();
+    let error = unsafe { *libc::__error() };
+    if written < 0 || (written == 0 && error != 0) {
+        return Err(if error == 0 {
+            io::Error::other("libproc failed without errno")
+        } else {
+            io::Error::from_raw_os_error(error)
+        });
     }
-    let error = io::Error::last_os_error();
-    if error.raw_os_error() == Some(libc::ESRCH) {
-        Ok(None)
-    } else {
-        Err(error)
+    Ok(written as usize)
+}
+
+fn process_info(pid: i32) -> io::Result<Option<libc::proc_bsdinfo>> {
+    process_info_with(|buffer, bytes| {
+        // SAFETY: the caller owns the complete initialized output buffer.
+        unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, buffer, bytes) }
+    })
+}
+
+fn process_info_with(
+    call: impl FnOnce(*mut libc::c_void, i32) -> i32,
+) -> io::Result<Option<libc::proc_bsdinfo>> {
+    let mut info = mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+    let bytes = mem::size_of::<libc::proc_bsdinfo>();
+    match libproc_call(|| call(info.as_mut_ptr().cast(), bytes as i32)) {
+        Ok(written) if written == bytes => {
+            // SAFETY: libproc returned the complete initialized structure.
+            Ok(Some(unsafe { info.assume_init() }))
+        }
+        Ok(written) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("libproc BSD info returned {written} bytes; expected {bytes}"),
+        )),
+        Err(error) if error.raw_os_error() == Some(libc::ESRCH) => Ok(None),
+        Err(error) => Err(error),
     }
 }
 
@@ -221,3 +237,7 @@ mod tests {
 #[cfg(test)]
 #[path = "terminal_pty_macos_migration_tests.rs"]
 mod migration_tests;
+
+#[cfg(test)]
+#[path = "terminal_pty_macos_libproc_tests.rs"]
+mod libproc_tests;
