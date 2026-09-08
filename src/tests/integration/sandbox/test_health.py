@@ -3,16 +3,51 @@
 Tests the health check endpoints with different check levels.
 """
 
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
+from unittest.mock import Mock
+
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.infrastructure.adapters.primary.web.main import app
+from src.infrastructure.adapters.primary.web.main import create_app
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+
+
+class _SandboxAdapter(MCPSandboxAdapter):
+    async def sync_from_docker(self) -> int:
+        return 0
+
+    async def close(self) -> None:
+        return None
+
+
+@asynccontextmanager
+async def _runtime_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    try:
+        await initialize_plugin_runtime_v2(app, sandbox_runtime_factory=_SandboxAdapter)
+        assert "sandbox" in app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(app)
 
 
 @pytest.fixture
-def client() -> TestClient:
-    """Create test client."""
-    return TestClient(app)
+def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """Publish production V2 routes in an isolated app on the client event loop."""
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter._DOCKER_CLIENT_FACTORY",
+        Mock(),
+    )
+    app = create_app()
+    app.router.lifespan_context = _runtime_lifespan
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestHealthCheckAPI:

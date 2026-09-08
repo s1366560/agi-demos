@@ -1,18 +1,43 @@
 """Integration tests for channel observability endpoints."""
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
     ChannelOutboxModel,
     ChannelSessionBindingModel,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Conversation
+from src.infrastructure.channels.connection_manager import ChannelConnectionManager
+from src.infrastructure.plugins.v2.channel_runtime import ChannelRuntimeManagerV2
+
+
+@pytest.fixture(autouse=True)
+async def _channel_observability_v2_runtime(test_app):
+    """Mount the real generation-owned channel routes for each isolated app."""
+    # Exercise the real generation service while isolating external channel
+    # connections; observability rows themselves use the shared test database.
+    manager = Mock(spec=ChannelConnectionManager, connections={})
+    manager.start_all = AsyncMock(return_value=0)
+    manager.shutdown_all = AsyncMock()
+    runtime = ChannelRuntimeManagerV2(manager_factory=lambda **_kwargs: manager)
+    await initialize_plugin_runtime_v2(test_app, channel_runtime_manager=runtime)
+    assert "channels" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+        manager.shutdown_all.assert_awaited_once()
 
 
 @pytest.mark.integration
@@ -115,6 +140,7 @@ class TestChannelObservabilityEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["project_id"] == test_project_db.id
+        assert data["active_connections"] == 0
         assert data["session_bindings_total"] == 1
         assert data["outbox_total"] == 2
         assert data["outbox_by_status"]["pending"] == 1

@@ -1,6 +1,9 @@
+from collections.abc import AsyncIterator
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -8,31 +11,55 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.configuration.config import get_settings
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import create_user
 from src.infrastructure.adapters.primary.web.main import create_app
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 
-app = create_app()
 
-
-@pytest.fixture
+@pytest_asyncio.fixture(loop_scope="function")
 async def integration_db_override():
     settings = get_settings()
     # Create a fresh engine for this test function to ensure clean loop binding
     engine = create_async_engine(settings.postgres_url)
-    TestingSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            sessions = async_sessionmaker(
+                connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
+            )
 
-    async def _get_db():
-        async with TestingSessionLocal() as session:
-            yield session
+            async def _get_db():
+                async with sessions() as session:
+                    yield session
 
-    yield _get_db
+            try:
+                yield _get_db
+            finally:
+                await transaction.rollback()
+    finally:
+        await engine.dispose()
 
-    await engine.dispose()
+
+@pytest_asyncio.fixture(loop_scope="function")
+async def app(integration_db_override) -> AsyncIterator[FastAPI]:
+    """Publish real auth routes after binding this test's PostgreSQL session."""
+    test_app = create_app()
+    test_app.dependency_overrides[get_db] = integration_db_override
+    try:
+        await initialize_plugin_runtime_v2(test_app)
+        assert "auth" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+        yield test_app
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+        test_app.dependency_overrides.clear()
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_auth_flow(integration_db_override):
+async def test_auth_flow(integration_db_override, app):
     app.dependency_overrides[get_db] = integration_db_override
     try:
         # Ensure test user is fresh
@@ -91,7 +118,7 @@ async def test_auth_flow(integration_db_override):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_auth_key_routes_persist_created_key(integration_db_override):
+async def test_auth_key_routes_persist_created_key(integration_db_override, app):
     app.dependency_overrides[get_db] = integration_db_override
     try:
         test_email = f"integration_test_keys_{uuid4().hex}@memstack.ai"
@@ -160,6 +187,7 @@ async def test_auth_key_routes_persist_created_key(integration_db_override):
 @pytest.mark.asyncio
 async def test_signout_revokes_only_authorization_bearer_and_is_idempotent(
     integration_db_override,
+    app,
 ):
     app.dependency_overrides[get_db] = integration_db_override
     try:
@@ -216,6 +244,7 @@ async def test_signout_revokes_only_authorization_bearer_and_is_idempotent(
 @pytest.mark.asyncio
 async def test_device_cancel_revokes_bound_token_and_rejects_caller_token(
     integration_db_override,
+    app,
 ):
     app.dependency_overrides[get_db] = integration_db_override
     try:

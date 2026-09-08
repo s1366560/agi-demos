@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -20,12 +21,35 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 
 
 @pytest.fixture(autouse=True)
 async def _project_my_work_v2_runtime(test_app):
     """Exercise this migrated row through the production generation dispatcher."""
-    await initialize_plugin_runtime_v2(test_app)
+
+    class ProviderAdapter:
+        async def wait_until_idle(self) -> None:
+            return None
+
+    async def workspace_core_runtime_factory() -> WorkspaceCoreRuntimeServiceV2:
+        marker = cast(Any, object())
+        return WorkspaceCoreRuntimeServiceV2(
+            settings=test_app.state.workspace_core_settings,
+            client=marker,
+            authority=test_app.state.workspace_authority,
+            context_judge=marker,
+            plan_judge=marker,
+            autonomy_judge=marker,
+            access_verifier=marker,
+            event_sink=marker,
+            agent_runtime_provider=marker,
+            provider_adapter=cast(Any, ProviderAdapter()),
+        )
+
+    await initialize_plugin_runtime_v2(
+        test_app, workspace_core_runtime_factory=workspace_core_runtime_factory
+    )
     assert "project-my-work" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
     try:
         yield
@@ -34,6 +58,7 @@ async def _project_my_work_v2_runtime(test_app):
 
 
 async def test_my_work_embeds_authoritative_agent_run_summary(
+    test_app,
     authenticated_async_client,
     test_db,
     test_project_db,
@@ -108,6 +133,9 @@ async def test_my_work_embeds_authoritative_agent_run_summary(
     test_db.add_all([conversation, plan, run, summary])
     await test_db.commit()
 
+    # The generation captured the authority at startup. A later legacy app
+    # state mutation must not replace the pinned service used by this request.
+    test_app.state.workspace_authority = object()
     response = await authenticated_async_client.get(
         f"/api/v1/projects/{test_project_db.id}/my-work"
     )
