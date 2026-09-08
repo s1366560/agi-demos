@@ -1,0 +1,48 @@
+{
+  "actor_id": "local-user",
+  "contract_version": "1.0.0",
+  "result": {
+    "allowed_actions": [
+      "configuration",
+      "configure_embedding",
+      "create",
+      "delete",
+      "entities",
+      "get",
+      "index_one",
+      "list",
+      "process_one",
+      "promote_index",
+      "relationships",
+      "retry_index",
+      "select_embedding",
+      "semantic",
+      "text",
+      "update",
+      "view"
+    ],
+    "authority_revision": 0,
+    "authority_source": "sidecar",
+    "availability": "degraded",
+    "contract_version": "1.0.0",
+    "provenance": "observed",
+    "reason_code": "knowledge_local_acceptance_only",
+    "retryable": false,
+    "scope": {
+      "instance_id": null,
+      "project_id": "desktop-client",
+      "tenant_id": "northstar",
+      "workspace_id": null
+    },
+    "service_version": "0.1.0",
+    "supporting_authority_sources": []
+  },
+  "scope": {
+    "context_revision": 0,
+    "digest": "d842d7567471ce5c32e0517f62a7bceb39fd78d266a96618243ecf09d6d7871f",
+    "generation": 1,
+    "profile_id": "memstack-local-knowledge-acceptance-v2",
+    "project_id": "desktop-client",
+    "tenant_id": "northstar"
+  }
+}

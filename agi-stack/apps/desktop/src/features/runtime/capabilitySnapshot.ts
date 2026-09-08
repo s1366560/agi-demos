@@ -1,4 +1,5 @@
 import { isCapabilityVersion, negotiateCapabilityContract } from './capabilityVersion';
+import { supportsNativeKnowledgeCapabilityV1 } from '../project-knowledge/nativeKnowledgeCapabilityVersion';
 
 export const DESKTOP_CAPABILITY_SNAPSHOT_VERSION = '5.0.0' as const;
 export const DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION = '4.0.0' as const;
@@ -239,6 +240,13 @@ export function parseDesktopCapabilitySnapshot(input: unknown): DesktopCapabilit
       input.version,
       runtimeState,
       input.capabilities[capabilityName],
+      supportsNativeKnowledgeCapabilityV1(
+        capabilityName,
+        runtimeState,
+        input.capabilities[capabilityName],
+      )
+        ? ['1.0.0']
+        : undefined,
     );
     if (!availability) return null;
     capabilities[capabilityName] = availability;
@@ -276,9 +284,10 @@ function readSnapshotAvailability(
     | typeof DESKTOP_LEGACY_CAPABILITY_SNAPSHOT_VERSION,
   runtimeState: DesktopCapabilityRuntimeState,
   input: unknown,
+  compatibleMinimums?: readonly string[],
 ): DesktopCapabilitySnapshotEntry | null {
   if (version === DESKTOP_CAPABILITY_SNAPSHOT_VERSION) {
-    return readAvailability(input, runtimeState);
+    return readAvailability(input, runtimeState, compatibleMinimums);
   }
   if (version === DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION) {
     return readV4Availability(input, runtimeState);
@@ -293,6 +302,7 @@ function readSnapshotAvailability(
 function readAvailability(
   input: unknown,
   runtimeState: DesktopCapabilityRuntimeState,
+  compatibleMinimums?: readonly string[],
 ): DesktopCapabilitySnapshotEntry | null {
   if (
     !isExactRecord(input, CAPABILITY_ENTRY_KEYS) ||
@@ -304,7 +314,7 @@ function readAvailability(
     return null;
   }
 
-  const availability = readStructuredAvailability(input, CAPABILITY_ENTRY_KEYS);
+  const availability = readStructuredAvailability(input, CAPABILITY_ENTRY_KEYS, compatibleMinimums);
   const active =
     availability?.availability === 'available' || availability?.availability === 'degraded';
   if (
@@ -369,6 +379,7 @@ function readV4Availability(
 function readStructuredAvailability(
   input: unknown,
   expectedKeys: readonly string[],
+  compatibleMinimums: readonly string[] = CURRENT_CAPABILITY_CONTRACT_MINIMUMS,
 ): DesktopCapabilityAvailability | null {
   if (
     !isExactRecord(input, expectedKeys) ||
@@ -390,7 +401,7 @@ function readStructuredAvailability(
       input.reason_code,
       input.service_version,
       input.contract_version,
-      CURRENT_CAPABILITY_CONTRACT_MINIMUMS,
+      compatibleMinimums,
     )
   ) {
     return null;
