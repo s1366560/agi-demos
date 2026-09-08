@@ -25,6 +25,7 @@ use super::{
     platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
 };
 
+pub(super) mod agent_access;
 mod admission;
 use admission::KnowledgeAdmission;
 mod capabilities;

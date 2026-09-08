@@ -671,6 +671,8 @@ fn is_local_demo_conversation(conversation_id: &str) -> bool {
 }
 
 const PLAN_MODE_TOOL_NAMES: &[&str] = &[
+    "knowledge_search",
+    "knowledge_source",
     "read",
     "batch_read",
     "glob",
@@ -849,6 +851,8 @@ struct LocalRuntimeState {
     recovery_fork_prepare_attempts: AtomicU64,
     #[cfg(test)]
     mock_llm_enabled: AtomicU8,
+    #[cfg(test)]
+    test_llm_override: Mutex<Option<Arc<dyn LlmPort>>>,
     events: broadcast::Sender<Value>,
 }
 
@@ -1140,6 +1144,8 @@ impl LocalRuntimeState {
             recovery_fork_prepare_attempts: AtomicU64::new(0),
             #[cfg(test)]
             mock_llm_enabled: AtomicU8::new(0),
+            #[cfg(test)]
+            test_llm_override: Mutex::new(None),
             events,
         })
     }
@@ -2217,6 +2223,14 @@ impl LocalRuntimeState {
             )));
         }
         let child_base_tool_hosts = tool_hosts.clone();
+        if let Some(host) = knowledge_authority_v2::agent_access::tool_host(
+            self,
+            conversation,
+            run,
+            &profile.agent.id,
+        ) {
+            tool_hosts.push(host);
+        }
         let mut dynamic_metadata =
             std::collections::BTreeMap::<String, tool_authority::ToolMetadata>::new();
         if let Some(run) = run {
@@ -2638,6 +2652,15 @@ impl LocalRuntimeState {
         conversation: &LocalConversation,
         role: LlmWorkloadRole,
     ) -> Result<Arc<dyn LlmPort>, String> {
+        #[cfg(test)]
+        if let Some(llm) = self
+            .test_llm_override
+            .lock()
+            .expect("test LLM override")
+            .clone()
+        {
+            return Ok(llm);
+        }
         #[cfg(test)]
         if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
             return Ok(Arc::new(MockLocalLlm));
@@ -6376,19 +6399,29 @@ async fn run_conversation_message(
     let run_state = Arc::clone(&state);
     let response_message_id = message_id.clone();
     let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+    let knowledge_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
+        authenticated,
+        plugin_generation.clone(),
+        &conversation,
+        &message_id,
+        None,
+    );
     tokio::spawn(async move {
-        run_state
-            .run_agent_message_for_role_with_generation(
-                conversation_id,
-                project_id,
-                body.message,
-                message_id,
-                body.workload_role,
-                None,
-                None,
-                plugin_generation,
-            )
-            .await;
+        knowledge_authority_v2::agent_access::scope(knowledge_authorization, async move {
+            run_state
+                .run_agent_message_for_role_with_generation(
+                    conversation_id,
+                    project_id,
+                    body.message,
+                    message_id,
+                    body.workload_role,
+                    None,
+                    None,
+                    plugin_generation,
+                )
+                .await;
+        })
+        .await;
     });
     Ok(Json(json!({
         "queued": true,
@@ -6534,19 +6567,30 @@ async fn approve_plan_and_start(
         let message_id = outcome.run.message_id.clone();
         let run_id = outcome.run.id.clone();
         let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+        let knowledge_authorization =
+            knowledge_authority_v2::agent_access::RunAuthorization::capture(
+                authenticated,
+                plugin_generation.clone(),
+                &outcome.conversation,
+                &message_id,
+                Some(&run_id),
+            );
         tokio::spawn(async move {
-            run_state
-                .run_agent_message_for_role_with_generation(
-                    conversation_id,
-                    project_id,
-                    message,
-                    message_id,
-                    None,
-                    Some(run_id),
-                    None,
-                    plugin_generation,
-                )
-                .await;
+            knowledge_authority_v2::agent_access::scope(knowledge_authorization, async move {
+                run_state
+                    .run_agent_message_for_role_with_generation(
+                        conversation_id,
+                        project_id,
+                        message,
+                        message_id,
+                        None,
+                        Some(run_id),
+                        None,
+                        plugin_generation,
+                    )
+                    .await;
+            })
+            .await;
         });
     }
     Ok(Json(json!({

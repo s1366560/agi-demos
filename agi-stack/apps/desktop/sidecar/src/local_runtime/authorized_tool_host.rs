@@ -417,6 +417,8 @@ static SENSITIVE_INPUT_FIELDS: LazyLock<BTreeSet<&'static str>> = LazyLock::new(
 });
 
 const READ_ONLY_TOOLS: &[&str] = &[
+    "knowledge_search",
+    "knowledge_source",
     "read",
     "batch_read",
     "glob",

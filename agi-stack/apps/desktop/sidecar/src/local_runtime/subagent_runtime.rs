@@ -73,6 +73,14 @@ impl LocalRuntimeState {
                 format!("SubAgent execution profile is invalid for {resource_id}: {error}")
             })?;
             let mut child_tool_hosts = base_tool_hosts.to_vec();
+            if let Some(host) = knowledge_authority_v2::agent_access::tool_host(
+                self,
+                conversation,
+                Some(run),
+                resource_id,
+            ) {
+                child_tool_hosts.push(host);
+            }
             let mcp_host = mcp_agent_tool_host::McpAgentToolHost::new(
                 Arc::clone(&self.mcp_supervisor),
                 mcp_supervisor::McpScope {

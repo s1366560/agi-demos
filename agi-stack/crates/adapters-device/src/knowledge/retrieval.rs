@@ -125,6 +125,47 @@ impl SqliteKnowledgeRepository {
             },
         )
     }
+    /// Read one exact, current, successfully audited source. Historical,
+    /// deleted, reprocessed, or foreign-scope references never hydrate.
+    pub fn source_durable(
+        &self,
+        scope: &KnowledgeScope,
+        source: &ProcessingSource,
+        audit_attempt: u32,
+        clock: &dyn Fn() -> KnowledgeResult<i64>,
+    ) -> KnowledgeResult<LiteralTextHit> {
+        let request = RetrievalRequest {
+            source: Some(source.clone()),
+            cursor: None,
+            limit: 1,
+        };
+        let page = self.retrieve(
+            scope,
+            &request,
+            RetrievalKind::Text,
+            None,
+            clock,
+            |current| {
+                if current.attempt != audit_attempt {
+                    return Err(KnowledgeError::Conflict);
+                }
+                Ok(vec![(
+                    0,
+                    LiteralTextHit {
+                        source: current.source.clone(),
+                        audit_attempt: current.attempt,
+                        title: current.memory.title.clone(),
+                        content: current.memory.content.clone(),
+                    },
+                )])
+            },
+        )?;
+        page.items
+            .into_iter()
+            .next()
+            .ok_or(KnowledgeError::Conflict)
+    }
+
     fn retrieve<T>(
         &self,
         scope: &KnowledgeScope,
