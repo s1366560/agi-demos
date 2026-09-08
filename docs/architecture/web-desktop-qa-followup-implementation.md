@@ -1043,3 +1043,40 @@ hooks and staged Gitleaks passed. GitNexus remained unavailable with Transport
 closed; no valid graph evidence is claimed. This additive response has no database
 migration and can be reverted independently. Desktop parsing and editing UI remain
 pending; these tests do not establish native Electron acceptance.
+
+### I3 generated processing contract and retrieval views (2026-09-08)
+
+`bff08c258` replaces duplicated native request types with a shared schema and
+generated Rust/TypeScript DTOs, preserving existing CRUD/sync calls and required
+observed scope for writes. All 37 schema cases and generator consistency checks
+passed. `19718760c` adds explicit literal/semantic/entity/relationship modes,
+configuration and index coverage, source revision checks and cursor pagination.
+The views discard late responses on scope changes and require explicit resubmission
+after embedding configuration changes. The 146 focused UI/controller tests and
+controlled browser scenarios passed against the exact generated DTOs.
+
+The complete Desktop suite at `19718760c` passed 4373 tests, skipped 2 binary-gated
+cases and retained 1 known audited-source parity failure
+(`/tmp/followup-main-desktop-schema-ui.log`). Processing lease/factory wiring and
+real Electron acceptance are pending; the production knowledge gate remains closed.
+
+### I4 deployment preparation barrier (2026-09-08)
+
+`aa48a3c35` adds the durable preparation/observation barrier and unified Rust
+scheduler admission predicate. Operator receipts cannot activate Rust; missing
+deployment verification remains an explicit blocker. The migration preserves the
+old owner epoch and accepted execution capabilities, and refuses downgrade after
+preparation or ownership. See [the operational boundary](cron-cutover-barrier.md).
+Main Python and private PostgreSQL regression: 73 passed
+(`/tmp/followup-main-cutover-aa48a3c35.log`). The isolated implementation also passed
+52 Rust unit tests, 3 private PostgreSQL cases, 1 generation case and Clippy.
+
+All six Workspace implementation evidence suites were rerun for schema
+`7c90e5134285` and passed (`/tmp/followup-workspace-evidence-cutover-final.log`).
+The first run exposed an incomplete disposable migration fixture: its owner table
+lacked the existing owner-kind and lease-token columns used by the new downgrade
+guard. The fixture now contains those columns; production migration logic was not
+changed. The attestation and ledger are generated from the successful rerun.
+Continuous owner renewal, authenticated deployment verification, reverse drain
+and joint native/cloud execution acceptance remain pending. No live deployment was
+prepared or activated by these tests.
