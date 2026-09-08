@@ -128,6 +128,19 @@ describe('MemoryDetail', () => {
       </MemoryRouter>
     );
 
+  it('shows persisted record tags instead of unrelated metadata tags', async () => {
+    vi.mocked(memoryAPI.get).mockResolvedValue({
+      ...memory,
+      tags: ['WEB_METADATA_V2'],
+      metadata: { tags: ['custom-metadata-value'] },
+    });
+    renderDetail();
+
+    const sidebar = await screen.findByRole('complementary');
+    expect(within(sidebar).getByText('#WEB_METADATA_V2')).toBeInTheDocument();
+    expect(within(sidebar).queryByText('#custom-metadata-value')).not.toBeInTheDocument();
+  });
+
   it('copies the current detail link from the share action', async () => {
     const { container } = renderDetail();
 

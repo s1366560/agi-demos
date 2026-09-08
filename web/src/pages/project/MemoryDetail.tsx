@@ -40,11 +40,6 @@ interface ProcessingProgress {
   taskId: string;
 }
 
-function getMemoryMetadataTags(metadata: Record<string, unknown>): string[] {
-  const tags = metadata.tags;
-  return Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === 'string') : [];
-}
-
 function buildMemoryExportFilename(memory: Memory): string {
   const baseName = memory.title || memory.id || 'memory';
   const safeName = baseName
@@ -315,7 +310,6 @@ export const MemoryDetail: React.FC = () => {
     );
   };
 
-  const metadataTags = getMemoryMetadataTags(memory.metadata);
   const processingStatusLabel = t(
     `project.memories.status.${memory.processing_status.toLowerCase()}`,
     memory.processing_status
@@ -746,7 +740,7 @@ export const MemoryDetail: React.FC = () => {
                       {t('project.memories.detail.sidebar.tags')}
                     </h3>
                     <div className="flex flex-wrap gap-2">
-                      {metadataTags.map((tag) => (
+                      {memory.tags.map((tag) => (
                         <span
                           key={tag}
                           className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -754,7 +748,7 @@ export const MemoryDetail: React.FC = () => {
                           #{tag}
                         </span>
                       ))}
-                      {metadataTags.length === 0 && (
+                      {memory.tags.length === 0 && (
                         <span className="text-xs text-slate-500">
                           {t('project.memories.detail.sidebar.no_tags')}
                         </span>
