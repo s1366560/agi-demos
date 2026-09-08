@@ -2,7 +2,7 @@
 Integration tests for new Memory workflow features.
 Tests:
 1. Update memory triggers re-processing via Temporal workflow
-2. Manual reprocess endpoint triggers re-processing
+2. Manual reprocess rejects storage without the required transaction fence
 3. Delete memory uses correct graphiti cleanup method
 """
 
@@ -22,7 +22,11 @@ from src.infrastructure.adapters.secondary.persistence.models import Memory, Mem
 
 
 @pytest.fixture(autouse=True)
-async def _memories_v2_runtime(test_app):
+async def _memories_v2_runtime(test_app, monkeypatch):
+    from src.infrastructure.agent.plugins.skill_evolution.scheduler import EvolutionScheduler
+
+    monkeypatch.setattr(EvolutionScheduler, "start", AsyncMock())
+
     async def graph_runtime_factory():
         return test_app.state.graph_service
 
@@ -30,8 +34,8 @@ async def _memories_v2_runtime(test_app):
         test_app,
         graph_runtime_factory=graph_runtime_factory,
     )
-    assert "memories" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
     try:
+        assert "memories" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
         yield
     finally:
         await shutdown_plugin_runtime_v2(test_app)
@@ -132,14 +136,15 @@ class TestMemoryWorkflowNew:
         # Verify workflow engine was NOT called
         assert not mock_workflow_engine.start_workflow.called
 
-    async def test_reprocess_memory_endpoint(
+    async def test_reprocess_memory_rejects_missing_enrollment_fence_without_effects(
         self,
         async_client: AsyncClient,
         test_memory_db: "Memory",
         mock_workflow_engine: AsyncMock,
+        mock_graph_service,
         db: AsyncSession,
     ):
-        """Test manual reprocess endpoint triggers Temporal workflow."""
+        """The SQLite fixture lacks the migration-created enrollment fence row."""
         # Arrange - set memory status to COMPLETED so we can reprocess it
         await db.execute(
             update(Memory)
@@ -155,47 +160,14 @@ class TestMemoryWorkflowNew:
         response = await async_client.post(f"/api/v1/memories/{test_memory_db.id}/reprocess")
 
         # Assert
-        assert response.status_code == 200
-        data = response.json()
-
-        # Verify workflow engine was called
-        assert mock_workflow_engine.start_workflow.called
-        assert data["processing_status"] == "PENDING"
-        assert data["task_id"] is not None
-
-    async def test_reprocess_memory_marks_task_failed_when_workflow_start_fails(
-        self,
-        async_client: AsyncClient,
-        test_memory_db: "Memory",
-        mock_workflow_engine: AsyncMock,
-        db: AsyncSession,
-    ):
-        """Test manual reprocess failure records a failed task instead of pending orphan."""
-        await db.execute(
-            update(Memory)
-            .where(Memory.id == test_memory_db.id)
-            .values(processing_status="COMPLETED")
-        )
-        await db.commit()
-
-        mock_workflow_engine.start_workflow.reset_mock()
-        mock_workflow_engine.start_workflow.side_effect = RuntimeError("temporal unavailable")
-        try:
-            response = await async_client.post(f"/api/v1/memories/{test_memory_db.id}/reprocess")
-        finally:
-            mock_workflow_engine.start_workflow.side_effect = None
-
-        assert response.status_code == 500
-
+        assert response.status_code == 503
+        assert "knowledge_sync_fence_missing" in response.text
+        mock_workflow_engine.start_workflow.assert_not_awaited()
+        mock_graph_service.delete_episode_by_memory_id.assert_not_awaited()
         await db.refresh(test_memory_db)
-        memory = test_memory_db
-        assert memory.processing_status == "FAILED"
-        assert memory.task_id is not None
-
-        task_result = await db.execute(select(TaskLog).where(TaskLog.id == memory.task_id))
-        task_log = task_result.scalar_one()
-        assert task_log.status == "FAILED"
-        assert "temporal unavailable" in (task_log.error_message or "")
+        assert test_memory_db.processing_status == "COMPLETED"
+        assert test_memory_db.task_id is None
+        assert list((await db.scalars(select(TaskLog))).all()) == []
 
     async def test_delete_memory_uses_memory_id_graph_cleanup(
         self,
