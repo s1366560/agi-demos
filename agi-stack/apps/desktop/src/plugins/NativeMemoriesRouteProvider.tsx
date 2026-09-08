@@ -1,20 +1,25 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useRef, type ReactNode } from 'react';
 
 import type { AuthState, DesktopRuntimeConfig } from '../types';
 import { isIdentityAuthenticated } from '../features/auth/authContextModel';
 import type { DesktopCapabilitySnapshot } from '../features/runtime/capabilitySnapshot';
 import { PROJECT_MEMORIES_ROUTE_ID } from '../features/project-knowledge/projectMemoriesClient';
 import type { NativeMemoriesAuthority } from '../features/project-knowledge/nativeMemoriesController';
+import type { CloudMemoryUiAuthority } from '../features/project-knowledge/cloudMemoryUiAuthority';
 import { NativeMemoriesRouteContextProvider } from '../features/project-knowledge/NativeMemoriesRouteContext';
+import { CloudMemoryRouteContextProvider } from '../features/project-knowledge/CloudMemoryRouteContext';
 import {
   createDesktopNativeKnowledgeClientV2,
   createDesktopProjectMemoriesClientV2,
   createDesktopProjectMemoriesOperationsV2,
+  createDesktopCloudMemoryClientV2,
+  createDesktopNativeKnowledgeProcessingClientV2,
+  createDesktopNativeKnowledgeProcessingCommandClientV2,
 } from './desktopProjectMemoriesAuthorityModuleV2';
 import { useOptionalDesktopRendererGenerationV2 } from './desktopRendererGenerationContextV2';
 import '../features/project-knowledge/NativeMemoriesPage.css';
 
-/** Credentials stay inside the existing clients; this context carries no transport config. */
+/** Credentials stay inside the existing clients; route contexts carry no transport config. */
 export function NativeMemoriesRouteProvider({
   config,
   auth,
@@ -32,9 +37,10 @@ export function NativeMemoriesRouteProvider({
   const userId = authenticated ? (auth.user?.user_id ?? null) : null;
   const sessionId = authenticated ? (auth.session?.session_id ?? null) : null;
   const actions = JSON.stringify(capability?.allowed_actions ?? []);
-  const authority = useMemo<NativeMemoriesAuthority>(() => {
+  const authorities = useMemo<
+    Readonly<{ native: NativeMemoriesAuthority; cloud: CloudMemoryUiAuthority }>
+  >(() => {
     const available =
-      config.mode === 'local' &&
       Boolean(userId && sessionId) &&
       Boolean(generation?.meta.digest) &&
       (generation?.meta.status === 'ready' || generation?.meta.status === 'degraded') &&
@@ -44,19 +50,32 @@ export function NativeMemoriesRouteProvider({
       capability?.scope.project_id === config.projectId &&
       capability?.authority_revision === auth.context?.revision &&
       capability?.provenance === 'observed' &&
+      capability?.authority_source === (config.mode === 'local' ? 'sidecar' : 'cloud_service') &&
       (capability?.availability === 'available' || capability?.availability === 'degraded');
-    return Object.freeze({
+    const shared = Object.freeze({
       scope: Object.freeze({
         authority: config.mode,
         tenantId: config.tenantId,
         projectId: config.projectId,
       }),
-      userId,
       sessionId,
       contextRevision: auth.context?.revision ?? null,
       generationDigest: generation?.meta.digest ?? null,
-      available,
-      allowedActions: Object.freeze(available ? (JSON.parse(actions) as string[]) : []),
+    });
+    const allowed = Object.freeze(available ? (JSON.parse(actions) as string[]) : []);
+    return Object.freeze({
+      native: Object.freeze({
+        ...shared,
+        userId,
+        available: available && config.mode === 'local',
+        allowedActions: config.mode === 'local' ? allowed : Object.freeze([]),
+      }),
+      cloud: Object.freeze({
+        ...shared,
+        actorId: userId,
+        available: available && config.mode === 'cloud',
+        allowedActions: config.mode === 'cloud' ? allowed : Object.freeze([]),
+      }),
     });
   }, [
     config.mode,
@@ -71,22 +90,47 @@ export function NativeMemoriesRouteProvider({
     capability?.scope.project_id,
     capability?.authority_revision,
     capability?.provenance,
+    capability?.authority_source,
     capability?.availability,
     actions,
     generation?.meta.digest,
     generation?.meta.status,
   ]);
-  const binding = useMemo(() => {
-    const operations = createDesktopProjectMemoriesOperationsV2(() => generation?.actions ?? null);
+  // Retained transports consult live capabilities and lose access as soon as identity changes.
+  const live = useRef({ authorities, capability });
+  live.current = { authorities, capability };
+  const bindings = useMemo(() => {
+    const operations = createDesktopProjectMemoriesOperationsV2(
+      () => generation?.actions ?? null,
+      () =>
+        live.current.authorities === authorities && authorities.native.available
+          ? (live.current.capability ?? null)
+          : null,
+    );
+    const listClient = createDesktopProjectMemoriesClientV2(operations, config);
     return Object.freeze({
-      authority,
-      client: createDesktopNativeKnowledgeClientV2(operations, config),
-      listClient: createDesktopProjectMemoriesClientV2(operations, config),
+      native: Object.freeze({
+        authority: authorities.native,
+        client: createDesktopNativeKnowledgeClientV2(operations, config),
+        listClient,
+        processingClient: createDesktopNativeKnowledgeProcessingClientV2(operations, config),
+        processingCommandClient: createDesktopNativeKnowledgeProcessingCommandClientV2(
+          operations,
+          config,
+        ),
+      }),
+      cloud: Object.freeze({
+        authority: authorities.cloud,
+        listClient,
+        client: createDesktopCloudMemoryClientV2(operations, config),
+      }),
     });
-  }, [authority, config, generation?.actions]);
+  }, [authorities, config, generation?.actions]);
   return (
-    <NativeMemoriesRouteContextProvider value={binding}>
-      {children}
+    <NativeMemoriesRouteContextProvider value={bindings.native}>
+      <CloudMemoryRouteContextProvider value={bindings.cloud}>
+        {children}
+      </CloudMemoryRouteContextProvider>
     </NativeMemoriesRouteContextProvider>
   );
 }

@@ -1,4 +1,24 @@
 import type {
+  DesktopNativeKnowledgeProcessingHttpV2,
+  NativeKnowledgeProcessingCapabilityGetter,
+} from './desktopNativeKnowledgeProcessingHttpV2';
+import type {
+  NativeKnowledgeProcessingQuery,
+  NativeKnowledgeProcessingCommand,
+  NativeKnowledgeProcessingResponse,
+  NativeKnowledgeProcessingCommandResponse,
+  NativeKnowledgeObservedOptions,
+} from '../features/project-knowledge/nativeKnowledgeContracts';
+import type {
+  DesktopProjectMemoriesProcessingQueryInputV2,
+  DesktopProjectMemoriesProcessingCommandInputV2,
+} from './desktopProjectMemoriesOperationContractV2';
+import { createRevocableKnowledgeProcessingV2 } from './desktopProjectMemoriesProcessingBridgeV2';
+export {
+  createDesktopNativeKnowledgeProcessingClientV2,
+  createDesktopNativeKnowledgeProcessingCommandClientV2,
+} from './desktopProjectMemoriesProcessingBridgeV2';
+import type {
   CloudMemoryClient,
   CloudMemoryCommand,
   CloudMemoryOptions,
@@ -63,7 +83,8 @@ export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_SERVICE_V2 =
   'service:desktop-renderer.project-memories-authority';
 export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_VERSION_V2 = '1.0.0';
 
-export interface DesktopProjectMemoriesAuthorityV2 extends NativeKnowledgeSyncAuthority {
+export interface DesktopProjectMemoriesAuthorityV2
+  extends NativeKnowledgeSyncAuthority, Partial<DesktopNativeKnowledgeProcessingHttpV2> {
   readonly executeCloudMemory?: <C extends CloudMemoryCommand>(
     command: C,
     options: CloudMemoryOptions,
@@ -78,10 +99,17 @@ export interface DesktopProjectMemoriesAuthorityServiceV2 {
   readonly bindOperation: (
     config: DesktopRuntimeConfig,
     scope: ProjectKnowledgeScope,
+    getCapability?: NativeKnowledgeProcessingCapabilityGetter,
   ) => DesktopProjectMemoriesAuthorityV2;
 }
 
 export interface DesktopProjectMemoriesOperationsV2 {
+  readonly queryKnowledgeProcessing: <Q extends NativeKnowledgeProcessingQuery>(
+    input: DesktopProjectMemoriesProcessingQueryInputV2<Q>,
+  ) => Promise<NativeKnowledgeProcessingResponse<Q>>;
+  readonly executeKnowledgeProcessing: <C extends NativeKnowledgeProcessingCommand>(
+    input: DesktopProjectMemoriesProcessingCommandInputV2<C>,
+  ) => Promise<NativeKnowledgeProcessingCommandResponse<C>>;
   readonly executeCloudMemory: <C extends CloudMemoryCommand>(
     input: DesktopProjectMemoriesCloudOperationInputV2<C>,
   ) => Promise<CloudMemoryResponse<C>>;
@@ -103,7 +131,13 @@ type GenerationActionsUnavailableV2 = Readonly<{
 }>;
 type AuthorityAdmissionRejectionV2 = ServiceAdmissionRejectionV2 | GenerationActionsUnavailableV2;
 
-const AUTHORITY_KEYS_V2 = new Set(['load', 'executeSync', 'executeCloudMemory']);
+const AUTHORITY_KEYS_V2 = new Set([
+  'load',
+  'executeSync',
+  'executeCloudMemory',
+  'queryProcessing',
+  'executeProcessing',
+]);
 
 export class DesktopProjectMemoriesAuthorityUnavailableErrorV2 extends Error {
   readonly reasonCode: AuthorityAdmissionRejectionV2['reasonCode'];
@@ -141,8 +175,51 @@ export const desktopProjectMemoriesAuthorityDefinitionV2: PluginDefinitionV2 = O
 
 export function createDesktopProjectMemoriesOperationsV2(
   resolveActions: () => DesktopRendererGenerationActionsV2 | null,
+  getCapability?: NativeKnowledgeProcessingCapabilityGetter,
 ): DesktopProjectMemoriesOperationsV2 {
   return Object.freeze({
+    queryKnowledgeProcessing<Q extends NativeKnowledgeProcessingQuery>(
+      input: DesktopProjectMemoriesProcessingQueryInputV2<Q>,
+    ): Promise<NativeKnowledgeProcessingResponse<Q>> {
+      const prepared = prepareDesktopProjectMemoriesAuthorityOperationV2({
+        kind: 'processing-query',
+        ...input,
+      });
+      return runDesktopProjectMemoriesAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) => {
+          if (!authority.queryProcessing)
+            throw new Error('native_knowledge_processing_unavailable');
+          return authority.queryProcessing(prepared.query, {
+            signal: prepared.signal,
+            expectedScope: prepared.expectedScope,
+          } as NativeKnowledgeObservedOptions);
+        },
+        getCapability,
+      );
+    },
+    executeKnowledgeProcessing<C extends NativeKnowledgeProcessingCommand>(
+      input: DesktopProjectMemoriesProcessingCommandInputV2<C>,
+    ): Promise<NativeKnowledgeProcessingCommandResponse<C>> {
+      const prepared = prepareDesktopProjectMemoriesAuthorityOperationV2({
+        kind: 'processing-command',
+        ...input,
+      });
+      return runDesktopProjectMemoriesAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) => {
+          if (!authority.executeProcessing)
+            throw new Error('native_knowledge_processing_unavailable');
+          return authority.executeProcessing(prepared.command, {
+            signal: prepared.signal,
+            expectedScope: prepared.expectedScope,
+          } as NativeKnowledgeObservedOptions);
+        },
+        getCapability,
+      );
+    },
     executeCloudMemory<C extends CloudMemoryCommand>(
       input: DesktopProjectMemoriesCloudOperationInputV2<C>,
     ): Promise<CloudMemoryResponse<C>> {
@@ -268,6 +345,7 @@ async function runDesktopProjectMemoriesAuthorityOperationV2<TResult>(
   actions: DesktopRendererGenerationActionsV2,
   prepared: PreparedDesktopProjectMemoriesAuthorityOperationV2,
   operation: (authority: DesktopProjectMemoriesAuthorityV2) => TResult | Promise<TResult>,
+  getCapability?: NativeKnowledgeProcessingCapabilityGetter,
 ): Promise<TResult> {
   const admission =
     await actions.acquireServiceOperationLease<DesktopProjectMemoriesAuthorityServiceV2>({
@@ -289,7 +367,7 @@ async function runDesktopProjectMemoriesAuthorityOperationV2<TResult>(
     return await admission.useService((candidate) => {
       const service = requireProjectMemoriesServiceV2(candidate);
       const authority = requireProjectMemoriesAuthorityV2(
-        service.bindOperation(prepared.config, prepared.scope),
+        service.bindOperation(prepared.config, prepared.scope, getCapability),
       );
       return operation(
         createRevocableProjectMemoriesAuthorityV2(authority, prepared.scope, () => operationActive),
@@ -314,6 +392,9 @@ function createRevocableProjectMemoriesAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopProjectMemoriesAuthorityV2 {
   return Object.freeze({
+    ...createRevocableKnowledgeProcessingV2(authority, scope, () =>
+      requireOperationActiveV2(isOperationActive),
+    ),
     ...(authority.executeCloudMemory
       ? {
           async executeCloudMemory<C extends CloudMemoryCommand>(

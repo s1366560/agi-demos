@@ -131,6 +131,7 @@ const capability = {
   authority_revision: 7,
   availability: 'available',
   provenance: 'observed',
+  authority_source: 'sidecar',
   allowed_actions: ['view', 'list'],
 };
 function Capture() {

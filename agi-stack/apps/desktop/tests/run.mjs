@@ -89,13 +89,17 @@ for (const project of ['project-agent', 'project-administration', 'project-knowl
     },
   );
   if (projectCompile.status !== 0) process.exit(projectCompile.status ?? 1);
+  copyAssets(projectDistRoot);
 }
 
-cpSync(join(desktopRoot, 'src'), join(compiledRoot, 'src'), {
-  recursive: true,
-  filter: (source) =>
-    statSync(source).isDirectory() || source.endsWith('.css') || source.endsWith('.mjs'),
-});
+function copyAssets(destination) {
+  cpSync(join(desktopRoot, 'src'), join(destination, 'src'), {
+    recursive: true,
+    filter: (source) =>
+      statSync(source).isDirectory() || source.endsWith('.css') || source.endsWith('.mjs'),
+  });
+}
+copyAssets(compiledRoot);
 symlinkSync(join(desktopRoot, 'node_modules'), join(compiledRoot, 'node_modules'), 'dir');
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });

@@ -1,3 +1,8 @@
+import {
+  createDesktopNativeKnowledgeProcessingHttpV2,
+  type DesktopNativeKnowledgeProcessingHttpV2,
+  type NativeKnowledgeProcessingCapabilityGetter,
+} from './desktopNativeKnowledgeProcessingHttpV2';
 import type {
   CloudMemoryCommand,
   CloudMemoryOptions,
@@ -37,6 +42,7 @@ import {
 const ACTIONS_V2 = Object.freeze(['view', 'list']);
 
 export type DesktopProjectMemoriesHttpAuthorityV2 = NativeKnowledgeSyncAuthority &
+  Partial<DesktopNativeKnowledgeProcessingHttpV2> &
   Readonly<{
     executeCloudMemory?: <C extends CloudMemoryCommand>(
       command: C,
@@ -51,11 +57,15 @@ export type DesktopProjectMemoriesHttpAuthorityV2 = NativeKnowledgeSyncAuthority
 export function createDesktopProjectMemoriesHttpAuthorityV2(
   config: DesktopRuntimeConfig,
   scope: ProjectKnowledgeScope,
+  getCapability?: NativeKnowledgeProcessingCapabilityGetter,
 ): DesktopProjectMemoriesHttpAuthorityV2 {
   const runtimeConfig = cloneDesktopProjectMemoriesRuntimeConfigV2(config);
   const operationScope = cloneDesktopProjectMemoriesScopeV2(scope, runtimeConfig);
   if (runtimeConfig.mode === 'local') {
-    return createDesktopProjectMemoriesLocalAuthorityV2(runtimeConfig, operationScope);
+    return Object.freeze({
+      ...createDesktopProjectMemoriesLocalAuthorityV2(runtimeConfig, operationScope),
+      ...createDesktopNativeKnowledgeProcessingHttpV2(runtimeConfig, operationScope, getCapability),
+    });
   }
   const cloud = createDesktopCloudMemoryHttpV2(runtimeConfig);
   return Object.freeze({

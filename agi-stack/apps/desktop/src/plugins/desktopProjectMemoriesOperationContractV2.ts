@@ -1,4 +1,14 @@
 import type {
+  NativeKnowledgeProcessingQuery,
+  NativeKnowledgeProcessingCommand,
+  NativeKnowledgeSyncOptions as ProcessingOptions,
+} from '../features/project-knowledge/nativeKnowledgeContracts';
+import {
+  prepareNativeKnowledgeProcessingQuery,
+  prepareNativeKnowledgeProcessingCommand,
+  prepareNativeKnowledgeProcessingOptions,
+} from '../features/project-knowledge/nativeKnowledgeProcessingValidation';
+import type {
   CloudMemoryCommand,
   CloudMemoryOptions,
 } from '../features/project-knowledge/cloudMemoryClient';
@@ -49,7 +59,18 @@ export type DesktopProjectMemoriesCloudOperationInputV2<
 > = CloudMemoryOptions &
   Readonly<{ config: DesktopRuntimeConfig; scope: ProjectKnowledgeScope; command: C }>;
 
+export type DesktopProjectMemoriesProcessingQueryInputV2<
+  Q extends NativeKnowledgeProcessingQuery = NativeKnowledgeProcessingQuery,
+> = ProcessingOptions &
+  Readonly<{ config: DesktopRuntimeConfig; scope: ProjectKnowledgeScope; query: Q }>;
+export type DesktopProjectMemoriesProcessingCommandInputV2<
+  C extends NativeKnowledgeProcessingCommand = NativeKnowledgeProcessingCommand,
+> = ProcessingOptions &
+  Readonly<{ config: DesktopRuntimeConfig; scope: ProjectKnowledgeScope; command: C }>;
+
 export type DesktopProjectMemoriesAuthorityOperationInputV2 =
+  | (DesktopProjectMemoriesProcessingQueryInputV2 & Readonly<{ kind: 'processing-query' }>)
+  | (DesktopProjectMemoriesProcessingCommandInputV2 & Readonly<{ kind: 'processing-command' }>)
   | (DesktopProjectMemoriesCloudOperationInputV2 & Readonly<{ kind: 'cloud' }>)
   | (DesktopProjectMemoriesLoadOperationInputV2 & Readonly<{ kind: 'load' }>)
   | (DesktopProjectMemoriesSyncOperationInputV2 & Readonly<{ kind: 'sync' }>);
@@ -57,6 +78,14 @@ export type DesktopProjectMemoriesAuthorityOperationInputV2 =
 export type PreparedDesktopProjectMemoriesAuthorityOperationV2 =
   DesktopProjectMemoriesAuthorityOperationInputV2;
 
+const PROCESSING_QUERY_KEYS_V2 = new Set([
+  'kind',
+  'config',
+  'scope',
+  'signal',
+  'expectedScope',
+  'query',
+]);
 const CLOUD_INPUT_KEYS_V2 = new Set([
   'kind',
   'config',
@@ -103,6 +132,17 @@ const MEMORY_KEYS_V2 = new Set([
   'updatedAt',
 ]);
 
+export function prepareDesktopProjectMemoriesAuthorityOperationV2<
+  Q extends NativeKnowledgeProcessingQuery,
+>(
+  input: DesktopProjectMemoriesProcessingQueryInputV2<Q> & Readonly<{ kind: 'processing-query' }>,
+): DesktopProjectMemoriesProcessingQueryInputV2<Q> & Readonly<{ kind: 'processing-query' }>;
+export function prepareDesktopProjectMemoriesAuthorityOperationV2<
+  C extends NativeKnowledgeProcessingCommand,
+>(
+  input: DesktopProjectMemoriesProcessingCommandInputV2<C> &
+    Readonly<{ kind: 'processing-command' }>,
+): DesktopProjectMemoriesProcessingCommandInputV2<C> & Readonly<{ kind: 'processing-command' }>;
 export function prepareDesktopProjectMemoriesAuthorityOperationV2<C extends CloudMemoryCommand>(
   input: DesktopProjectMemoriesCloudOperationInputV2<C> & Readonly<{ kind: 'cloud' }>,
 ): DesktopProjectMemoriesCloudOperationInputV2<C> & Readonly<{ kind: 'cloud' }>;
@@ -120,14 +160,22 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
 ): PreparedDesktopProjectMemoriesAuthorityOperationV2 {
   if (
     !isPlainRecordV2(input) ||
-    (input.kind !== 'load' && input.kind !== 'sync' && input.kind !== 'cloud') ||
+    (input.kind !== 'load' &&
+      input.kind !== 'sync' &&
+      input.kind !== 'cloud' &&
+      input.kind !== 'processing-query' &&
+      input.kind !== 'processing-command') ||
     !hasExactOptionalKeysV2(
       input,
-      input.kind === 'cloud'
-        ? CLOUD_INPUT_KEYS_V2
-        : input.kind === 'sync'
+      input.kind === 'processing-query'
+        ? PROCESSING_QUERY_KEYS_V2
+        : input.kind === 'processing-command'
           ? SYNC_INPUT_KEYS_V2
-          : INPUT_KEYS_V2,
+          : input.kind === 'cloud'
+            ? CLOUD_INPUT_KEYS_V2
+            : input.kind === 'sync'
+              ? SYNC_INPUT_KEYS_V2
+              : INPUT_KEYS_V2,
     ) ||
     !Object.hasOwn(input, 'config') ||
     !Object.hasOwn(input, 'scope') ||
@@ -137,6 +185,29 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
   }
   const config = cloneDesktopProjectMemoriesRuntimeConfigV2(input.config);
   const scope = cloneDesktopProjectMemoriesScopeV2(input.scope, config);
+  if (input.kind === 'processing-query' || input.kind === 'processing-command') {
+    requireNativeKnowledgeTransportV2(config);
+    if (scope.authority !== 'local') throw invalidInputV2();
+    const options = { signal: input.signal, expectedScope: input.expectedScope };
+    if (input.kind === 'processing-query') {
+      const query = prepareNativeKnowledgeProcessingQuery(input.query, scope);
+      return Object.freeze({
+        kind: input.kind,
+        config,
+        scope,
+        query,
+        ...prepareNativeKnowledgeProcessingOptions(query, options),
+      });
+    }
+    const command = prepareNativeKnowledgeProcessingCommand(input.command, scope);
+    return Object.freeze({
+      kind: input.kind,
+      config,
+      scope,
+      command,
+      ...prepareNativeKnowledgeProcessingOptions(command, options),
+    });
+  }
   if (input.kind === 'cloud') {
     if (scope.authority !== 'cloud') throw invalidInputV2();
     return Object.freeze({

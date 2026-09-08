@@ -1,3 +1,4 @@
+import { useCloudMemoryRouteBinding } from './CloudMemoryRouteContext';
 import { createElement } from 'react';
 
 import type { DesktopRouteModuleLoader } from '../navigation/desktopRouteModule';
@@ -24,14 +25,20 @@ export function createProjectMemoriesRouteModuleLoader(
     ...options,
   });
   return async () => {
-    const [cloud, { NativeMemoriesRouteSurface }] = await Promise.all([
+    const [cloud, { NativeMemoriesRouteSurface }, { CloudMemoryRouteSurface }] = await Promise.all([
       loadCloud(),
       import('./NativeMemoriesRouteSurface'),
+      import('./CloudMemoryRouteSurface'),
     ]);
     function MemoriesRouteSurface(props: DesktopRouteSurfaceProps) {
       const binding = useNativeMemoriesRouteBinding();
+      const cloudBinding = useCloudMemoryRouteBinding();
       return createElement(
-        binding?.authority.scope.authority === 'local' ? NativeMemoriesRouteSurface : cloud.Surface,
+        binding?.authority.scope.authority === 'local'
+          ? NativeMemoriesRouteSurface
+          : cloudBinding
+            ? CloudMemoryRouteSurface
+            : cloud.Surface,
         props,
       );
     }

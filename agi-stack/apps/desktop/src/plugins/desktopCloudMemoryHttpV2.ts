@@ -70,6 +70,7 @@ export function createDesktopCloudMemoryHttpV2(config: DesktopRuntimeConfig): Cl
           result: Object.freeze({ memoryId: command.id, deleted: true }),
         }) as CloudMemoryResponse<typeof input>;
       }
+      if (response.status !== (command.operation === 'create' ? 201 : 200)) throw invalidResponse();
       const memory = parseMemoryV2(response.body, pinned);
       if (
         (command.operation !== 'create' && memory.id !== command.id) ||

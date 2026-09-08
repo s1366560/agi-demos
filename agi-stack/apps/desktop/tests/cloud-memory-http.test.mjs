@@ -208,3 +208,5 @@ test('missing vault broker fails closed even with apiKey configured', async () =
     if (previous !== undefined) globalThis.window = previous;
   }
 });
+
+for (const [command,status] of [[{operation:'get',id:'memory'},206],[{operation:'create',idempotencyKey:key,memory:{title:'Title',content:'Body'}},202],[{operation:'update',id:'memory',expectedRevision:1,idempotencyKey:key,patch:{title:'Next'}},201]]) test(`non-final status ${status} never confirms ${command.operation}`,async()=>fixture({status,body:{...row,version:command.operation==='update'?2:1}},async(client)=>{await assert.rejects(client.execute(scope,command,options),error=>error.status===502);}));

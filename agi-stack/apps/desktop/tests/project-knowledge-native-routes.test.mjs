@@ -10,6 +10,7 @@ process.env.NODE_PATH = [
 Module._initPaths();
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
 const compiled =
   '/tmp/agistack-project-knowledge-test-dist/src/features/project-knowledge';
 const React = require('react');
