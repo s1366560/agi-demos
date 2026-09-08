@@ -315,6 +315,42 @@
     },
     "NativeKnowledgeProcessingTaskSnapshot": {
       "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeProcessingTaskSnapshot"
+    },
+    "NativeKnowledgeCommunityFailure": {
+      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityFailure"
+    },
+    "NativeKnowledgeCommunitySelection": {
+      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunitySelection"
+    },
+    "NativeKnowledgeCommunityBuildReceipt": {
+      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildReceipt"
+    },
+    "NativeKnowledgeCommunityBuildStatus": {
+      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildStatus"
+    },
+    "NativeKnowledgeCommunityEvidence": {
+      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityEvidence"
+    },
+    "NativeKnowledgeCommunityDecision": {
+      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityDecision"
+    },
+    "NativeKnowledgeCommunitySubmission": {
+      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunitySubmission"
+    },
+    "NativeKnowledgeCommunityResult": {
+      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityResult"
+    },
+    "NativeKnowledgeCommunityJobStatus": {
+      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityJobStatus"
+    },
+    "NativeKnowledgeCommunityAuditSummary": {
+      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityAuditSummary"
+    },
+    "NativeKnowledgeCommunityCandidateProgress": {
+      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityCandidateProgress"
+    },
+    "NativeKnowledgeCommunityBuildPage": {
+      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildPage"
     }
   },
   "x-routes": {
@@ -586,7 +622,15 @@
     "failed_index": "read",
     "processing_audits": "read",
     "retry_processing": "write",
-    "processing_task": "read"
+    "processing_task": "read",
+    "community_active": "read",
+    "community_build": "read",
+    "community_audit": "read",
+    "create_community_build": "write",
+    "select_community_build": "write",
+    "process_community_one": "write",
+    "retry_community": "write",
+    "activate_community_build": "write"
   },
   "x-local-acceptance-actions": [
     "view",
@@ -610,6 +654,14 @@
     "failed_index",
     "processing_audits",
     "retry_processing",
-    "processing_task"
+    "processing_task",
+    "community_active",
+    "community_build",
+    "community_audit",
+    "create_community_build",
+    "select_community_build",
+    "process_community_one",
+    "retry_community",
+    "activate_community_build"
   ]
 }

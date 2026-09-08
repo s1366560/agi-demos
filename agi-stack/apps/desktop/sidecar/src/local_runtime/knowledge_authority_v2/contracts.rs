@@ -47,6 +47,17 @@ pub(crate) enum ProcessingQuery {
     ProcessingTask {
         source: agistack_core::knowledge::processing::ProcessingSource,
     },
+    CommunityActive {},
+    CommunityBuild {
+        build_id: String,
+        offset: u32,
+        limit: u32,
+    },
+    CommunityAudit {
+        build_id: String,
+        candidate_id: String,
+        attempt: u32,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -87,6 +98,27 @@ pub(crate) enum ProcessingCommand {
     RetryProcessing {
         source: agistack_core::knowledge::processing::ProcessingSource,
         expected_attempt: u32,
+    },
+    CreateCommunityBuild {
+        idempotency_key: String,
+        min_community_size: usize,
+    },
+    SelectCommunityBuild {
+        build_id: String,
+        expected_selection_revision: u64,
+    },
+    ProcessCommunityOne {
+        build_id: String,
+        workspace_id: String,
+    },
+    RetryCommunity {
+        build_id: String,
+        candidate_id: String,
+        expected_attempt: u32,
+    },
+    ActivateCommunityBuild {
+        build_id: String,
+        expected_selection_revision: u64,
     },
 }
 

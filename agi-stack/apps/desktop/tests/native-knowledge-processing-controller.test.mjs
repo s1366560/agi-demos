@@ -5,7 +5,7 @@ import { nativeScope, projectScope } from './nativeKnowledgeFixtures.mjs';
 const require = createRequire(import.meta.url);
 const {
   createNativeKnowledgeProcessingController,
-} = require('/tmp/agistack-project-knowledge-test-dist/src/features/project-knowledge/nativeKnowledgeProcessingController.js');
+} = require(`${process.env.AGISTACK_KNOWLEDGE_HTTP_TEST_DIST ?? '/tmp/agistack-project-knowledge-test-dist'}/src/features/project-knowledge/nativeKnowledgeProcessingController.js`);
 const configuration = {
   revision: 8,
   build_id: 'desired-B',
@@ -99,6 +99,19 @@ function fixture(options = {}) {
   });
   return { controller, queries, writes };
 }
+
+test('embedding controller does not admit community commands through a widened command union', async () => {
+  const community = ['create_community_build', 'select_community_build', 'process_community_one',
+    'retry_community', 'activate_community_build'];
+  const f = fixture({ authority: { allowedActions: [...authority.allowedActions, ...community] } });
+  for (const operation of community) {
+    await f.controller.review(operation);
+    await f.controller.confirm();
+  }
+  assert.equal(f.queries.length, 0);
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.controller.getSnapshot().selection, null);
+});
 
 test('write admission requires both clients, configuration read and exact operation declarations', async () => {
   const unsupported = fixture();

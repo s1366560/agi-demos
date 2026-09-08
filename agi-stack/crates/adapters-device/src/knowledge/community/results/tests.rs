@@ -9,6 +9,53 @@ use super::*;
 
 include!("../tests/fixtures.rs");
 
+#[test]
+fn page_reads_status_result_and_redacted_audit_from_one_snapshot() {
+    let (repo, s, build) = setup();
+    let pending = repo
+        .community_build_page_durable(&s, &build.build_id, 0, 1, &|| Ok(100))
+        .unwrap()
+        .unwrap();
+    assert_eq!(pending.items.len(), 1);
+    assert!(pending.current_graph);
+    assert_eq!(pending.items[0].job.state, CommunityJobState::Pending);
+    assert!(pending.items[0].audit.is_none());
+    let (lease, input) = begin(&repo, &s, &build);
+    apply(&repo, &s, &lease, &input, true);
+    let page = repo
+        .community_build_page_durable(&s, &build.build_id, 0, 1, &|| Ok(103))
+        .unwrap()
+        .unwrap();
+    assert_eq!(page.status.ready_count, 1);
+    assert_eq!(page.items[0].job.state, CommunityJobState::Completed);
+    assert_eq!(
+        page.items[0].result.as_ref().unwrap().attempt,
+        lease.attempt
+    );
+    let audit = page.items[0].audit.as_ref().unwrap();
+    assert_eq!(audit.status, CommunityAuditStatus::Applied);
+    assert_eq!(audit.attempt, lease.attempt);
+    assert!(serde_json::to_value(audit)
+        .unwrap()
+        .get("invocation")
+        .is_none());
+    assert!(repo
+        .community_build_page_durable(&s, &build.build_id, 1, 1, &|| Ok(103))
+        .unwrap()
+        .unwrap()
+        .items
+        .is_empty());
+    let mut memory = block_on(repo.get(&s, "source")).unwrap().unwrap();
+    memory.content = "changed source".into();
+    block_on(repo.update(&s, memory, 1)).unwrap();
+    let stale = repo
+        .community_build_page_durable(&s, &build.build_id, 0, 1, &|| Ok(104))
+        .unwrap()
+        .unwrap();
+    assert!(!stale.current_graph);
+    assert_eq!(stale.status.ready_count, 1);
+}
+
 fn setup() -> (
     SqliteKnowledgeRepository,
     KnowledgeScope,

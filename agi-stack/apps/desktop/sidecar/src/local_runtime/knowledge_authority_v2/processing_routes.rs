@@ -6,6 +6,8 @@ use super::*;
 
 #[path = "processing_commands.rs"]
 mod commands;
+#[path = "community_routes.rs"]
+mod community;
 pub(super) use commands::command;
 
 const MAX_WIRE_INTEGER: u64 = 9_007_199_254_740_991;
@@ -22,6 +24,12 @@ pub(super) async fn query(
         .admit_capability(&state, &auth, body.query.capability_action())
         .map_err(IntoResponse::into_response)?;
     let result = match body.query {
+        query @ (ProcessingQuery::CommunityActive {}
+        | ProcessingQuery::CommunityBuild { .. }
+        | ProcessingQuery::CommunityAudit { .. }) => {
+            community::query(&operation, &state, &auth, query)
+                .map_err(IntoResponse::into_response)?
+        }
         ProcessingQuery::Configuration {} => {
             let status =
                 processing_context::with_read_current(&operation, &state, &auth, |clock| {

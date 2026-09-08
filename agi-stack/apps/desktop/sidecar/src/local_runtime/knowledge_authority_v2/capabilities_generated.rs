@@ -2,6 +2,9 @@
 use super::contracts::{ProcessingCommand, ProcessingQuery};
 pub(super) const READ_ACTIONS: &[&str] = &[
     "cloud_conflict_context",
+    "community_active",
+    "community_audit",
+    "community_build",
     "configuration",
     "entities",
     "failed_index",
@@ -28,18 +31,23 @@ pub(super) const READ_ACTIONS: &[&str] = &[
     "view",
 ];
 pub(super) const WRITE_ACTIONS: &[&str] = &[
+    "activate_community_build",
     "configure_embedding",
     "create",
+    "create_community_build",
     "delete",
     "index_one",
+    "process_community_one",
     "process_one",
     "promote_index",
     "reconcile_resolution",
     "resolve_pull",
     "resolve_push",
     "resume_resolution",
+    "retry_community",
     "retry_index",
     "retry_processing",
+    "select_community_build",
     "select_embedding",
     "sync_link",
     "sync_pull",
@@ -47,9 +55,14 @@ pub(super) const WRITE_ACTIONS: &[&str] = &[
     "update",
 ];
 pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &[
+    "activate_community_build",
+    "community_active",
+    "community_audit",
+    "community_build",
     "configuration",
     "configure_embedding",
     "create",
+    "create_community_build",
     "delete",
     "entities",
     "failed_index",
@@ -57,13 +70,16 @@ pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &[
     "get",
     "index_one",
     "list",
+    "process_community_one",
     "process_one",
     "processing_audits",
     "processing_task",
     "promote_index",
     "relationships",
+    "retry_community",
     "retry_index",
     "retry_processing",
+    "select_community_build",
     "select_embedding",
     "semantic",
     "text",
@@ -82,6 +98,9 @@ impl ProcessingQuery {
             Self::FailedIndex { .. } => "failed_index",
             Self::ProcessingAudits { .. } => "processing_audits",
             Self::ProcessingTask { .. } => "processing_task",
+            Self::CommunityActive { .. } => "community_active",
+            Self::CommunityBuild { .. } => "community_build",
+            Self::CommunityAudit { .. } => "community_audit",
         }
     }
 }
@@ -95,6 +114,11 @@ impl ProcessingCommand {
             Self::RetryIndex { .. } => "retry_index",
             Self::ProcessOne { .. } => "process_one",
             Self::RetryProcessing { .. } => "retry_processing",
+            Self::CreateCommunityBuild { .. } => "create_community_build",
+            Self::SelectCommunityBuild { .. } => "select_community_build",
+            Self::ProcessCommunityOne { .. } => "process_community_one",
+            Self::RetryCommunity { .. } => "retry_community",
+            Self::ActivateCommunityBuild { .. } => "activate_community_build",
         }
     }
 }

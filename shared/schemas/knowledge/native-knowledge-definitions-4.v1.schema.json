@@ -531,6 +531,68 @@
             "source"
           ],
           "additionalProperties": false
+        },
+        "community_active": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "community_build": {
+          "type": "object",
+          "properties": {
+            "build_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295,
+              "x-rust-type": "u32"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "x-rust-type": "u32"
+            }
+          },
+          "required": [
+            "build_id",
+            "offset",
+            "limit"
+          ],
+          "additionalProperties": false
+        },
+        "community_audit": {
+          "type": "object",
+          "properties": {
+            "build_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "candidate_id": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295,
+              "x-rust-type": "u32"
+            }
+          },
+          "required": [
+            "build_id",
+            "candidate_id",
+            "attempt"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -542,7 +604,10 @@
         "failed_processing",
         "failed_index",
         "processing_audits",
-        "processing_task"
+        "processing_task",
+        "community_active",
+        "community_build",
+        "community_audit"
       ],
       "additionalProperties": false
     },
@@ -779,6 +844,80 @@
         },
         "processing_task": {
           "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingTaskSnapshot"
+        },
+        "community_active": {
+          "type": "object",
+          "properties": {
+            "selection": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunitySelection"
+            },
+            "current_status": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stale_build_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "selection",
+            "current_status",
+            "stale_build_id"
+          ],
+          "additionalProperties": false
+        },
+        "community_build": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildPage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "page"
+          ],
+          "additionalProperties": false
+        },
+        "community_audit": {
+          "type": "object",
+          "properties": {
+            "audit": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityAuditSummary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "audit"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -790,7 +929,10 @@
         "failed_processing",
         "failed_index",
         "processing_audits",
-        "processing_task"
+        "processing_task",
+        "community_active",
+        "community_build",
+        "community_audit"
       ],
       "additionalProperties": false
     }

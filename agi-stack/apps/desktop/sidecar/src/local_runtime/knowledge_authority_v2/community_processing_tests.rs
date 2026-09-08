@@ -3,6 +3,8 @@ use agistack_core::knowledge::community::{build::*, result::*, worker::*};
 
 #[path = "community_processing_lifecycle_tests.rs"]
 mod lifecycle;
+#[path = "community_rpc_tests.rs"]
+mod rpc;
 
 struct CommunityFixture {
     base: Fixture,

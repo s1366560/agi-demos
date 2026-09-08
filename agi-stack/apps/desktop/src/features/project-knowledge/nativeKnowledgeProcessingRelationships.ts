@@ -14,6 +14,7 @@ import type {
 import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
 import * as s from './nativeKnowledgeSchema';
 import { sameJson } from './nativeKnowledgeRelationships';
+import { validCommunityResult } from './nativeKnowledgeCommunityRelationships';
 
 type Query = Extract<
   NativeKnowledgeProcessingQuery,
@@ -73,6 +74,15 @@ export function validProcessingResult(
   scope: ProjectKnowledgeScope,
 ): boolean {
   switch (operation.operation) {
+    case 'community_active':
+    case 'community_build':
+    case 'community_audit':
+    case 'create_community_build':
+    case 'select_community_build':
+    case 'process_community_one':
+    case 'retry_community':
+    case 'activate_community_build':
+      return validCommunityResult(operation, value, scope);
     case 'configuration': {
       const r = value as Results['configuration'];
       return (

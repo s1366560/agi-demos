@@ -60,6 +60,38 @@ function fixture({
   return { client, calls };
 }
 const opts = (operation) => ({ operation, expectedScope: nativeScope });
+test('community workspace selection uses its own admission and observes community scope', async () => {
+  const operations = [];
+  const queries = [];
+  const f = fixture({
+    isCurrent: (operation) => {
+      operations.push(operation);
+      return operation === 'process_community_one';
+    },
+    observe: async (_scope, query, options) => {
+      queries.push(query.operation);
+      assert.deepEqual(options.expectedScope, nativeScope);
+      return { scope: nativeScope };
+    },
+  });
+  const result = await f.client.load(projectScope, opts('process_community_one'));
+  assert.deepEqual(result.workspaces.items, [{ id: 'workspace', name: 'Workspace' }]);
+  assert.deepEqual(f.calls, ['workspaces']);
+  assert.deepEqual(queries, ['community_active', 'community_active']);
+  assert.ok(operations.every((operation) => operation === 'process_community_one'));
+});
+test('community admission loss after directory read rejects its result', async () => {
+  let observations = 0;
+  const f = fixture({
+    isCurrent: () => observations < 2,
+    observe: async () => {
+      observations += 1;
+      return { scope: nativeScope };
+    },
+  });
+  await assert.rejects(f.client.load(projectScope, opts('process_community_one')), /scope/);
+  assert.deepEqual(f.calls, ['workspaces']);
+});
 test('workspace generation admission rejection yields an unavailable directory', async () => {
   const { createDesktopWorkspaceCatalogOperationsV2 } = require(
     `${root}/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js`,

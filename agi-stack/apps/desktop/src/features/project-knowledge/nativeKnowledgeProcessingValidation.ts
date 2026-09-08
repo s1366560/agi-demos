@@ -35,7 +35,11 @@ export function prepareNativeKnowledgeProcessingQuery<Q extends NativeKnowledgeP
   scope: ProjectKnowledgeScope,
 ): Q {
   if (!s.jsonValue(value) || !definitions.NativeKnowledgeProcessingQuery!(value)) throw invalid();
-  if (value.operation === 'processing_task') {
+  if (value.operation === 'community_active') {
+    return s.frozenClone(value);
+  } else if (value.operation === 'community_build' || value.operation === 'community_audit') {
+    if (!s.identifier(value.build_id)) throw invalid();
+  } else if (value.operation === 'processing_task') {
     if (!validProcessingSource(value.source, scope)) throw invalid();
   } else if (value.operation === 'semantic') {
     if (
@@ -74,10 +78,19 @@ export function prepareNativeKnowledgeProcessingCommand<C extends NativeKnowledg
   if (value.operation === 'retry_processing') {
     if (!validProcessingSource(value.source, scope) || !s.localRevision(value.expected_attempt))
       throw invalid();
+  } else if (value.operation === 'create_community_build') {
+    if (!s.identifier(value.idempotency_key)) throw invalid();
   } else if (value.operation === 'process_one') {
     if (!s.identifier(value.workspace_id)) throw invalid();
   } else {
     if (!s.identifier(value.build_id)) throw invalid();
+    if (value.operation === 'process_community_one' && !s.identifier(value.workspace_id))
+      throw invalid();
+    if (
+      value.operation === 'select_community_build' &&
+      value.expected_selection_revision >= Number.MAX_SAFE_INTEGER
+    )
+      throw invalid();
     if (
       value.operation === 'configure_embedding' &&
       (!s.identifier(value.provider_id) || !s.identifier(value.model_id))

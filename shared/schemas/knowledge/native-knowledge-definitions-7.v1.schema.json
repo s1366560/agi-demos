@@ -516,6 +516,105 @@
             "attempt"
           ],
           "additionalProperties": false
+        },
+        "create_community_build": {
+          "type": "object",
+          "properties": {
+            "build": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildReceipt"
+            }
+          },
+          "required": [
+            "build"
+          ],
+          "additionalProperties": false
+        },
+        "select_community_build": {
+          "type": "object",
+          "properties": {
+            "selection": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunitySelection"
+            }
+          },
+          "required": [
+            "selection"
+          ],
+          "additionalProperties": false
+        },
+        "process_community_one": {
+          "type": "object",
+          "properties": {
+            "receipt": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityAuditSummary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "receipt"
+          ],
+          "additionalProperties": false
+        },
+        "retry_community": {
+          "type": "object",
+          "properties": {
+            "accepted": {
+              "const": true
+            },
+            "build_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "candidate_id": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295,
+              "x-rust-type": "u32"
+            }
+          },
+          "required": [
+            "accepted",
+            "build_id",
+            "candidate_id",
+            "attempt"
+          ],
+          "additionalProperties": false
+        },
+        "activate_community_build": {
+          "type": "object",
+          "properties": {
+            "activated": {
+              "type": "boolean"
+            },
+            "build_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "selection_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "activated",
+            "build_id",
+            "selection_revision"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -525,7 +624,12 @@
         "promote_index",
         "retry_index",
         "process_one",
-        "retry_processing"
+        "retry_processing",
+        "create_community_build",
+        "select_community_build",
+        "process_community_one",
+        "retry_community",
+        "activate_community_build"
       ],
       "additionalProperties": false
     },

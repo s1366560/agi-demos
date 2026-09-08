@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memstack.local/schemas/native-knowledge-definitions-13.v1.schema.json",
+  "title": "Native knowledge community definitions 13",
+  "$defs": {
+    "NativeKnowledgeCommunityFailure": {
+      "enum": [
+        "provider_unavailable",
+        "invalid_submission",
+        "cancelled",
+        "lease_lost",
+        "admission_changed",
+        "graph_changed",
+        "internal_failure"
+      ]
+    },
+    "NativeKnowledgeCommunitySelection": {
+      "type": "object",
+      "properties": {
+        "requested_build_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active_build_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "requested_build_id",
+        "active_build_id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeCommunityBuildReceipt": {
+      "type": "object",
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "project_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "build_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "graph_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "candidate_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "completed_empty"
+          ]
+        },
+        "created_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "tenant_id",
+        "project_id",
+        "build_id",
+        "graph_digest",
+        "candidate_count",
+        "state",
+        "created_at_ms"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeCommunityBuildStatus": {
+      "type": "object",
+      "properties": {
+        "build_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "failed",
+            "completed",
+            "completed_empty"
+          ]
+        },
+        "candidate_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "ready_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "insufficient_evidence_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "failed_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "build_id",
+        "state",
+        "candidate_count",
+        "ready_count",
+        "insufficient_evidence_count",
+        "failed_count"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeCommunityEvidence": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+        },
+        "entity_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "relationship_index": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source",
+        "entity_index",
+        "relationship_index"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeCommunityDecision": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "ready"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16384
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityEvidence"
+              },
+              "minItems": 1,
+              "maxItems": 256
+            }
+          },
+          "required": [
+            "status",
+            "name",
+            "summary",
+            "rationale",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "insufficient_evidence"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityEvidence"
+              },
+              "minItems": 0,
+              "maxItems": 256
+            }
+          },
+          "required": [
+            "status",
+            "rationale",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "NativeKnowledgeCommunitySubmission": {
+      "type": "object",
+      "properties": {
+        "build_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "graph_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "candidate_id": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEntityReference"
+          },
+          "minItems": 2,
+          "maxItems": 4096
+        },
+        "decision": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityDecision"
+        }
+      },
+      "required": [
+        "build_id",
+        "graph_digest",
+        "candidate_id",
+        "members",
+        "decision"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -20,7 +20,7 @@ import type {
 import type { NativeMemoriesAuthority } from './nativeMemoriesController';
 import type { NativeKnowledgeConfigurationSnapshot } from './nativeKnowledgeRetrievalController';
 
-type SupportedOperation = Exclude<NativeKnowledgeProcessingCommand['operation'], 'retry_processing'>;
+type SupportedOperation = (typeof OPERATIONS)[number];
 type SupportedCommand = Extract<
   NativeKnowledgeProcessingCommand,
   { operation: SupportedOperation }
@@ -83,7 +83,7 @@ const OPERATIONS = [
   'select_embedding',
   'configure_embedding',
   'process_one',
-];
+] as const;
 const configurationKey = (snapshot: NativeKnowledgeConfigurationSnapshot) => {
   const c = snapshot.configuration;
   return JSON.stringify(
@@ -144,7 +144,8 @@ export function createNativeKnowledgeProcessingController({
   const listeners = new Set<() => void>();
   const initial = (): NativeKnowledgeProcessingModel =>
     Object.freeze({
-      phase: allowedActions.some((action) => OPERATIONS.includes(action)) ? 'idle' : 'unavailable',
+      phase: allowedActions.some((action) => OPERATIONS.some((operation) => operation === action))
+        ? 'idle' : 'unavailable',
       allowedActions: declared,
       inputsAvailable: Boolean(inputsClient),
       inputs: null,

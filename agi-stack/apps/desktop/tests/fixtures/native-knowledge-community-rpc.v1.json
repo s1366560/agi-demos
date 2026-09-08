@@ -1,0 +1,242 @@
+{
+  "command_cases": [
+    {
+      "command": {
+        "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+        "operation": "process_community_one",
+        "workspace_id": "explicit-workspace"
+      },
+      "response": {
+        "contract_version": "1.0.0",
+        "result": {
+          "receipt": {
+            "agent_id": "knowledge-community-v1",
+            "attempt": 1,
+            "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+            "candidate_id": "d941eba31586fec3b92959da23deffcf63a158e09818a904c7ec540009fd6281",
+            "contract_version": 1,
+            "failure": null,
+            "finished_at_ms": 1788862381464,
+            "latency_ms": 18,
+            "model_id": "fixture-model",
+            "provider_id": "local-runtime",
+            "response_digest": null,
+            "started_at_ms": 1788862381447,
+            "status": "applied",
+            "tool_name": "submit_knowledge_community"
+          }
+        },
+        "scope": {
+          "context_revision": 0,
+          "digest": "be58ea199640ba1945ab3f0db5869fbd17a9c3732c0f6b6d5ad95602eb970485",
+          "generation": 1,
+          "profile_id": "knowledge-integration-test",
+          "project_id": "local-project",
+          "tenant_id": "local"
+        }
+      }
+    }
+  ],
+  "query_cases": [
+    {
+      "query": { "operation": "community_active" },
+      "response": {
+        "contract_version": "1.0.0",
+        "result": {
+          "current_status": {
+            "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+            "candidate_count": 1,
+            "failed_count": 0,
+            "insufficient_evidence_count": 0,
+            "ready_count": 1,
+            "state": "completed"
+          },
+          "selection": {
+            "active_build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+            "requested_build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+            "revision": 1
+          },
+          "stale_build_id": null
+        },
+        "scope": {
+          "context_revision": 0,
+          "digest": "be58ea199640ba1945ab3f0db5869fbd17a9c3732c0f6b6d5ad95602eb970485",
+          "generation": 1,
+          "profile_id": "knowledge-integration-test",
+          "project_id": "local-project",
+          "tenant_id": "local"
+        }
+      }
+    },
+    {
+      "query": {
+        "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+        "limit": 20,
+        "offset": 0,
+        "operation": "community_build"
+      },
+      "response": {
+        "contract_version": "1.0.0",
+        "result": {
+          "page": {
+            "build": {
+              "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+              "candidate_count": 1,
+              "created_at_ms": 1788862381414,
+              "graph_digest": "7bb97f134c5a28054b3be8d566daea1db86cefcc720e3cb94a780615e06d04da",
+              "project_id": "local-project",
+              "state": "pending",
+              "tenant_id": "local"
+            },
+            "current_graph": true,
+            "items": [
+              {
+                "audit": {
+                  "agent_id": "knowledge-community-v1",
+                  "attempt": 1,
+                  "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+                  "candidate_id": "d941eba31586fec3b92959da23deffcf63a158e09818a904c7ec540009fd6281",
+                  "contract_version": 1,
+                  "failure": null,
+                  "finished_at_ms": 1788862381464,
+                  "latency_ms": 18,
+                  "model_id": "fixture-model",
+                  "provider_id": "local-runtime",
+                  "response_digest": null,
+                  "started_at_ms": 1788862381447,
+                  "status": "applied",
+                  "tool_name": "submit_knowledge_community"
+                },
+                "candidate_id": "d941eba31586fec3b92959da23deffcf63a158e09818a904c7ec540009fd6281",
+                "job": {
+                  "attempt": 1,
+                  "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+                  "candidate_id": "d941eba31586fec3b92959da23deffcf63a158e09818a904c7ec540009fd6281",
+                  "failure": null,
+                  "state": "completed"
+                },
+                "member_count": 2,
+                "result": {
+                  "attempt": 1,
+                  "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+                  "candidate_id": "d941eba31586fec3b92959da23deffcf63a158e09818a904c7ec540009fd6281",
+                  "finished_at_ms": 1788862381464,
+                  "submission": {
+                    "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+                    "candidate_id": "d941eba31586fec3b92959da23deffcf63a158e09818a904c7ec540009fd6281",
+                    "decision": {
+                      "evidence": [
+                        {
+                          "entity_index": 0,
+                          "relationship_index": null,
+                          "source": {
+                            "change_sequence": 1,
+                            "memory_id": "knowledge-test-memory",
+                            "project_id": "local-project",
+                            "revision": 1,
+                            "tenant_id": "local"
+                          }
+                        }
+                      ],
+                      "name": "Cedar maintenance",
+                      "rationale": "Source explicitly associates these entities.",
+                      "status": "ready",
+                      "summary": "Mira maintains Cedar."
+                    },
+                    "graph_digest": "7bb97f134c5a28054b3be8d566daea1db86cefcc720e3cb94a780615e06d04da",
+                    "members": [
+                      {
+                        "entity_index": 0,
+                        "source": {
+                          "change_sequence": 1,
+                          "memory_id": "knowledge-test-memory",
+                          "project_id": "local-project",
+                          "revision": 1,
+                          "tenant_id": "local"
+                        }
+                      },
+                      {
+                        "entity_index": 1,
+                        "source": {
+                          "change_sequence": 1,
+                          "memory_id": "knowledge-test-memory",
+                          "project_id": "local-project",
+                          "revision": 1,
+                          "tenant_id": "local"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "limit": 20,
+            "offset": 0,
+            "status": {
+              "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+              "candidate_count": 1,
+              "failed_count": 0,
+              "insufficient_evidence_count": 0,
+              "ready_count": 1,
+              "state": "completed"
+            },
+            "total": 1
+          }
+        },
+        "scope": {
+          "context_revision": 0,
+          "digest": "be58ea199640ba1945ab3f0db5869fbd17a9c3732c0f6b6d5ad95602eb970485",
+          "generation": 1,
+          "profile_id": "knowledge-integration-test",
+          "project_id": "local-project",
+          "tenant_id": "local"
+        }
+      }
+    },
+    {
+      "query": {
+        "attempt": 1,
+        "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+        "candidate_id": "d941eba31586fec3b92959da23deffcf63a158e09818a904c7ec540009fd6281",
+        "operation": "community_audit"
+      },
+      "response": {
+        "contract_version": "1.0.0",
+        "result": {
+          "audit": {
+            "agent_id": "knowledge-community-v1",
+            "attempt": 1,
+            "build_id": "79313f3e-7820-442e-9b28-be03546ac599",
+            "candidate_id": "d941eba31586fec3b92959da23deffcf63a158e09818a904c7ec540009fd6281",
+            "contract_version": 1,
+            "failure": null,
+            "finished_at_ms": 1788862381464,
+            "latency_ms": 18,
+            "model_id": "fixture-model",
+            "provider_id": "local-runtime",
+            "response_digest": null,
+            "started_at_ms": 1788862381447,
+            "status": "applied",
+            "tool_name": "submit_knowledge_community"
+          }
+        },
+        "scope": {
+          "context_revision": 0,
+          "digest": "be58ea199640ba1945ab3f0db5869fbd17a9c3732c0f6b6d5ad95602eb970485",
+          "generation": 1,
+          "profile_id": "knowledge-integration-test",
+          "project_id": "local-project",
+          "tenant_id": "local"
+        }
+      }
+    }
+  ],
+  "scope": {
+    "context_revision": 0,
+    "digest": "be58ea199640ba1945ab3f0db5869fbd17a9c3732c0f6b6d5ad95602eb970485",
+    "generation": 1,
+    "profile_id": "knowledge-integration-test",
+    "project_id": "local-project",
+    "tenant_id": "local"
+  }
+}

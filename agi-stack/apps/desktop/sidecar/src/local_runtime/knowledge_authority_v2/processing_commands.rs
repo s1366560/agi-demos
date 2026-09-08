@@ -22,6 +22,15 @@ pub(crate) async fn command(
     processing_context::with_current(&operation, &state, &auth, |_| Ok(()))
         .map_err(IntoResponse::into_response)?;
     let result = match body.command {
+        command @ (ProcessingCommand::CreateCommunityBuild { .. }
+        | ProcessingCommand::SelectCommunityBuild { .. }
+        | ProcessingCommand::ProcessCommunityOne { .. }
+        | ProcessingCommand::RetryCommunity { .. }
+        | ProcessingCommand::ActivateCommunityBuild { .. }) => {
+            super::community::command(&operation, &state, &auth, command)
+                .await
+                .map_err(IntoResponse::into_response)?
+        }
         ProcessingCommand::ConfigureEmbedding {
             build_id,
             provider_id,

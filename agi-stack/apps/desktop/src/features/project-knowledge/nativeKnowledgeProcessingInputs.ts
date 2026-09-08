@@ -20,7 +20,7 @@ export interface NativeKnowledgeProcessingInputsClient {
   load(
     scope: ProjectKnowledgeScope,
     options: Readonly<{
-      operation: 'configure_embedding' | 'process_one';
+      operation: 'configure_embedding' | 'process_one' | 'process_community_one';
       expectedScope: NativeKnowledgeScope;
       signal?: AbortSignal;
     }>,

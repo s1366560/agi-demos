@@ -22,7 +22,7 @@ type Dependencies = Readonly<{
   processing: NativeKnowledgeProcessingClient;
   providers: Pick<DesktopTenantProvidersClientV2, 'listLlmProviders' | 'discoverLlmProviderModels'>;
   workspaces: DesktopWorkspaceCatalogOperationsV2;
-  isCurrent: (operation: 'configure_embedding' | 'process_one') => boolean;
+  isCurrent: (operation: 'configure_embedding' | 'process_one' | 'process_community_one') => boolean;
 }>;
 const unavailable = Object.freeze({
   availability: 'unavailable' as const,
@@ -40,7 +40,7 @@ export function createDesktopNativeKnowledgeInputsClientV2(
       if (
         pinned.authority !== 'local' ||
         !input ||
-        !['configure_embedding', 'process_one'].includes(input.operation) ||
+        !['configure_embedding', 'process_one', 'process_community_one'].includes(input.operation) ||
         Object.keys(input).some((key) => !['operation', 'expectedScope', 'signal'].includes(key))
       )
         throw invalid();
@@ -59,7 +59,7 @@ export function createDesktopNativeKnowledgeInputsClientV2(
         current();
         const response = await dependencies.processing.query(
           pinned,
-          { operation: 'configuration' },
+          { operation: operation === 'process_community_one' ? 'community_active' : 'configuration' },
           { signal, expectedScope: expected },
         );
         current();

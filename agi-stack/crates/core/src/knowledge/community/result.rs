@@ -130,3 +130,89 @@ pub struct CommunityActiveView {
     pub current: Option<CommunityPublishedBuild>,
     pub stale_build_id: Option<String>,
 }
+
+/// One consistent read of a frozen build and its mutable job progress.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommunityBuildPage {
+    pub build: super::build::CommunityBuildReceipt,
+    pub status: CommunityBuildStatus,
+    pub current_graph: bool,
+    pub items: Vec<CommunityCandidateProgress>,
+    pub total: u32,
+    pub offset: u32,
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommunityCandidateProgress {
+    pub candidate_id: String,
+    pub member_count: u32,
+    pub job: super::build::CommunityJobStatus,
+    pub result: Option<CommunityResult>,
+    pub audit: Option<CommunityAuditSummary>,
+}
+
+/// Audit diagnostics exclude frozen source payloads and provider response text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommunityAuditSummary {
+    pub build_id: String,
+    pub candidate_id: String,
+    pub attempt: u32,
+    pub agent_id: String,
+    pub provider_id: String,
+    pub model_id: String,
+    pub tool_name: String,
+    pub contract_version: u32,
+    pub started_at_ms: i64,
+    pub finished_at_ms: Option<i64>,
+    pub latency_ms: Option<u64>,
+    pub status: CommunityAuditStatus,
+    pub failure: Option<CommunityAuditFailure>,
+    pub response_digest: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommunityAuditStatus {
+    Running,
+    Applied,
+    Failed,
+}
+
+impl CommunityAuditRecord {
+    pub fn summary(&self) -> CommunityAuditSummary {
+        let (status, failure, response_digest) = match &self.outcome {
+            None => (CommunityAuditStatus::Running, None, None),
+            Some(CommunityAuditOutcome::Applied { .. }) => {
+                (CommunityAuditStatus::Applied, None, None)
+            }
+            Some(CommunityAuditOutcome::Failed {
+                code,
+                response_digest,
+            }) => (
+                CommunityAuditStatus::Failed,
+                Some(*code),
+                response_digest.clone(),
+            ),
+        };
+        CommunityAuditSummary {
+            build_id: self.invocation.input.build_id.clone(),
+            candidate_id: self.invocation.input.candidate.membership_digest.clone(),
+            attempt: self.attempt,
+            agent_id: self.invocation.agent_id.clone(),
+            provider_id: self.invocation.provider_id.clone(),
+            model_id: self.invocation.model_id.clone(),
+            tool_name: self.invocation.tool_name.clone(),
+            contract_version: self.invocation.contract_version,
+            started_at_ms: self.started_at_ms,
+            finished_at_ms: self.finished_at_ms,
+            latency_ms: self.latency_ms,
+            status,
+            failure,
+            response_digest,
+        }
+    }
+}

@@ -470,7 +470,7 @@ export type NativeKnowledgeCapabilityEntry = {
   readonly reason_code: (string) | (null);
   readonly service_version: (string) | (null);
   readonly contract_version: (string) | (null);
-  readonly allowed_actions: readonly ("cloud_conflict_context" | "configuration" | "configure_embedding" | "create" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "index_one" | "list" | "pending_resolutions" | "process_one" | "processing_audits" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_index" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view" | "retry_processing" | "processing_task")[];
+  readonly allowed_actions: readonly ("activate_community_build" | "cloud_conflict_context" | "community_active" | "community_audit" | "community_build" | "configuration" | "configure_embedding" | "create" | "create_community_build" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "index_one" | "list" | "pending_resolutions" | "process_community_one" | "process_one" | "processing_audits" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_community" | "retry_index" | "select_embedding" | "select_community_build" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view" | "retry_processing" | "processing_task")[];
   readonly scope: NativeKnowledgeCapabilityScope;
   readonly authority_revision: (number) | (null);
   readonly retryable: boolean;
@@ -597,4 +597,120 @@ export type NativeKnowledgeProcessingTaskSnapshot = {
     readonly attempt: number;
     readonly failure: (NativeKnowledgeProcessingFailure) | (null);
   }) | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityFailure = "provider_unavailable" | "invalid_submission" | "cancelled" | "lease_lost" | "admission_changed" | "graph_changed" | "internal_failure";
+
+// prettier-ignore
+export type NativeKnowledgeCommunitySelection = {
+  readonly requested_build_id: (string) | (null);
+  readonly active_build_id: (string) | (null);
+  readonly revision: number;
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityBuildReceipt = {
+  readonly tenant_id: string;
+  readonly project_id: string;
+  readonly build_id: string;
+  readonly graph_digest: string;
+  readonly candidate_count: number;
+  readonly state: "pending" | "completed_empty";
+  readonly created_at_ms: number;
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityBuildStatus = {
+  readonly build_id: string;
+  readonly state: "pending" | "failed" | "completed" | "completed_empty";
+  readonly candidate_count: number;
+  readonly ready_count: number;
+  readonly insufficient_evidence_count: number;
+  readonly failed_count: number;
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityEvidence = {
+  readonly source: NativeKnowledgeProcessingSource;
+  readonly entity_index: number;
+  readonly relationship_index: (number) | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityDecision = ({
+  readonly status: "ready";
+  readonly name: string;
+  readonly summary: string;
+  readonly rationale: string;
+  readonly evidence: readonly (NativeKnowledgeCommunityEvidence)[];
+}) | ({
+  readonly status: "insufficient_evidence";
+  readonly rationale: string;
+  readonly evidence: readonly (NativeKnowledgeCommunityEvidence)[];
+});
+
+// prettier-ignore
+export type NativeKnowledgeCommunitySubmission = {
+  readonly build_id: string;
+  readonly graph_digest: string;
+  readonly candidate_id: string;
+  readonly members: readonly (NativeKnowledgeEntityReference)[];
+  readonly decision: NativeKnowledgeCommunityDecision;
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityResult = {
+  readonly build_id: string;
+  readonly candidate_id: string;
+  readonly attempt: number;
+  readonly submission: NativeKnowledgeCommunitySubmission;
+  readonly finished_at_ms: number;
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityJobStatus = {
+  readonly build_id: string;
+  readonly candidate_id: string;
+  readonly state: "pending" | "leased" | "failed" | "completed";
+  readonly attempt: number;
+  readonly failure: ("cancelled" | "worker_unavailable" | "execution_failed") | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityAuditSummary = {
+  readonly build_id: string;
+  readonly candidate_id: string;
+  readonly attempt: number;
+  readonly agent_id: string;
+  readonly provider_id: string;
+  readonly model_id: string;
+  readonly tool_name: "submit_knowledge_community";
+  readonly contract_version: 1;
+  readonly started_at_ms: number;
+  readonly finished_at_ms: (number) | (null);
+  readonly latency_ms: (number) | (null);
+  readonly status: "running" | "applied" | "failed";
+  readonly failure: (NativeKnowledgeCommunityFailure) | (null);
+  readonly response_digest: (string) | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityCandidateProgress = {
+  readonly candidate_id: string;
+  readonly member_count: number;
+  readonly job: NativeKnowledgeCommunityJobStatus;
+  readonly result: (NativeKnowledgeCommunityResult) | (null);
+  readonly audit: (NativeKnowledgeCommunityAuditSummary) | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityBuildPage = {
+  readonly build: NativeKnowledgeCommunityBuildReceipt;
+  readonly status: NativeKnowledgeCommunityBuildStatus;
+  readonly current_graph: boolean;
+  readonly items: readonly (NativeKnowledgeCommunityCandidateProgress)[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
 };
