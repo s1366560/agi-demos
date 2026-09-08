@@ -32,6 +32,18 @@ pub(crate) enum ProcessingQuery {
         query: String,
         limit: usize,
     },
+    FailedProcessing {
+        request: agistack_core::knowledge::diagnostics::DiagnosticRequest,
+    },
+    FailedIndex {
+        build_id: String,
+        config_revision: u64,
+        request: agistack_core::knowledge::diagnostics::DiagnosticRequest,
+    },
+    ProcessingAudits {
+        source: agistack_core::knowledge::processing::ProcessingSource,
+        request: agistack_core::knowledge::diagnostics::DiagnosticRequest,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

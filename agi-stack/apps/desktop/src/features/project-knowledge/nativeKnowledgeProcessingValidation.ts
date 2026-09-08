@@ -42,6 +42,18 @@ export function prepareNativeKnowledgeProcessingQuery<Q extends NativeKnowledgeP
       value.query.trim().length === 0
     )
       throw invalid();
+  } else if (
+    value.operation === 'failed_processing' ||
+    value.operation === 'failed_index' ||
+    value.operation === 'processing_audits'
+  ) {
+    if (
+      (value.operation === 'failed_index' && !s.identifier(value.build_id)) ||
+      (value.operation === 'processing_audits' && !validProcessingSource(value.source, scope)) ||
+      (value.request.cursor != null &&
+        (value.request.cursor.length === 0 || value.request.cursor.length > 8192))
+    )
+      throw invalid();
   } else if (value.operation !== 'configuration') {
     if (value.operation === 'text' && !boundedText(value.literal)) throw invalid();
     if (value.request.source && !validProcessingSource(value.request.source, scope))

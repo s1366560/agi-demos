@@ -7,6 +7,8 @@ use tower::ServiceExt;
 
 #[path = "processing_rpc_admission_tests.rs"]
 mod admission;
+#[path = "diagnostics_rpc_tests.rs"]
+mod diagnostics;
 
 async fn request(
     state: Arc<LocalRuntimeState>,

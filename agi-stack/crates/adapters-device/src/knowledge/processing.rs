@@ -9,6 +9,7 @@ use super::{
 };
 
 pub(super) mod audit;
+mod diagnostics;
 mod leases;
 mod projection;
 mod schema;

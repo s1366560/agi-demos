@@ -469,6 +469,56 @@
             "limit"
           ],
           "additionalProperties": false
+        },
+        "failed_processing": {
+          "type": "object",
+          "properties": {
+            "request": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticRequest"
+            }
+          },
+          "required": [
+            "request"
+          ],
+          "additionalProperties": false
+        },
+        "failed_index": {
+          "type": "object",
+          "properties": {
+            "build_id": {
+              "type": "string"
+            },
+            "config_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "request": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticRequest"
+            }
+          },
+          "required": [
+            "build_id",
+            "config_revision",
+            "request"
+          ],
+          "additionalProperties": false
+        },
+        "processing_audits": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+            },
+            "request": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticRequest"
+            }
+          },
+          "required": [
+            "source",
+            "request"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -476,7 +526,10 @@
         "entities",
         "relationships",
         "text",
-        "semantic"
+        "semantic",
+        "failed_processing",
+        "failed_index",
+        "processing_audits"
       ],
       "additionalProperties": false
     },
@@ -632,6 +685,84 @@
             "hits"
           ],
           "additionalProperties": false
+        },
+        "failed_processing": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingFailureDetail"
+              }
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "items",
+            "next_cursor"
+          ],
+          "additionalProperties": false
+        },
+        "failed_index": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeIndexFailureDetail"
+              }
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "items",
+            "next_cursor"
+          ],
+          "additionalProperties": false
+        },
+        "processing_audits": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeAuditSummary"
+              }
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "items",
+            "next_cursor"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -639,7 +770,10 @@
         "entities",
         "relationships",
         "text",
-        "semantic"
+        "semantic",
+        "failed_processing",
+        "failed_index",
+        "processing_audits"
       ],
       "additionalProperties": false
     }

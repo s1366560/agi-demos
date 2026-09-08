@@ -11,11 +11,14 @@ import type {
 } from './nativeKnowledgeContracts';
 import type { NativeMemoriesAuthority } from './nativeMemoriesController';
 
-export type NativeKnowledgeRetrievalMode = Exclude<
+export type NativeKnowledgeRetrievalMode = Extract<
   NativeKnowledgeProcessingQuery['operation'],
-  'configuration'
+  'entities' | 'relationships' | 'text' | 'semantic'
 >;
-type RetrievalQuery = Exclude<NativeKnowledgeProcessingQuery, { operation: 'configuration' }>;
+type RetrievalQuery = Extract<
+  NativeKnowledgeProcessingQuery,
+  { operation: NativeKnowledgeRetrievalMode }
+>;
 export type NativeKnowledgeRetrievalResult = {
   [K in NativeKnowledgeRetrievalMode]: Readonly<{
     operation: K;

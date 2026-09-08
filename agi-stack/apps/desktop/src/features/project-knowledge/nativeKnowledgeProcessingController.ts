@@ -1,3 +1,4 @@
+import type { DiagnosticIndexSelection } from './nativeKnowledgeDiagnosticsController';
 import type {
   NativeKnowledgeProcessingInputsClient,
   NativeKnowledgeProcessingInputs,
@@ -454,6 +455,42 @@ export function createNativeKnowledgeProcessingController({
       if (current(request)) fail(error);
     }
   };
+  const selectDiagnosticFailure = async (selection: DiagnosticIndexSelection) => {
+    if (locked() || !permitted('retry_index')) return;
+    const selected = structuredClone(selection);
+    const request = begin();
+    emit({ phase: 'loading', failedTask: null, selection: null, error: null });
+    try {
+      checkScope(selected.scope);
+      observed = Object.freeze({ ...selected.scope });
+      const snapshot = await read(request);
+      if (!current(request)) return;
+      if (
+        !snapshot.configuration ||
+        configurationKey(snapshot) !==
+          configurationKey({
+            ...snapshot,
+            configuration: selected.configuration,
+          }) ||
+        selected.failure.input.source.tenant_id !== scope.tenantId ||
+        selected.failure.input.source.project_id !== scope.projectId
+      ) {
+        emit({ phase: 'idle', snapshot, error: 'reviewChanged' });
+        return;
+      }
+      emit({
+        phase: 'idle',
+        snapshot,
+        failedTask: {
+          buildId: snapshot.configuration.build_id,
+          configRevision: snapshot.configuration.revision,
+          receipt: { ...selected.failure, status: 'failed' },
+        },
+      });
+    } catch (error) {
+      if (current(request)) fail(error);
+    }
+  };
   const confirm = async () => {
     const command = model.selection;
     const previous = model.snapshot;
@@ -563,6 +600,7 @@ export function createNativeKnowledgeProcessingController({
       };
     },
     refresh,
+    selectDiagnosticFailure,
     prepareInputs,
     chooseEmbedding: (providerId: string, modelId: string) => {
       if (

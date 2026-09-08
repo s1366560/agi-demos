@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use rusqlite::{params, Connection, OptionalExtension};
 
 mod cloud_resolution;
+mod diagnostics;
 mod index;
 mod mutations;
 mod processing;

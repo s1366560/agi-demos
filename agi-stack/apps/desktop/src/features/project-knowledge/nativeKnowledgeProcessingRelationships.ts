@@ -15,7 +15,10 @@ import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
 import * as s from './nativeKnowledgeSchema';
 import { sameJson } from './nativeKnowledgeRelationships';
 
-type Query = Exclude<NativeKnowledgeProcessingQuery, { operation: 'configuration' | 'semantic' }>;
+type Query = Extract<
+  NativeKnowledgeProcessingQuery,
+  { operation: 'entities' | 'relationships' | 'text' }
+>;
 export function validProcessingSource(
   value: NativeKnowledgeProcessingSource,
   scope: ProjectKnowledgeScope,
@@ -97,6 +100,10 @@ export function validProcessingResult(
         new Set(r.hits.map((h) => h.input.source.memory_id)).size === r.hits.length
       );
     }
+    case 'failed_processing':
+    case 'failed_index':
+    case 'processing_audits':
+      return diagnosticPage(operation, value, scope);
     case 'entities':
     case 'relationships':
     case 'text':
@@ -220,4 +227,52 @@ function page(query: Query, value: unknown, scope: ProjectKnowledgeScope): boole
       (!query.request.cursor ||
         cursor.upper_change_sequence === query.request.cursor.upper_change_sequence))
   );
+}
+
+function diagnosticPage(
+  query: Extract<
+    NativeKnowledgeProcessingQuery,
+    { operation: 'failed_processing' | 'failed_index' | 'processing_audits' }
+  >,
+  value: unknown,
+  scope: ProjectKnowledgeScope,
+): boolean {
+  const result = value as
+    | Results['failed_processing']
+    | Results['failed_index']
+    | Results['processing_audits'];
+  if (
+    result.items.length > query.request.limit ||
+    (result.next_cursor !== null &&
+      (result.items.length !== query.request.limit ||
+        result.next_cursor.length === 0 ||
+        result.next_cursor.length > 8192))
+  )
+    return false;
+  let previous = 0;
+  for (const item of result.items) {
+    const source = 'input' in item ? item.input.source : item.source;
+    const position =
+      query.operation === 'processing_audits' ? item.attempt : source.change_sequence;
+    if (
+      !validProcessingSource(source, scope) ||
+      !s.localRevision(item.attempt) ||
+      position <= previous
+    )
+      return false;
+    previous = position;
+    if ('input' in item && !validProcessingIndexInput(item.input, scope)) return false;
+    if (query.operation === 'processing_audits' && !sameJson(query.source, source)) return false;
+    if (
+      'status' in item &&
+      (![item.agent_id, item.provider_id, item.model_id, item.tool_name].every(s.identifier) ||
+        (item.status === 'running') !==
+          (item.finished_at_ms === null && item.latency_ms === null) ||
+        (item.status !== 'running' && (item.finished_at_ms === null || item.latency_ms === null)) ||
+        (item.finished_at_ms !== null && item.finished_at_ms < item.started_at_ms) ||
+        (item.status === 'failed') !== (item.failure !== null))
+    )
+      return false;
+  }
+  return true;
 }

@@ -41,6 +41,53 @@ pub(super) async fn query(
             json!({"configuration":configuration,"active_build_id":status.active_build_id,
                 "processing":processing_coverage(&status.processing),"index":status.index.as_ref().map(index_coverage)})
         }
+        ProcessingQuery::FailedProcessing { request } => {
+            let result =
+                processing_context::with_read_current(&operation, &state, &auth, |clock| {
+                    operation
+                        .authority
+                        .repository()
+                        .map_err(|_| KnowledgeError::Conflict)?
+                        .failed_processing_durable(&operation.scope, &request, clock)
+                })
+                .map_err(IntoResponse::into_response)?;
+            serde_json::to_value(result).map_err(serialization_error)?
+        }
+        ProcessingQuery::ProcessingAudits { source, request } => {
+            let result =
+                processing_context::with_read_current(&operation, &state, &auth, |clock| {
+                    operation
+                        .authority
+                        .repository()
+                        .map_err(|_| KnowledgeError::Conflict)?
+                        .processing_audit_summaries_durable(
+                            &operation.scope,
+                            &source,
+                            &request,
+                            clock,
+                        )
+                })
+                .map_err(IntoResponse::into_response)?;
+            serde_json::to_value(result).map_err(serialization_error)?
+        }
+        ProcessingQuery::FailedIndex {
+            build_id,
+            config_revision,
+            request,
+        } => {
+            let config = current_config(&operation, &state, &auth, &build_id, config_revision)
+                .map_err(IntoResponse::into_response)?;
+            let result =
+                processing_context::with_read_current(&operation, &state, &auth, |clock| {
+                    operation
+                        .authority
+                        .repository()
+                        .map_err(|_| KnowledgeError::Conflict)?
+                        .failed_index_durable(&config, &request, clock)
+                })
+                .map_err(IntoResponse::into_response)?;
+            serde_json::to_value(result).map_err(serialization_error)?
+        }
         ProcessingQuery::Entities { request } => serde_json::to_value(
             operation
                 .entities(&state, &auth, &request)

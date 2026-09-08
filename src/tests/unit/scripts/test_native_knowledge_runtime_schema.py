@@ -20,7 +20,7 @@ def test_runtime_schema_matches_generated_file() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("keyword", ["pattern", "minLength", "not", "unevaluatedProperties"])
+@pytest.mark.parametrize("keyword", ["format", "dependentRequired", "not", "unevaluatedProperties"])
 def test_new_validation_keywords_cannot_silently_weaken_runtime_contract(keyword: str) -> None:
     definitions = copy.deepcopy(load_definitions())
     definitions["NativeKnowledgeScope"]["properties"]["tenant_id"][keyword] = "unsupported"

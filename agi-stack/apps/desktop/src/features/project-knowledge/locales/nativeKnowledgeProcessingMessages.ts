@@ -1,4 +1,9 @@
+import {
+  nativeKnowledgeDiagnosticsEnUS,
+  nativeKnowledgeDiagnosticsZhCN,
+} from './nativeKnowledgeDiagnosticsMessages';
 export const nativeKnowledgeProcessingEnUS = {
+  ...nativeKnowledgeDiagnosticsEnUS,
   'nativeProcessing.choose.configure_embedding': 'Choose embedding provider and model',
   'nativeProcessing.choose.process_one': 'Choose extraction workspace',
   'nativeProcessing.configure_embedding': 'Review embedding configuration',
@@ -93,6 +98,7 @@ export const nativeKnowledgeProcessingZhCN: Record<
   keyof typeof nativeKnowledgeProcessingEnUS,
   string
 > = {
+  ...nativeKnowledgeDiagnosticsZhCN,
   'nativeProcessing.choose.configure_embedding': '选择向量提供方和模型',
   'nativeProcessing.choose.process_one': '选择提取工作区',
   'nativeProcessing.configure_embedding': '审阅向量配置',

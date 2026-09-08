@@ -23,7 +23,9 @@ def test_capability_action_catalog_and_closed_fixture_match_shared_contract() ->
     rust, ts = render_capability_catalog(schema, definitions)
     assert RUST.with_name("capabilities_generated.rs").read_text() == rust
     assert TYPESCRIPT.with_name("nativeKnowledgeCapabilityActionsGenerated.ts").read_text() == ts
-    assert len(schema["x-capability-actions"]) == 37
+    assert len(schema["x-capability-actions"]) == 40
+    for action in ("failed_processing", "failed_index", "processing_audits"):
+        assert schema["x-capability-actions"][action] == "read"
     old_writes = {
         "create",
         "update",

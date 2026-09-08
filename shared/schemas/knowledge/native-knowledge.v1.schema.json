@@ -300,6 +300,18 @@
     },
     "NativeKnowledgeSyncBindingResult": {
       "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncBindingResult"
+    },
+    "NativeKnowledgeDiagnosticRequest": {
+      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeDiagnosticRequest"
+    },
+    "NativeKnowledgeProcessingFailureDetail": {
+      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeProcessingFailureDetail"
+    },
+    "NativeKnowledgeIndexFailureDetail": {
+      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeIndexFailureDetail"
+    },
+    "NativeKnowledgeAuditSummary": {
+      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeAuditSummary"
     }
   },
   "x-routes": {
@@ -566,7 +578,10 @@
     "sync_status": "read",
     "text": "read",
     "update": "write",
-    "view": "read"
+    "view": "read",
+    "failed_processing": "read",
+    "failed_index": "read",
+    "processing_audits": "read"
   },
   "x-local-acceptance-actions": [
     "view",
@@ -585,6 +600,9 @@
     "text",
     "semantic",
     "entities",
-    "relationships"
+    "relationships",
+    "failed_processing",
+    "failed_index",
+    "processing_audits"
   ]
 }

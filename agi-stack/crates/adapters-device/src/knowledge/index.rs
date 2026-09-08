@@ -8,6 +8,7 @@ use super::*;
 mod builds;
 pub(super) mod configuration;
 use configuration::ensure_config;
+mod diagnostics;
 mod leases;
 mod schema;
 pub(super) use schema::migrate;

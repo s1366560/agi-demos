@@ -96,7 +96,10 @@ async fn validation_publication_uses_live_role_and_preserves_all_existing_native
     let auth = authenticated(&state);
     let all: std::collections::BTreeSet<_> =
         READ_ACTIONS.iter().chain(WRITE_ACTIONS).copied().collect();
-    assert_eq!(all.len(), 37);
+    assert_eq!(all.len(), 40);
+    for action in ["failed_processing", "failed_index", "processing_audits"] {
+        assert!(READ_ACTIONS.contains(&action));
+    }
     for member_role in ["owner", "admin", "member", "contributor", "viewer"] {
         role(&state, &auth, member_role);
         let (status, response) =

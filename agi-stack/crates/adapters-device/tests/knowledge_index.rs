@@ -13,6 +13,8 @@ use std::num::NonZeroU32;
 mod clock;
 #[path = "knowledge_index/configuration.rs"]
 mod configuration;
+#[path = "knowledge_index/diagnostics.rs"]
+mod diagnostics;
 #[path = "knowledge_index/lifecycle.rs"]
 mod lifecycle;
 #[path = "knowledge_index/visibility.rs"]

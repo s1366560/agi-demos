@@ -461,7 +461,7 @@ export type NativeKnowledgeCapabilityEntry = {
   readonly reason_code: (string) | (null);
   readonly service_version: (string) | (null);
   readonly contract_version: (string) | (null);
-  readonly allowed_actions: readonly ("cloud_conflict_context" | "configuration" | "configure_embedding" | "create" | "delete" | "entities" | "get" | "index_one" | "list" | "pending_resolutions" | "process_one" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_index" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view")[];
+  readonly allowed_actions: readonly ("cloud_conflict_context" | "configuration" | "configure_embedding" | "create" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "index_one" | "list" | "pending_resolutions" | "process_one" | "processing_audits" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_index" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view")[];
   readonly scope: NativeKnowledgeCapabilityScope;
   readonly authority_revision: (number) | (null);
   readonly retryable: boolean;
@@ -547,4 +547,34 @@ export type NativeKnowledgeSyncBindingResult = {
   readonly enrollment: NativeKnowledgeSyncEnrollment;
   readonly status: NativeKnowledgeStatus;
   readonly association_state: "verified";
+};
+
+// prettier-ignore
+export type NativeKnowledgeProcessingFailureDetail = {
+  readonly source: NativeKnowledgeProcessingSource;
+  readonly attempt: number;
+  readonly failure: "model_unconfigured" | "provider_unavailable" | "invalid_extraction" | "cancelled" | "processing_failed";
+};
+
+// prettier-ignore
+export type NativeKnowledgeIndexFailureDetail = {
+  readonly input: NativeKnowledgeIndexSource;
+  readonly attempt: number;
+  readonly failure: "provider_unavailable" | "profile_changed" | "invalid_embedding" | "cancelled";
+};
+
+// prettier-ignore
+export type NativeKnowledgeAuditSummary = {
+  readonly source: NativeKnowledgeProcessingSource;
+  readonly attempt: number;
+  readonly agent_id: string;
+  readonly provider_id: string;
+  readonly model_id: string;
+  readonly tool_name: string;
+  readonly contract_version: number;
+  readonly started_at_ms: number;
+  readonly finished_at_ms: (number) | (null);
+  readonly latency_ms: (number) | (null);
+  readonly status: "running" | "applied" | "failed";
+  readonly failure: ("provider_unavailable" | "invalid_extraction" | "cancelled" | "lease_lost" | "admission_changed" | "internal_failure") | (null);
 };
