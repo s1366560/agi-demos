@@ -278,6 +278,28 @@ async fn repeated_real_unix_idle_and_foreground_shutdown_does_not_signal_groups_
 }
 
 #[tokio::test]
+async fn concurrent_real_unix_pty_shutdown_reaps_idle_and_short_lived_foreground_groups() {
+    let mut tasks = tokio::task::JoinSet::new();
+    for worker in 0..8 {
+        tasks.spawn(async move {
+            for iteration in 0..8 {
+                let terminal = ready_terminal().await;
+                if (worker + iteration) % 2 == 0 {
+                    terminal
+                        .try_input(b"true; sleep 60\n".to_vec())
+                        .expect("queue foreground job");
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                drain_terminal(&terminal).await;
+            }
+        });
+    }
+    while let Some(result) = tasks.join_next().await {
+        result.expect("each concurrent real PTY completes cleanup");
+    }
+}
+
+#[tokio::test]
 async fn real_unix_shell_natural_exit_is_reaped_without_signalling_its_dead_group() {
     for _ in 0..8 {
         let mut terminal = ready_terminal().await;

@@ -20,6 +20,10 @@ const COMMAND_CAPACITY: usize = 32;
 const INPUT_LIMIT: usize = 64 * 1024;
 type DrainResult = Result<(), String>;
 
+#[cfg(target_os = "macos")]
+#[path = "terminal_pty_macos_groups_v2.rs"]
+mod macos_groups;
+
 pub(super) enum TerminalPtyCommandV2 {
     Input(Vec<u8>),
     Resize { cols: u16, rows: u16 },
@@ -165,7 +169,7 @@ mod platform {
                 // Do not signal a naturally exited/reaped shell: its numeric group id may
                 // already be reusable. The pump itself never reaps the child.
                 let mut can_signal_groups = false;
-                let mut exited = match child.try_wait() {
+                let exited = match child.try_wait() {
                     Ok(Some(_)) => true,
                     Err(error) if error.raw_os_error() == Some(libc::ECHILD) => true,
                     Err(error) => {
@@ -185,33 +189,31 @@ mod platform {
                         .master
                         .as_ref()
                         .and_then(|master| master.process_group_leader());
+                    // Release the terminal before waiting for process exit. On macOS a
+                    // dying process can remain active while the master is still open.
+                    #[cfg(target_os = "macos")]
+                    {
+                        self.writer.take();
+                        self.reader.take();
+                        self.master.take();
+                    }
                     failures.extend(signal_process_groups(foreground, shell_group, |group| {
-                        if exited {
-                            return Ok(());
+                        #[cfg(target_os = "macos")]
+                        {
+                            let session = shell_group.ok_or_else(|| {
+                                io::Error::other("owned PTY session id is unavailable")
+                            })?;
+                            super::macos_groups::terminate_owned_group(group, session)
                         }
-                        // SAFETY: a positive group id comes from the owned PTY/session.
-                        if unsafe { libc::kill(-group, libc::SIGKILL) } == 0 {
-                            return Ok(());
-                        }
-                        let error = io::Error::last_os_error();
-                        // macOS can report EPERM for a group whose last process just exited.
-                        // Suppress only for our direct shell group AND confirmed child exit.
-                        // A foreground job's permission failure is still an error.
-                        if error.raw_os_error() == Some(libc::EPERM) && Some(group) == shell_group {
-                            exited = match child.try_wait() {
-                                Ok(Some(_)) => true,
-                                Err(wait_error)
-                                    if wait_error.raw_os_error() == Some(libc::ECHILD) =>
-                                {
-                                    true
-                                }
-                                _ => false,
-                            };
-                            if exited {
-                                return Ok(());
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            // SAFETY: a positive group id comes from the owned PTY/session.
+                            if unsafe { libc::kill(-group, libc::SIGKILL) } == 0 {
+                                Ok(())
+                            } else {
+                                Err(io::Error::last_os_error())
                             }
                         }
-                        Err(error)
                     }));
                 }
                 // Close the PTY before waiting: macOS terminal teardown can keep a
