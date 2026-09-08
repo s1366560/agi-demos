@@ -138,7 +138,7 @@
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/project-knowledge/nativeKnowledgeCapabilityVersion.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant-creation/TenantCreationPage.tsx",
@@ -264,7 +264,7 @@
       "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/project-knowledge/nativeKnowledgeCapabilityVersion.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings-routes/ProfileSettingsHost.tsx",
@@ -285,7 +285,7 @@
       ],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/project-knowledge/nativeKnowledgeCapabilityVersion.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings-routes/ProfileSettingsHost.tsx",

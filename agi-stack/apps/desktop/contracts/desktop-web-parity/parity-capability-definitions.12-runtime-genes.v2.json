@@ -350,7 +350,7 @@
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/project-knowledge/nativeKnowledgeCapabilityVersion.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
@@ -368,7 +368,7 @@
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/project-knowledge/nativeKnowledgeCapabilityVersion.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",

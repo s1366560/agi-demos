@@ -346,7 +346,7 @@
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts", "agi-stack/apps/desktop/src/features/project-knowledge/nativeKnowledgeCapabilityVersion.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportCapability.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportController.ts",
