@@ -5,47 +5,65 @@
 //! The caller retains its unreaped session leader throughout this operation,
 //! preventing reuse of the owned session id, and closes all PTY master handles.
 
-use std::{io, mem, thread, time::Duration};
+use std::{collections::BTreeSet, io, mem, thread, time::Duration};
 
 pub(super) fn terminate_owned_group(group: i32, session: i32) -> io::Result<()> {
+    terminate_owned_group_after_snapshot(group, session, |_, _| {})
+}
+
+fn terminate_owned_group_after_snapshot(
+    group: i32,
+    session: i32,
+    mut after_snapshot: impl FnMut(i32, &[i32]),
+) -> io::Result<()> {
     if group <= 1 || session <= 1 {
         return Err(io::Error::other("invalid owned PTY process group/session"));
     }
+    let mut owned_groups = BTreeSet::from([group]);
     loop {
         let mut active = false;
-        for pid in group_members(group)? {
-            let Some(info) = process_info(pid)? else {
-                continue;
-            };
-            if info.pbi_status == libc::SZOMB {
-                continue;
-            }
-            // Revalidate each numeric PID immediately before signalling. The retained
-            // session leader prevents this session identity from being recycled.
-            // SAFETY: getsid/geteuid take no pointers and only inspect process state.
-            let actual_session = unsafe { libc::getsid(pid) };
-            if actual_session == -1 {
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() == Some(libc::ESRCH) {
+        for group in owned_groups.clone() {
+            let members = group_members(group)?;
+            after_snapshot(group, &members);
+            for pid in members {
+                let Some(info) = process_info(pid)? else {
+                    continue;
+                };
+                if info.pbi_status == libc::SZOMB {
                     continue;
                 }
-                return Err(error);
-            }
-            if actual_session != session
-                || info.pbi_pgid != group as u32
-                || info.pbi_uid != unsafe { libc::geteuid() }
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    "PTY group member is outside the owned user/session",
-                ));
-            }
-            active = true;
-            // SAFETY: the positive PID was validated against the retained session.
-            if unsafe { libc::kill(pid, libc::SIGKILL) } == -1 {
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() != Some(libc::ESRCH) {
+                // Revalidate each numeric PID immediately before signalling. The retained
+                // session leader prevents this session identity from being recycled.
+                // SAFETY: getsid/geteuid take no pointers and only inspect process state.
+                let actual_session = unsafe { libc::getsid(pid) };
+                if actual_session == -1 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::ESRCH) {
+                        continue;
+                    }
                     return Err(error);
+                }
+                if actual_session != session || info.pbi_uid != unsafe { libc::geteuid() } {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "PTY group member is outside the owned user/session",
+                    ));
+                }
+                // Job control can move a snapshotted member into a new group before
+                // inspection. Follow that group only after verifying the retained session
+                // and user, so cleanup also covers children forked after the migration.
+                let current_group = i32::try_from(info.pbi_pgid)
+                    .ok()
+                    .filter(|group| *group > 1)
+                    .ok_or_else(|| io::Error::other("owned PTY member has an invalid group"))?;
+                owned_groups.insert(current_group);
+                active = true;
+                // SAFETY: the positive PID was validated against the retained session.
+                if unsafe { libc::kill(pid, libc::SIGKILL) } == -1 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() != Some(libc::ESRCH) {
+                        return Err(error);
+                    }
                 }
             }
         }
@@ -199,3 +217,7 @@ mod tests {
         cleanup.expect("every live group member terminated");
     }
 }
+
+#[cfg(test)]
+#[path = "terminal_pty_macos_migration_tests.rs"]
+mod migration_tests;
