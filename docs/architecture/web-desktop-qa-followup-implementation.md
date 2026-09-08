@@ -1025,3 +1025,21 @@ sync UI independently. For the index configuration schema, preserve the pre-upgr
 backup and closed feature gate; do not delete user content, previous builds, or
 outbox state to simulate rollback. Cloud editing UI, native processing RPC, real
 model/Electron acceptance and formal parity remain follow-up work.
+
+### I2 cloud memory command affordances (2026-09-08)
+
+`0a91ccf19` adds an optional, versioned command capability snapshot to each memory
+page. It binds tenant, project, actor and exact object revision, and reuses the
+command authority's live enrollment, membership and share checks. Expired shares
+grant no update; edit shares grant no delete; exhausted revisions advertise no
+object writes. Missing enrollment or an independent capability failure preserves
+the read page without advertising writes. Every actual command still reauthorizes.
+
+The initial 10 integration cases failed before implementation. Final focused
+PostgreSQL coverage is 13 passed and 95.52% across the two new modules; the combined
+HTTP, renderer/main bridge and permission regression at `0a91ccf19` is 76 passed
+(`/tmp/followup-main-cloud-0a91ccf19.log`). Scoped mypy and pyright, normal commit
+hooks and staged Gitleaks passed. GitNexus remained unavailable with Transport
+closed; no valid graph evidence is claimed. This additive response has no database
+migration and can be reverted independently. Desktop parsing and editing UI remain
+pending; these tests do not establish native Electron acceptance.
