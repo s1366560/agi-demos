@@ -4,6 +4,11 @@ This supplements [the implementation ledger](web-desktop-qa-followup-implementat
 The source baseline for this checkpoint is `efa0a482f`. It records implementation
 and test evidence, not a release approval or native acceptance result.
 
+The later [native knowledge acceptance](native-knowledge-acceptance-2026-09-08.md)
+records the completed local CRUD, real-model extraction, embedding, indexing,
+retrieval and restart journey. Remaining boundaries below describe this earlier
+checkpoint; cloud synchronization and deployment acceptance are still pending.
+
 ## Cloud memory commands
 
 `6e0e836ef`, `0ce226d89`, `d1661a89b`, `3628b9b6d`, and `449379f8f`
