@@ -268,3 +268,49 @@ Local evidence: `/tmp/native-knowledge-failure-fcc0f16df.txt`,
 extraction failure/retry journey previously pending above. Native graph acceptance,
 Agent citation, portable schema/entity/relationship records, and the shared release
 gate remain separate outstanding work.
+
+## Native Agent semantic source citation
+
+At `316631c85`, the canonical Electron launch upgraded the same isolated profile
+and retained both memories and applied extraction states. Two explicit single
+index operations built current vectors with `bge-m3:latest` (1024 dimensions),
+reaching 2/2 coverage without a failed index task. The query "Which project keeps
+its notes available if its AI provider cannot be reached?" returned the recovery
+sample first (cosine similarity 0.5658). Opening its exact match showed memory
+`5f74c60e-e948-4bf1-b552-1c764805ac84`, revision 1, change 12, extraction attempt 2
+and the preserved Cedar/Mira source text.
+
+The real Kimi native conversation `5a4c894c-3b53-5a81-97a1-46f54150ee05` submitted
+a five-step structured plan. After explicit approval with the read-only permission
+profile, it called `knowledge_search` in semantic mode and then `knowledge_source`
+with reference `0091488b-a9f8-429d-821c-11135bfb7ff7` returned by that search. Both
+durable tool observations succeeded. The source audit retained the same source,
+attempt, vector build, configuration revision and input digest as the search audit.
+The final native answer named Cedar and Mira and cited that memory and revision.
+The run reached review, then completed after its evidence was checked and approved
+through the native UI. No file or knowledge write tool was called in this run.
+
+The UI capture initially lagged the persisted result; raising the native window
+showed the completed response. This was not treated as model failure. A separate
+display regression split act/observe pairs around knowledge audit events, leaving
+completed calls labeled running. The narrative model now pairs across that explicit
+audit event type while preserving its separate record. An audit alone cannot mark
+a call complete, error observations remain failed, and conversation messages still
+bound pairing. The new regression failed before the change; native HMR subsequently
+showed both knowledge calls completed.
+
+Local evidence: `/tmp/native-index-two-sources-316631c85.txt`,
+`/tmp/native-semantic-source-316631c85.txt`,
+`/tmp/native-agent-knowledge-success-316631c85.txt` and
+`/tmp/native-agent-knowledge-durable-316631c85.json`. The last file is a scoped
+timeline export from a temporary, stable database/WAL copy; no live database was
+modified. These observations do not cover background recovered/promoted runs,
+which do not inherit the new explicit-run knowledge grant.
+
+Combined authority tests passed 131 with one ignored; generated protocol and
+native knowledge contract checks passed. Full Rust completed with 801 passed and
+one ignored using four test threads. Two preceding default-concurrency runs each
+had a timing failure (MCP delete timeout, then PTY EOF); those failures remain in
+their logs. Desktop full at this revision had 4,718 passed, two failed and two
+skipped: stale parity evidence and an obsolete aggregate lease-event assertion.
+This is not a completed shared release gate.

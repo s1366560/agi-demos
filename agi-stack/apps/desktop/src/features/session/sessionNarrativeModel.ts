@@ -56,7 +56,12 @@ export function buildSessionNarrative(items: AgentTimelineItem[]): SessionNarrat
   };
 
   items.forEach((item) => {
-    if (item.type === 'thought' || item.type === 'act' || item.type === 'observe') {
+    if (
+      item.type === 'thought' ||
+      item.type === 'act' ||
+      item.type === 'observe' ||
+      item.type === 'knowledge_tool_audit'
+    ) {
       structuredItems.push(item);
       return;
     }
@@ -163,7 +168,7 @@ function appendStructuredNarrative(
   };
 
   items.forEach((item) => {
-    if (item.type === 'thought') {
+    if (item.type === 'thought' || item.type === 'knowledge_tool_audit') {
       flushToolItems();
       narrative.push({ kind: 'item', id: item.id, item });
       return;

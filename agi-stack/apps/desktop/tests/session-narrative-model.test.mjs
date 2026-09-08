@@ -74,6 +74,36 @@ test('group disclosure keeps explicit user state ahead of changing defaults', ()
   assert.equal(timelineGroupOpen(items, { 'act-1': true }, false), true);
 });
 
+test('knowledge audit preserves paired tool results without becoming completion evidence', () => {
+  const call = { id: 'search-call', type: 'act', toolName: 'knowledge_search' };
+  const audit = { id: 'search-audit', type: 'knowledge_tool_audit', data: { status: 'returned' } };
+  const result = { id: 'search-result', type: 'observe', toolName: 'knowledge_search' };
+  for (const isError of [false, true]) {
+    const narrative = buildSessionNarrative([call, audit, { ...result, isError }]);
+    assert.deepEqual(narrative.map((node) => node.kind), ['tool_group', 'item']);
+    assert.deepEqual(narrative[0].items.map((item) => item.id), [call.id, result.id]);
+    assert.equal(narrative[0].toolCount, 1);
+    assert.equal(narrative[0].status, isError ? 'failed' : 'complete');
+    assert.equal(narrative[1].item, audit);
+  }
+  const pending = buildSessionNarrative([call, audit]);
+  assert.equal(pending[0].status, 'running');
+  assert.equal(pending[1].item, audit);
+});
+
+test('knowledge audit does not pair tools across a conversation message boundary', () => {
+  const narrative = buildSessionNarrative([
+    { id: 'call', type: 'act', toolName: 'knowledge_source' },
+    { id: 'audit', type: 'knowledge_tool_audit' },
+    { id: 'message', type: 'user_message', role: 'user', content: 'Next request' },
+    { id: 'result', type: 'observe', toolName: 'knowledge_source' },
+  ]);
+  assert.equal(narrative[0].status, 'running');
+  assert.deepEqual(narrative[0].items.map((item) => item.id), ['call']);
+  assert.equal(narrative[1].item.id, 'audit');
+  assert.equal(narrative[2].item.id, 'message');
+});
+
 test('tool groups expose running and failed states from structural events', () => {
   const running = buildSessionNarrative([
     { id: 'act-1', type: 'act', toolName: 'run_tests' },
