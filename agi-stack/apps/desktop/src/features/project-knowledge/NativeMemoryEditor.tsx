@@ -1,3 +1,4 @@
+import { NativeKnowledgeMetadataField } from './NativeKnowledgeMetadataField';
 import { useI18n } from '../../i18n';
 import type { NativeMemoriesController, NativeMemoriesModel } from './nativeMemoriesController';
 
@@ -33,6 +34,12 @@ export function NativeMemoryEditor({
             <dt>{t('nativeMemories.contentType')}</dt>
             <dd>{model.record.content_type}</dd>
           </dl>
+          {!model.draft ? (
+            <details>
+              <summary>{t('nativeMemories.metadataLabel')}</summary>
+              <pre>{JSON.stringify(model.record.metadata, null, 2)}</pre>
+            </details>
+          ) : null}
         </article>
       ) : null}
       {model.draft ? (
@@ -58,6 +65,11 @@ export function NativeMemoryEditor({
                 onChange={(event) => controller.setDraft({ content: event.target.value })}
               />
             </label>
+            <NativeKnowledgeMetadataField
+              value={model.draft.metadataText}
+              invalid={model.error === 'invalidMetadata'}
+              onChange={(metadataText) => controller.setDraft({ metadataText })}
+            />
             {editing && allowed(model.phase === 'creating' ? 'create' : 'update') ? (
               <button type="submit">{t('common.save')}</button>
             ) : null}

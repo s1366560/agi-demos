@@ -1,3 +1,4 @@
+import { parseNativeKnowledgeMetadata } from './nativeKnowledgeMetadata';
 import type { NativeMemoriesAuthority } from './nativeMemoriesController';
 import type {
   NativeKnowledgeClient,
@@ -42,7 +43,15 @@ export type NativeKnowledgeConflictModel = Readonly<{
   record: NativeKnowledgeResolutionRecord | null;
   decision: NativeKnowledgeDecision | null;
   draft: NativeKnowledgeContent | null;
-  error: 'failed' | 'conflict' | 'contextChanged' | 'uncertain' | 'reviewChanged' | null;
+  metadataText: string | null;
+  error:
+    | 'failed'
+    | 'conflict'
+    | 'contextChanged'
+    | 'uncertain'
+    | 'reviewChanged'
+    | 'invalidMetadata'
+    | null;
   pendingReconciliation: boolean;
 }>;
 type Write = Extract<
@@ -104,6 +113,7 @@ export function createNativeKnowledgeConflictController({
       record: null,
       decision: null,
       draft: null,
+      metadataText: null,
       error: null,
       pendingReconciliation: false,
     });
@@ -167,6 +177,7 @@ export function createNativeKnowledgeConflictController({
       record: value.record,
       decision: null,
       draft: null,
+      metadataText: null,
       error: null,
       pendingReconciliation: !!value.record?.receipt && !value.record.reconciliation,
     });
@@ -213,11 +224,21 @@ export function createNativeKnowledgeConflictController({
           metadata: { ...context.local_metadata },
           status: 'ENABLED',
         };
-    emit({ decision, draft: decision === 'merged' ? draft : null, error: null });
+    emit({
+      decision,
+      draft: decision === 'merged' ? draft : null,
+      metadataText: decision === 'merged' ? JSON.stringify(draft.metadata, null, 2) : null,
+      error: null,
+    });
   };
-  const setDraft = (patch: Readonly<{ title?: string; content?: string }>) => {
+  const setDraft = (
+    patch: Readonly<{ title?: string; content?: string; metadataText?: string }>,
+  ) => {
     if (model.phase !== 'reviewing' || model.decision !== 'merged' || !model.draft) return;
     emit({
+      metadataText:
+        typeof patch.metadataText === 'string' ? patch.metadataText : model.metadataText,
+      error: model.error === 'invalidMetadata' ? null : model.error,
       draft: {
         ...model.draft,
         ...(typeof patch.title === 'string' ? { title: patch.title } : {}),
@@ -236,6 +257,7 @@ export function createNativeKnowledgeConflictController({
         phase: 'accepted',
         decision: null,
         draft: null,
+        metadataText: null,
         error: null,
         pendingReconciliation:
           'pending_reconciliation' in response.result && response.result.pending_reconciliation,
@@ -264,7 +286,15 @@ export function createNativeKnowledgeConflictController({
     const selection = model.selection;
     const prior = preview;
     const decision = model.decision;
-    const draft = model.draft;
+    let draft = model.draft;
+    if (decision === 'merged') {
+      const metadata = parseNativeKnowledgeMetadata(model.metadataText ?? '');
+      if (metadata === null || draft === null) {
+        emit({ error: 'invalidMetadata' });
+        return;
+      }
+      draft = { ...draft, metadata };
+    }
     const resume =
       selection.kind === 'resolution' &&
       model.record &&
@@ -346,6 +376,7 @@ export function createNativeKnowledgeConflictController({
           error: failure === 'uncertain' ? 'failed' : failure,
           decision: null,
           draft: null,
+          metadataText: null,
         });
       }
     }

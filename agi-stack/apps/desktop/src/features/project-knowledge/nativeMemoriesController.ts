@@ -1,3 +1,4 @@
+import { parseNativeKnowledgeMetadata } from './nativeKnowledgeMetadata';
 import type {
   NativeKnowledgeClient,
   NativeKnowledgeCommand,
@@ -17,7 +18,7 @@ export type NativeMemoriesAuthority = Readonly<{
   available: boolean;
   allowedActions: readonly string[];
 }>;
-export type NativeMemoryDraft = Readonly<{ title: string; content: string }>;
+export type NativeMemoryDraft = Readonly<{ title: string; content: string; metadataText: string }>;
 export type NativeMemoryIntent = 'view' | 'edit' | 'delete';
 export type NativeMemoriesModel = Readonly<{
   phase:
@@ -36,7 +37,15 @@ export type NativeMemoriesModel = Readonly<{
   record: NativeKnowledgeStoredMemory | null;
   draft: NativeMemoryDraft | null;
   notice: 'accepted' | null;
-  error: 'failed' | 'conflict' | 'contextChanged' | 'forbidden' | 'notFound' | 'uncertain' | null;
+  error:
+    | 'failed'
+    | 'conflict'
+    | 'contextChanged'
+    | 'forbidden'
+    | 'notFound'
+    | 'uncertain'
+    | 'invalidMetadata'
+    | null;
 }>;
 type Mutation = Extract<NativeKnowledgeCommand, { operation: 'create' | 'update' | 'delete' }>;
 type PendingWrite = Readonly<{ command: Mutation; scope: NativeKnowledgeScope }>;
@@ -171,7 +180,10 @@ export function createNativeMemoriesController({
         embedding: null,
         created_at_ms: now(),
       });
-      emit({ phase: 'creating', draft: Object.freeze({ title: '', content: '' }) });
+      emit({
+        phase: 'creating',
+        draft: Object.freeze({ title: '', content: '', metadataText: '{}' }),
+      });
     } catch (error) {
       if (current(request)) fail(error, false);
     } finally {
@@ -209,7 +221,11 @@ export function createNativeMemoriesController({
         record: response.result.memory,
         draft:
           intent === 'edit'
-            ? Object.freeze({ title: baseline.title, content: baseline.content })
+            ? Object.freeze({
+                title: baseline.title,
+                content: baseline.content,
+                metadataText: JSON.stringify(baseline.metadata, null, 2),
+              })
             : null,
       });
     } catch (error) {
@@ -261,7 +277,17 @@ export function createNativeMemoriesController({
     const creating = model.phase === 'creating';
     if (!permitted(creating ? 'create' : 'update')) return;
     try {
-      const memory = { ...baseline, ...model.draft };
+      const metadata = parseNativeKnowledgeMetadata(model.draft.metadataText);
+      if (metadata === null) {
+        emit({ error: 'invalidMetadata' });
+        return;
+      }
+      const memory = {
+        ...baseline,
+        title: model.draft.title,
+        content: model.draft.content,
+        metadata,
+      };
       const command = prepareNativeKnowledgeCommand(
         creating
           ? { operation: 'create', memory, idempotency_key: newId() }
@@ -312,9 +338,12 @@ export function createNativeMemoriesController({
     setDraft(patch: Partial<NativeMemoryDraft>) {
       if ((model.phase !== 'creating' && model.phase !== 'editing') || !model.draft) return;
       emit({
+        error: model.error === 'invalidMetadata' ? null : model.error,
         draft: Object.freeze({
           title: typeof patch.title === 'string' ? patch.title : model.draft.title,
           content: typeof patch.content === 'string' ? patch.content : model.draft.content,
+          metadataText:
+            typeof patch.metadataText === 'string' ? patch.metadataText : model.draft.metadataText,
         }),
       });
     },

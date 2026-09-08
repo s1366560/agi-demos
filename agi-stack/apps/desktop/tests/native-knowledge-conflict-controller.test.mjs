@@ -301,3 +301,39 @@ test('late context and accepted writes cannot repopulate a stopped or replaced b
   await writing;
   assert.equal(late.controller.getSnapshot().phase, 'idle');
 });
+
+test('manual conflict metadata rejects invalid JSON before rechecking and submits the explicit immutable object', async () => {
+  for (const kind of ['pull', 'push']) {
+    let fail = true;
+    const operation = kind === 'pull' ? 'resolve_pull' : 'resolve_push';
+    const { controller, calls } = fixture({
+      execute: async (command) => {
+        if (command.operation === operation && fail) throw error(502);
+      },
+    });
+    await controller.open(kind === 'pull' ? { kind, id: 'memory-1' } : { kind, localSequence: 1 });
+    controller.choose('merged');
+    assert.deepEqual(
+      JSON.parse(controller.getSnapshot().metadataText),
+      controller.getSnapshot().draft.metadata,
+    );
+    const before = calls.length;
+    controller.setDraft({ metadataText: '[]' });
+    await controller.submit();
+    assert.equal(calls.length, before);
+    assert.equal(controller.getSnapshot().phase, 'reviewing');
+    assert.equal(controller.getSnapshot().error, 'invalidMetadata');
+    controller.setDraft({ metadataText: '{"merged":{"left":false,"right":[null,7,"新"]}}' });
+    await controller.submit();
+    const original = calls.find(({ command }) => command.operation === operation).command;
+    assert.deepEqual(original.resolution.choice.content.metadata, {
+      merged: { left: false, right: [null, 7, '新'] },
+    });
+    assert.equal(controller.getSnapshot().phase, 'uncertain');
+    controller.setDraft({ metadataText: '{}' });
+    fail = false;
+    await controller.retry();
+    assert.equal(calls.at(-1).command, original);
+    assert(Object.isFrozen(original.resolution.choice.content.metadata.merged.right));
+  }
+});

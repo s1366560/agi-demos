@@ -21,7 +21,12 @@ function fixture(overrides = {}) {
   const calls = [];
   let serial = 0;
   let accepted = 0;
-  const stored = { ...memory, tags: ['preserve'], entities: [{ name: 'node', kind: 'topic' }] };
+  const stored = {
+    ...memory,
+    tags: ['preserve'],
+    entities: [{ name: 'node', kind: 'topic' }],
+    metadata: { original: { nested: [false, 3, '中文'] } },
+  };
   const client = {
     observeScope: async (scope, options) => {
       calls.push({ scope, command: { operation: 'observe_scope' }, options });
@@ -157,7 +162,7 @@ test('a newer selection cancels an older read even if the transport ignores abor
   await read;
   assert.equal(controller.getSnapshot().phase, 'creating');
   assert.equal(controller.getSnapshot().record, null);
-  assert.deepEqual(controller.getSnapshot().draft, { title: '', content: '' });
+  assert.deepEqual(controller.getSnapshot().draft, { title: '', content: '', metadataText: '{}' });
 });
 
 test('edit and delete fetch the full record and retain its exact revision and metadata', async () => {
@@ -278,4 +283,56 @@ test('stop cancels in-flight operations, clears sensitive data and drops late re
   await controller.create();
   await controller.retryWrite();
   assert.equal(calls.length, count);
+});
+
+test('metadata JSON edits preserve nested values, permit explicit clear and reject malformed drafts without a write', async () => {
+  const { controller, calls, stored } = fixture();
+  await controller.open(memory.id, 'edit');
+  assert.deepEqual(JSON.parse(controller.getSnapshot().draft.metadataText), stored.metadata);
+  for (const metadataText of [
+    '{',
+    'null',
+    '[]',
+    '"string"',
+    JSON.stringify({ large: '界'.repeat(22_000) }),
+  ]) {
+    controller.setDraft({ metadataText });
+    const before = calls.length;
+    await controller.save();
+    assert.equal(calls.length, before);
+    assert.equal(controller.getSnapshot().phase, 'editing');
+    assert.equal(controller.getSnapshot().error, 'invalidMetadata');
+    assert.equal(controller.getSnapshot().draft.metadataText, metadataText);
+  }
+  controller.setDraft({ metadataText: '{"user":{"values":[1,false,null,"新"]}}' });
+  assert.equal(controller.getSnapshot().error, null);
+  await controller.save();
+  assert.deepEqual(calls.at(-1).command.memory.metadata, {
+    user: { values: [1, false, null, '新'] },
+  });
+  assert.equal(Object.hasOwn(calls.at(-1).command.memory, 'metadataText'), false);
+  await controller.open(memory.id, 'edit');
+  controller.setDraft({ metadataText: '{}' });
+  await controller.save();
+  assert.deepEqual(calls.at(-1).command.memory.metadata, {});
+});
+
+test('uncertain metadata save freezes the command and raw draft until same-key retry completes', async () => {
+  let writes = 0;
+  const { controller, calls } = fixture({
+    execute: async (_scope, command) => {
+      if (++writes === 1) throw error(502);
+      return { result: { receipt: { memory: command.memory, deleted: false } } };
+    },
+  });
+  await controller.create();
+  controller.setDraft({ title: 'Metadata', metadataText: '{"retain":[false,2]}' });
+  await controller.save();
+  const original = calls.at(-1).command;
+  controller.setDraft({ metadataText: '{}' });
+  assert.equal(controller.getSnapshot().draft.metadataText, '{"retain":[false,2]}');
+  await controller.retryWrite();
+  assert.equal(calls.at(-1).command, original);
+  assert.deepEqual(original.memory.metadata, { retain: [false, 2] });
+  assert(Object.isFrozen(original.memory.metadata.retain));
 });

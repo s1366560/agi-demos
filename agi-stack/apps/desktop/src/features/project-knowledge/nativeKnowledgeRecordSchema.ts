@@ -1,9 +1,8 @@
-import * as s from "./nativeKnowledgeSchema";
+import { isNativeKnowledgeMetadata } from './nativeKnowledgeMetadata';
+import * as s from './nativeKnowledgeSchema';
 
 const embedding = s.nullable(
-  s.array(
-    (value) => typeof value === "number" && Number.isFinite(Math.fround(value)),
-  ),
+  s.array((value) => typeof value === 'number' && Number.isFinite(Math.fround(value))),
 );
 const storedMemoryFields = {
   id: s.identifier,
@@ -13,9 +12,7 @@ const storedMemoryFields = {
   author_id: s.identifier,
   content_type: s.text,
   tags: s.array(s.text),
-  metadata: (value: unknown) =>
-    s.jsonObject(value) &&
-    new TextEncoder().encode(JSON.stringify(value)).length <= 65_536,
+  metadata: isNativeKnowledgeMetadata,
   entities: s.array(s.object({ name: s.text, kind: s.text })),
   version: s.localRevision,
   status: s.text,
@@ -24,13 +21,9 @@ const storedMemoryFields = {
 export const mutationMemory = s.object(storedMemoryFields, { embedding });
 export const storedMemory = s.object({ ...storedMemoryFields, embedding });
 export const mutationResult = s.object({
-  receipt: s.object({
-    sequence: s.sequence,
-    memory: storedMemory,
-    deleted: s.bool,
-  }),
+  receipt: s.object({ sequence: s.sequence, memory: storedMemory, deleted: s.bool }),
   replayed: s.bool,
-  processing_status: s.literal("accepted"),
+  processing_status: s.literal('accepted'),
 });
 
 export const link = s.object({
@@ -45,12 +38,11 @@ export const status = s.object({
 });
 export const content = s.object({
   title: (v) => s.identifier(v) && [...String(v)].length <= 500,
-  content: (v) =>
-    typeof v === "string" && new TextEncoder().encode(v).length <= 1_048_576,
-  content_type: s.literal("text", "document", "image", "video"),
+  content: (v) => typeof v === 'string' && new TextEncoder().encode(v).length <= 1_048_576,
+  content_type: s.literal('text', 'document', 'image', 'video'),
   tags: s.array(s.identifier, 100),
-  metadata: s.jsonObject,
-  status: s.literal("ENABLED", "DISABLED"),
+  metadata: isNativeKnowledgeMetadata,
+  status: s.literal('ENABLED', 'DISABLED'),
 });
 export const memory = s.object({
   id: s.identifier,
@@ -60,16 +52,12 @@ export const memory = s.object({
   author_id: s.identifier,
   content_type: s.identifier,
   tags: s.array(s.text),
-  metadata: (value: unknown) =>
-    s.jsonObject(value) &&
-    new TextEncoder().encode(JSON.stringify(value)).length <= 65_536,
+  metadata: isNativeKnowledgeMetadata,
   entities: s.array(s.jsonValue),
   version: s.localRevision,
   status: s.identifier,
   created_at_ms: s.integer(-Number.MAX_SAFE_INTEGER),
-  embedding: s.nullable(
-    s.array((v) => typeof v === "number" && Number.isFinite(v)),
-  ),
+  embedding: s.nullable(s.array((v) => typeof v === 'number' && Number.isFinite(v))),
 });
 export const remote = s.object(
   {
@@ -86,7 +74,7 @@ export const remote = s.object(
 export const proposal = s.object(
   {
     memory_id: s.identifier,
-    operation: s.literal("create", "update", "delete"),
+    operation: s.literal('create', 'update', 'delete'),
     expected_revision: s.remoteRevision,
     content: s.nullable(content),
   },
@@ -120,16 +108,13 @@ export const guardShape = {
 };
 export const guard = s.object(guardShape);
 export const localChoice: s.NativeCheck = (v) =>
-  s.object({ decision: s.literal("use_local", "use_remote", "keep_both") })(
-    v,
-  ) || s.object({ decision: s.literal("merged"), content })(v);
+  s.object({ decision: s.literal('use_local', 'use_remote', 'keep_both') })(v) ||
+  s.object({ decision: s.literal('merged'), content })(v);
 export const cloudChoice: s.NativeCheck = (v) =>
-  s.object({ decision: s.literal("keep_current", "use_proposed") })(v) ||
-  s.object({ decision: s.literal("merged"), content })(v);
+  s.object({ decision: s.literal('keep_current', 'use_proposed') })(v) ||
+  s.object({ decision: s.literal('merged'), content })(v);
 export const pullResolution: s.NativeCheck = (v) =>
-  s.object({ ...guardShape, memory_id: s.identifier, choice: localChoice })(
-    v,
-  ) &&
+  s.object({ ...guardShape, memory_id: s.identifier, choice: localChoice })(v) &&
   Number((v as Record<string, unknown>).expected_remote_revision) > 0 &&
   ((v as Record<string, unknown>).conflict_sequences as number[]).length > 0;
 export const cloudResolution = s.object({
@@ -153,8 +138,7 @@ export const cloudContext = s.object({
   local_sequence: s.sequence,
   memory_id: s.identifier,
   conflict_id: s.uuid,
-  original_request: (v) =>
-    proposal(v) && s.uuid((v as Record<string, unknown>).change_id),
+  original_request: (v) => proposal(v) && s.uuid((v as Record<string, unknown>).change_id),
   cloud_conflict: pushConflict,
   local: memory,
   local_deleted: s.bool,
@@ -181,18 +165,13 @@ export const localReceipt = s.object({
 });
 export const reconciliationReceipt = s.object(receiptShape);
 export const appliedReceipt = s.object(
-  {
-    status: s.literal("applied"),
-    change_id: s.uuid,
-    sequence: s.sequence,
-    version: remote,
-  },
+  { status: s.literal('applied'), change_id: s.uuid, sequence: s.sequence, version: remote },
   {},
   true,
 );
 const resolvedReceipt = s.object(
   {
-    status: s.literal("resolved"),
+    status: s.literal('resolved'),
     change_id: s.uuid,
     conflict_id: s.uuid,
     version: s.nullable(remote),
@@ -201,15 +180,10 @@ const resolvedReceipt = s.object(
   true,
 );
 export const cloudReceipt: s.NativeCheck = (v) =>
-  appliedReceipt(v) ||
-  (resolvedReceipt(v) && !Object.hasOwn(v as object, "sequence"));
+  appliedReceipt(v) || (resolvedReceipt(v) && !Object.hasOwn(v as object, 'sequence'));
 export const pushReceipt: s.NativeCheck = (v) =>
   appliedReceipt(v) ||
-  s.object(
-    { status: s.literal("conflict"), change_id: s.uuid, conflict_id: s.uuid },
-    {},
-    true,
-  )(v);
+  s.object({ status: s.literal('conflict'), change_id: s.uuid, conflict_id: s.uuid }, {}, true)(v);
 export const cloudOutcome = s.object({
   resolution_id: s.uuid,
   receipt: cloudReceipt,
@@ -225,22 +199,14 @@ export const resolutionRecord = s.object({
   receipt: s.nullable(cloudReceipt),
   rejection: s.nullable(
     s.object(
-      {
-        detail: s.object(
-          { code: s.literal("knowledge_sync_resolution_stale") },
-          {},
-          true,
-        ),
-      },
+      { detail: s.object({ code: s.literal('knowledge_sync_resolution_stale') }, {}, true) },
       {},
       true,
     ),
   ),
   reconciliation: s.nullable(reconciliationReceipt),
   reconciliation_command: s.nullable(
-    (value) =>
-      reconciliation(value) ||
-      s.object({ source: s.literal("cloud_receipt") })(value),
+    (value) => reconciliation(value) || s.object({ source: s.literal('cloud_receipt') })(value),
   ),
   reconciliation_archive: s.nullable(cloudContext),
 });

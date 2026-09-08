@@ -72,7 +72,7 @@ test('unknown writes disable editing and competing actions while preserving expl
     ...editor,
     phase: 'uncertain',
     allowedActions: list.allowedActions,
-    draft: { title: 'Pending', content: 'Possibly saved' },
+    draft: { title: 'Pending', content: 'Possibly saved', metadataText: '{"pending":true}' },
     error: 'uncertain',
   });
   assert.match(html, /<fieldset disabled=""/);
@@ -219,4 +219,26 @@ test('Memories loader selects the dedicated local surface and preserves the clou
     ),
   );
   assert.match(wrongScope, /Local memories are not available/);
+});
+
+test('metadata is visible in the full record and editable with labelled validation feedback', () => {
+  const viewed = page({
+    ...editor,
+    phase: 'viewing',
+    record: { ...memory, metadata: { owner: 'user' } },
+  });
+  assert.match(viewed, /User metadata \(JSON\)/);
+  assert.match(viewed, /owner/);
+  const editing = page({
+    ...editor,
+    phase: 'editing',
+    allowedActions: list.allowedActions,
+    draft: { title: 'Title', content: 'Body', metadataText: '{broken' },
+    error: 'invalidMetadata',
+  });
+  assert.match(editing, /Enter a valid JSON object no larger than 64 KiB/);
+  assert.match(editing, /aria-invalid="true"/);
+  assert.match(editing, /aria-describedby=/);
+  assert.match(editing, /\{broken/);
+  assert.match(editing, /Use \{\} to clear all metadata/);
 });

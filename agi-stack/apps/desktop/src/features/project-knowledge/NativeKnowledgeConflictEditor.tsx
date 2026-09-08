@@ -1,3 +1,4 @@
+import { NativeKnowledgeMetadataField } from './NativeKnowledgeMetadataField';
 import { useI18n } from '../../i18n';
 import type { NativeKnowledgeCloudContext } from './nativeKnowledgeContracts';
 import type {
@@ -138,10 +139,20 @@ export function NativeKnowledgeConflictEditor({
               onChange={(event) => controller.setDraft({ content: event.target.value })}
             />
           </label>
+          <NativeKnowledgeMetadataField
+            value={model.metadataText ?? '{}'}
+            readOnly={locked}
+            invalid={model.error === 'invalidMetadata'}
+            onChange={(metadataText) => controller.setDraft({ metadataText })}
+          />
           <details>
             <summary>{t('nativeSync.preservedMetadata')}</summary>
             <pre>
-              {JSON.stringify({ ...model.draft, title: undefined, content: undefined }, null, 2)}
+              {JSON.stringify(
+                { ...model.draft, title: undefined, content: undefined, metadata: undefined },
+                null,
+                2,
+              )}
             </pre>
           </details>
         </div>
