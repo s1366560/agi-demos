@@ -12,6 +12,10 @@ readonly TOOL_CACHE="${TOOL_ROOT}/protoc/${PROTOC_VERSION}"
 export RUSTUP_HOME="${AVERNET_BCS_RUSTUP_HOME:-${TOOL_ROOT}/rustup}"
 export CARGO_HOME="${AVERNET_BCS_CARGO_HOME:-${TOOL_ROOT}/cargo}"
 export CARGO_TARGET_DIR="${AVERNET_BCS_TARGET_DIR:-${TOOL_ROOT}/target}"
+# Limit local artifact growth while preserving explicit debugging overrides.
+export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
+export CARGO_PROFILE_DEV_DEBUG="${CARGO_PROFILE_DEV_DEBUG:-1}"
+export CARGO_PROFILE_TEST_DEBUG="${CARGO_PROFILE_TEST_DEBUG:-1}"
 
 platform_key() {
   local os

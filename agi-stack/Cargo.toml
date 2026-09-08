@@ -53,6 +53,16 @@ rhai = { version = "1", features = ["sync"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 syn = { version = "2", features = ["full", "visit"] }
 
+# Keep local build artifacts small. Cargo profile environment variables can
+# restore full debug information or incremental compilation when needed.
+[profile.dev]
+debug = 1
+incremental = false
+
+[profile.test]
+debug = 1
+incremental = false
+
 # Release profile tuned for the WASM / mobile size budgets in 05-roadmap.md §3.
 [profile.release]
 opt-level = "z"

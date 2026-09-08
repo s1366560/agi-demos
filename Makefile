@@ -18,6 +18,7 @@
 # =============================================================================
 
 .PHONY: help install update clean init reset fresh restart stop logs status
+.PHONY: disk-usage clean-cache clean-build-cache clean-backend clean-web clean-docker clean-logs
 .PHONY: dev dev-all dev-stop dev-backend dev-web dev-web-stop
 .PHONY: workspace-core-build workspace-core-configure workspace-core-start workspace-core-health workspace-core-status workspace-core-logs workspace-core-stop
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
@@ -106,6 +107,11 @@ help: ## Show this help message
 	@echo "  guard-refresh-select - Check wrapped execute(select(...)) usage"
 	@echo "  plugin-build-all - Validate protocol-v2 plugin artifacts"
 	@echo "  plugin-v2-contract-gate - Verify generated V2 catalogs and contract completeness"
+	@echo ""
+	@echo " Disk maintenance:"
+	@echo "  disk-usage        - Preview known build caches"
+	@echo "  clean-cache       - Reclaim idle incremental caches"
+	@echo "  clean-build-cache - Reclaim idle Rust build caches (rebuild required)"
 	@echo ""
 	@echo " Database:"
 	@echo "  db-init   - Initialize database"
@@ -1216,8 +1222,17 @@ helm-uninstall-dev: ## Uninstall the dev Helm release
 # Utilities
 # =============================================================================
 
-clean: clean-backend clean-web clean-docker ## Remove all generated files and caches
-	@echo " All cleaned up"
+disk-usage: ## Report reclaimable build caches without deleting files
+	python3 scripts/dev_disk.py
+
+clean-cache: ## Reclaim idle Rust incremental caches; keep compiled dependencies
+	python3 scripts/dev_disk.py --group rust-incremental --apply
+
+clean-build-cache: ## Reclaim idle Rust build caches; next build recompiles dependencies
+	python3 scripts/dev_disk.py --group rust-build --apply
+
+clean: clean-backend clean-web clean-cache ## Clean development artifacts; preserve logs and Docker data
+	@echo " Development artifacts cleaned; logs and Docker data preserved"
 
 clean-backend: ## Clean backend build artifacts
 	@echo " Cleaning backend artifacts..."
@@ -1229,16 +1244,15 @@ clean-backend: ## Clean backend build artifacts
 	rm -rf dist
 	rm -rf build
 	rm -rf *.egg-info
-	rm -rf logs
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
+	find src scripts sdk -type d -name __pycache__ -prune -exec rm -rf {} +
+	find src scripts sdk -type f -name "*.pyc" -delete
+	find src scripts sdk -type f -name "*.pyo" -delete
 	@echo " Backend artifacts cleaned"
 
 clean-web: ## Clean web build artifacts
 	@echo " Cleaning web artifacts..."
-	cd web && rm -rf node_modules/.vite
-	cd web && rm -rf dist
+	@test ! -L web || { echo "Refusing to clean through a linked web directory" >&2; exit 1; }
+	rm -rf web/dist
 	@echo " Web artifacts cleaned"
 
 clean-docker: ## Clean Docker volumes
