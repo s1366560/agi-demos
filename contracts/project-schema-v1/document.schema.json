@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:memstack:project-schema:document:v1",
+  "title": "ProjectSchemaDocument v1 structural wire shape",
+  "$comment": "Normative runtime constraints beyond JSON Schema are documented in README.md. No remote schema references are evaluated. Integer fields require integer JSON tokens, not 1.0/1e0. Strings use UTF-8 byte bounds. Duplicate object keys are rejected before shape validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "tenant_id",
+    "project_id",
+    "schema_id",
+    "revision",
+    "deleted",
+    "entity_types",
+    "edge_types",
+    "mappings",
+    "tombstones"
+  ],
+  "properties": {
+    "format_version": {
+      "const": 1,
+      "type": "integer",
+      "x-integerToken": true
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "x-maxUtf8Bytes": 512,
+      "not": {
+        "pattern": "\\u0000"
+      }
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "x-maxUtf8Bytes": 512,
+      "not": {
+        "pattern": "\\u0000"
+      }
+    },
+    "schema_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "deleted": {
+      "type": "boolean"
+    },
+    "entity_types": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/$defs/type"
+      }
+    },
+    "edge_types": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/$defs/type"
+      }
+    },
+    "mappings": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/$defs/mapping"
+      }
+    },
+    "tombstones": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/$defs/tombstone"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "deleted": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entity_types": {
+            "maxItems": 0
+          },
+          "edge_types": {
+            "maxItems": 0
+          },
+          "mappings": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "x-maxWireBytes": 1048576,
+  "x-maxTotalMembersIncludingTombstones": 1024,
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "not": {
+        "const": "00000000-0000-0000-0000-000000000000"
+      }
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647,
+      "x-integerToken": true
+    },
+    "type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "source",
+        "name",
+        "description",
+        "schema"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "status": {
+          "enum": [
+            "ENABLED",
+            "DISABLED"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "x-maxUtf8Bytes": 128,
+          "not": {
+            "pattern": "\\u0000"
+          }
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-maxUtf8Bytes": 512,
+          "not": {
+            "pattern": "\\u0000"
+          }
+        },
+        "description": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096,
+          "x-maxUtf8Bytes": 4096,
+          "not": {
+            "pattern": "\\u0000"
+          }
+        },
+        "schema": {
+          "type": "object",
+          "x-maxNodes": 1024,
+          "x-maxTextUtf8Bytes": 16384,
+          "x-maxDepth": 16,
+          "x-maxAbsoluteNumber": 9007199254740991,
+          "propertyNames": {
+            "not": {
+              "pattern": "\\u0000"
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        }
+      }
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "source",
+        "source_type_id",
+        "target_type_id",
+        "edge_type_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "status": {
+          "enum": [
+            "ENABLED",
+            "DISABLED"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "x-maxUtf8Bytes": 128,
+          "not": {
+            "pattern": "\\u0000"
+          }
+        },
+        "source_type_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "target_type_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "edge_type_id": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "tombstone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "deleted_revision"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "entity_type",
+            "edge_type",
+            "mapping"
+          ]
+        },
+        "deleted_revision": {
+          "$ref": "#/$defs/revision"
+        }
+      }
+    },
+    "jsonValue": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "string",
+          "not": {
+            "pattern": "\\u0000"
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "not": {
+              "pattern": "\\u0000"
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        }
+      ]
+    }
+  },
+  "x-maxDocumentWeight": 1048576
+}

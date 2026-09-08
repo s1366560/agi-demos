@@ -7,7 +7,8 @@ license.workspace = true
 
 [dependencies]
 serde.workspace = true
-serde_json.workspace = true
+# Portable schema numbers must round-trip identically to the Python boundary.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 async-trait.workspace = true
 thiserror.workspace = true
 

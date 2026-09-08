@@ -21,6 +21,7 @@ pub mod graph;
 pub mod knowledge;
 pub mod model;
 pub mod ports;
+pub mod project_schema;
 pub mod service;
 pub mod sync;
 pub mod tool_definition;
