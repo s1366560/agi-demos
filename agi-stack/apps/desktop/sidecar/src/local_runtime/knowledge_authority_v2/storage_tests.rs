@@ -374,7 +374,8 @@ fn index_upgrade_backs_up_v9_before_schema_creation_and_reopens_idempotently() {
     let connection = Connection::open(knowledge.join("memories.db")).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE knowledge_index_vectors;
+            "DROP TABLE knowledge_index_configuration;
+        DROP TABLE knowledge_index_vectors;
         DROP TABLE knowledge_index_jobs; DROP TABLE knowledge_index_active;
         DROP TABLE knowledge_index_builds; UPDATE knowledge_schema SET version=9;
         CREATE TABLE index_upgrade_retained(value TEXT);
@@ -424,6 +425,67 @@ fn index_upgrade_backs_up_v9_before_schema_creation_and_reopens_idempotently() {
                 .unwrap()
                 .to_string_lossy()
                 .contains("pre-v9-"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn desired_config_upgrade_backs_up_v10_and_never_infers_selection_from_active_index() {
+    let directory = TestDirectory::new();
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    let knowledge = directory.0.join("knowledge");
+    let connection = Connection::open(knowledge.join("memories.db")).unwrap();
+    connection
+        .execute_batch(
+            "DROP TABLE knowledge_index_configuration;
+        ALTER TABLE knowledge_index_jobs DROP COLUMN config_revision;
+        UPDATE knowledge_schema SET version=10;
+        INSERT INTO knowledge_index_active VALUES('t','p','historical-build');",
+        )
+        .unwrap();
+    let repo = storage_lifecycle::open(&directory.0).unwrap();
+    let scope = agistack_core::knowledge::KnowledgeScope {
+        tenant_id: "t".into(),
+        project_id: "p".into(),
+    };
+    assert!(repo
+        .desired_index_config_durable(&scope, &|| Ok(1))
+        .unwrap()
+        .is_none());
+    let backups = fs::read_dir(&knowledge)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("pre-v10-")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    let before: (i64, i64, String) = backup
+        .query_row(
+            "SELECT (SELECT version FROM knowledge_schema),
+        (SELECT count(*) FROM sqlite_master WHERE name='knowledge_index_configuration'),
+        (SELECT build_id FROM knowledge_index_active)",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(before, (10, 0, "historical-build".into()));
+    drop(repo);
+    drop(storage_lifecycle::open(&directory.0).unwrap());
+    assert_eq!(
+        fs::read_dir(&knowledge)
+            .unwrap()
+            .filter(|e| e
+                .as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("pre-v10-"))
             .count(),
         1
     );

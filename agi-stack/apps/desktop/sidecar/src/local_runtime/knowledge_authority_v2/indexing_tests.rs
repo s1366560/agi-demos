@@ -12,6 +12,8 @@ use axum::{
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Notify;
 
+#[path = "embedding_configuration_tests.rs"]
+mod embedding_configuration_tests;
 #[path = "indexing_lifecycle_tests.rs"]
 mod lifecycle;
 #[path = "embedding_profile_tests.rs"]
@@ -56,7 +58,7 @@ impl Fixture {
     }
     fn run(
         &self,
-        build: IndexBuild,
+        build: DesiredEmbeddingConfig,
         options: IndexRunOptions,
     ) -> tokio::task::JoinHandle<Result<Option<IndexRunReceipt>, KnowledgeAuthorityErrorV2>> {
         let operation = self.operation.clone();
@@ -69,7 +71,7 @@ impl Fixture {
             State(self.state.clone()),Extension(self.auth.clone()),axum::http::HeaderMap::new(),Json(serde_json::from_value(json!({
                 "name":"Explicit embedding QA","provider_type":"openai_compatible","base_url":endpoint.base,
                 "auth_method":"api_key","api_key":"embedding-fixture-key","llm_model":"configured-embedding-model",
-                "allowed_models":["configured-embedding-model"],"is_active":true
+                "allowed_models":["configured-embedding-model","other-embedding-model"],"is_active":true
             })).unwrap()),
         ).await.unwrap().0;
         EmbeddingRoute {
@@ -195,10 +197,14 @@ async fn native_provider_crud_binding_embeds_indexes_and_queries_with_separate_p
         .prepare_index_build(&f.state, &f.auth, &route, "build")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     assert_eq!(build.profile.dimensions.get(), 2);
     let receipt = f
         .operation
-        .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
         .await
         .unwrap()
         .unwrap();
@@ -206,7 +212,7 @@ async fn native_provider_crud_binding_embeds_indexes_and_queries_with_separate_p
     assert_eq!(receipt.input.source, f.source);
     assert_eq!(receipt.attempt, 1);
     f.operation
-        .promote_index_build(&f.state, &f.auth, &build, None)
+        .promote_index_build(&f.state, &f.auth, &config, None)
         .unwrap();
     let mut memory = f
         .repo()
@@ -245,7 +251,7 @@ async fn native_provider_crud_binding_embeds_indexes_and_queries_with_separate_p
     assert_ne!(pending.source, failed.source);
     let result = f
         .operation
-        .semantic_query(&f.state, &f.auth, &build, "query", 10)
+        .semantic_query(&f.state, &f.auth, &config, "query", 10)
         .await
         .unwrap();
     assert_eq!(result.build, build);
@@ -274,7 +280,7 @@ async fn native_provider_crud_binding_embeds_indexes_and_queries_with_separate_p
     .unwrap();
     assert_eq!(
         reopened
-            .read_active_index_durable(&build, &|| Ok(200))
+            .read_active_index_durable(&config, &|| Ok(200))
             .unwrap()
             .vectors
             .len(),
@@ -292,11 +298,15 @@ async fn invalid_verified_response_is_failed_until_explicit_retry_and_query_neve
         .prepare_index_build(&f.state, &f.auth, &route, "build")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     *endpoint.state.response.lock().unwrap() =
         Some(json!({"model":"wrong-model","data":[{"index":0,"embedding":[1.0,0.0]}]}));
     let receipt = f
         .operation
-        .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
         .await
         .unwrap()
         .unwrap();
@@ -306,15 +316,15 @@ async fn invalid_verified_response_is_failed_until_explicit_retry_and_query_neve
     );
     assert!(f
         .operation
-        .promote_index_build(&f.state, &f.auth, &build, None)
+        .promote_index_build(&f.state, &f.auth, &config, None)
         .is_err());
     f.operation
-        .retry_index(&f.state, &f.auth, &build, &receipt.input, receipt.attempt)
+        .retry_index(&f.state, &f.auth, &config, &receipt.input, receipt.attempt)
         .unwrap();
     *endpoint.state.response.lock().unwrap() = None;
     assert_eq!(
         f.operation
-            .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+            .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
             .await
             .unwrap()
             .unwrap()
@@ -322,13 +332,13 @@ async fn invalid_verified_response_is_failed_until_explicit_retry_and_query_neve
         IndexRunOutcome::Indexed
     );
     f.operation
-        .promote_index_build(&f.state, &f.auth, &build, None)
+        .promote_index_build(&f.state, &f.auth, &config, None)
         .unwrap();
     *endpoint.state.response.lock().unwrap() =
         Some(json!({"model":route.model_id,"data":[{"index":0,"embedding":[1.0,0.0,1.0]}]}));
     assert!(f
         .operation
-        .semantic_query(&f.state, &f.auth, &build, "query", 10)
+        .semantic_query(&f.state, &f.auth, &config, "query", 10)
         .await
         .is_err());
 }

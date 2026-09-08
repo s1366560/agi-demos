@@ -9,6 +9,7 @@ fn scoped_identical_ids_and_forged_lease_provenance_never_cross_boundaries() {
             create(&repo, &b.scope, "same-id").await;
             finish(&repo, &b.scope).await;
             repo.begin_index_build_durable(&b, &|| Ok(110)).unwrap();
+            select_initial(&repo, &b);
             let lease = claim(&repo, &b, 110);
             for field in 0..9 {
                 let mut forged = lease.clone();
@@ -29,9 +30,11 @@ fn scoped_identical_ids_and_forged_lease_provenance_never_cross_boundaries() {
             }
             repo.complete_index_durable(&lease, &[1.0, 0.0], &|| Ok(111))
                 .unwrap();
-            repo.promote_index_build_durable(&b, None, &|| Ok(112))
+            repo.promote_index_build_durable(&config(&repo, &b), None, &|| Ok(112))
                 .unwrap();
-            let read = repo.read_active_index_durable(&b, &|| Ok(113)).unwrap();
+            let read = repo
+                .read_active_index_durable(&config(&repo, &b), &|| Ok(113))
+                .unwrap();
             assert_eq!(read.vectors.len(), 1);
             assert_eq!(read.vectors[0].input.source.tenant_id, tenant);
             assert_eq!(read.vectors[0].input.source.project_id, project);
@@ -53,18 +56,21 @@ fn late_applied_audits_and_new_documents_make_active_coverage_partial_until_reco
         create(&repo, &b.scope, "ready").await;
         finish(&repo, &b.scope).await;
         repo.begin_index_build_durable(&b, &|| Ok(110)).unwrap();
+        select_initial(&repo, &b);
         let ready = claim(&repo, &b, 110);
         assert_eq!(ready.input.source.memory_id, "ready");
         repo.complete_index_durable(&ready, &[1.0, 0.0], &|| Ok(111))
             .unwrap();
-        repo.promote_index_build_durable(&b, None, &|| Ok(112))
+        repo.promote_index_build_durable(&config(&repo, &b), None, &|| Ok(112))
             .unwrap();
         apply(&repo, &b.scope, &late, 120).await;
-        let partial = repo.read_active_index_durable(&b, &|| Ok(121)).unwrap();
+        let partial = repo
+            .read_active_index_durable(&config(&repo, &b), &|| Ok(121))
+            .unwrap();
         assert_eq!(partial.coverage.current_sources, 2);
         assert_eq!(partial.coverage.completed_sources, 1);
         assert!(repo
-            .promote_index_build_durable(&b, Some("b"), &|| Ok(122))
+            .promote_index_build_durable(&config(&repo, &b), Some("b"), &|| Ok(122))
             .is_err());
         let indexed_late = claim(&repo, &b, 123);
         assert_eq!(indexed_late.input.source, late.source);
@@ -77,7 +83,7 @@ fn late_applied_audits_and_new_documents_make_active_coverage_partial_until_reco
         repo.complete_index_durable(&new, &[1.0, 1.0], &|| Ok(126))
             .unwrap();
         assert!(repo
-            .read_active_index_durable(&b, &|| Ok(127))
+            .read_active_index_durable(&config(&repo, &b), &|| Ok(127))
             .unwrap()
             .coverage
             .complete());
@@ -93,10 +99,11 @@ fn edited_deleted_and_invalid_audit_sources_disappear_even_without_cleanup_trigg
         let mut memory = create(&repo, &b.scope, "one").await;
         finish(&repo, &b.scope).await;
         repo.begin_index_build_durable(&b, &|| Ok(110)).unwrap();
+        select_initial(&repo, &b);
         let lease = claim(&repo, &b, 110);
         repo.complete_index_durable(&lease, &[1.0, 0.0], &|| Ok(111))
             .unwrap();
-        repo.promote_index_build_durable(&b, None, &|| Ok(112))
+        repo.promote_index_build_durable(&config(&repo, &b), None, &|| Ok(112))
             .unwrap();
         db.sql()
             .execute_batch("DROP TRIGGER knowledge_processing_enqueue")
@@ -104,7 +111,7 @@ fn edited_deleted_and_invalid_audit_sources_disappear_even_without_cleanup_trigg
         memory.content = "edited".into();
         repo.update(&b.scope, memory, 1).await.unwrap();
         assert!(repo
-            .read_active_index_durable(&b, &|| Ok(113))
+            .read_active_index_durable(&config(&repo, &b), &|| Ok(113))
             .unwrap()
             .vectors
             .is_empty());
@@ -112,7 +119,7 @@ fn edited_deleted_and_invalid_audit_sources_disappear_even_without_cleanup_trigg
         create(&repo, &b.scope, "other").await;
         // Lost enqueue trigger deliberately prevents extraction/indexing of new rows.
         assert!(repo
-            .claim_index_durable(&b, "worker", 100, &|| Ok(114))
+            .claim_index_durable(&config(&repo, &b), "worker", 100, &|| Ok(114))
             .unwrap()
             .is_none());
     });
@@ -128,14 +135,15 @@ fn edited_deleted_and_invalid_audit_sources_disappear_even_without_cleanup_trigg
             create(&repo, &b.scope, "one").await;
             finish(&repo, &b.scope).await;
             repo.begin_index_build_durable(&b, &|| Ok(110)).unwrap();
+            select_initial(&repo, &b);
             let lease = claim(&repo, &b, 110);
             repo.complete_index_durable(&lease, &[1.0, 0.0], &|| Ok(111))
                 .unwrap();
-            repo.promote_index_build_durable(&b, None, &|| Ok(112))
+            repo.promote_index_build_durable(&config(&repo, &b), None, &|| Ok(112))
                 .unwrap();
             db.sql().execute_batch(invalid).unwrap();
             assert!(repo
-                .read_active_index_durable(&b, &|| Ok(113))
+                .read_active_index_durable(&config(&repo, &b), &|| Ok(113))
                 .unwrap()
                 .vectors
                 .is_empty());
@@ -152,6 +160,7 @@ fn active_lease_source_edit_or_audit_inconsistency_blocks_all_late_transitions()
         let mut memory = create(&repo, &b.scope, "one").await;
         finish(&repo, &b.scope).await;
         repo.begin_index_build_durable(&b, &|| Ok(110)).unwrap();
+        select_initial(&repo, &b);
         let lease = claim(&repo, &b, 110);
         memory.content = "edited while embedding".into();
         repo.update(&b.scope, memory, 1).await.unwrap();
@@ -170,7 +179,7 @@ fn active_lease_source_edit_or_audit_inconsistency_blocks_all_late_transitions()
             .complete_index_durable(&current, &[1.0, 0.0], &|| Ok(113))
             .is_err());
         assert!(repo
-            .promote_index_build_durable(&b, None, &|| Ok(113))
+            .promote_index_build_durable(&config(&repo, &b), None, &|| Ok(113))
             .is_err());
     });
 }

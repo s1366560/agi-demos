@@ -11,14 +11,18 @@ async fn viewer_queries_and_coverage_work_but_all_index_writes_require_current_w
         .prepare_index_build(&f.state, &f.auth, &route, "build")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     let receipt = f
         .operation
-        .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
         .await
         .unwrap()
         .unwrap();
     f.operation
-        .promote_index_build(&f.state, &f.auth, &build, None)
+        .promote_index_build(&f.state, &f.auth, &config, None)
         .unwrap();
     f.state
         .session_store
@@ -37,7 +41,7 @@ async fn viewer_queries_and_coverage_work_but_all_index_writes_require_current_w
         KnowledgeOperationV2::admit(lease.clone(), &auth, &operation_scope(&auth, &lease)).unwrap();
     assert_eq!(
         viewer
-            .semantic_query(&f.state, &auth, &build, "query", 10)
+            .semantic_query(&f.state, &auth, &config, "query", 10)
             .await
             .unwrap()
             .hits
@@ -45,29 +49,36 @@ async fn viewer_queries_and_coverage_work_but_all_index_writes_require_current_w
         1
     );
     assert!(viewer
-        .index_coverage(&f.state, &auth, &build)
+        .index_coverage(&f.state, &auth, &config)
         .unwrap()
         .1
         .complete());
+    assert!(viewer
+        .select_index_build(&f.state, &auth, &build, Some(config.revision))
+        .is_err());
+    assert!(f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, Some(config.revision))
+        .is_err());
     assert!(viewer
         .prepare_index_build(&f.state, &auth, &route, "denied")
         .await
         .is_err());
     assert!(viewer
-        .index_one(&f.state, &auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &auth, &config, IndexRunOptions::default())
         .await
         .is_err());
     assert!(viewer
-        .promote_index_build(&f.state, &auth, &build, Some("build"))
+        .promote_index_build(&f.state, &auth, &config, Some("build"))
         .is_err());
     assert!(viewer
-        .retry_index(&f.state, &auth, &build, &receipt.input, 1)
+        .retry_index(&f.state, &auth, &config, &receipt.input, 1)
         .is_err());
     // The original operation captured writable=true, but live role downgrade
     // must also reject writes made through that old admission.
     assert!(f
         .operation
-        .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
         .await
         .is_err());
 }
@@ -84,9 +95,13 @@ async fn durable_provider_delete_before_runtime_cleanup_revision_and_binding_cha
             .prepare_index_build(&f.state, &f.auth, &route, "build")
             .await
             .unwrap();
+        let config = f
+            .operation
+            .select_index_build(&f.state, &f.auth, &build, None)
+            .unwrap();
         endpoint.pause();
         let task = f.run(
-            build.clone(),
+            config.clone(),
             IndexRunOptions {
                 lease_ms: 1000,
                 renew_every_ms: 500,
@@ -178,7 +193,7 @@ async fn durable_provider_delete_before_runtime_cleanup_revision_and_binding_cha
         assert!(task.await.unwrap().is_err());
         assert_eq!(
             f.repo()
-                .reconcile_index_durable(&build, &|| Ok(chrono::Utc::now().timestamp_millis()))
+                .reconcile_index_durable(&config, &|| Ok(chrono::Utc::now().timestamp_millis()))
                 .unwrap()
                 .completed_sources,
             0
@@ -201,18 +216,22 @@ async fn same_revision_runtime_credential_rotation_is_not_exposed_and_discards_i
         .prepare_index_build(&f.state, &f.auth, &route, "build")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     f.operation
-        .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
         .await
         .unwrap();
     f.operation
-        .promote_index_build(&f.state, &f.auth, &build, None)
+        .promote_index_build(&f.state, &f.auth, &config, None)
         .unwrap();
     endpoint.pause();
     let operation = f.operation.clone();
     let state = f.state.clone();
     let auth = f.auth.clone();
-    let querybuild = build.clone();
+    let querybuild = config.clone();
     let task = tokio::spawn(async move {
         operation
             .semantic_query(&state, &auth, &querybuild, "query", 10)
@@ -258,10 +277,14 @@ async fn explicit_no_auth_provider_uses_verified_embedding_without_a_credential_
         .prepare_index_build(&f.state, &f.auth, &route, "no-auth")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     assert_eq!(build.profile.dimensions.get(), 2);
     assert_eq!(
         f.operation
-            .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+            .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
             .await
             .unwrap()
             .unwrap()

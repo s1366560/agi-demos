@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 use super::*;
 
 mod builds;
+pub(super) mod configuration;
+use configuration::ensure_config;
 mod leases;
 mod schema;
 pub(super) use schema::migrate;

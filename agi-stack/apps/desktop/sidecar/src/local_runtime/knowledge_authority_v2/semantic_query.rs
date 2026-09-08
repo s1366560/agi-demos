@@ -17,6 +17,7 @@ use crate::local_runtime::LocalRuntimeState;
     )
 )]
 pub(super) struct SemanticQueryResult {
+    pub(super) config_revision: u64,
     pub(super) build: IndexBuild,
     pub(super) processing: ProcessingCoverage,
     pub(super) index: IndexCoverage,
@@ -32,15 +33,16 @@ impl KnowledgeOperationV2 {
         &self,
         state: &LocalRuntimeState,
         auth: &AuthenticatedContext,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
     ) -> Result<(ProcessingCoverage, IndexCoverage), KnowledgeAuthorityErrorV2> {
+        let build = &config.build;
         let provider = super::indexing::resolve_build(self, state, auth, build, false)?;
         super::embedding_provider::with_current(self, state, auth, &provider, false, |clock| {
             let read = self
                 .authority
                 .repository()
                 .map_err(|_| KnowledgeError::Conflict)?
-                .read_active_index_durable(build, clock)?;
+                .read_active_index_durable(config, clock)?;
             Ok((read.processing, read.coverage))
         })
     }
@@ -49,10 +51,11 @@ impl KnowledgeOperationV2 {
         &self,
         state: &LocalRuntimeState,
         auth: &AuthenticatedContext,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         query: &str,
         limit: usize,
     ) -> Result<SemanticQueryResult, KnowledgeAuthorityErrorV2> {
+        let build = &config.build;
         if query.trim().is_empty() || query.len() > 4096 || !(1..=100).contains(&limit) {
             return Err(KnowledgeError::InvalidInput.into());
         }
@@ -63,7 +66,7 @@ impl KnowledgeOperationV2 {
             self.authority
                 .repository()
                 .map_err(|_| KnowledgeError::Conflict)?
-                .read_active_index_durable(build, clock)
+                .read_active_index_durable(config, clock)
                 .map(|_| ())
         })?;
         let vector = provider
@@ -82,10 +85,11 @@ impl KnowledgeOperationV2 {
                 .authority
                 .repository()
                 .map_err(|_| KnowledgeError::Conflict)?
-                .read_active_index_durable(build, clock)?;
+                .read_active_index_durable(config, clock)?;
             let mut hits = rank_index_vectors(vector.vector(), &read.vectors)?;
             hits.truncate(limit);
             Ok(SemanticQueryResult {
+                config_revision: read.config_revision,
                 build: read.build,
                 processing: read.processing,
                 index: read.coverage,

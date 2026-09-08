@@ -12,6 +12,7 @@ fn deadline_before_commit_rolls_back_claim_renew_complete_fail_and_retry() {
         create(&repo, &b.scope, "one").await;
         finish(&repo, &b.scope).await;
         repo.begin_index_build_durable(&b, &|| Ok(110)).unwrap();
+        select_initial(&repo, &b);
         let advancing = || {
             let c = std::cell::Cell::new(0);
             move || {
@@ -21,7 +22,7 @@ fn deadline_before_commit_rolls_back_claim_renew_complete_fail_and_retry() {
             }
         };
         assert!(repo
-            .claim_index_durable(&b, "worker", 100, &advancing())
+            .claim_index_durable(&config(&repo, &b), "worker", 100, &advancing())
             .is_err());
         let lease = claim(&repo, &b, 110);
         assert_eq!(lease.attempt, 1);
@@ -33,7 +34,7 @@ fn deadline_before_commit_rolls_back_claim_renew_complete_fail_and_retry() {
             .fail_index_durable(&lease, IndexFailure::Cancelled, &advancing())
             .is_err());
         let before = repo
-            .index_job_status_durable(&b, &lease.input, &|| Ok(111))
+            .index_job_status_durable(&config(&repo, &b), &lease.input, &|| Ok(111))
             .unwrap()
             .unwrap();
         assert_eq!(before.state, IndexJobState::Leased);
@@ -50,16 +51,16 @@ fn deadline_before_commit_rolls_back_claim_renew_complete_fail_and_retry() {
             }
         };
         assert!(repo
-            .retry_index_durable(&b, &lease.input, 1, &expired)
+            .retry_index_durable(&config(&repo, &b), &lease.input, 1, &expired)
             .is_err());
         assert_eq!(
-            repo.index_job_status_durable(&b, &lease.input, &|| Ok(113))
+            repo.index_job_status_durable(&config(&repo, &b), &lease.input, &|| Ok(113))
                 .unwrap()
                 .unwrap()
                 .state,
             IndexJobState::Failed
         );
-        repo.retry_index_durable(&b, &lease.input, 1, &|| Ok(114))
+        repo.retry_index_durable(&config(&repo, &b), &lease.input, 1, &|| Ok(114))
             .unwrap();
         let retried = claim(&repo, &b, 115);
         repo.complete_index_durable(&retried, &[1.0, 0.0], &|| Ok(116))
@@ -75,7 +76,7 @@ fn deadline_before_commit_rolls_back_claim_renew_complete_fail_and_retry() {
             }
         };
         assert!(repo
-            .promote_index_build_durable(&b, None, &expired)
+            .promote_index_build_durable(&config(&repo, &b), None, &expired)
             .is_err());
         assert!(repo
             .active_index_build_durable(&b.scope, &|| Ok(118))
@@ -90,12 +91,13 @@ fn sqlite_lock_wait_uses_fresh_admission_clock_before_any_index_write() {
     let repo = Arc::new(db.open());
     let b = build("t", "p", "b");
     repo.begin_index_build_durable(&b, &|| Ok(1)).unwrap();
+    select_initial(&repo, &b);
+    let worker_build = config(&repo, &b);
     let connection = db.sql();
     connection.execute_batch("BEGIN EXCLUSIVE").unwrap();
     let deadline = std::time::Instant::now() + Duration::from_millis(150);
     let (sent, received) = mpsc::channel();
     let worker_repo = repo.clone();
-    let worker_build = b.clone();
     let worker = std::thread::spawn(move || {
         sent.send(()).unwrap();
         worker_repo.claim_index_durable(&worker_build, "worker", 100, &|| {

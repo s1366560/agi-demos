@@ -11,9 +11,13 @@ async fn delayed_embedding_renews_and_cancelled_future_marks_only_current_lease_
             .prepare_index_build(&f.state, &f.auth, &route, "build")
             .await
             .unwrap();
+        let config = f
+            .operation
+            .select_index_build(&f.state, &f.auth, &build, None)
+            .unwrap();
         endpoint.pause();
         let task = f.run(
-            build.clone(),
+            config.clone(),
             IndexRunOptions {
                 lease_ms: 200,
                 renew_every_ms: 40,
@@ -27,12 +31,12 @@ async fn delayed_embedding_renews_and_cancelled_future_marks_only_current_lease_
             endpoint.release();
             let status = f
                 .repo()
-                .reconcile_index_durable(&build, &|| Ok(chrono::Utc::now().timestamp_millis()))
+                .reconcile_index_durable(&config, &|| Ok(chrono::Utc::now().timestamp_millis()))
                 .unwrap();
             assert_eq!(status.failed_sources, 1);
             assert!(f
                 .repo()
-                .claim_index_durable(&build, "other", 100, &|| Ok(
+                .claim_index_durable(&config, "other", 100, &|| Ok(
                     chrono::Utc::now().timestamp_millis()
                 ))
                 .unwrap()
@@ -44,7 +48,7 @@ async fn delayed_embedding_renews_and_cancelled_future_marks_only_current_lease_
                 IndexRunOutcome::Indexed
             );
             f.operation
-                .promote_index_build(&f.state, &f.auth, &build, None)
+                .promote_index_build(&f.state, &f.auth, &config, None)
                 .unwrap();
         }
     }
@@ -65,9 +69,13 @@ async fn revoked_or_downgraded_admission_during_embedding_never_publishes() {
             .prepare_index_build(&f.state, &f.auth, &route, "build")
             .await
             .unwrap();
+        let config = f
+            .operation
+            .select_index_build(&f.state, &f.auth, &build, None)
+            .unwrap();
         endpoint.pause();
         let task = f.run(
-            build.clone(),
+            config.clone(),
             IndexRunOptions {
                 lease_ms: 1000,
                 renew_every_ms: 500,
@@ -84,7 +92,7 @@ async fn revoked_or_downgraded_admission_during_embedding_never_publishes() {
         assert!(task.await.unwrap().is_err());
         assert_eq!(
             f.repo()
-                .reconcile_index_durable(&build, &|| Ok(chrono::Utc::now().timestamp_millis()))
+                .reconcile_index_durable(&config, &|| Ok(chrono::Utc::now().timestamp_millis()))
                 .unwrap()
                 .completed_sources,
             0
@@ -102,9 +110,13 @@ async fn retired_generation_rejects_index_writeback_and_new_generation_reclaims(
         .prepare_index_build(&f.state, &f.auth, &route, "build")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     endpoint.pause();
     let task = f.run(
-        build.clone(),
+        config.clone(),
         IndexRunOptions {
             lease_ms: 200,
             renew_every_ms: 100,
@@ -133,13 +145,13 @@ async fn retired_generation_rejects_index_writeback_and_new_generation_reclaims(
         KnowledgeOperationV2::admit(lease.clone(), &f.auth, &operation_scope(&f.auth, &lease))
             .unwrap();
     let receipt = next
-        .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
         .await
         .unwrap()
         .unwrap();
     assert_eq!(receipt.attempt, 2);
     assert_eq!(receipt.outcome, IndexRunOutcome::Indexed);
-    next.promote_index_build(&f.state, &f.auth, &build, None)
+    next.promote_index_build(&f.state, &f.auth, &config, None)
         .unwrap();
     drop(f.operation);
     retirement.dispose().await;
@@ -155,18 +167,22 @@ async fn source_edit_while_query_embedding_waits_removes_old_source_from_final_h
         .prepare_index_build(&f.state, &f.auth, &route, "build")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     f.operation
-        .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
         .await
         .unwrap();
     f.operation
-        .promote_index_build(&f.state, &f.auth, &build, None)
+        .promote_index_build(&f.state, &f.auth, &config, None)
         .unwrap();
     endpoint.pause();
     let op = f.operation.clone();
     let state = f.state.clone();
     let auth = f.auth.clone();
-    let querybuild = build.clone();
+    let querybuild = config.clone();
     let task = tokio::spawn(async move {
         op.semantic_query(&state, &auth, &querybuild, "query", 10)
             .await
@@ -200,6 +216,10 @@ async fn generation_publication_waits_for_admitted_index_transaction_commit() {
         .prepare_index_build(&f.state, &f.auth, &route, "build")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     let provider = super::super::super::embedding_provider::resolve(
         &f.operation,
         &f.state,
@@ -210,7 +230,7 @@ async fn generation_publication_waits_for_admitted_index_transaction_commit() {
     .unwrap();
     let repo = f.repo();
     let claim = repo
-        .claim_index_durable(&build, "linearize", 5000, &|| {
+        .claim_index_durable(&config, "linearize", 5000, &|| {
             Ok(chrono::Utc::now().timestamp_millis())
         })
         .unwrap()
@@ -263,14 +283,14 @@ async fn generation_publication_waits_for_admitted_index_transaction_commit() {
         .unwrap();
     assert_eq!(
         f.repo()
-            .reconcile_index_durable(&build, &|| Ok(chrono::Utc::now().timestamp_millis()))
+            .reconcile_index_durable(&config, &|| Ok(chrono::Utc::now().timestamp_millis()))
             .unwrap()
             .completed_sources,
         1
     );
     assert!(f
         .operation
-        .promote_index_build(&f.state, &f.auth, &build, None)
+        .promote_index_build(&f.state, &f.auth, &config, None)
         .is_err());
     drop(f.operation);
     retirement.dispose().await;
@@ -286,12 +306,16 @@ async fn session_expiry_during_post_read_work_discards_the_result() {
         .prepare_index_build(&f.state, &f.auth, &route, "build")
         .await
         .unwrap();
+    let config = f
+        .operation
+        .select_index_build(&f.state, &f.auth, &build, None)
+        .unwrap();
     f.operation
-        .index_one(&f.state, &f.auth, &build, IndexRunOptions::default())
+        .index_one(&f.state, &f.auth, &config, IndexRunOptions::default())
         .await
         .unwrap();
     f.operation
-        .promote_index_build(&f.state, &f.auth, &build, None)
+        .promote_index_build(&f.state, &f.auth, &config, None)
         .unwrap();
     let provider = super::super::super::embedding_provider::resolve(
         &f.operation,
@@ -320,7 +344,7 @@ async fn session_expiry_during_post_read_work_discards_the_result() {
         &provider,
         false,
         |clock| {
-            let read = f.repo().read_active_index_durable(&build, clock)?;
+            let read = f.repo().read_active_index_durable(&config, clock)?;
             assert_eq!(read.vectors.len(), 1);
             // Ranking happens after the SQLite read transaction. The wrapper's
             // final clock must reject expiry during that post-read work too.

@@ -23,11 +23,12 @@ impl SqliteKnowledgeRepository {
     /// Every worker pass reconciles the whole current set instead of a watermark.
     pub fn reconcile_index_durable(
         &self,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         clock: Clock<'_>,
     ) -> KnowledgeResult<IndexCoverage> {
+        let build = &config.build;
         timed(self, clock, |tx, _| {
-            ensure_build(tx, build)?;
+            ensure_config(tx, config)?;
             let current = reconcile(tx, build)?;
             let (coverage, _) = vectors(tx, build, &current)?;
             Ok((coverage, None))
@@ -61,12 +62,13 @@ impl SqliteKnowledgeRepository {
     /// same write transaction. Historical builds remain available for rollback.
     pub fn promote_index_build_durable(
         &self,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         expected_active: Option<&str>,
         clock: Clock<'_>,
     ) -> KnowledgeResult<()> {
+        let build = &config.build;
         timed(self, clock, |tx, _| {
-            ensure_build(tx, build)?;
+            ensure_config(tx, config)?;
             let active:Option<String> = tx.query_row("SELECT build_id FROM knowledge_index_active WHERE tenant_id=?1 AND project_id=?2",
                 params![build.scope.tenant_id,build.scope.project_id],|r|r.get(0)).optional().map_err(storage)?;
             if active.as_deref() != expected_active {
@@ -95,11 +97,12 @@ impl SqliteKnowledgeRepository {
     /// validates its live Provider/vault binding before and after embedding.
     pub fn read_active_index_durable(
         &self,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         clock: Clock<'_>,
     ) -> KnowledgeResult<IndexRead> {
+        let build = &config.build;
         timed(self, clock, |tx, _| {
-            ensure_build(tx, build)?;
+            ensure_config(tx, config)?;
             let active:Option<String> = tx.query_row("SELECT build_id FROM knowledge_index_active WHERE tenant_id=?1 AND project_id=?2",
                 params![build.scope.tenant_id,build.scope.project_id],|r|r.get(0)).optional().map_err(storage)?;
             if active.as_deref() != Some(build.build_id.as_str()) {
@@ -110,6 +113,7 @@ impl SqliteKnowledgeRepository {
             let processing = processing_coverage(tx, build, current.len())?;
             Ok((
                 IndexRead {
+                    config_revision: config.revision,
                     build: build.clone(),
                     coverage,
                     processing,
@@ -122,12 +126,13 @@ impl SqliteKnowledgeRepository {
 
     pub fn index_job_status_durable(
         &self,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         input: &IndexSource,
         clock: Clock<'_>,
     ) -> KnowledgeResult<Option<IndexJobStatus>> {
+        let build = &config.build;
         timed(self, clock, |tx, _| {
-            ensure_build(tx, build)?;
+            ensure_config(tx, config)?;
             current_input(tx, build, input)?;
             Ok((job(tx, build, input)?, None))
         })

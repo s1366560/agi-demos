@@ -86,13 +86,30 @@ impl KnowledgeOperationV2 {
         Ok(build)
     }
 
-    pub(super) async fn index_one(
+    pub(super) fn select_index_build(
         &self,
         state: &LocalRuntimeState,
         auth: &AuthenticatedContext,
         build: &IndexBuild,
+        expected_revision: Option<u64>,
+    ) -> Result<DesiredEmbeddingConfig, KnowledgeAuthorityErrorV2> {
+        let provider = resolve_build(self, state, auth, build, true)?;
+        embedding_provider::with_current(self, state, auth, &provider, true, |clock| {
+            self.authority
+                .repository()
+                .map_err(|_| KnowledgeError::Conflict)?
+                .select_index_config_durable(build, expected_revision, clock)
+        })
+    }
+
+    pub(super) async fn index_one(
+        &self,
+        state: &LocalRuntimeState,
+        auth: &AuthenticatedContext,
+        config: &DesiredEmbeddingConfig,
         options: IndexRunOptions,
     ) -> Result<Option<IndexRunReceipt>, KnowledgeAuthorityErrorV2> {
+        let build = &config.build;
         if options.renew_every_ms == 0 || options.renew_every_ms >= options.lease_ms {
             return Err(KnowledgeError::InvalidInput.into());
         }
@@ -101,7 +118,7 @@ impl KnowledgeOperationV2 {
         let Some(lease) =
             embedding_provider::with_current(self, state, auth, &provider, true, |clock| {
                 repository.claim_index_durable(
-                    build,
+                    config,
                     "knowledge-embedding-v1",
                     options.lease_ms,
                     clock,
@@ -172,31 +189,33 @@ impl KnowledgeOperationV2 {
         &self,
         state: &LocalRuntimeState,
         auth: &AuthenticatedContext,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         expected_active: Option<&str>,
     ) -> Result<(), KnowledgeAuthorityErrorV2> {
+        let build = &config.build;
         let provider = resolve_build(self, state, auth, build, true)?;
         embedding_provider::with_current(self, state, auth, &provider, true, |clock| {
             self.authority
                 .repository()
                 .map_err(|_| KnowledgeError::Conflict)?
-                .promote_index_build_durable(build, expected_active, clock)
+                .promote_index_build_durable(config, expected_active, clock)
         })
     }
     pub(super) fn retry_index(
         &self,
         state: &LocalRuntimeState,
         auth: &AuthenticatedContext,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         input: &IndexSource,
         expected_attempt: u32,
     ) -> Result<(), KnowledgeAuthorityErrorV2> {
+        let build = &config.build;
         let provider = resolve_build(self, state, auth, build, true)?;
         embedding_provider::with_current(self, state, auth, &provider, true, |clock| {
             self.authority
                 .repository()
                 .map_err(|_| KnowledgeError::Conflict)?
-                .retry_index_durable(build, input, expected_attempt, clock)
+                .retry_index_durable(config, input, expected_attempt, clock)
         })
     }
 }

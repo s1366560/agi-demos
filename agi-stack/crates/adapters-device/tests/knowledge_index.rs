@@ -11,6 +11,8 @@ use std::num::NonZeroU32;
 
 #[path = "knowledge_index/clock.rs"]
 mod clock;
+#[path = "knowledge_index/configuration.rs"]
+mod configuration;
 #[path = "knowledge_index/lifecycle.rs"]
 mod lifecycle;
 #[path = "knowledge_index/visibility.rs"]
@@ -127,7 +129,28 @@ async fn apply(
     .unwrap();
 }
 fn claim(repo: &SqliteKnowledgeRepository, b: &IndexBuild, now: i64) -> IndexLease {
-    repo.claim_index_durable(b, "embed-worker", 100, &|| Ok(now))
+    repo.claim_index_durable(&config(repo, b), "embed-worker", 100, &|| Ok(now))
         .unwrap()
         .unwrap()
+}
+
+fn select_initial(repo: &SqliteKnowledgeRepository, build: &IndexBuild) {
+    if repo
+        .desired_index_config_durable(&build.scope, &|| Ok(0))
+        .unwrap()
+        .is_none()
+    {
+        repo.select_index_config_durable(build, None, &|| Ok(0))
+            .unwrap();
+    }
+}
+fn config(repo: &SqliteKnowledgeRepository, build: &IndexBuild) -> DesiredEmbeddingConfig {
+    DesiredEmbeddingConfig {
+        revision: repo
+            .desired_index_config_durable(&build.scope, &|| Ok(0))
+            .unwrap()
+            .unwrap()
+            .revision,
+        build: build.clone(),
+    }
 }

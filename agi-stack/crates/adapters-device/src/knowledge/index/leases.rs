@@ -8,7 +8,13 @@ fn deadline(now: i64, lease_ms: u64) -> KnowledgeResult<i64> {
         .ok_or(KnowledgeError::InvalidInput)
 }
 fn active(tx: &Transaction<'_>, lease: &IndexLease, now: i64) -> KnowledgeResult<i64> {
-    ensure_build(tx, &lease.build)?;
+    ensure_config(
+        tx,
+        &DesiredEmbeddingConfig {
+            revision: lease.config_revision,
+            build: lease.build.clone(),
+        },
+    )?;
     let current = current_input(tx, &lease.build, &lease.input)?;
     if current.text != lease.input_text
         || lease.worker_id.trim().is_empty()
@@ -21,15 +27,15 @@ fn active(tx: &Transaction<'_>, lease: &IndexLease, now: i64) -> KnowledgeResult
     let i = &lease.input;
     tx.query_row("SELECT expires_at_ms FROM knowledge_index_jobs
         WHERE tenant_id=?1 AND project_id=?2 AND build_id=?3 AND change_sequence=?4 AND audit_attempt=?5 AND input_digest=?6
-          AND memory_id=?7 AND revision=?8 AND state='leased' AND worker_id=?9 AND token=?10 AND attempt=?11 AND expires_at_ms>?12",
-        params![b.scope.tenant_id,b.scope.project_id,b.build_id,i.source.change_sequence,i.audit_attempt,i.input_digest,i.source.memory_id,i.source.revision,lease.worker_id,lease.token,lease.attempt,now],|r|r.get(0)
+          AND memory_id=?7 AND revision=?8 AND state='leased' AND worker_id=?9 AND token=?10 AND attempt=?11 AND expires_at_ms>?12 AND config_revision=?13",
+        params![b.scope.tenant_id,b.scope.project_id,b.build_id,i.source.change_sequence,i.audit_attempt,i.input_digest,i.source.memory_id,i.source.revision,lease.worker_id,lease.token,lease.attempt,now,lease.config_revision],|r|r.get(0)
     ).optional().map_err(storage)?.ok_or(KnowledgeError::Conflict)
 }
 
 impl SqliteKnowledgeRepository {
     pub fn claim_index_durable(
         &self,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         worker_id: &str,
         lease_ms: u64,
         clock: Clock<'_>,
@@ -37,8 +43,9 @@ impl SqliteKnowledgeRepository {
         if worker_id.trim().is_empty() {
             return Err(KnowledgeError::InvalidInput);
         }
+        let build = &config.build;
         timed(self, clock, |tx, now| {
-            ensure_build(tx, build)?;
+            ensure_config(tx, config)?;
             let expires_at_ms = deadline(now, lease_ms)?;
             for current in reconcile(tx, build)? {
                 let i = &current.identity;
@@ -49,11 +56,12 @@ impl SqliteKnowledgeRepository {
                 let Some(attempt) = available else { continue };
                 let attempt = attempt.checked_add(1).ok_or(KnowledgeError::Conflict)?;
                 let token = uuid::Uuid::new_v4().to_string();
-                tx.execute("UPDATE knowledge_index_jobs SET state='leased',attempt=?1,worker_id=?2,token=?3,expires_at_ms=?4,failure_json=NULL
+                tx.execute("UPDATE knowledge_index_jobs SET state='leased',attempt=?1,worker_id=?2,token=?3,expires_at_ms=?4,failure_json=NULL,config_revision=?11
                     WHERE tenant_id=?5 AND project_id=?6 AND build_id=?7 AND change_sequence=?8 AND audit_attempt=?9 AND input_digest=?10",
-                    params![attempt,worker_id,token,expires_at_ms,build.scope.tenant_id,build.scope.project_id,build.build_id,i.source.change_sequence,i.audit_attempt,i.input_digest]).map_err(storage)?;
+                    params![attempt,worker_id,token,expires_at_ms,build.scope.tenant_id,build.scope.project_id,build.build_id,i.source.change_sequence,i.audit_attempt,i.input_digest,config.revision]).map_err(storage)?;
                 return Ok((
                     Some(IndexLease {
+                        config_revision: config.revision,
                         build: build.clone(),
                         input: current.identity,
                         input_text: current.text,
@@ -132,13 +140,14 @@ impl SqliteKnowledgeRepository {
 
     pub fn retry_index_durable(
         &self,
-        build: &IndexBuild,
+        config: &DesiredEmbeddingConfig,
         input: &IndexSource,
         expected_attempt: u32,
         clock: Clock<'_>,
     ) -> KnowledgeResult<()> {
+        let build = &config.build;
         timed(self, clock, |tx, _| {
-            ensure_build(tx, build)?;
+            ensure_config(tx, config)?;
             current_input(tx, build, input)?;
             let Some(status) = job(tx, build, input)? else {
                 return Err(KnowledgeError::Conflict);

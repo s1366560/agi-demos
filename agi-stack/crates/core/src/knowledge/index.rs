@@ -29,6 +29,14 @@ pub struct IndexBuild {
     pub profile: IndexProfile,
 }
 
+/// Project selection is independent of the last fully promoted index. Every
+/// worker and query carries this version, including when reselecting an old build.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DesiredEmbeddingConfig {
+    pub revision: u64,
+    pub build: IndexBuild,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IndexSource {
@@ -39,6 +47,7 @@ pub struct IndexSource {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexLease {
+    pub config_revision: u64,
     pub build: IndexBuild,
     pub input: IndexSource,
     /// Exact versioned text to send to the verified embedding adapter.
@@ -108,6 +117,7 @@ pub struct IndexedVector {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IndexRead {
+    pub config_revision: u64,
     pub build: IndexBuild,
     pub coverage: IndexCoverage,
     pub processing: ProcessingCoverage,
