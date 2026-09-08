@@ -74,12 +74,7 @@ const LOGIN_RESPONSE_KEYS = new Set([
   'session',
   'context',
 ]);
-const SESSION_KEYS = new Set([
-  'session_id',
-  'auth_method',
-  'expires_at',
-  'trusted_device',
-]);
+const SESSION_KEYS = new Set(['session_id', 'auth_method', 'expires_at', 'trusted_device']);
 const DEVICE_CODE_KEYS = new Set([
   'device_code',
   'user_code',
@@ -95,9 +90,31 @@ export class DesktopCloudAuthenticationAuthority {
   readonly #dependencies: DesktopCloudAuthenticationDependencies;
   #pendingDevice: PendingDeviceAuthorization | null = null;
   #persistAcrossRestart = true;
+  #attemptRevision = 0;
+  #passwordChangeCredential: string | null = null;
+  #sessionMutation: Promise<unknown> = Promise.resolve();
 
   constructor(dependencies: DesktopCloudAuthenticationDependencies) {
     this.#dependencies = dependencies;
+  }
+
+  async getStatus(): Promise<
+    Readonly<{
+      status: 'disconnected' | 'authenticated' | 'password_change_required';
+    }>
+  > {
+    const revision = this.#attemptRevision;
+    await this.#sessionMutation;
+    const session = await this.#trustedSession().catch(() => null);
+    this.#assertCurrent(revision);
+    return Object.freeze({
+      status:
+        session === null
+          ? 'disconnected'
+          : session.credential === this.#passwordChangeCredential
+            ? 'password_change_required'
+            : 'authenticated',
+    });
   }
 
   async loginWithPassword(
@@ -109,6 +126,7 @@ export class DesktopCloudAuthenticationAuthority {
     if (!apiBaseUrl || !username || !password || typeof input.trustedDevice !== 'boolean') {
       throw contractInvalid();
     }
+    const revision = this.#retireAttempt();
     const body = new URLSearchParams({ username, password });
     const response = await this.#requestJson(apiBaseUrl, '/api/v1/auth/token', {
       method: 'POST',
@@ -119,7 +137,7 @@ export class DesktopCloudAuthenticationAuthority {
       body,
     });
     const token = parseLoginToken(response.body);
-    await this.#adoptToken(apiBaseUrl, token, input.trustedDevice);
+    await this.#adoptToken(apiBaseUrl, token, input.trustedDevice, revision);
     return Object.freeze({
       status: token.mustChangePassword ? 'password_change_required' : 'authenticated',
     });
@@ -131,7 +149,9 @@ export class DesktopCloudAuthenticationAuthority {
     const currentPassword = boundedString(input.currentPassword, 4096, false);
     const newPassword = boundedString(input.newPassword, 4096, false);
     if (!currentPassword || !newPassword) throw contractInvalid();
+    const revision = this.#attemptRevision;
     const session = await this.#trustedSession();
+    this.#assertCurrent(revision);
     const response = await this.#requestJson(
       session.api_base_url,
       '/api/v1/auth/force-change-password',
@@ -151,6 +171,8 @@ export class DesktopCloudAuthenticationAuthority {
     ) {
       throw responseInvalid();
     }
+    this.#assertCurrent(revision);
+    this.#passwordChangeCredential = null;
     return Object.freeze({ status: 'authenticated' });
   }
 
@@ -162,14 +184,13 @@ export class DesktopCloudAuthenticationAuthority {
     if (!apiBaseUrl || !deviceAuthorizationBaseUrl || typeof input.trustedDevice !== 'boolean') {
       throw contractInvalid();
     }
-    if (this.#pendingDevice) {
-      await this.cancelDeviceAuthorization(this.#pendingDevice.attemptId);
-    }
+    const revision = this.#retireAttempt();
     const response = await this.#requestJson(apiBaseUrl, '/api/v1/auth/device/code', {
       method: 'POST',
       body: JSON.stringify({}),
     });
     const code = parseDeviceCode(response.body);
+    this.#assertCurrent(revision);
     const attemptId = this.#dependencies.randomId();
     if (!DEVICE_ATTEMPT_ID.test(attemptId)) throw contractInvalid();
     const expiresAt = this.#dependencies.now() + code.expiresIn * 1000;
@@ -194,6 +215,7 @@ export class DesktopCloudAuthenticationAuthority {
 
   async pollDeviceAuthorization(attemptId: string): Promise<DeviceAuthorizationPollResult> {
     const pending = this.#requiredPendingDevice(attemptId);
+    const revision = this.#attemptRevision;
     if (pending.expiresAt <= this.#dependencies.now()) {
       this.#pendingDevice = null;
       await this.#cancelDeviceCode(pending).catch(() => undefined);
@@ -208,6 +230,7 @@ export class DesktopCloudAuthenticationAuthority {
       },
       true,
     );
+    this.#assertCurrent(revision);
     if (response.status === 428) {
       const interval = pendingDeviceInterval(response.body);
       if (interval === null) throw responseInvalid();
@@ -220,64 +243,80 @@ export class DesktopCloudAuthenticationAuthority {
     if (response.status < 200 || response.status >= 300) throw requestFailed();
     const token = parseDeviceToken(response.body);
     this.#pendingDevice = null;
-    await this.#adoptToken(pending.apiBaseUrl, token, pending.trustedDevice);
+    await this.#adoptToken(pending.apiBaseUrl, token, pending.trustedDevice, revision);
     return Object.freeze({ status: 'authenticated' });
   }
 
-  async cancelDeviceAuthorization(
-    attemptId: string,
-  ): Promise<Readonly<{ cancelled: true }>> {
+  async cancelDeviceAuthorization(attemptId: string): Promise<Readonly<{ cancelled: true }>> {
     const pending = this.#requiredPendingDevice(attemptId);
     this.#pendingDevice = null;
+    this.#retireAttempt();
     await this.#cancelDeviceCode(pending);
     return Object.freeze({ cancelled: true });
   }
 
+  async cancelPendingAuthentication(): Promise<void> {
+    this.#retireAttempt();
+    await this.#sessionMutation;
+  }
+
   async signOut(): Promise<Readonly<{ success: boolean }>> {
-    let session: TrustedCloudSession | null = null;
-    try {
-      session = await this.#trustedSession();
-    } catch {
+    const revision = this.#retireAttempt();
+    const session = await this.#mutateSession(async () => {
+      this.#assertCurrent(revision);
+      const current = await this.#trustedSession().catch(() => null);
+      this.#assertCurrent(revision);
       await this.#dependencies.clearTrustedSession();
       this.#persistAcrossRestart = false;
-      return Object.freeze({ success: true });
-    }
-    let revoked = false;
-    try {
-      const response = await this.#requestJson(session.api_base_url, '/api/v1/auth/signout', {
-        method: 'POST',
-        authorization: session.credential,
-      });
-      revoked =
-        isRecord(response.body) &&
-        Object.keys(response.body).length === 1 &&
-        response.body.success === true;
-    } finally {
-      await this.#dependencies.clearTrustedSession();
-      this.#persistAcrossRestart = false;
-    }
-    return Object.freeze({ success: revoked });
+      this.#passwordChangeCredential = null;
+      return current;
+    });
+    if (!session) return Object.freeze({ success: true });
+    const response = await this.#requestJson(session.api_base_url, '/api/v1/auth/signout', {
+      method: 'POST',
+      authorization: session.credential,
+    });
+    return Object.freeze({
+      success: isExactRecord(response.body, new Set(['success'])) && response.body.success === true,
+    });
   }
 
   async clearTransientSession(): Promise<boolean> {
-    if (this.#persistAcrossRestart) return false;
-    try {
-      await this.#dependencies.clearTrustedSession();
-      return true;
-    } catch {
-      return false;
-    }
+    this.#retireAttempt();
+    return this.#mutateSession(async () => {
+      if (this.#persistAcrossRestart) return false;
+      try {
+        await this.#dependencies.clearTrustedSession();
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  #retireAttempt(): number {
+    this.#attemptRevision += 1;
+    const pending = this.#pendingDevice;
+    this.#pendingDevice = null;
+    if (pending) void this.#cancelDeviceCode(pending).catch(() => undefined);
+    return this.#attemptRevision;
+  }
+
+  #assertCurrent(revision: number): void {
+    if (revision !== this.#attemptRevision) throw new Error('cloud_auth_attempt_retired');
+  }
+
+  #mutateSession<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.#sessionMutation.then(operation);
+    this.#sessionMutation = result.catch(() => undefined);
+    return result;
   }
 
   async #cancelDeviceCode(pending: PendingDeviceAuthorization): Promise<void> {
-    const response = await this.#requestJson(
-      pending.apiBaseUrl,
-      '/api/v1/auth/device/cancel',
-      {
-        method: 'POST',
-        body: JSON.stringify({ device_code: pending.deviceCode }),
-      },
-    );
+    const response = await this.#requestJson(pending.apiBaseUrl, '/api/v1/auth/device/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ device_code: pending.deviceCode }),
+    });
     if (!isRecord(response.body) || response.body.success !== true) throw responseInvalid();
   }
 
@@ -294,18 +333,27 @@ export class DesktopCloudAuthenticationAuthority {
     apiBaseUrl: string,
     token: ParsedToken,
     trustedDevice: boolean,
+    revision: number,
   ): Promise<void> {
-    await this.#dependencies.saveTrustedSession({
-      input: Object.freeze({
-        version: 1,
-        api_base_url: apiBaseUrl,
-        runtime_mode: 'cloud',
-        credential_kind: 'cloud_bearer',
-        credential: token.credential,
-        expires_at: token.expiresAt,
-      }),
+    await this.#mutateSession(async () => {
+      this.#assertCurrent(revision);
+      await this.#dependencies.saveTrustedSession({
+        input: Object.freeze({
+          version: 1,
+          api_base_url: apiBaseUrl,
+          runtime_mode: 'cloud',
+          credential_kind: 'cloud_bearer',
+          credential: token.credential,
+          expires_at: token.expiresAt,
+        }),
+      });
+      if (revision !== this.#attemptRevision) {
+        await this.#dependencies.clearTrustedSession();
+        this.#assertCurrent(revision);
+      }
+      this.#persistAcrossRestart = trustedDevice;
+      this.#passwordChangeCredential = token.mustChangePassword ? token.credential : null;
     });
-    this.#persistAcrossRestart = trustedDevice;
   }
 
   async #trustedSession(): Promise<TrustedCloudSession> {
@@ -349,15 +397,12 @@ export class DesktopCloudAuthenticationAuthority {
     if (!headers.has('Accept')) headers.set('Accept', 'application/json');
     if (typeof init.body === 'string') headers.set('Content-Type', 'application/json');
     if (init.authorization) headers.set('Authorization', `Bearer ${init.authorization}`);
-    const response = await this.#dependencies.fetch(
-      new URL(path, `${apiBaseUrl}/`).toString(),
-      {
-        method: init.method,
-        headers,
-        redirect: 'manual',
-        body: init.body,
-      },
-    );
+    const response = await this.#dependencies.fetch(new URL(path, `${apiBaseUrl}/`).toString(), {
+      method: init.method,
+      headers,
+      redirect: 'manual',
+      body: init.body,
+    });
     const body = await boundedJson(response);
     if (!response.ok && !(allowExpectedDeviceStatus && [410, 428].includes(response.status))) {
       throw requestFailed();
@@ -448,7 +493,7 @@ function pendingDeviceInterval(value: unknown): number | null {
 }
 
 async function boundedJson(response: Response): Promise<unknown> {
-  if (response.type === 'opaqueredirect' || response.status >= 300 && response.status < 400) {
+  if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
     throw responseInvalid();
   }
   const reader = response.body?.getReader();
@@ -490,9 +535,7 @@ function secureOrigin(value: unknown): string | null {
   } catch {
     return null;
   }
-  const loopback = ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(
-    url.hostname.toLowerCase(),
-  );
+  const loopback = ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(url.hostname.toLowerCase());
   if (
     (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
     url.username ||
@@ -517,7 +560,9 @@ function boundedString(value: unknown, maxLength: number, allowEmpty: boolean): 
 }
 
 function integerBetween(value: unknown, minimum: number, maximum: number): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= minimum && (value as number) <= maximum;
+  return (
+    Number.isSafeInteger(value) && (value as number) >= minimum && (value as number) <= maximum
+  );
 }
 
 function isAllowedRecord(
@@ -531,9 +576,7 @@ function isExactRecord(
   value: unknown,
   expectedKeys: ReadonlySet<string>,
 ): value is Record<string, unknown> {
-  return (
-    isAllowedRecord(value, expectedKeys) && Object.keys(value).length === expectedKeys.size
-  );
+  return isAllowedRecord(value, expectedKeys) && Object.keys(value).length === expectedKeys.size;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

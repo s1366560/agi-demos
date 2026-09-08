@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { DesktopCloudAuthenticationAuthority } = await import(
-  '/tmp/agistack-desktop-test-dist/electron/main/cloudAuthenticationAuthority.js'
-);
+const { DesktopCloudAuthenticationAuthority } =
+  await import('/tmp/agistack-desktop-test-dist/electron/main/cloudAuthenticationAuthority.js');
 
 test('native password authentication adopts the bearer in the vault without returning it', async () => {
   const calls = [];
@@ -30,7 +29,10 @@ test('native password authentication adopts the bearer in the vault without retu
   assert.deepEqual(result, { status: 'authenticated' });
   assert.equal(JSON.stringify(result).includes('vault-only-token'), false);
   assert.equal(calls[0].url, 'https://cloud.memstack.test/api/v1/auth/token');
-  assert.equal(calls[0].init.body.toString(), 'username=admin%40memstack.test&password=correct+horse+battery+staple');
+  assert.equal(
+    calls[0].init.body.toString(),
+    'username=admin%40memstack.test&password=correct+horse+battery+staple',
+  );
   assert.equal(new Headers(calls[0].init.headers).has('Authorization'), false);
   assert.deepEqual(saved[0], {
     input: {
@@ -133,11 +135,11 @@ test('device authentication keeps device_code privileged through polling and can
         expires_in: 600,
         interval: 5,
       }),
-      jsonResponse(
-        { detail: { error: 'authorization_pending', interval: 7 } },
-        428,
-      ),
-      jsonResponse({ access_token: 'device-vault-token', token_type: 'bearer' }),
+      jsonResponse({ detail: { error: 'authorization_pending', interval: 7 } }, 428),
+      jsonResponse({
+        access_token: 'device-vault-token',
+        token_type: 'bearer',
+      }),
     ],
   });
 
@@ -272,3 +274,138 @@ function jsonResponse(body, status = 200) {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+function deferredResponse() {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function raceAuthority() {
+  const requests = [];
+  let session = null;
+  const saved = [];
+  const authority = new DesktopCloudAuthenticationAuthority({
+    now: () => 1700000000000,
+    randomId: () => 'device_attempt_12345678',
+    fetch: () => {
+      const response = deferredResponse();
+      requests.push(response);
+      return response.promise;
+    },
+    loadTrustedSession: async () => session,
+    saveTrustedSession: async ({ input }) => {
+      session = input;
+      saved.push(input);
+    },
+    clearTrustedSession: async () => {
+      session = null;
+    },
+  });
+  const login = () =>
+    authority.loginWithPassword({
+      apiBaseUrl: 'https://cloud.memstack.test',
+      username: 'user',
+      password: 'password',
+      trustedDevice: true,
+    });
+  const token = (value) =>
+    jsonResponse({
+      access_token: value,
+      token_type: 'bearer',
+      must_change_password: false,
+    });
+  return { authority, requests, saved, login, token, session: () => session };
+}
+
+test('disconnect prevents a late password response from restoring cloud credentials', async () => {
+  const fixture = raceAuthority();
+  const pending = fixture.login();
+  const rejected = assert.rejects(pending, /cloud_auth_attempt_retired/u);
+  await fixture.authority.signOut();
+  fixture.requests[0].resolve(fixture.token('retired'));
+  await rejected;
+  assert.equal(fixture.session(), null);
+  assert.equal(fixture.saved.length, 0);
+});
+
+test('a newer password attempt supersedes an earlier response', async () => {
+  const fixture = raceAuthority();
+  const first = fixture.login();
+  const rejected = assert.rejects(first, /cloud_auth_attempt_retired/u);
+  const second = fixture.login();
+  fixture.requests[1].resolve(fixture.token('current'));
+  await second;
+  fixture.requests[0].resolve(fixture.token('retired'));
+  await rejected;
+  assert.equal(fixture.session().credential, 'current');
+  assert.equal(fixture.saved.length, 1);
+});
+
+test('runtime exit retires authentication without clearing an existing cloud session', async () => {
+  const fixture = raceAuthority();
+  const first = fixture.login();
+  fixture.requests[0].resolve(fixture.token('restored'));
+  await first;
+  const pending = fixture.login();
+  const rejected = assert.rejects(pending, /cloud_auth_attempt_retired/u);
+  await fixture.authority.cancelPendingAuthentication();
+  fixture.requests[1].resolve(fixture.token('retired'));
+  await rejected;
+  assert.equal(fixture.session().credential, 'restored');
+});
+
+test('an earlier remote signout response cannot clear a newer login', async () => {
+  const fixture = raceAuthority();
+  const initial = fixture.login();
+  fixture.requests[0].resolve(fixture.token('first'));
+  await initial;
+  const signout = fixture.authority.signOut();
+  while (fixture.requests.length < 2) await new Promise((done) => setImmediate(done));
+  assert.equal(fixture.session(), null);
+  const current = fixture.login();
+  fixture.requests[2].resolve(fixture.token('current'));
+  await current;
+  fixture.requests[1].resolve(jsonResponse({ success: true }));
+  await signout;
+  assert.equal(fixture.session().credential, 'current');
+});
+
+test('cancellation while a vault write is pending removes the retired credential', async () => {
+  let session = null;
+  const write = deferredResponse();
+  const started = deferredResponse();
+  const authority = new DesktopCloudAuthenticationAuthority({
+    now: () => 1700000000000,
+    randomId: () => 'device_attempt_12345678',
+    fetch: async () =>
+      jsonResponse({
+        access_token: 'retired',
+        token_type: 'bearer',
+        must_change_password: false,
+      }),
+    loadTrustedSession: async () => session,
+    saveTrustedSession: async ({ input }) => {
+      started.resolve();
+      await write.promise;
+      session = input;
+    },
+    clearTrustedSession: async () => {
+      session = null;
+    },
+  });
+  const login = authority.loginWithPassword({
+    apiBaseUrl: 'https://cloud.memstack.test',
+    username: 'user',
+    password: 'password',
+    trustedDevice: true,
+  });
+  const rejected = assert.rejects(login, /cloud_auth_attempt_retired/u);
+  await started.promise;
+  const cancelled = authority.cancelPendingAuthentication();
+  write.resolve();
+  await Promise.all([cancelled, rejected]);
+  assert.equal(session, null);
+});

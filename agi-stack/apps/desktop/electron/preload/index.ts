@@ -66,6 +66,8 @@ const allowedCommands = new Set([
   'cloud_auth_device_poll',
   'cloud_auth_device_cancel',
   'cloud_auth_signout',
+  'cloud_auth_cancel_pending',
+  'cloud_auth_status',
   'oauth_list_providers',
   'oauth_begin_authorization',
   'oauth_restore_authorization',

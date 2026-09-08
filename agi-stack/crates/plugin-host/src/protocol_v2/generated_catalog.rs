@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:46a1359825c5a76ef92df7e07d7f9211bb37de2af3d3a0e638a55c316c0976",
-    "9e\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:257acb9b3288b3e11d45184dae016148a4bd217074f8ac0a95d6759be21156",
+    "2e\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1922,8 +1922,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "c7453efea390000fedbd5cce99492728eb309be604\",\"entrypoint\":\"applyDesktopProjectMcpServersA",
     "uthorityV2\",\"module_ref\":\"builtin://memstack/desktop/project-mcp-servers-authority\",\"plu",
     "gin_id\":\"memstack-renderer-target-hosts\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-re",
-    "nderer\"]},{\"artifact_digest\":\"sha256:2e9a22e95a3c857330bf7a82905b49c2f8d92cd7ce5c2fa41b6",
-    "0af926e09e2ab\",\"artifact_source\":\"repo+typescript://agi-stack/apps/desktop/src/plugins/d",
+    "nderer\"]},{\"artifact_digest\":\"sha256:1e07c957a0cc5fba25aee2112c0f8383ec577441ac7d5152ded",
+    "feacb9925a911\",\"artifact_source\":\"repo+typescript://agi-stack/apps/desktop/src/plugins/d",
     "esktopProjectMemoriesAuthorityModuleV2.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https",
     "://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"str",
     "ategy\":{\"const\":\"desktop-api-fetch\",\"type\":\"string\"}},\"required\":[\"strategy\"],\"type\":\"ob",
@@ -4573,4 +4573,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "chema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:46a1359825c5a76ef92df7e07d7f9211bb37de2af3d3a0e638a55c316c09769e";
+    "sha256:257acb9b3288b3e11d45184dae016148a4bd217074f8ac0a95d6759be211562e";

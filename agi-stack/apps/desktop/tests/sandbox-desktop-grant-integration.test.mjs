@@ -344,6 +344,11 @@ test('actual sidecar default branch revokes before local-session replacement cle
       `async function invoke(command,args){${clause.statements.map((node) => node.getText()).join('\n')}}`,
       {
         SIDECAR_COMMANDS: new Set(commands),
+        cloudAuthenticationAuthority: {
+          cancelPendingAuthentication: async () => {
+            events.push('auth_cancel');
+          },
+        },
         sandboxDesktopGrants: {
           withAuthorityTransition: async (operation) => {
             events.push('revoke');
@@ -361,10 +366,10 @@ test('actual sidecar default branch revokes before local-session replacement cle
     );
     const pending = invoke(command, {});
     await new Promise(setImmediate);
-    assert.deepEqual(events, ['revoke']);
+    assert.deepEqual(events, ['auth_cancel', 'revoke']);
     gate.resolve();
     await pending;
-    assert.deepEqual(events, ['revoke', command]);
+    assert.deepEqual(events, ['auth_cancel', 'revoke', command, 'auth_cancel']);
   }
 });
 test('main cloud-request path injects its real revoke callback and releases the IPC request lease', async () => {
@@ -473,4 +478,51 @@ test('actual request broker and registry keep new grants blocked through blankin
   await registry.open(7, 11, next);
   assert.equal(authorizations, 2);
   await registry.revokeAll();
+});
+
+test('actual local runtime exit retires pending cloud login before and after the authority transition', async () => {
+  const { DesktopCloudAuthenticationAuthority } = load(
+    new URL('../electron/main/cloudAuthenticationAuthority.ts', import.meta.url),
+  );
+  const response = deferred();
+  const saved = [];
+  const cloudAuthenticationAuthority = new DesktopCloudAuthenticationAuthority({
+    now: () => 1700000000000,
+    randomId: () => 'device_attempt_12345678',
+    fetch: () => response.promise,
+    loadTrustedSession: async () => null,
+    saveTrustedSession: async (input) => saved.push(input),
+    clearTrustedSession: async () => {},
+  });
+  const pending = cloudAuthenticationAuthority.loginWithPassword({
+    apiBaseUrl: 'https://cloud.example.test',
+    username: 'user',
+    password: 'password',
+    trustedDevice: true,
+  });
+  const rejected = assert.rejects(pending, /cloud_auth_attempt_retired/u);
+  const clause = nodes(fn(mainAst, 'executeDesktopCommand'), ts.isDefaultClause)[0];
+  const invoke = compileFunction(
+    `async function invoke(command,args){${clause.statements.map((node) => node.getText()).join('\n')}}`,
+    {
+      SIDECAR_COMMANDS: new Set(['local_trusted_session_clear']),
+      cloudAuthenticationAuthority,
+      sandboxDesktopGrants: { withAuthorityTransition: async (operation) => operation() },
+      sidecarSupervisor: { invoke: async () => {} },
+    },
+    'invoke',
+  );
+  await invoke('local_trusted_session_clear', {});
+  response.resolve(
+    new Response(
+      JSON.stringify({
+        access_token: 'retired',
+        token_type: 'bearer',
+        must_change_password: false,
+      }),
+      { status: 200 },
+    ),
+  );
+  await rejected;
+  assert.deepEqual(saved, []);
 });

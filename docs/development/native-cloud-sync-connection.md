@@ -66,3 +66,18 @@ If enrollment commits but its response is lost, refresh `sync-enrollment` to
 observe the real state. No local binding is created by enrollment itself. Cloud
 logout, rotation or expiry invalidates pending observations; a local scope,
 permission or generation change prevents a pending bind from committing.
+
+The native Local Knowledge page exposes a separate Cloud connection card. Its
+password login and forced password change use token-free Electron commands. The
+card never calls cloud-session hydration or changes the local runtime, tenant,
+project, actor or workspace. Mounting reads the existing cloud vault projection;
+it does not sign in, enroll or bind. Users explicitly choose observed catalog rows,
+enroll when authorized, and bind the enrolled target before push or pull is enabled.
+A remounted card requires a fresh observation and explicit binding confirmation.
+
+Authentication attempts have a main-process revision and serialized vault writes.
+Disconnect, a newer login and local-authority exit retire older responses. A remote
+signout response cannot clear a newer login. The main process exposes only a
+credential-free authentication status so forced password change survives renderer
+owner retirement during a vault write. Renderer unmount discards its UI requests;
+the existing host authority transition remains responsible for local-runtime exit.

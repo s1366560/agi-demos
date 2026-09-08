@@ -731,6 +731,17 @@ async function executeDesktopCommand(
       if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
       return cloudAuthenticationAuthority.cancelDeviceAuthorization(parseCloudDeviceAttemptArgs(args));
     }
+    case 'cloud_auth_status': {
+      void authorizedCloudRequestOwner(event);
+      if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+      return cloudAuthenticationAuthority.getStatus();
+    }
+    case 'cloud_auth_cancel_pending': {
+      void authorizedCloudRequestOwner(event);
+      if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+      await cloudAuthenticationAuthority.cancelPendingAuthentication();
+      return Object.freeze({ cancelled: true });
+    }
     case 'cloud_auth_signout': {
       void authorizedCloudRequestOwner(event);
       if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
@@ -822,11 +833,16 @@ async function executeDesktopCommand(
           'local_trusted_session_clear',
           'platform_plugin_authority_select_v2',
         ].includes(command)) {
+          await cloudAuthenticationAuthority?.cancelPendingAuthentication();
           const supervisor = sidecarSupervisor;
           if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
-          return withDesktopAuthorityTransitionV2(
-            () => supervisor.invoke(command, args),
-          );
+          return withDesktopAuthorityTransitionV2(async () => {
+            try {
+              return await supervisor.invoke(command, args);
+            } finally {
+              await cloudAuthenticationAuthority?.cancelPendingAuthentication();
+            }
+          });
         }
         return sidecarSupervisor.invoke(command, args);
       }

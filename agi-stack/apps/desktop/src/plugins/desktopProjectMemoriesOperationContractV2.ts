@@ -1,3 +1,8 @@
+import {
+  prepareNativeKnowledgeCloudConnection,
+  type NativeKnowledgeCloudConnectionCommand,
+  type NativeKnowledgeCloudConnectionOptions,
+} from '../features/project-knowledge/nativeKnowledgeCloudConnectionClient';
 import type {
   NativeKnowledgeProcessingQuery,
   NativeKnowledgeProcessingCommand,
@@ -62,18 +67,40 @@ export type DesktopProjectMemoriesSyncOperationInputV2<
 export type DesktopProjectMemoriesCloudOperationInputV2<
   C extends CloudMemoryCommand = CloudMemoryCommand,
 > = CloudMemoryOptions &
-  Readonly<{ config: DesktopRuntimeConfig; scope: ProjectKnowledgeScope; command: C }>;
+  Readonly<{
+    config: DesktopRuntimeConfig;
+    scope: ProjectKnowledgeScope;
+    command: C;
+  }>;
 
 export type DesktopProjectMemoriesProcessingQueryInputV2<
   Q extends NativeKnowledgeProcessingQuery = NativeKnowledgeProcessingQuery,
 > = ProcessingOptions &
-  Readonly<{ config: DesktopRuntimeConfig; scope: ProjectKnowledgeScope; query: Q }>;
+  Readonly<{
+    config: DesktopRuntimeConfig;
+    scope: ProjectKnowledgeScope;
+    query: Q;
+  }>;
 export type DesktopProjectMemoriesProcessingCommandInputV2<
   C extends NativeKnowledgeProcessingCommand = NativeKnowledgeProcessingCommand,
 > = ProcessingOptions &
-  Readonly<{ config: DesktopRuntimeConfig; scope: ProjectKnowledgeScope; command: C }>;
+  Readonly<{
+    config: DesktopRuntimeConfig;
+    scope: ProjectKnowledgeScope;
+    command: C;
+  }>;
+
+export type DesktopProjectMemoriesConnectionInputV2<
+  C extends NativeKnowledgeCloudConnectionCommand = NativeKnowledgeCloudConnectionCommand,
+> = NativeKnowledgeCloudConnectionOptions &
+  Readonly<{
+    config: DesktopRuntimeConfig;
+    scope: ProjectKnowledgeScope;
+    command: C;
+  }>;
 
 export type DesktopProjectMemoriesAuthorityOperationInputV2 =
+  | (DesktopProjectMemoriesConnectionInputV2 & Readonly<{ kind: 'connection' }>)
   | (DesktopProjectMemoriesObserveScopeInputV2 & Readonly<{ kind: 'observe-scope' }>)
   | (DesktopProjectMemoriesProcessingQueryInputV2 & Readonly<{ kind: 'processing-query' }>)
   | (DesktopProjectMemoriesProcessingCommandInputV2 & Readonly<{ kind: 'processing-command' }>)
@@ -139,6 +166,11 @@ const MEMORY_KEYS_V2 = new Set([
   'updatedAt',
 ]);
 
+export function prepareDesktopProjectMemoriesAuthorityOperationV2<
+  C extends NativeKnowledgeCloudConnectionCommand,
+>(
+  input: DesktopProjectMemoriesConnectionInputV2<C> & Readonly<{ kind: 'connection' }>,
+): DesktopProjectMemoriesConnectionInputV2<C> & Readonly<{ kind: 'connection' }>;
 export function prepareDesktopProjectMemoriesAuthorityOperationV2(
   input: DesktopProjectMemoriesObserveScopeInputV2 & Readonly<{ kind: 'observe-scope' }>,
 ): DesktopProjectMemoriesObserveScopeInputV2 & Readonly<{ kind: 'observe-scope' }>;
@@ -173,6 +205,7 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
     (input.kind !== 'observe-scope' &&
       input.kind !== 'load' &&
       input.kind !== 'sync' &&
+      input.kind !== 'connection' &&
       input.kind !== 'cloud' &&
       input.kind !== 'processing-query' &&
       input.kind !== 'processing-command') ||
@@ -186,7 +219,7 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
             ? SYNC_INPUT_KEYS_V2
             : input.kind === 'cloud'
               ? CLOUD_INPUT_KEYS_V2
-              : input.kind === 'sync'
+              : input.kind === 'sync' || input.kind === 'connection'
                 ? SYNC_INPUT_KEYS_V2
                 : INPUT_KEYS_V2,
     ) ||
@@ -198,6 +231,21 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
   }
   const config = cloneDesktopProjectMemoriesRuntimeConfigV2(input.config);
   const scope = cloneDesktopProjectMemoriesScopeV2(input.scope, config);
+  if (input.kind === 'connection') {
+    requireNativeKnowledgeTransportV2(config);
+    if (scope.authority !== 'local') throw invalidInputV2();
+    const prepared = prepareNativeKnowledgeCloudConnection(input.command, {
+      expectedScope: input.expectedScope,
+      signal: input.signal,
+    });
+    return Object.freeze({
+      kind: input.kind,
+      config,
+      scope,
+      command: prepared.command,
+      ...prepared.options,
+    });
+  }
   if (input.kind === 'observe-scope') {
     requireNativeKnowledgeTransportV2(config);
     if (scope.authority !== 'local') throw invalidInputV2();
@@ -214,7 +262,10 @@ export function prepareDesktopProjectMemoriesAuthorityOperationV2(
   if (input.kind === 'processing-query' || input.kind === 'processing-command') {
     requireNativeKnowledgeTransportV2(config);
     if (scope.authority !== 'local') throw invalidInputV2();
-    const options = { signal: input.signal, expectedScope: input.expectedScope };
+    const options = {
+      signal: input.signal,
+      expectedScope: input.expectedScope,
+    };
     if (input.kind === 'processing-query') {
       const query = prepareNativeKnowledgeProcessingQuery(input.query, scope);
       return Object.freeze({

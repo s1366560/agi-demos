@@ -19,24 +19,36 @@ export type NativeDeviceAuthorizationPollResult =
   | Readonly<{ status: 'expired' }>;
 
 export type NativeCloudAuthClient = Readonly<{
-  loginWithPassword(input: Readonly<{
-    apiBaseUrl: string;
-    username: string;
-    password: string;
-    trustedDevice: boolean;
-  }>): Promise<NativeCloudAuthenticationResult>;
-  forceChangePassword(input: Readonly<{
-    currentPassword: string;
-    newPassword: string;
-  }>): Promise<Readonly<{ status: 'authenticated' }>>;
-  beginDeviceAuthorization(input: Readonly<{
-    apiBaseUrl: string;
-    deviceAuthorizationBaseUrl: string;
-    trustedDevice: boolean;
-  }>): Promise<NativeDeviceAuthorizationOpened>;
+  getStatus(): Promise<
+    Readonly<{
+      status: 'disconnected' | 'authenticated' | 'password_change_required';
+    }>
+  >;
+  loginWithPassword(
+    input: Readonly<{
+      apiBaseUrl: string;
+      username: string;
+      password: string;
+      trustedDevice: boolean;
+    }>,
+  ): Promise<NativeCloudAuthenticationResult>;
+  forceChangePassword(
+    input: Readonly<{
+      currentPassword: string;
+      newPassword: string;
+    }>,
+  ): Promise<Readonly<{ status: 'authenticated' }>>;
+  beginDeviceAuthorization(
+    input: Readonly<{
+      apiBaseUrl: string;
+      deviceAuthorizationBaseUrl: string;
+      trustedDevice: boolean;
+    }>,
+  ): Promise<NativeDeviceAuthorizationOpened>;
   pollDeviceAuthorization(attemptId: string): Promise<NativeDeviceAuthorizationPollResult>;
   cancelDeviceAuthorization(attemptId: string): Promise<Readonly<{ cancelled: true }>>;
   signOut(): Promise<Readonly<{ success: boolean }>>;
+  cancelPendingAuthentication(): Promise<Readonly<{ cancelled: true }>>;
 }>;
 
 const ATTEMPT_ID = /^[A-Za-z0-9_-]{16,128}$/u;
@@ -47,6 +59,17 @@ export function desktopNativeCloudAuthClient(): NativeCloudAuthClient | null {
   const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke as DesktopInvoke | undefined;
   if (!invoke) return null;
   return Object.freeze({
+    async getStatus() {
+      const value = await invoke('cloud_auth_status');
+      if (
+        !isExactRecord(value, new Set(['status'])) ||
+        (value.status !== 'disconnected' &&
+          value.status !== 'authenticated' &&
+          value.status !== 'password_change_required')
+      )
+        throw resultInvalid();
+      return Object.freeze({ status: value.status });
+    },
     async loginWithPassword(input) {
       return decodeAuthenticationResult(await invoke('cloud_auth_password', input));
     },
@@ -58,17 +81,20 @@ export function desktopNativeCloudAuthClient(): NativeCloudAuthClient | null {
       return Object.freeze({ status: 'authenticated' as const });
     },
     async beginDeviceAuthorization(input) {
-      return decodeDeviceAuthorizationOpened(
-        await invoke('cloud_auth_device_begin', input),
-      );
+      return decodeDeviceAuthorizationOpened(await invoke('cloud_auth_device_begin', input));
     },
     async pollDeviceAuthorization(attemptId) {
-      return decodeDevicePollResult(
-        await invoke('cloud_auth_device_poll', { attemptId }),
-      );
+      return decodeDevicePollResult(await invoke('cloud_auth_device_poll', { attemptId }));
     },
     async cancelDeviceAuthorization(attemptId) {
       const value = await invoke('cloud_auth_device_cancel', { attemptId });
+      if (!isExactRecord(value, new Set(['cancelled'])) || value.cancelled !== true) {
+        throw resultInvalid();
+      }
+      return Object.freeze({ cancelled: true });
+    },
+    async cancelPendingAuthentication() {
+      const value = await invoke('cloud_auth_cancel_pending');
       if (!isExactRecord(value, new Set(['cancelled'])) || value.cancelled !== true) {
         throw resultInvalid();
       }
@@ -98,14 +124,7 @@ function decodeDeviceAuthorizationOpened(value: unknown): NativeDeviceAuthorizat
   if (
     !isExactRecord(
       value,
-      new Set([
-        'status',
-        'attemptId',
-        'userCode',
-        'authorizationUrl',
-        'expiresAt',
-        'interval',
-      ]),
+      new Set(['status', 'attemptId', 'userCode', 'authorizationUrl', 'expiresAt', 'interval']),
     ) ||
     value.status !== 'authorization_pending' ||
     typeof value.attemptId !== 'string' ||
@@ -136,7 +155,10 @@ function decodeDevicePollResult(value: unknown): NativeDeviceAuthorizationPollRe
     isExactRecord(value, new Set(['status', 'interval'])) &&
     integerBetween(value.interval, 1, 60)
   ) {
-    return Object.freeze({ status: 'authorization_pending', interval: value.interval });
+    return Object.freeze({
+      status: 'authorization_pending',
+      interval: value.interval,
+    });
   }
   if (
     (value.status === 'authenticated' || value.status === 'expired') &&
@@ -155,9 +177,7 @@ function secureWebUrl(value: unknown): URL | null {
   } catch {
     return null;
   }
-  const loopback = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(
-    url.hostname.toLowerCase(),
-  );
+  const loopback = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname.toLowerCase());
   if (
     (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
     url.username ||
@@ -170,7 +190,9 @@ function secureWebUrl(value: unknown): URL | null {
 }
 
 function integerBetween(value: unknown, minimum: number, maximum: number): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= minimum && (value as number) <= maximum;
+  return (
+    Number.isSafeInteger(value) && (value as number) >= minimum && (value as number) <= maximum
+  );
 }
 
 function isExactRecord(

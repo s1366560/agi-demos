@@ -1,3 +1,13 @@
+import {
+  prepareNativeKnowledgeCloudConnection,
+  requireNativeKnowledgeCloudConnectionResponse,
+  type NativeKnowledgeCloudConnectionAuthority,
+  type NativeKnowledgeCloudConnectionClient,
+  type NativeKnowledgeCloudConnectionCommand,
+  type NativeKnowledgeCloudConnectionResponse,
+  type NativeKnowledgeCloudConnectionOptions,
+} from '../features/project-knowledge/nativeKnowledgeCloudConnectionClient';
+import type { DesktopProjectMemoriesConnectionInputV2 } from './desktopProjectMemoriesOperationContractV2';
 import type {
   DesktopNativeKnowledgeProcessingHttpV2,
   NativeKnowledgeProcessingCapabilityGetter,
@@ -90,7 +100,10 @@ export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_SERVICE_V2 =
 export const DESKTOP_PROJECT_MEMORIES_AUTHORITY_VERSION_V2 = '1.0.0';
 
 export interface DesktopProjectMemoriesAuthorityV2
-  extends NativeKnowledgeSyncAuthority, Partial<DesktopNativeKnowledgeProcessingHttpV2> {
+  extends
+    NativeKnowledgeSyncAuthority,
+    Partial<DesktopNativeKnowledgeProcessingHttpV2>,
+    Partial<NativeKnowledgeCloudConnectionAuthority> {
   readonly executeCloudMemory?: <C extends CloudMemoryCommand>(
     command: C,
     options: CloudMemoryOptions,
@@ -110,6 +123,9 @@ export interface DesktopProjectMemoriesAuthorityServiceV2 {
 }
 
 export interface DesktopProjectMemoriesOperationsV2 {
+  readonly executeKnowledgeConnection: <C extends NativeKnowledgeCloudConnectionCommand>(
+    input: DesktopProjectMemoriesConnectionInputV2<C>,
+  ) => Promise<NativeKnowledgeCloudConnectionResponse<C>>;
   readonly observeNativeKnowledgeScope: (
     input: DesktopProjectMemoriesObserveScopeInputV2,
   ) => Promise<NativeKnowledgeScope>;
@@ -142,6 +158,7 @@ type AuthorityAdmissionRejectionV2 = ServiceAdmissionRejectionV2 | GenerationAct
 
 const AUTHORITY_KEYS_V2 = new Set([
   'observeScope',
+  'executeConnection',
   'load',
   'executeSync',
   'executeCloudMemory',
@@ -188,6 +205,26 @@ export function createDesktopProjectMemoriesOperationsV2(
   getCapability?: NativeKnowledgeProcessingCapabilityGetter,
 ): DesktopProjectMemoriesOperationsV2 {
   return Object.freeze({
+    executeKnowledgeConnection<C extends NativeKnowledgeCloudConnectionCommand>(
+      input: DesktopProjectMemoriesConnectionInputV2<C>,
+    ) {
+      const prepared = prepareDesktopProjectMemoriesAuthorityOperationV2({
+        kind: 'connection',
+        ...input,
+      });
+      return runDesktopProjectMemoriesAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) => {
+          if (!authority.executeConnection)
+            throw projectKnowledgeError('native_knowledge_cloud_connection_unavailable', 503);
+          return authority.executeConnection(prepared.command, {
+            expectedScope: prepared.expectedScope,
+            signal: prepared.signal,
+          });
+        },
+      );
+    },
     observeNativeKnowledgeScope(input: DesktopProjectMemoriesObserveScopeInputV2) {
       const prepared = prepareDesktopProjectMemoriesAuthorityOperationV2({
         kind: 'observe-scope',
@@ -299,6 +336,27 @@ export function createDesktopProjectMemoriesOperationsV2(
   });
 }
 
+export function createDesktopNativeKnowledgeConnectionClientV2(
+  operations: Pick<DesktopProjectMemoriesOperationsV2, 'executeKnowledgeConnection'>,
+  config: DesktopRuntimeConfig,
+): NativeKnowledgeCloudConnectionClient {
+  const operationConfig = Object.freeze({ ...config });
+  return Object.freeze({
+    async execute<C extends NativeKnowledgeCloudConnectionCommand>(
+      scope: ProjectKnowledgeScope,
+      command: C,
+      options: NativeKnowledgeCloudConnectionOptions,
+    ) {
+      return operations.executeKnowledgeConnection({
+        config: operationConfig,
+        scope,
+        command,
+        ...options,
+      });
+    },
+  });
+}
+
 export function createDesktopCloudMemoryClientV2(
   operations: Pick<DesktopProjectMemoriesOperationsV2, 'executeCloudMemory'>,
   config: DesktopRuntimeConfig,
@@ -310,7 +368,12 @@ export function createDesktopCloudMemoryClientV2(
       command: C,
       options: CloudMemoryOptions,
     ): Promise<CloudMemoryResponse<C>> {
-      return operations.executeCloudMemory({ config: operationConfig, scope, command, ...options });
+      return operations.executeCloudMemory({
+        config: operationConfig,
+        scope,
+        command,
+        ...options,
+      });
     },
   });
 }
@@ -436,6 +499,35 @@ function createRevocableProjectMemoriesAuthorityV2(
   generationDigest: string,
 ): DesktopProjectMemoriesAuthorityV2 {
   return Object.freeze({
+    ...(authority.executeConnection
+      ? {
+          async executeConnection<C extends NativeKnowledgeCloudConnectionCommand>(
+            command: C,
+            inputOptions: NativeKnowledgeCloudConnectionOptions,
+          ) {
+            const prepared = prepareNativeKnowledgeCloudConnection(command, inputOptions);
+            const current = () => {
+              requireOperationActiveV2(isOperationActive);
+              prepared.options.signal?.throwIfAborted();
+              if (prepared.options.expectedScope.digest !== generationDigest)
+                throw projectKnowledgeError('knowledge_generation_mismatch', 409);
+            };
+            current();
+            const result = await authority.executeConnection!(
+              prepared.command,
+              prepared.options,
+              current,
+            );
+            current();
+            return requireNativeKnowledgeCloudConnectionResponse(
+              result,
+              prepared.command,
+              scope,
+              prepared.options.expectedScope,
+            );
+          },
+        }
+      : {}),
     ...(authority.observeScope
       ? {
           async observeScope(input: NativeKnowledgeScopeObservationOptions) {
@@ -517,6 +609,7 @@ function requireProjectMemoriesAuthorityV2(value: unknown): DesktopProjectMemori
   if (
     !isPlainRecordV2(value) ||
     Object.keys(value).some((key) => !AUTHORITY_KEYS_V2.has(key)) ||
+    (Object.hasOwn(value, 'executeConnection') && typeof value.executeConnection !== 'function') ||
     (Object.hasOwn(value, 'observeScope') && typeof value.observeScope !== 'function') ||
     (Object.hasOwn(value, 'executeCloudMemory') &&
       typeof value.executeCloudMemory !== 'function') ||

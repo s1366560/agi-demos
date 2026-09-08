@@ -1,3 +1,4 @@
+import { desktopNativeCloudAuthClient } from '../api/nativeCloudAuthClient';
 import { createDesktopNativeKnowledgeInputsClientV2 } from './desktopNativeKnowledgeInputsClientV2';
 import {
   createDesktopTenantProvidersOperationsV2,
@@ -16,6 +17,7 @@ import { NativeMemoriesRouteContextProvider } from '../features/project-knowledg
 import { CloudMemoryRouteContextProvider } from '../features/project-knowledge/CloudMemoryRouteContext';
 import {
   createDesktopNativeKnowledgeClientV2,
+  createDesktopNativeKnowledgeConnectionClientV2,
   createDesktopProjectMemoriesClientV2,
   createDesktopProjectMemoriesOperationsV2,
   createDesktopCloudMemoryClientV2,
@@ -132,6 +134,8 @@ export function NativeMemoriesRouteProvider({
     return Object.freeze({
       native: Object.freeze({
         authority: authorities.native,
+        connectionClient: createDesktopNativeKnowledgeConnectionClientV2(operations, config),
+        cloudAuthClient: desktopNativeCloudAuthClient(),
         client: createDesktopNativeKnowledgeClientV2(operations, config),
         listClient,
         processingClient,

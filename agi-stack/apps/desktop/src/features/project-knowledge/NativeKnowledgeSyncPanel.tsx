@@ -10,11 +10,13 @@ export function NativeKnowledgeSyncPanel({
   controller,
   conflicts,
   disabled = false,
+  connectionReady = false,
 }: Readonly<{
   model: NativeKnowledgeSyncModel;
   controller: NativeKnowledgeSyncController;
   conflicts: NativeKnowledgeConflictController;
   disabled?: boolean;
+  connectionReady?: boolean;
 }>) {
   const { t } = useI18n();
   const allowed = (operation: string) => model.allowedActions.includes(operation);
@@ -69,7 +71,7 @@ export function NativeKnowledgeSyncPanel({
         {allowed('sync_pull') && allowed('sync_status') ? (
           <button
             type="button"
-            disabled={!ready || !model.status?.link}
+            disabled={!ready || !model.status?.link || !connectionReady}
             onClick={() => void controller.sync('sync_pull')}
           >
             {t('nativeSync.pull')}
@@ -78,7 +80,7 @@ export function NativeKnowledgeSyncPanel({
         {allowed('sync_push') && allowed('sync_status') ? (
           <button
             type="button"
-            disabled={!ready || !model.status?.link}
+            disabled={!ready || !model.status?.link || !connectionReady}
             onClick={() => void controller.sync('sync_push')}
           >
             {t('nativeSync.push')}

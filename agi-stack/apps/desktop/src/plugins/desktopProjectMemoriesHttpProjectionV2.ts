@@ -1,3 +1,5 @@
+import { createDesktopNativeKnowledgeConnectionHttpV2 } from './desktopNativeKnowledgeConnectionHttpV2';
+import type { NativeKnowledgeCloudConnectionAuthority } from '../features/project-knowledge/nativeKnowledgeCloudConnectionClient';
 import {
   createDesktopNativeKnowledgeProcessingHttpV2,
   type DesktopNativeKnowledgeProcessingHttpV2,
@@ -42,6 +44,7 @@ import {
 const ACTIONS_V2 = Object.freeze(['view', 'list']);
 
 export type DesktopProjectMemoriesHttpAuthorityV2 = NativeKnowledgeSyncAuthority &
+  Partial<NativeKnowledgeCloudConnectionAuthority> &
   Partial<DesktopNativeKnowledgeProcessingHttpV2> &
   Readonly<{
     executeCloudMemory?: <C extends CloudMemoryCommand>(
@@ -64,6 +67,7 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
   if (runtimeConfig.mode === 'local') {
     return Object.freeze({
       ...createDesktopProjectMemoriesLocalAuthorityV2(runtimeConfig, operationScope),
+      ...createDesktopNativeKnowledgeConnectionHttpV2(runtimeConfig, operationScope),
       ...createDesktopNativeKnowledgeProcessingHttpV2(runtimeConfig, operationScope, getCapability),
     });
   }

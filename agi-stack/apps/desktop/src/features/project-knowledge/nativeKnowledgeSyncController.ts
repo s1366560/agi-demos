@@ -30,10 +30,12 @@ export function createNativeKnowledgeSyncController({
   client,
   authority,
   onAccepted,
+  canSync = () => true,
 }: Readonly<{
   client: NativeKnowledgeClient;
   authority: NativeMemoriesAuthority;
   onAccepted?: () => void;
+  canSync?: () => boolean;
 }>) {
   const session = createNativeKnowledgeUiSession(client, authority);
   const initial = (): NativeKnowledgeSyncModel =>
@@ -135,6 +137,7 @@ export function createNativeKnowledgeSyncController({
     }
   };
   const sync = async (operation: 'sync_pull' | 'sync_push') => {
+    if (!canSync()) return;
     if (
       model.phase !== 'ready' ||
       model.recoveryRequired ||

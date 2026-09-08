@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:46a1359825c5a76ef92df7e07d7f9211bb37de2af3d3a0e638a55c316c',
-  '09769e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:257acb9b3288b3e11d45184dae016148a4bd217074f8ac0a95d6759be2',
+  '11562e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -2033,8 +2033,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '9eb9dcbc9f1da819f67ec7453efea390000fedbd5cce99492728eb309be604","entrypoint":"applyD',
   'esktopProjectMcpServersAuthorityV2","module_ref":"builtin://memstack/desktop/project',
   '-mcp-servers-authority","plugin_id":"memstack-renderer-target-hosts","plugin_version',
-  '":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:2e9a22e95a3c857',
-  '330bf7a82905b49c2f8d92cd7ce5c2fa41b60af926e09e2ab","artifact_source":"repo+typescrip',
+  '":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:1e07c957a0cc5fb',
+  'a25aee2112c0f8383ec577441ac7d5152dedfeacb9925a911","artifact_source":"repo+typescrip',
   't://agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV2.ts","',
   'contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema"',
   ',"additionalProperties":false,"properties":{"strategy":{"const":"desktop-api-fetch",',
@@ -4815,4 +4815,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:46a1359825c5a76ef92df7e07d7f9211bb37de2af3d3a0e638a55c316c09769e' as const;
+  'sha256:257acb9b3288b3e11d45184dae016148a4bd217074f8ac0a95d6759be211562e' as const;

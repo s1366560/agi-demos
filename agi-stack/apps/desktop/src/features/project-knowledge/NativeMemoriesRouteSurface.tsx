@@ -1,3 +1,5 @@
+import { NativeKnowledgeCloudConnectionPanel } from './NativeKnowledgeCloudConnectionPanel';
+import { createNativeKnowledgeCloudConnectionController } from './nativeKnowledgeCloudConnectionController';
 import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 
 import type { DesktopRouteSurfaceProps } from '../navigation/desktopRouteModule';
@@ -48,7 +50,17 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
         if (binding.authority.allowedActions.includes('list')) void list.retry();
       },
     });
+    const connection = createNativeKnowledgeCloudConnectionController({
+      client: binding.connectionClient,
+      sourceClient: binding.client,
+      authClient: binding.cloudAuthClient ?? null,
+      authority: binding.authority,
+      onAccepted: () => {
+        void sync.refresh();
+      },
+    });
     const sync = createNativeKnowledgeSyncController({
+      canSync: () => connection.getSnapshot().bound,
       client: binding.client,
       authority: binding.authority,
       onAccepted: () => {
@@ -75,8 +87,13 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
       authority: binding.authority,
       onAccepted: () => retrieval.refreshConfiguration(),
     });
-    return { list, editor, sync, conflicts, retrieval, processing };
+    return { list, editor, sync, conflicts, retrieval, processing, connection };
   }, [binding]);
+  const connection = useSyncExternalStore(
+    controllers.connection.subscribe,
+    controllers.connection.getSnapshot,
+    controllers.connection.getSnapshot,
+  );
   const list = useSyncExternalStore(
     controllers.list.subscribe,
     controllers.list.getSnapshot,
@@ -108,6 +125,8 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
     controllers.processing.getSnapshot,
   );
   useLayoutEffect(() => {
+    controllers.connection.activate();
+    void controllers.connection.refresh();
     controllers.editor.activate();
     controllers.sync.activate();
     controllers.conflicts.activate();
@@ -118,6 +137,7 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
     if (controllers.editor.getSnapshot().allowedActions.includes('list'))
       void controllers.list.load(binding.authority.scope);
     return () => {
+      controllers.connection.stop();
       controllers.editor.stop();
       controllers.list.stop();
       controllers.sync.stop();
@@ -150,7 +170,15 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
           }}
         />
       </fieldset>
+      {binding.connectionClient && binding.authority.allowedActions.includes('sync_status') ? (
+        <NativeKnowledgeCloudConnectionPanel
+          model={connection}
+          controller={controllers.connection}
+          disabled={editorLocked || conflictLocked || processingLocked || syncLocked}
+        />
+      ) : null}
       <NativeKnowledgeSyncPanel
+        connectionReady={connection.bound}
         model={sync}
         controller={controllers.sync}
         conflicts={controllers.conflicts}

@@ -13,6 +13,8 @@ test('native Cloud auth client exposes only token-free command results', async (
       core: {
         async invoke(command, args) {
           commands.push({ command, args });
+          if (command === 'cloud_auth_status') return { status: 'password_change_required' };
+          if (command === 'cloud_auth_cancel_pending') return { cancelled: true };
           if (command === 'cloud_auth_password') return { status: 'authenticated' };
           if (command === 'cloud_auth_device_begin') {
             return {
@@ -38,6 +40,8 @@ test('native Cloud auth client exposes only token-free command results', async (
   try {
     const client = desktopNativeCloudAuthClient();
     assert.ok(client);
+    assert.deepEqual(await client.getStatus(), { status: 'password_change_required' });
+    assert.deepEqual(await client.cancelPendingAuthentication(), { cancelled: true });
     assert.deepEqual(
       await client.loginWithPassword({
         apiBaseUrl: 'https://api.memstack.test',
@@ -70,6 +74,8 @@ test('native Cloud auth client exposes only token-free command results', async (
     assert.deepEqual(
       commands.map(({ command }) => command),
       [
+        'cloud_auth_status',
+        'cloud_auth_cancel_pending',
         'cloud_auth_password',
         'cloud_auth_device_begin',
         'cloud_auth_device_poll',
@@ -96,6 +102,7 @@ test('native Cloud auth client rejects credential-bearing or malformed main resu
     },
   };
   try {
+    await assert.rejects(desktopNativeCloudAuthClient().getStatus(), /cloud_auth_result_invalid/u);
     await assert.rejects(
       desktopNativeCloudAuthClient().loginWithPassword({
         apiBaseUrl: 'https://api.memstack.test',

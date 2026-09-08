@@ -1,3 +1,5 @@
+import type { NativeCloudAuthClient } from '../../api/nativeCloudAuthClient';
+import type { NativeKnowledgeCloudConnectionClient } from './nativeKnowledgeCloudConnectionClient';
 import type { NativeKnowledgeProcessingInputsClient } from './nativeKnowledgeProcessingInputs';
 import { createContext, useContext } from 'react';
 
@@ -11,6 +13,8 @@ import type { ProjectMemoriesClient } from './projectMemoriesClient';
 
 export type NativeMemoriesRouteBinding = Readonly<{
   authority: NativeMemoriesAuthority;
+  connectionClient?: NativeKnowledgeCloudConnectionClient;
+  cloudAuthClient?: NativeCloudAuthClient | null;
   client: NativeKnowledgeClient;
   listClient: ProjectMemoriesClient;
   processingClient?: NativeKnowledgeProcessingClient;
