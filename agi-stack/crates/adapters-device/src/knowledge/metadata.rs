@@ -74,6 +74,21 @@ fn trusted_current(
     project: &str,
     id: &str,
 ) -> KnowledgeResult<Map<String, Value>> {
+    let exact: Option<String> = tx
+        .query_row(
+            "SELECT m.metadata_json FROM knowledge_sync_outbox_metadata m
+         JOIN knowledge_processing_changes c ON c.sequence=m.sequence
+         JOIN knowledge_memories d ON d.tenant_id=c.tenant_id AND d.project_id=c.project_id
+           AND d.id=c.memory_id AND d.revision=c.revision
+         WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.memory_id=?3",
+            params![tenant, project, id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(storage)?;
+    if let Some(exact) = exact {
+        return retained(Some(exact), None);
+    }
     let explicit: Option<String> = tx
         .query_row(
             "SELECT m.metadata_json FROM knowledge_sync_outbox_metadata m

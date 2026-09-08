@@ -647,3 +647,59 @@ fn metadata_upgrade_preserves_prepared_bytes_and_recovers_explicit_pending_inten
         );
     });
 }
+
+#[test]
+fn metadata_upgrade_keeps_exact_current_revision_intent_after_acknowledgement() {
+    block_on(async {
+        let db = Database::new();
+        let repo = db.open();
+        init(&repo).await;
+        let sequence = repo.changes(&scope(), 0, 10).await.unwrap()[0].sequence;
+        let conn = rusqlite::Connection::open(&db.0).unwrap();
+        conn.execute(
+            "INSERT INTO knowledge_sync_outbox_metadata VALUES(?1,?2)",
+            rusqlite::params![sequence, json!({"acknowledged_local":true}).to_string()],
+        )
+        .unwrap();
+        let push = repo
+            .prepare_push(&scope(), &target())
+            .await
+            .unwrap()
+            .unwrap();
+        repo.accept_push_receipt(&scope(), &target(), sequence, applied(&push), None)
+            .await
+            .unwrap();
+        assert!(repo.sync_outbox(&scope(), 0, 10).await.unwrap().is_empty());
+        drop(repo);
+        // A later trusted cloud result may advance the baseline while an explicit
+        // local reconciliation is still pending. It is not the local revision.
+        let mut baseline = applied(&push)["receipt"]["version"].clone();
+        baseline["revision"] = json!(2);
+        baseline["content"]["metadata"] = json!({"later_remote":true});
+        conn.execute(
+            "UPDATE knowledge_sync_remote_versions SET version_json=?1",
+            [baseline.to_string()],
+        )
+        .unwrap();
+        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
+        let repo = db.open();
+        assert_eq!(
+            serde_json::to_value(
+                repo.get(&scope(), "memory")
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .metadata
+            )
+            .unwrap(),
+            json!({"acknowledged_local":true})
+        );
+        let retained: String = conn
+            .query_row("SELECT request_json FROM knowledge_sync_pushes", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(retained, push.request_json);
+        assert!(repo.sync_outbox(&scope(), 0, 10).await.unwrap().is_empty());
+    });
+}
