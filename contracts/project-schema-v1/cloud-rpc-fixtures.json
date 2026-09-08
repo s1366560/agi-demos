@@ -1,0 +1,128 @@
+[
+  {
+    "name": "read_empty",
+    "definition": "readRequest",
+    "value": {},
+    "valid": true
+  },
+  {
+    "name": "read_actor_rejected",
+    "definition": "readRequest",
+    "value": {
+      "actor_id": "owner"
+    },
+    "valid": false
+  },
+  {
+    "name": "replace_full_snapshot",
+    "definition": "replaceRequest",
+    "value": {
+      "document": {
+        "format_version": 1,
+        "tenant_id": "tenant-a",
+        "project_id": "project-a",
+        "schema_id": "00000000-0000-4000-8000-000000000001",
+        "revision": 2,
+        "deleted": false,
+        "entity_types": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "人物",
+            "description": "",
+            "schema": {
+              "properties": {
+                "age": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "status": "ENABLED",
+            "source": "user"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "name": "组织",
+            "description": "",
+            "schema": {},
+            "status": "ENABLED",
+            "source": "user"
+          }
+        ],
+        "edge_types": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "name": "成员",
+            "description": "",
+            "schema": {},
+            "status": "ENABLED",
+            "source": "user"
+          }
+        ],
+        "mappings": [
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "source_type_id": "00000000-0000-4000-8000-000000000002",
+            "target_type_id": "00000000-0000-4000-8000-000000000003",
+            "edge_type_id": "00000000-0000-4000-8000-000000000004",
+            "status": "ENABLED",
+            "source": "user"
+          }
+        ],
+        "tombstones": []
+      },
+      "expected_revision": 1,
+      "change_id": "00000000-0000-4000-8000-999999999999"
+    },
+    "valid": true
+  },
+  {
+    "name": "receipt_actor_implicit",
+    "definition": "receiptRequest",
+    "value": {
+      "schema_id": "00000000-0000-4000-8000-000000000001",
+      "change_id": "00000000-0000-4000-8000-999999999999"
+    },
+    "valid": true
+  },
+  {
+    "name": "receipt_actor_rejected",
+    "definition": "receiptRequest",
+    "value": {
+      "schema_id": "00000000-0000-4000-8000-000000000001",
+      "change_id": "00000000-0000-4000-8000-999999999999",
+      "actor_id": "owner"
+    },
+    "valid": false
+  },
+  {
+    "name": "history_initial",
+    "definition": "historyRequest",
+    "value": {
+      "schema_id": "00000000-0000-4000-8000-000000000001",
+      "after_revision": 0,
+      "limit": 100
+    },
+    "valid": true
+  },
+  {
+    "name": "history_limit_overflow",
+    "definition": "historyRequest",
+    "value": {
+      "schema_id": "00000000-0000-4000-8000-000000000001",
+      "after_revision": 0,
+      "limit": 101
+    },
+    "valid": false
+  },
+  {
+    "name": "history_cursor_negative",
+    "definition": "historyRequest",
+    "value": {
+      "schema_id": "00000000-0000-4000-8000-000000000001",
+      "after_revision": -1,
+      "limit": 1
+    },
+    "valid": false
+  }
+]

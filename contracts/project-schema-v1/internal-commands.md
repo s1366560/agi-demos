@@ -269,3 +269,64 @@ unrelated ORM work, bootstrap races, malformed raw JSON, independent SQL
 materialization, receipt immutability, commit-time drift and migration roundtrip.
 This is cloud HTTP command support only: schema enrollment, native commands,
 Memory synchronization and remote transport remain outside M1.
+
+## M2 cloud full-document transport
+
+Four authenticated POST routes under `/api/v1/projects/{project_id}/schema/document`
+expose the existing full-document authority. `cloud-rpc.schema.json` defines their
+closed request/response shapes: `read` takes `{}`; `replace` takes `document`,
+`expected_revision`, `change_id`; `receipt` takes `schema_id`, `change_id`; `history`
+takes `schema_id`, `after_revision`, `limit`. Actor and actual tenant come from the
+request-pinned schema operation. No body-supplied identity or alternate target is accepted.
+
+Read returns an accepted document or null for legacy plus the existing cloud knowledge
+sync generation observation. Read may carry the optional generation condition; all
+other operations require `X-Memstack-Knowledge-Sync-Generation`. Missing, malformed and
+mismatched conditions return 428, 400 and 412. These operations do not require Memory
+sync enrollment and do not initialize a schema. Generation JSON receives duplicate-key,
+nonfinite and Unicode validation before descriptor parsing. Existing live pinned cloud
+generation semantics apply; this transport does not substitute native lease semantics.
+
+Raw request envelopes reject duplicate fields, nonfinite numbers, invalid UTF-8 or
+surrogates, unknown fields, excessive nesting and payloads above 2 MiB. Their typed
+validation failures return 422 `project_schema_transport_invalid`. Documents retain
+their 1 MiB structural bound. Full replacement freezes supplied array order in request
+identity and delegates atomic CAS to `SqlProjectSchemaCommands`; it never decomposes a
+snapshot into per-item M1 calls. Legacy replacement, stale revision, terminal or invalid
+successor, identity mismatch, reused change ID and legacy-unrepresentable snapshots
+return typed 409 conflicts. The shared bootstrap/M1/full-replace change namespace remains
+unchanged. Cross-scope document input returns 422; unauthorized access returns 403.
+
+Replace and actor-scoped receipt lookup return the exact stored cloud receipt JSON bytes.
+Missing receipt lookup returns 404. Cloud receipt fields remain `schema_id`, `revision`,
+`sequence`, `change_id`, `document`; they are not rewritten into native's distinct receipt
+shape. An exact replay returns the original accepted snapshot even after newer writes or
+terminal deletion. A current read is not an acknowledgement. Future synchronization must
+retain a source/destination receipt pair with independent revisions, not replace it with
+a newer head or silently rebase a failed CAS.
+
+History is project-readable across writers, under the same project lock used by commands.
+It returns a same-transaction `upper_revision`, contiguous `receipts`,
+`next_after_revision`, and `has_more`. `limit` is an integer from 1 through 100; the cursor
+is an integer from zero through the locked upper revision. The entire serialized response
+is at most 2 MiB, returning only a complete prefix. Admission reserves the longest cursor
+and boolean envelope before accepting each receipt, then checks final bytes. Stored
+receipt bytes remain intact inside the page. Empty and terminal histories are supported;
+legacy history returns active-required. Missing rows, revision/sequence disagreement,
+scope mismatch or malformed stored receipts are internal failures, never client 4xx
+validation errors. Every query reauthorizes after locking and before return.
+
+The operation reuses M1's factory-bound isolated sessions and authorization, so request
+ORM state is never flushed. There are no new tables, migrations, bootstrap endpoint,
+outbox, binding mechanism, transport client, scheduler, enrollment or activation changes.
+Future schema sync must reuse the verified project association and trusted transport,
+preserve one logical schema identity, and explicitly resolve independently active heads,
+missing bootstrap/history and tombstone lineage. Latest-snapshot copying and revision
+renumbering are not valid substitutes for that later protocol.
+
+M2 rejects `X-Expected-Revision`, `Idempotency-Key`,
+`X-Project-Schema-Expected-Revision`, and `X-Project-Schema-Change-Id`, including
+duplicate occurrences, with 422 transport-invalid. The closed body is the sole CAS and
+change-identity source. History cursors require nonnegative integer JSON tokens: `-0`,
+`0.0`, `0e0`, and booleans are invalid. This envelope rule does not change opaque numeric
+values inside document JSON Schema objects.

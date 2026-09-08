@@ -21,6 +21,9 @@ from src.application.schemas.schema import (
 from src.domain.model.project_schema.http_mutations import SchemaHttpReceipt
 from src.domain.model.project_schema.validation import ProjectSchemaError
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.schema_documents import (
+    router as document_router,
+)
 from src.infrastructure.adapters.primary.web.schema_application_authority_v2 import (
     SchemaApplicationAuthorityV2,
     schema_application_authority_dependency_v2,
@@ -39,6 +42,7 @@ from src.infrastructure.plugins.v2.schema_services import (
 )
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/schema", tags=["schema"])
+router.include_router(document_router)
 
 
 async def _schema_call[ResultT](operation: Awaitable[ResultT]) -> ResultT:

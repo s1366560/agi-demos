@@ -34,6 +34,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     EntityType,
     UserProject,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_project_schema_commands import (
+    SqlProjectSchemaCommands,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_project_schema_http_commands import (
     SqlProjectSchemaHttpCommands,
 )
@@ -43,6 +46,7 @@ from src.infrastructure.adapters.secondary.schema.active_schema_reads import (
     require_legacy_schema,
 )
 from src.infrastructure.plugins.v2.schema_authorization import SqlProjectSchemaAuthorizationV2
+from src.infrastructure.plugins.v2.schema_document_services import SchemaDocumentServicesV2
 
 from .runtime import (
     ContextV2,
@@ -310,6 +314,15 @@ class SchemaApplicationServicesV2:
     authorization: ProjectSchemaAuthorization
     scope: ProjectSchemaScope
     mutations: SqlProjectSchemaHttpCommands
+
+    @property
+    def documents(self) -> SchemaDocumentServicesV2:
+        return SchemaDocumentServicesV2(
+            commands=SqlProjectSchemaCommands(
+                sessions=self.mutations.sessions, authorization=self.authorization
+            ),
+            scope=self.scope,
+        )
 
     async def _authorize(self, *, user_id: str, project_id: str, write: bool) -> None:
         if (user_id, project_id) != (self.scope.actor_id, self.scope.project_id):

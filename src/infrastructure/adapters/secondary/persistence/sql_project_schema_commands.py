@@ -1,7 +1,7 @@
-"""Unregistered internal commands with explicit authorization and atomic commit boundaries.
+"""Full-document commands with explicit authorization and atomic commit boundaries.
 
-No HTTP route, dynamic-schema writer or plugin calls this executor yet. The supplied
-factory creates an isolated command session; unrelated caller ORM state is never flushed.
+The operation-owned factory supplies isolated sessions for the cloud document transport;
+unrelated caller ORM state is never flushed. Bootstrap remains an internal operation.
 """
 
 from __future__ import annotations
@@ -24,8 +24,13 @@ from src.domain.model.project_schema.commands import (
     require_legacy_representable,
 )
 from src.domain.model.project_schema.document import ProjectSchemaDocument
+from src.domain.model.project_schema.transport import SchemaHistoryQuery, SchemaReceiptQuery
 from src.domain.model.project_schema.validation import ProjectSchemaError
 from src.domain.ports.services.project_schema_authorization import ProjectSchemaAuthorization
+from src.infrastructure.adapters.secondary.persistence.project_schema_history import (
+    exact_receipt,
+    receipt_history,
+)
 from src.infrastructure.adapters.secondary.persistence.project_schema_models import (
     ProjectSchemaHeadModel,
 )
@@ -129,6 +134,24 @@ class SqlProjectSchemaCommands:
             )
             await self.authorization.authorize(scope, ProjectSchemaAction.READ)
         return document
+
+    async def receipt(
+        self, scope: ProjectSchemaScope, query: SchemaReceiptQuery
+    ) -> ProjectSchemaReceipt | None:
+        async with self.sessions() as db, db.begin():
+            await self._start(db, scope, ProjectSchemaAction.READ)
+            await self.authorization.authorize(scope, ProjectSchemaAction.READ)
+            result = await exact_receipt(db, scope, query)
+            await self.authorization.authorize(scope, ProjectSchemaAction.READ)
+        return result
+
+    async def history(self, scope: ProjectSchemaScope, query: SchemaHistoryQuery) -> str:
+        async with self.sessions() as db, db.begin():
+            await self._start(db, scope, ProjectSchemaAction.READ)
+            await self.authorization.authorize(scope, ProjectSchemaAction.READ)
+            result = await receipt_history(db, scope, query)
+            await self.authorization.authorize(scope, ProjectSchemaAction.READ)
+        return result
 
     async def bootstrap(
         self, scope: ProjectSchemaScope, command: BootstrapProjectSchema

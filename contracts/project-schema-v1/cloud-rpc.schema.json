@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:memstack:project-schema:cloud-rpc:v1",
+  "title": "Cloud ProjectSchema full-document transport v1",
+  "$comment": "Select the route-specific $defs entry. Raw JSON duplicate keys, nonfinite numbers and invalid Unicode are rejected before typed parsing. Both request and response envelope limits are 2097152 UTF-8 bytes; document constraints remain normative. Stored cloud receipt JSON bytes are preserved, not converted to the native receipt shape. History receipt revision/sequence must be the contiguous prefix after after_revision and at most upper_revision. Actor is authenticated, never caller supplied. Read optionally observes the existing generation header; all other routes require it. No public cloud bootstrap.",
+  "$defs": {
+    "readRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {}
+    },
+    "replaceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "expected_revision",
+        "change_id"
+      ],
+      "properties": {
+        "document": {
+          "$ref": "urn:memstack:project-schema:document:v1"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "x-integerToken": true
+        },
+        "change_id": {
+          "$ref": "urn:memstack:project-schema:document:v1#/$defs/uuid"
+        }
+      }
+    },
+    "receiptRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id",
+        "change_id"
+      ],
+      "properties": {
+        "schema_id": {
+          "$ref": "urn:memstack:project-schema:document:v1#/$defs/uuid"
+        },
+        "change_id": {
+          "$ref": "urn:memstack:project-schema:document:v1#/$defs/uuid"
+        }
+      }
+    },
+    "historyRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id",
+        "after_revision",
+        "limit"
+      ],
+      "properties": {
+        "schema_id": {
+          "$ref": "urn:memstack:project-schema:document:v1#/$defs/uuid"
+        },
+        "after_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "x-integerToken": true
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "x-integerToken": true
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id",
+        "revision",
+        "sequence",
+        "change_id",
+        "document"
+      ],
+      "properties": {
+        "schema_id": {
+          "$ref": "urn:memstack:project-schema:document:v1#/$defs/uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "x-integerToken": true
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "x-integerToken": true
+        },
+        "change_id": {
+          "$ref": "urn:memstack:project-schema:document:v1#/$defs/uuid"
+        },
+        "document": {
+          "$ref": "urn:memstack:project-schema:document:v1"
+        }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "descriptor"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "1.0.0"
+        },
+        "descriptor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profile_id",
+            "generation",
+            "digest"
+          ],
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "readResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "generation"
+      ],
+      "properties": {
+        "document": {
+          "oneOf": [
+            {
+              "$ref": "urn:memstack:project-schema:document:v1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generation": {
+          "$ref": "#/$defs/generation"
+        }
+      }
+    },
+    "historyResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id",
+        "upper_revision",
+        "next_after_revision",
+        "has_more",
+        "receipts"
+      ],
+      "properties": {
+        "schema_id": {
+          "$ref": "urn:memstack:project-schema:document:v1#/$defs/uuid"
+        },
+        "upper_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "x-integerToken": true
+        },
+        "next_after_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "x-integerToken": true
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "receipts": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/receipt"
+          }
+        }
+      }
+    }
+  }
+}
