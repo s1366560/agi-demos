@@ -201,3 +201,38 @@ is stale. This run is not a green full-suite or release gate. Log:
 `/tmp/desktop-graph-22219932c-full.log`. Graph interactions, metadata/schema/entity
 synchronization, Agent source citation and the remaining release scenarios still
 require their own evidence. The default knowledge release remains closed.
+
+## Web graph provenance with persisted QA data
+
+At `f73439066`, the isolated QA API was restarted with the production graph read
+routes admitted. The declared fixture was seeded through the public Neo4j
+persistence adapter into the dedicated loopback QA graph, after validating the
+existing QA project and memory through SQL repositories. No memory, revision,
+sync cursor or profile digest was changed by this fixture operation. The fixture
+tests passed 15/15 on this main revision.
+
+The real Web client loaded five nodes and seven edges. Canvas selection and
+keyboard activation of the accessible relationship list verified:
+
+- Distinct same-name entities retain their UUIDs and directed endpoints; selecting
+  entity B shows incoming A-to-B and outgoing B-to-A relationships correctly.
+- The linked source reads `QA_GRAPH_CAPTURE_V1` through its exact UUID. Opening
+  the separately labeled current memory shows revision 5 and `WEB_SYNC_BODY_V3`.
+- Selecting a missing source after a valid source clears the old source content
+  and removes the current-memory link.
+- The reverse relationship reads `QA_GRAPH_UNLINKED_V1` and offers no fabricated
+  current-memory link. Community membership has no recorded source reference.
+- The self relationship appears once in entity A's adjacency.
+
+Local evidence is `/tmp/cloud-graph-fixture-f73439066.json`,
+`/tmp/cloud-graph-fixture-f73439066.log`, and `/tmp/web-graph-*-f73439066.txt`
+(captured, current-memory, forward-source, missing-source, directed-neighbors,
+unlinked-source, membership and self-adjacency).
+
+These observations prove graph transport and provenance browsing with a declared
+fixture, not extraction or community generation. Native graph acceptance and the
+populated native failure/retry journey remain pending: the current Computer Use
+capture showed inconsistent screenshot/accessibility state and no verified result
+from its attempted settings actions. No Provider endpoint was changed. GitNexus
+change detection remains unavailable; this documentation records the observed
+UI and completed tests without claiming graph-analysis or release-gate success.
