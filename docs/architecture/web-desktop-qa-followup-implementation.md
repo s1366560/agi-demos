@@ -907,3 +907,26 @@ PostgreSQL HTTP tests passed (`KNOWLEDGE_SYNC_POSTGRES_TESTS=1` against
 online create/mutation suites), 335 memory unit regressions passed, and
 Ruff, format, mypy and pyright are clean on the changed files. No migration
 and no enrollment exposure; rollback is the single cherry-pick revert.
+
+I3.22 integrates `codex/knowledge-processing-worker` (cherry-picked as
+`1e8654b4e`, `b10808b04`, `fb1aa03f4`, `b41453b45`, `473fb5650`;
+conflict-free; `codex/knowledge-cosine-ranking` is a zero-diff duplicate and
+stays archived). Local knowledge processing gains its integrity spine: an
+audited single-attempt extraction action over the real desktop Provider
+binding (claim -> validated LLM tool submission -> durable audit ->
+projection publish, schema v9) with the legacy unaudited completion path
+fenced off; audited entity/relationship projection reads with honest
+literal-substring search; a provenance-verified embedding client (exact
+model echo, single finite vector, redirect/timeout bounds); versioned
+vector index builds with lease lifecycle (schema v10); and strict cosine
+ranking with deterministic tie-breaks. Every entry point remains internal
+dead code behind the closed release contract; no worker loop, RPC route,
+UI, semantic query or community detection is wired yet. Validation: full
+sidecar suite 716/716 (18 new processing/retrieval lifecycle tests included
+with zero ignored), affected core/device/http-llm suites green, strict
+all-target Clippy (`-D warnings`) passed for core, adapters-device,
+adapters-http-llm and the sidecar, and the plugin protocol generator check
+passed after the branch's catalog re-digest. Rollback: revert the five
+cherry-picks together; schema v9/v10 databases and their backups are
+retained, and older binaries refuse the newer schema instead of rewriting
+it.
