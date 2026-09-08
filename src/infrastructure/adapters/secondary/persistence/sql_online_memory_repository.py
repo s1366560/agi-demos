@@ -10,12 +10,18 @@ from src.domain.model.knowledge_sync.contracts import (
     MemorySyncMutation,
 )
 from src.domain.model.knowledge_sync.online_patch import MemoryOnlinePatch
-from src.domain.ports.repositories.online_memory_repository import OnlineMemoryContext
+from src.domain.ports.repositories.online_memory_repository import (
+    OnlineMemoryCapabilities,
+    OnlineMemoryContext,
+)
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
     KnowledgeSyncEnrollmentModel as Enrollment,
     KnowledgeSyncTombstoneModel as Tombstone,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project
+from src.infrastructure.adapters.secondary.persistence.online_memory_capabilities import (
+    read_online_memory_capabilities,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_knowledge_sync_repository import (
     SqlKnowledgeSyncRepository,
 )
@@ -25,6 +31,11 @@ class SqlOnlineMemoryRepository:
     def __init__(self, db: AsyncSession) -> None:
         super().__init__()
         self.db = db
+
+    async def capabilities(
+        self, actor_id: str, project_id: str, objects: tuple[tuple[str, int], ...]
+    ) -> OnlineMemoryCapabilities | None:
+        return await read_online_memory_capabilities(self.db, actor_id, project_id, objects)
 
     async def open(self, actor_id: str, project_id: str) -> OnlineMemoryContext:
         # Authorization is deliberately left to each path: legacy policy is

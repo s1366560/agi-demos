@@ -41,6 +41,11 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.i18n import gettext as _
 
+from .memory_command_capabilities import (
+    MemoryCommandCapabilitiesResponse,
+    command_capabilities_response,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -490,6 +495,7 @@ class MemoryListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    command_capabilities: MemoryCommandCapabilitiesResponse | None = None
 
 
 class MemoryUpdate(BaseModel):
@@ -810,11 +816,19 @@ async def list_memories(
     result = await db.execute(refresh_select_statement(query))
     memories = result.scalars().all()
 
+    response_memories = [MemoryResponse.from_orm(m) for m in memories]
+    command_capabilities = await command_capabilities_response(
+        memory_application,
+        str(current_user.id),
+        project_id,
+        tuple((memory.id, memory.version) for memory in response_memories),
+    )
     return MemoryListResponse(
-        memories=[MemoryResponse.from_orm(m) for m in memories],
+        memories=response_memories,
         total=total or 0,
         page=page,
         page_size=page_size,
+        command_capabilities=command_capabilities,
     )
 
 

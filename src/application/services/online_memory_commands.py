@@ -12,6 +12,7 @@ from src.domain.model.knowledge_sync.contracts import (
 )
 from src.domain.model.knowledge_sync.online_patch import MemoryOnlinePatch
 from src.domain.ports.repositories.online_memory_repository import (
+    OnlineMemoryCapabilities,
     OnlineMemoryContext,
     OnlineMemoryRepository,
 )
@@ -21,6 +22,11 @@ class OnlineMemoryCommands:
     def __init__(self, repository: OnlineMemoryRepository) -> None:
         super().__init__()
         self.repository = repository
+
+    async def capabilities(
+        self, actor_id: str, project_id: str, objects: tuple[tuple[str, int], ...]
+    ) -> OnlineMemoryCapabilities | None:
+        return await self.repository.capabilities(actor_id, project_id, objects)
 
     async def open(self, actor_id: str, project_id: str) -> OnlineMemoryContext:
         return await self.repository.open(actor_id, project_id)
