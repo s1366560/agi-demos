@@ -14,13 +14,20 @@ struct RetainedSession {
 
 impl Drop for RetainedSession {
     fn drop(&mut self) {
-        // SAFETY: these are test-owned processes; the leader stays unreaped until here.
-        unsafe {
-            if self.descendant > 1 {
-                libc::kill(self.descendant, libc::SIGKILL);
+        // Successful cleanup may already have reaped indirect children. Revalidate
+        // their current session before fallback signalling so reused PIDs are skipped.
+        for pid in group_members(self.member)
+            .unwrap_or_default()
+            .into_iter()
+            .chain([self.member, self.descendant])
+        {
+            // SAFETY: the retained leader prevents reuse of this session identity.
+            if pid > 1 && unsafe { libc::getsid(pid) } == self.leader {
+                unsafe { libc::kill(pid, libc::SIGKILL) };
             }
-            libc::kill(-self.member, libc::SIGKILL);
-            libc::kill(self.member, libc::SIGKILL);
+        }
+        // SAFETY: the direct leader remains unreaped, retaining its numeric identity.
+        unsafe {
             libc::kill(-self.leader, libc::SIGKILL);
             libc::kill(self.leader, libc::SIGKILL);
             libc::waitpid(self.leader, std::ptr::null_mut(), 0);
