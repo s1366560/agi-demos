@@ -37,7 +37,7 @@ export const nativeKnowledgeRetrievalEnUS = {
   'nativeRetrieval.entities': 'Extracted entities',
   'nativeRetrieval.relationships': 'Extracted relationships',
   'nativeRetrieval.literalHelp':
-    'Case-sensitive substring matching in the original title or content.',
+    'Case-sensitive substring matching in the title or content of current source revisions with successfully applied extraction. New or edited memories must be extracted manually before they can appear here.',
   'nativeRetrieval.semanticHelp':
     'Uses the selected embedding configuration and cosine similarity. Scores are not quality verdicts.',
   'nativeRetrieval.entityHelp': 'Browse current extracted entities. This is not semantic search.',
@@ -47,7 +47,8 @@ export const nativeKnowledgeRetrievalEnUS = {
   'nativeRetrieval.submit': 'Retrieve',
   'nativeRetrieval.next': 'Load next page',
   'nativeRetrieval.loading': 'Loading knowledge…',
-  'nativeRetrieval.noResults': 'No matching records were returned.',
+  'nativeRetrieval.noResults':
+    'No matching records were returned. Retrieval includes only current source revisions with successfully applied extraction. Check extraction status; new or edited memories require manual extraction.',
   'nativeRetrieval.unavailable':
     'This retrieval operation is not available for the current context.',
   'nativeRetrieval.failed':
@@ -116,7 +117,8 @@ export const nativeKnowledgeRetrievalZhCN: Record<
   'nativeRetrieval.semantic': '语义相似度',
   'nativeRetrieval.entities': '已提取实体',
   'nativeRetrieval.relationships': '已提取关系',
-  'nativeRetrieval.literalHelp': '在原始标题或正文中执行区分大小写的子串匹配。',
+  'nativeRetrieval.literalHelp':
+    '仅在当前版本已成功提取的来源标题或正文中执行区分大小写的子串匹配。新建或编辑记忆后，需手动提取才能在此检索。',
   'nativeRetrieval.semanticHelp': '使用选定的向量配置与余弦相似度，分数不代表质量判断。',
   'nativeRetrieval.entityHelp': '浏览当前已提取实体，此操作不执行语义检索。',
   'nativeRetrieval.relationshipHelp': '使用明确的来源引用浏览当前已提取关系。',
@@ -124,7 +126,8 @@ export const nativeKnowledgeRetrievalZhCN: Record<
   'nativeRetrieval.submit': '检索',
   'nativeRetrieval.next': '加载下一页',
   'nativeRetrieval.loading': '正在加载知识…',
-  'nativeRetrieval.noResults': '未返回匹配记录。',
+  'nativeRetrieval.noResults':
+    '未返回匹配记录。检索仅包含当前版本已成功提取的来源，请检查提取状态；新建或编辑记忆后需手动提取。',
   'nativeRetrieval.unavailable': '当前上下文暂不可使用此检索操作。',
   'nativeRetrieval.failed': '查询未完成，请刷新配置或重新提交。',
   'nativeRetrieval.contextChanged': '当前上下文已变化，原有查询和结果已清空。',

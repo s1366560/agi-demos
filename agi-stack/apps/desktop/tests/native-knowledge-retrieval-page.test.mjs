@@ -162,3 +162,19 @@ test('entity and relationship browsing labels do not describe semantic matching'
   assert.match(relationships, /exact source references/);
   assert.doesNotMatch(relationships, /Query text|Cosine similarity/);
 });
+
+// A saved raw memory is not yet an eligible retrieval source.
+test('literal help and an empty result explain manual extraction of the current revision', () => {
+  const html = retrieval({
+    ...model,
+    phase: 'results',
+    result: { operation: 'text', result: { items: [], next_cursor: null } },
+  });
+  assert.match(
+    html,
+    /title or content of current source revisions with successfully applied extraction/,
+  );
+  assert.match(html, /New or edited memories must be extracted manually/);
+  assert.match(html, /No matching records were returned/);
+  assert.match(html, /Check extraction status/);
+});

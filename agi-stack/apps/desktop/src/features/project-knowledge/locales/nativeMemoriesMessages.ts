@@ -85,7 +85,7 @@ export const nativeMemoriesEnUS = {
   'nativeMemories.deleteConfirm': 'Delete this memory? You are confirming the version shown here.',
   'nativeMemories.saving': 'Saving…',
   'nativeMemories.accepted':
-    'Change saved. Extraction, indexing and synchronization may still be pending.',
+    'Change saved. Saving does not automatically run extraction, indexing or synchronization. Start available operations manually.',
   'nativeMemories.failed': 'The memory could not be loaded or saved. Reload it and try again.',
   'nativeMemories.conflict': 'This memory changed. Reload the latest version before editing again.',
   'nativeMemories.contextChanged':
@@ -166,7 +166,8 @@ export const nativeMemoriesZhCN: Record<keyof typeof nativeMemoriesEnUS, string>
   'nativeMemories.contentType': '内容类型',
   'nativeMemories.deleteConfirm': '确定删除此记忆？此次确认针对当前显示的版本。',
   'nativeMemories.saving': '正在保存…',
-  'nativeMemories.accepted': '变更已保存，提取、索引和同步可能仍在进行。',
+  'nativeMemories.accepted':
+    '变更已保存。保存不会自动执行提取、索引或同步，请手动发起当前可用的操作。',
   'nativeMemories.failed': '无法加载或保存此记忆，请重新加载后再试。',
   'nativeMemories.conflict': '此记忆已发生变化，请重新加载最新版本后再编辑。',
   'nativeMemories.contextChanged': '当前上下文已变化，草稿已清空，请重新加载后继续。',

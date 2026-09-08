@@ -95,7 +95,7 @@ test('delete confirmation shows the fetched record and revision before the destr
   assert.match(html, /<button type="button">Delete<\/button>/);
   assert.match(
     page({ ...editor, notice: 'accepted' }),
-    /Extraction, indexing and synchronization may still be pending/,
+    /Saving does not automatically run extraction, indexing or synchronization/,
   );
 });
 
