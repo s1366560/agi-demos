@@ -872,3 +872,25 @@ work-in-progress on top of those branches (embedding/index/semantic-query
 worker; conflict editor and sync panel UI); they are completed and committed
 as separate batches before the I3 worker-loop wiring. None of these batches
 opens a release gate.
+
+I4.25 integrates `codex/automation-readiness-slice` (cherry-picked as
+`a84398137`, `67b8b32de`, `042eb1bde`; conflict-free). The legacy Python
+scheduler now admits every fire through `agistack_legacy_cron_admissions`
+(Alembic `b36acb66634d`): admission requires the owner row at
+`owner_kind='python'`, execution claims a per-phase nonce, and only a real
+terminal outcome settles the row. The Rust owner acquire SQL fails closed
+while any active legacy admission exists or the table is missing, so flipping
+`owner_kind` is now a code-enforced stop-and-drain rather than a procedure.
+Ordinary clarification/decision answers persist verbatim `resume_answer`
+metadata, making Python-answered HITL resumable by the restarted Rust driver;
+legacy runs project QUEUED-then-actual outcomes instead of dispatch-time
+success. Validation: 11 unit (hitl_resume_metadata, legacy_admission), 50
+scheduler integration on real PostgreSQL including migration
+upgrade/downgrade-refusal/downgrade in isolated schemas, the Rust
+`legacy_cron_fence` test against `DATABASE_URL`, the cross-language
+`python_http_answer_resumes_restarted_driver_without_repeating_pure_tool`
+test, and 574 hitl/cron unit regressions passed. GitNexus MCP tools were
+unavailable this session and the index is stale (indexed at 88957e0); scope
+was verified with git diff/merge-tree instead. Rollback: revert the three
+cherry-picks; the admission table and its rows are retained, and the
+migration downgrade already refuses to drop unresolved admissions.
