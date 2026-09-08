@@ -205,6 +205,7 @@ export function createNativeKnowledgeRetrievalController({
     submitted = null;
     emit({
       phase: 'loading',
+      configuration: null,
       error: null,
       result: null,
       navigation: null,

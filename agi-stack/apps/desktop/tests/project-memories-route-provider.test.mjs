@@ -130,3 +130,24 @@ test('signed-out initial render needs no catalog configuration', () => {
   assert.equal(value.local.available, false);
   assert.equal(value.cloud.available, false);
 });
+
+test('local Provider retains diagnostic reads and exact retry permission on the shared native binding', () => {
+  const allowed = [
+    'view',
+    'list',
+    'configuration',
+    'failed_processing',
+    'failed_index',
+    'processing_audits',
+    'retry_index',
+  ];
+  const value = render({
+    mode: 'local',
+    capability: { ...cap, authority_source: 'sidecar', allowed_actions: allowed },
+  });
+  assert.equal(value.local.available, true);
+  assert.deepEqual(value.local.allowedActions, allowed);
+  assert.equal(value.processing, true);
+  assert.equal(value.processingWrite, true);
+  assert.equal(value.cloud.available, false);
+});

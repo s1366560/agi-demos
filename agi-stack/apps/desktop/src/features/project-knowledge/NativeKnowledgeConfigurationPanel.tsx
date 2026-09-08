@@ -8,10 +8,12 @@ export function NativeKnowledgeConfigurationPanel({
   model,
   controller,
   disabled = false,
+  diagnosticsAvailable = false,
 }: Readonly<{
   model: NativeKnowledgeRetrievalModel;
   controller: NativeKnowledgeRetrievalController;
   disabled?: boolean;
+  diagnosticsAvailable?: boolean;
 }>) {
   const { t } = useI18n();
   if (!model.allowedActions.includes('configuration')) return null;
@@ -100,7 +102,8 @@ export function NativeKnowledgeConfigurationPanel({
             <p>{t('nativeRetrieval.noCoverage')}</p>
           )}
           <p>{t('nativeRetrieval.coverageHelp')}</p>
-          {snapshot.processing.failed_sources > 0 || (snapshot.index?.failed_sources ?? 0) > 0 ? (
+          {!diagnosticsAvailable &&
+          (snapshot.processing.failed_sources > 0 || (snapshot.index?.failed_sources ?? 0) > 0) ? (
             <p>{t('nativeRetrieval.failureDetailsUnavailable')}</p>
           ) : null}
         </>

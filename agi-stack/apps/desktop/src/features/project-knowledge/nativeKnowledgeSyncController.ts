@@ -155,14 +155,15 @@ export function createNativeKnowledgeSyncController({
       if (!session.current(request)) return;
       accepted = true;
       emit({ result: response.result });
+      // Accepted source changes invalidate other readers even when this follow-up read fails.
+      void Promise.resolve()
+        .then(() => {
+          if (session.current(request)) onAccepted?.();
+        })
+        .catch(() => {});
       const patch = await collect(request);
       if (session.current(request)) {
         emit({ ...patch, phase: 'ready' });
-        void Promise.resolve()
-          .then(() => {
-            if (session.current(request)) onAccepted?.();
-          })
-          .catch(() => {});
       }
     } catch (error) {
       if (!session.current(request)) return;
@@ -265,6 +266,27 @@ export function createNativeKnowledgeSyncController({
       };
     },
     refresh,
+    invalidateSources: () => {
+      if (
+        model.phase === 'syncing' ||
+        model.recoveryRequired ||
+        !([
+          'sync_status',
+          'sync_outbox',
+          'pull_conflicts',
+          'push_conflicts',
+          'pending_resolutions',
+          'resolutions',
+        ] as const).some(session.allowed)
+      ) {
+        return;
+      }
+      session.cancel();
+      const { result, lastOperation } = model;
+      model = initial();
+      emit({ result, lastOperation });
+      void refresh();
+    },
     sync,
     moreOutbox,
     morePending,

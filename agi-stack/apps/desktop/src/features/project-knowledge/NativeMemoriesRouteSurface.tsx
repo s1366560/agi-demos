@@ -1,5 +1,6 @@
+import { createNativeMemoriesRouteControllers } from './nativeMemoriesRouteControllers';
+import { NativeKnowledgeDiagnosticsPanel } from './NativeKnowledgeDiagnosticsPanel';
 import { NativeKnowledgeCloudConnectionPanel } from './NativeKnowledgeCloudConnectionPanel';
-import { createNativeKnowledgeCloudConnectionController } from './nativeKnowledgeCloudConnectionController';
 import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 
 import type { DesktopRouteSurfaceProps } from '../navigation/desktopRouteModule';
@@ -8,15 +9,9 @@ import {
   useNativeMemoriesRouteBinding,
   type NativeMemoriesRouteBinding,
 } from './NativeMemoriesRouteContext';
-import { createNativeMemoriesController } from './nativeMemoriesController';
-import { createProjectMemoriesController } from './projectMemoriesController';
-import { createNativeKnowledgeSyncController } from './nativeKnowledgeSyncController';
-import { createNativeKnowledgeConflictController } from './nativeKnowledgeConflictController';
 import { NativeKnowledgeSyncPanel } from './NativeKnowledgeSyncPanel';
 import { NativeKnowledgeConflictEditor } from './NativeKnowledgeConflictEditor';
-import { createNativeKnowledgeRetrievalController } from './nativeKnowledgeRetrievalController';
 import { NativeKnowledgeConfigurationPanel } from './NativeKnowledgeConfigurationPanel';
-import { createNativeKnowledgeProcessingController } from './nativeKnowledgeProcessingController';
 import { NativeKnowledgeProcessingPanel } from './NativeKnowledgeProcessingPanel';
 import {
   NativeKnowledgeRetrievalPanel,
@@ -37,58 +32,12 @@ export function NativeMemoriesRouteSurface({ context }: DesktopRouteSurfaceProps
 }
 
 function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemoriesRouteBinding }>) {
-  const controllers = useMemo(() => {
-    const list = createProjectMemoriesController({
-      authority: 'local',
-      client: binding.listClient,
-      initialScope: binding.authority.scope,
-    });
-    const editor = createNativeMemoriesController({
-      client: binding.client,
-      authority: binding.authority,
-      onAccepted: () => {
-        if (binding.authority.allowedActions.includes('list')) void list.retry();
-      },
-    });
-    const connection = createNativeKnowledgeCloudConnectionController({
-      client: binding.connectionClient,
-      sourceClient: binding.client,
-      authClient: binding.cloudAuthClient ?? null,
-      authority: binding.authority,
-      onAccepted: () => {
-        void sync.refresh();
-      },
-    });
-    const sync = createNativeKnowledgeSyncController({
-      canSync: () => connection.getSnapshot().bound,
-      client: binding.client,
-      authority: binding.authority,
-      onAccepted: () => {
-        if (binding.authority.allowedActions.includes('list')) void list.retry();
-      },
-    });
-    const conflicts = createNativeKnowledgeConflictController({
-      client: binding.client,
-      authority: binding.authority,
-      onAccepted: () => {
-        void sync.refresh();
-        if (binding.authority.allowedActions.includes('list')) void list.retry();
-      },
-    });
-    const retrieval = createNativeKnowledgeRetrievalController({
-      client: binding.processingClient,
-      sourceClient: binding.client,
-      authority: binding.authority,
-    });
-    const processing = createNativeKnowledgeProcessingController({
-      queryClient: binding.processingClient,
-      commandClient: binding.processingCommandClient,
-      inputsClient: binding.processingInputsClient,
-      authority: binding.authority,
-      onAccepted: () => retrieval.refreshConfiguration(),
-    });
-    return { list, editor, sync, conflicts, retrieval, processing, connection };
-  }, [binding]);
+  const controllers = useMemo(() => createNativeMemoriesRouteControllers(binding), [binding]);
+  const diagnostics = useSyncExternalStore(
+    controllers.diagnostics.subscribe,
+    controllers.diagnostics.getSnapshot,
+    controllers.diagnostics.getSnapshot,
+  );
   const connection = useSyncExternalStore(
     controllers.connection.subscribe,
     controllers.connection.getSnapshot,
@@ -132,6 +81,8 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
     controllers.conflicts.activate();
     controllers.retrieval.activate();
     controllers.processing.activate();
+    controllers.diagnostics.activate();
+    void controllers.diagnostics.refresh();
     void controllers.retrieval.refreshConfiguration();
     void controllers.sync.refresh();
     if (controllers.editor.getSnapshot().allowedActions.includes('list'))
@@ -144,6 +95,7 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
       controllers.conflicts.stop();
       controllers.retrieval.stop();
       controllers.processing.stop();
+      controllers.diagnostics.stop();
     };
   }, [binding, controllers]);
   const editorLocked = editor.phase === 'saving' || editor.phase === 'uncertain';
@@ -197,6 +149,7 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
       ) : (
         <>
           <NativeKnowledgeConfigurationPanel
+            diagnosticsAvailable={diagnostics.phase !== 'unavailable'}
             model={retrieval}
             controller={controllers.retrieval}
             disabled={editorLocked || syncLocked || conflictLocked || processingLocked}
@@ -208,6 +161,18 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
           />
         </>
       )}
+      <NativeKnowledgeDiagnosticsPanel
+        model={diagnostics}
+        controller={controllers.diagnostics}
+        onSelectIndexFailure={controllers.processing.selectDiagnosticFailure}
+        disabled={
+          editorLocked ||
+          syncLocked ||
+          conflictLocked ||
+          processingLocked ||
+          processing.phase === 'loading'
+        }
+      />
       <NativeKnowledgeProcessingPanel
         model={processing}
         controller={controllers.processing}

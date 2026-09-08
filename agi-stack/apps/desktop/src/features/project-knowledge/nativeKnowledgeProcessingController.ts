@@ -601,6 +601,13 @@ export function createNativeKnowledgeProcessingController({
     },
     refresh,
     selectDiagnosticFailure,
+    invalidateSources: () => {
+      if (stopped || model.phase === 'executing' || model.recoveryRequired) return;
+      cancel();
+      model = initial();
+      emit({});
+      void refresh();
+    },
     prepareInputs,
     chooseEmbedding: (providerId: string, modelId: string) => {
       if (
