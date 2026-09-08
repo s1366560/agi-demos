@@ -96,6 +96,10 @@ import {
   nativeMemoriesEnUS,
   nativeMemoriesZhCN,
 } from './features/project-knowledge/locales/nativeMemoriesMessages';
+import {
+  cloudMemoriesEnUS,
+  cloudMemoriesZhCN,
+} from './features/project-knowledge/locales/cloudMemoriesMessages';
 
 export type { DesktopLocale } from './i18nContext';
 
@@ -103,6 +107,7 @@ const STORAGE_KEY = 'agistack.desktop.locale';
 
 const enUS: Record<string, string> = {
   ...nativeMemoriesEnUS,
+  ...cloudMemoriesEnUS,
   ...deadLetterQueueEnUS,
   ...deviceApprovalEnUS,
   ...tenantCreationEnUS,
@@ -4168,6 +4173,7 @@ const enUS: Record<string, string> = {
 
 const zhCN: Record<string, string> = {
   ...nativeMemoriesZhCN,
+  ...cloudMemoriesZhCN,
   ...tenantCreationZhCN,
   ...invitationAcceptanceZhCN,
   ...deadLetterQueueZhCN,

@@ -1,0 +1,88 @@
+.cloud-memories-page {
+  margin: 1.25rem;
+  max-width: 64rem;
+  min-width: 0;
+  color: var(--gray-12);
+  overflow-wrap: anywhere;
+}
+.cloud-memories-page header,
+.cloud-memories-actions,
+.cloud-memories-page nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.cloud-memories-page header h1 {
+  margin-inline-end: auto;
+}
+.cloud-memories-page ol {
+  padding-inline-start: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+.cloud-memories-page li,
+.cloud-memory-editor {
+  padding: 1rem;
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-6);
+  border-radius: 0.5rem;
+}
+.cloud-memory-editor {
+  margin-block: 1rem;
+}
+.cloud-memory-editor:empty {
+  display: none;
+}
+.cloud-memory-editor form,
+.cloud-memory-editor label {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+.cloud-memory-editor form {
+  gap: 1rem;
+  margin-block: 1rem;
+}
+.cloud-memory-editor dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.5rem 1rem;
+}
+.cloud-memory-editor dd {
+  margin: 0;
+}
+.cloud-memory-body {
+  white-space: pre-wrap;
+  max-height: 20rem;
+  overflow: auto;
+}
+.cloud-memories-page button,
+.cloud-memory-editor input,
+.cloud-memory-editor textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-7);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+}
+.cloud-memories-page button:disabled {
+  opacity: 0.55;
+}
+.cloud-memories-page :is(button, input, textarea):focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: 2px;
+}
+.cloud-memory-editor textarea {
+  resize: vertical;
+}
+.cloud-memory-editor section {
+  border-block-start: 1px solid var(--gray-6);
+  margin-block: 1rem;
+}
+@media (max-width: 36rem) {
+  .cloud-memory-editor dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
