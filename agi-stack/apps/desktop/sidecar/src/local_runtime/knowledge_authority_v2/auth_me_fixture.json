@@ -1,0 +1,12 @@
+{
+  "user_id": "remote-actor",
+  "email": "sync@example.com",
+  "name": "Sync contract fixture",
+  "roles": [],
+  "global_roles": [],
+  "is_active": true,
+  "is_superuser": false,
+  "created_at": "2026-09-08T00:00:00Z",
+  "profile": {},
+  "preferred_language": null
+}

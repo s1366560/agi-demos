@@ -65,8 +65,17 @@ impl VerifiedCloudTransport {
         let user = transport
             .get(control_plane_url(&transport.authority.base_url, "auth/me"))
             .await?;
-        if user["id"] != transport.target.link.remote_actor_id {
+        // /auth/me serializes auth.User with user_id, not the id alias of
+        // other user projections. Never infer identity from those projections.
+        let actor = user["user_id"]
+            .as_str()
+            .filter(|actor| !actor.is_empty() && actor.trim() == *actor)
+            .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
+        if actor != transport.target.link.remote_actor_id {
             return Err(KnowledgeAuthorityErrorV2::ScopeMismatch);
+        }
+        if user["is_active"].as_bool() != Some(true) {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
         }
         let mut project_url = transport.project_url(&[])?;
         project_url

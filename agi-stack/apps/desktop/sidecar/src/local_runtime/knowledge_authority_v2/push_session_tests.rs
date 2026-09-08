@@ -35,7 +35,7 @@ impl Cloud {
 }
 async fn auth(State(cloud): State<Arc<Cloud>>) -> Json<Value> {
     cloud.barrier(Phase::Auth).await;
-    Json(json!({"id":"remote-actor"}))
+    Json(super::sync_auth_tests::auth_me_fixture())
 }
 async fn project(State(cloud): State<Arc<Cloud>>) -> Json<Value> {
     cloud.barrier(Phase::Project).await;

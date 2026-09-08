@@ -38,7 +38,11 @@ fn check_auth(headers: &HeaderMap) {
 }
 async fn user(State(cloud): State<Arc<Cloud>>, headers: HeaderMap) -> Json<Value> {
     check_auth(&headers);
-    Json(json!({"id":if cloud.wrong_actor.load(Ordering::SeqCst){"wrong"}else{"remote-actor"}}))
+    let mut user = super::sync_auth_tests::auth_me_fixture();
+    if cloud.wrong_actor.load(Ordering::SeqCst) {
+        user["user_id"] = json!("wrong");
+    }
+    Json(user)
 }
 async fn project(headers: HeaderMap) -> Json<Value> {
     check_auth(&headers);

@@ -448,3 +448,6 @@ mod capability_tests;
 #[cfg(unix)]
 #[path = "local_acceptance_tests.rs"]
 mod local_acceptance_tests;
+
+#[path = "sync_auth_tests.rs"]
+mod sync_auth_tests;

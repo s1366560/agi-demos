@@ -31,7 +31,7 @@ async fn auth(State(cloud): State<Arc<Cloud>>) -> (StatusCode, Json<Value>) {
     cloud.barrier(1).await;
     (
         StatusCode::from_u16(cloud.auth_status.load(Ordering::SeqCst)).unwrap(),
-        Json(json!({"id":"remote-actor"})),
+        Json(super::super::sync_auth_tests::auth_me_fixture()),
     )
 }
 async fn project(State(cloud): State<Arc<Cloud>>) -> Json<Value> {
