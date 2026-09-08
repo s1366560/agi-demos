@@ -270,3 +270,122 @@ async fn ordinary_host_retains_disabled_default_profile_and_no_knowledge_storage
     assert!(!directories.data.join("knowledge").exists());
     control.shutdown().await;
 }
+
+#[tokio::test]
+async fn explicit_sync_host_uses_separate_profile_and_requires_exact_cloud_descriptor() {
+    let directories = AcceptanceDirectories::new();
+    let mut state = accepted_state(&directories);
+    Arc::get_mut(&mut state).unwrap().local_knowledge_acceptance =
+        Some(directories.sync_qualification());
+    let control = start(state.clone(), &directories).await;
+    let observed = request(state.clone(), "/api/v1/knowledge/capabilities", None).await;
+    assert_eq!(observed.0, StatusCode::OK);
+    assert_eq!(
+        observed.1["scope"]["profile_id"],
+        local_knowledge_acceptance::SYNC_PROFILE
+    );
+    assert_eq!(
+        observed.1["result"]["reason_code"],
+        "knowledge_sync_acceptance_only"
+    );
+    let actions = observed.1["result"]["allowed_actions"].as_array().unwrap();
+    assert!(actions.contains(&json!("sync_push")));
+    assert!(actions.contains(&json!("sync_pull")));
+    let lease = state
+        .platform_plugin_authority_v2
+        .acquire_generation()
+        .unwrap();
+    let auth = authenticated(&state);
+    let authority = lease
+        .knowledge_authority(&ScopeV2 {
+            kind: ScopeKindV2::Project,
+            tenant_id: Some(auth.workspace.tenant_id),
+            project_id: Some(auth.workspace.project_id),
+            session_id: None,
+        })
+        .unwrap();
+    authority.require_sync_release().unwrap();
+    let cloud: Value =
+        serde_json::from_str(local_knowledge_acceptance::CLOUD_SYNC_SNAPSHOT).unwrap();
+    authority
+        .require_sync_cloud_profile(
+            local_knowledge_acceptance::CLOUD_SYNC_PROFILE,
+            1,
+            cloud["digest"].as_str().unwrap(),
+        )
+        .unwrap();
+    for (profile, digest) in [
+        (
+            local_knowledge_acceptance::SYNC_PROFILE,
+            cloud["digest"].as_str().unwrap(),
+        ),
+        (
+            local_knowledge_acceptance::CLOUD_SYNC_PROFILE,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        ),
+        (local_knowledge_acceptance::CLOUD_SYNC_PROFILE, "invalid"),
+    ] {
+        assert!(authority
+            .require_sync_cloud_profile(profile, 1, digest)
+            .is_err());
+    }
+    assert!(authority
+        .require_profile(
+            &lease.descriptor().profile_id,
+            &lease.descriptor().digest,
+            Some(1)
+        )
+        .is_err());
+    let old = directories.profile.join("retired-workspace");
+    fs::rename(&directories.workspace, &old).unwrap();
+    fs::create_dir(&directories.workspace).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&directories.workspace, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(authority.require_sync_release().is_err());
+    assert!(authority
+        .require_sync_cloud_profile(
+            local_knowledge_acceptance::CLOUD_SYNC_PROFILE,
+            1,
+            cloud["digest"].as_str().unwrap()
+        )
+        .is_err());
+    drop(authority);
+    drop(lease);
+    control.shutdown().await;
+}
+
+#[tokio::test]
+async fn sync_profile_requires_matching_host_purpose_before_storage() {
+    let directories = AcceptanceDirectories::new();
+    for qualification in [None, Some(directories.qualification())] {
+        let loader = LoaderV2::for_target(
+            DataPlaneTargetV2::DesktopSidecar,
+            [
+                desktop_sidecar_http_routes_definition_v2(),
+                desktop_sidecar_host_definition_v2(),
+                definition(Some(directories.data.clone()), qualification).unwrap(),
+            ],
+        );
+        assert!(loader
+            .stage(parse_profile_snapshot_v2(local_knowledge_acceptance::SYNC_SNAPSHOT).unwrap())
+            .await
+            .is_err());
+        assert!(!directories.data.join("knowledge").exists());
+    }
+    let loader = LoaderV2::for_target(
+        DataPlaneTargetV2::DesktopSidecar,
+        [
+            desktop_sidecar_http_routes_definition_v2(),
+            desktop_sidecar_host_definition_v2(),
+            definition(
+                Some(directories.data.clone()),
+                Some(directories.sync_qualification()),
+            )
+            .unwrap(),
+        ],
+    );
+    assert!(loader
+        .stage(parse_profile_snapshot_v2(local_knowledge_acceptance::SNAPSHOT).unwrap())
+        .await
+        .is_err());
+}

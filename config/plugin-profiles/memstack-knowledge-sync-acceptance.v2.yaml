@@ -1,0 +1,19 @@
+# Explicit joint QA only; never the default production profile.
+schema_version: 2
+profile:
+  id: memstack-knowledge-sync-acceptance-v2
+  entries:
+  - entry_id: builtin-desktop-sidecar-knowledge-authority
+    parent_entry_id: builtin-desktop-sidecar-local-capability
+    plugin_ref: memstack-local-knowledge
+    module_ref: builtin://memstack/desktop-sidecar/knowledge-authority
+    enabled: true
+    config:
+      acceptance_contract: knowledge-sync-acceptance-v1
+    inject: {}
+    isolate: {}
+    scope:
+      kind: root
+    permissions: []
+    quotas: {}
+    restart_policy: hot-generation

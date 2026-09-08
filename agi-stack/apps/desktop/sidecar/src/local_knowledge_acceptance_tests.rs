@@ -30,6 +30,7 @@ impl AcceptanceDirectories {
     }
     fn request(&self) -> LocalKnowledgeAcceptanceRequest {
         LocalKnowledgeAcceptanceRequest {
+            is_packaged: None,
             purpose: PURPOSE.into(),
             user_data_directory: self.profile.clone(),
         }
@@ -141,4 +142,99 @@ fn qualification_rejects_late_permission_changes_and_non_temporary_directories()
         .request()
         .verify(&directories.data, &nested, &[])
         .is_err());
+}
+
+impl AcceptanceDirectories {
+    pub(crate) fn sync_qualification(&self) -> LocalKnowledgeAcceptance {
+        let request: LocalKnowledgeAcceptanceRequest = serde_json::from_value(serde_json::json!({
+            "purpose": SYNC_PURPOSE,
+            "isPackaged": false,
+            "userDataDirectory": self.profile,
+        }))
+        .unwrap();
+        request.verify(&self.data, &self.workspace, &[]).unwrap()
+    }
+}
+
+#[test]
+fn sync_qualification_requires_explicit_purpose_and_unpacked_private_host() {
+    let directories = AcceptanceDirectories::new();
+    for payload in [
+        serde_json::json!({"purpose":SYNC_PURPOSE,"userDataDirectory":directories.profile}),
+        serde_json::json!({"purpose":SYNC_PURPOSE,"isPackaged":true,"userDataDirectory":directories.profile}),
+        serde_json::json!({"purpose":"sync","isPackaged":false,"userDataDirectory":directories.profile}),
+        serde_json::json!({"purpose":PURPOSE,"isPackaged":false,"userDataDirectory":directories.profile}),
+    ] {
+        let request: LocalKnowledgeAcceptanceRequest = serde_json::from_value(payload).unwrap();
+        assert!(request
+            .verify(&directories.data, &directories.workspace, &[])
+            .is_err());
+    }
+    assert!(!directories.qualification().permits_sync());
+    assert!(directories.sync_qualification().permits_sync());
+}
+
+#[test]
+fn sync_qualification_requires_both_distinct_compiled_profiles() {
+    let directories = AcceptanceDirectories::new();
+    let qualification = directories.sync_qualification();
+    let native: serde_json::Value = serde_json::from_str(SYNC_SNAPSHOT).unwrap();
+    let cloud: serde_json::Value = serde_json::from_str(CLOUD_SYNC_SNAPSHOT).unwrap();
+    let native_digest = native["digest"].as_str().unwrap();
+    let cloud_digest = cloud["digest"].as_str().unwrap();
+    qualification
+        .require_profile(SYNC_PROFILE, native_digest)
+        .unwrap();
+    qualification
+        .require_cloud_profile(CLOUD_SYNC_PROFILE, 1, cloud_digest)
+        .unwrap();
+    assert!(qualification
+        .require_profile(PROFILE, native_digest)
+        .is_err());
+    assert!(qualification
+        .require_cloud_profile(SYNC_PROFILE, 1, native_digest)
+        .is_err());
+    assert!(qualification
+        .require_cloud_profile(CLOUD_SYNC_PROFILE, 1, native_digest)
+        .is_err());
+    assert!(qualification
+        .require_cloud_profile(CLOUD_SYNC_PROFILE, 1, &"0".repeat(64))
+        .is_err());
+    assert!(directories
+        .qualification()
+        .require_cloud_profile(CLOUD_SYNC_PROFILE, 1, cloud_digest)
+        .is_err());
+    let moved = directories.profile.with_extension("previous");
+    fs::rename(&directories.profile, &moved).unwrap();
+    fs::create_dir(&directories.profile).unwrap();
+    fs::set_permissions(&directories.profile, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(qualification
+        .require_cloud_profile(CLOUD_SYNC_PROFILE, 1, cloud_digest)
+        .is_err());
+    fs::remove_dir_all(moved).unwrap();
+}
+
+#[test]
+fn cloud_generation_template_matches_python_protocol_vectors_and_rejects_stale_generation() {
+    let vectors: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../../shared/fixtures/cloud-knowledge-sync-acceptance-generations.v1.json"
+    ))
+    .unwrap();
+    let directories = AcceptanceDirectories::new();
+    let qualification = directories.sync_qualification();
+    let entries = vectors["descriptors"].as_array().unwrap();
+    assert_eq!(entries.len(), 3);
+    for entry in entries {
+        let generation = entry["generation"].as_u64().unwrap();
+        let digest = entry["digest"].as_str().unwrap();
+        assert_eq!(cloud_profile_digest(generation).unwrap(), digest);
+        qualification
+            .require_cloud_profile(CLOUD_SYNC_PROFILE, generation, digest)
+            .unwrap();
+        assert!(qualification
+            .require_cloud_profile(CLOUD_SYNC_PROFILE, generation + 1, digest)
+            .is_err());
+    }
+    assert!(cloud_profile_digest(0).is_err());
+    assert!(cloud_profile_digest(u64::MAX).is_err());
 }

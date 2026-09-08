@@ -369,7 +369,7 @@ fn local_bootstrap_snapshot(state: &LocalRuntimeState) -> Result<LocalBootstrapS
                 .lock()
                 .map_err(|_| "local acceptance workspace unavailable")?,
         )?;
-        crate::local_knowledge_acceptance::SNAPSHOT
+        qualification.snapshot()
     } else {
         LOCAL_BOOTSTRAP_PROFILE_V2
     };

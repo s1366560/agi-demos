@@ -958,6 +958,7 @@ function createSidecarSupervisor(): SidecarSupervisor {
   const workspaceRoot = defaultWorkspaceRoot();
   const localKnowledgeAcceptance = qualifyLocalKnowledgeAcceptance({
     isPackaged: app.isPackaged,
+    requestedPurpose: process.env.AGISTACK_DESKTOP_QA_PURPOSE,
     qaProfileDirectory,
     dataDirectory,
     workspaceRoot,

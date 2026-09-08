@@ -126,3 +126,77 @@ input.once('line', line => {
     await supervisor.stop();
   }
 });
+
+test('sync purpose is explicit, unpackaged and private while ordinary QA remains local only', (t) => {
+  const input = fixture(t);
+  assert.equal(qualifyLocalKnowledgeAcceptance(input).purpose, 'local-knowledge-acceptance-v1');
+  const observed = qualifyLocalKnowledgeAcceptance({
+    ...input,
+    requestedPurpose: 'knowledge-sync-acceptance-v1',
+  });
+  assert.deepEqual(observed, {
+    purpose: 'knowledge-sync-acceptance-v1',
+    isPackaged: false,
+    userDataDirectory: input.qaProfileDirectory,
+  });
+  for (const changes of [
+    { isPackaged: true },
+    { qaProfileDirectory: null },
+    { requestedPurpose: '' },
+    { requestedPurpose: 'production' },
+  ]) {
+    assert.throws(() =>
+      qualifyLocalKnowledgeAcceptance({
+        ...input,
+        requestedPurpose: 'knowledge-sync-acceptance-v1',
+        ...changes,
+      }),
+    );
+  }
+});
+
+test('explicit sync purpose crosses the authenticated initialization pipe without an alternate profile or actions', async (t) => {
+  const input = fixture(t);
+  const qualification = qualifyLocalKnowledgeAcceptance({
+    ...input,
+    requestedPurpose: 'knowledge-sync-acceptance-v1',
+  });
+  const marker = join(input.qaProfileDirectory, 'observed-initialize.json');
+  const binaryPath = join(input.qaProfileDirectory, 'sidecar.cjs');
+  writeFileSync(
+    binaryPath,
+    `#!/usr/bin/env node
+const { createHmac } = require('node:crypto');
+const { writeFileSync } = require('node:fs');
+const input = require('node:readline').createInterface({ input: process.stdin });
+input.once('line', line => {
+  const init = JSON.parse(line);
+  writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ acceptance:init.localKnowledgeAcceptance, data:init.dataDirectory, workspace:init.workspaceRoot, legacy:init.legacyDataDirectories }));
+  const apiBaseUrl = 'http://127.0.0.1:41123';
+  const apiToken = 'test-local-acceptance-token';
+  const proof = createHmac('sha256',Buffer.from(init.secret,'base64url')).update([init.protocolVersion,init.nonce,process.pid,apiBaseUrl,apiToken].join('\\n')).digest('base64url');
+  process.stdout.write(JSON.stringify({type:'ready',protocolVersion:init.protocolVersion,nonce:init.nonce,pid:process.pid,apiBaseUrl,apiToken,proof})+'\\n');
+});
+`,
+  );
+  chmodSync(binaryPath, 0o700);
+  const supervisor = new SidecarSupervisor({
+    binaryPath,
+    workspaceCoreBinaryPath: binaryPath,
+    dataDirectory: input.dataDirectory,
+    workspaceRoot: input.workspaceRoot,
+    legacyDataDirectories: [],
+    localKnowledgeAcceptance: qualification,
+  });
+  try {
+    await supervisor.start();
+    assert.deepEqual(JSON.parse(readFileSync(marker, 'utf8')), {
+      acceptance: qualification,
+      data: input.dataDirectory,
+      workspace: input.workspaceRoot,
+      legacy: [],
+    });
+  } finally {
+    await supervisor.stop();
+  }
+});

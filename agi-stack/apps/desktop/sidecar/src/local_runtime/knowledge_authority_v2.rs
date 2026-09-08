@@ -65,7 +65,7 @@ pub(super) fn contract() -> Result<PluginContractV2, RuntimeV2Error> {
                                "release_state":{"type":"string","const":"closed"}},
                  "required":["release_contract","release_state"]},
                 {"type":"object", "additionalProperties":false,
-                 "properties":{"acceptance_contract":{"type":"string","const":crate::local_knowledge_acceptance::PURPOSE}},
+                 "properties":{"acceptance_contract":{"type":"string","enum":[crate::local_knowledge_acceptance::PURPOSE,crate::local_knowledge_acceptance::SYNC_PURPOSE]}},
                  "required":["acceptance_contract"]}
             ]
         }
@@ -104,21 +104,36 @@ impl PluginModuleRuntimeV2 for KnowledgeModuleV2 {
         context: &mut ContextV2,
         config: &BTreeMap<String, Value>,
     ) -> Result<(), RuntimeV2Error> {
+        let acceptance_purpose = config.get("acceptance_contract").and_then(Value::as_str);
         let admission = if config.len() == 1
-            && config.get("acceptance_contract")
-                == Some(&json!(crate::local_knowledge_acceptance::PURPOSE))
-        {
+            && matches!(
+                acceptance_purpose,
+                Some(
+                    crate::local_knowledge_acceptance::PURPOSE
+                        | crate::local_knowledge_acceptance::SYNC_PURPOSE
+                )
+            ) {
             let qualification = self.local_acceptance.clone().ok_or_else(|| {
                 RuntimeV2Error::Module(
                     "local knowledge acceptance requires a qualified host".into(),
                 )
             })?;
+            let sync = acceptance_purpose == Some(crate::local_knowledge_acceptance::SYNC_PURPOSE);
+            if qualification.permits_sync() != sync {
+                return Err(RuntimeV2Error::Module(
+                    "knowledge acceptance host purpose mismatch".into(),
+                ));
+            }
             qualification
                 .require_storage(self.app_data_dir.as_deref().ok_or_else(|| {
                     RuntimeV2Error::Module("local knowledge acceptance data root is missing".into())
                 })?)
                 .map_err(RuntimeV2Error::Module)?;
-            KnowledgeAdmission::LocalAcceptance(qualification)
+            if sync {
+                KnowledgeAdmission::SyncAcceptance(qualification)
+            } else {
+                KnowledgeAdmission::LocalAcceptance(qualification)
+            }
         } else if config.len() == 2
             && config.get("release_contract") == Some(&json!(RELEASE_CONTRACT))
             && config.get("release_state") == Some(&json!("closed"))

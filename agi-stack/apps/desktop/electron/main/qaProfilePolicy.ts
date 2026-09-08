@@ -103,24 +103,33 @@ function prepareQaProfileDirectory(path: string, temporaryRoot: string): void {
 }
 
 export type LocalKnowledgeAcceptanceRequest = Readonly<{
-  purpose: 'local-knowledge-acceptance-v1';
+  purpose: 'local-knowledge-acceptance-v1' | 'knowledge-sync-acceptance-v1';
+  isPackaged?: false;
   userDataDirectory: string;
 }>;
 
 /** Derive a fixed host qualification only after both QA roots are isolated. */
 export function qualifyLocalKnowledgeAcceptance({
   isPackaged,
+  requestedPurpose,
   qaProfileDirectory,
   dataDirectory,
   workspaceRoot,
   temporaryRoot = tmpdir(),
 }: Readonly<{
   isPackaged: boolean;
+  requestedPurpose?: string;
   qaProfileDirectory: string | null;
   dataDirectory: string;
   workspaceRoot: string;
   temporaryRoot?: string;
 }>): LocalKnowledgeAcceptanceRequest | undefined {
+  if (requestedPurpose !== undefined && requestedPurpose !== 'knowledge-sync-acceptance-v1') {
+    throw new Error('Knowledge sync acceptance requires the fixed explicit QA purpose');
+  }
+  if (requestedPurpose !== undefined && (isPackaged || qaProfileDirectory === null)) {
+    throw new Error('Knowledge sync acceptance requires an unpackaged isolated host');
+  }
   if (qaProfileDirectory === null) return undefined;
   const profile = resolveQaProfileDirectory({
     isPackaged,
@@ -153,7 +162,11 @@ export function qualifyLocalKnowledgeAcceptance({
   }
   if (process.platform !== 'win32') chmodSync(dataDirectory, 0o700);
   return Object.freeze({
-    purpose: 'local-knowledge-acceptance-v1',
+    purpose:
+      requestedPurpose === undefined
+        ? 'local-knowledge-acceptance-v1'
+        : 'knowledge-sync-acceptance-v1',
+    ...(requestedPurpose === undefined ? {} : { isPackaged: false as const }),
     userDataDirectory: profile,
   });
 }

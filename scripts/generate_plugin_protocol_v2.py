@@ -657,7 +657,11 @@ def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def _bootstrap_profile(
-    manifests: tuple[dict[str, Any], ...], *, local_acceptance: bool = False
+    manifests: tuple[dict[str, Any], ...],
+    *,
+    local_acceptance: bool = False,
+    sync_acceptance: bool = False,
+    cloud_acceptance: bool = False,
 ) -> dict[str, Any]:
     from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
     from src.infrastructure.plugins.v2.protocol import (
@@ -671,11 +675,28 @@ def _bootstrap_profile(
     parsed = tuple(parse_plugin_manifest_v2(manifest) for manifest in manifests)
     manifest_by_id = {manifest.plugin_id: manifest for manifest in parsed}
     document = include_production_target_hosts_v2(load_profile_document_v2(DEFAULT_PROFILE_PATH))
+    if sum((local_acceptance, sync_acceptance, cloud_acceptance)) > 1:
+        raise ValueError("acceptance purposes are mutually exclusive")
     if local_acceptance:
         from scripts.local_knowledge_acceptance_profile import include_local_knowledge_acceptance
 
         document = include_local_knowledge_acceptance(
             document, ROOT / "config/plugin-profiles/memstack-local-knowledge-acceptance.v2.yaml"
+        )
+    if sync_acceptance:
+        from scripts.knowledge_sync_acceptance_profile import include_knowledge_sync_acceptance
+
+        document = include_knowledge_sync_acceptance(
+            document, ROOT / "config/plugin-profiles/memstack-knowledge-sync-acceptance.v2.yaml"
+        )
+    if cloud_acceptance:
+        from scripts.cloud_knowledge_sync_acceptance_profile import (
+            include_cloud_knowledge_sync_acceptance,
+        )
+
+        document = include_cloud_knowledge_sync_acceptance(
+            document,
+            ROOT / "config/plugin-profiles/memstack-cloud-knowledge-sync-acceptance.v2.yaml",
         )
     snapshot = compose_profile_v2(
         document,
@@ -683,6 +704,17 @@ def _bootstrap_profile(
         generation=1,
     )
     return profile_snapshot_v2_to_payload(snapshot)
+
+
+def _cloud_acceptance_generation_vectors(manifests: tuple[dict[str, Any], ...]) -> dict[str, Any]:
+    from scripts.cloud_knowledge_sync_acceptance_profile import (
+        cloud_knowledge_sync_generation_vectors,
+    )
+    from src.infrastructure.plugins.v2.protocol import parse_profile_snapshot_v2
+
+    return cloud_knowledge_sync_generation_vectors(
+        parse_profile_snapshot_v2(_bootstrap_profile(manifests, cloud_acceptance=True))
+    )
 
 
 def _write_or_check(path: Path, content: str, *, check: bool) -> bool:
@@ -738,6 +770,17 @@ def main() -> int:
         BOOTSTRAP_PROFILE_PATH: _canonical_document(_bootstrap_profile(manifests)),
         ROOT / "shared/profiles/memstack-local-knowledge-acceptance.v2.json": _canonical_document(
             _bootstrap_profile(manifests, local_acceptance=True)
+        ),
+        ROOT / "shared/profiles/memstack-knowledge-sync-acceptance.v2.json": _canonical_document(
+            _bootstrap_profile(manifests, sync_acceptance=True)
+        ),
+        ROOT
+        / "shared/profiles/memstack-cloud-knowledge-sync-acceptance.v2.json": _canonical_document(
+            _bootstrap_profile(manifests, cloud_acceptance=True)
+        ),
+        ROOT
+        / "shared/fixtures/cloud-knowledge-sync-acceptance-generations.v1.json": _canonical_document(
+            _cloud_acceptance_generation_vectors(manifests)
         ),
         SNAPSHOT_FIXTURE_PATH: _canonical_document(snapshot),
         CONFORMANCE_FIXTURE_PATH: _canonical_document(_conformance_fixture(snapshot)),

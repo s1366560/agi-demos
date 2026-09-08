@@ -8,6 +8,15 @@ use std::{
 use serde::Deserialize;
 
 pub(crate) const PURPOSE: &str = "local-knowledge-acceptance-v1";
+pub(crate) const SYNC_PURPOSE: &str = "knowledge-sync-acceptance-v1";
+pub(crate) const SYNC_PROFILE: &str = "memstack-knowledge-sync-acceptance-v2";
+pub(crate) const SYNC_SNAPSHOT: &str =
+    include_str!("../../../../../shared/profiles/memstack-knowledge-sync-acceptance.v2.json");
+
+pub(crate) const CLOUD_SYNC_PROFILE: &str = "memstack-cloud-knowledge-sync-acceptance-v2";
+pub(crate) const CLOUD_SYNC_SNAPSHOT: &str =
+    include_str!("../../../../../shared/profiles/memstack-cloud-knowledge-sync-acceptance.v2.json");
+
 pub(crate) const PROFILE: &str = "memstack-local-knowledge-acceptance-v2";
 pub(crate) const SNAPSHOT: &str =
     include_str!("../../../../../shared/profiles/memstack-local-knowledge-acceptance.v2.json");
@@ -16,11 +25,20 @@ pub(crate) const SNAPSHOT: &str =
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct LocalKnowledgeAcceptanceRequest {
     purpose: String,
+    #[serde(default)]
+    is_packaged: Option<bool>,
     user_data_directory: PathBuf,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AcceptancePurpose {
+    LocalKnowledge,
+    KnowledgeSync,
 }
 
 #[derive(Clone)]
 pub(crate) struct LocalKnowledgeAcceptance {
+    purpose: AcceptancePurpose,
     user_data: Directory,
     data: Directory,
     workspace: Directory,
@@ -40,7 +58,16 @@ impl LocalKnowledgeAcceptanceRequest {
         workspace: &Path,
         legacy: &[PathBuf],
     ) -> Result<LocalKnowledgeAcceptance, String> {
-        if !cfg!(debug_assertions) || self.purpose != PURPOSE || !legacy.is_empty() {
+        let purpose = match (self.purpose.as_str(), self.is_packaged) {
+            (PURPOSE, None) => AcceptancePurpose::LocalKnowledge,
+            (SYNC_PURPOSE, Some(false)) => AcceptancePurpose::KnowledgeSync,
+            _ => {
+                return Err(
+                    "knowledge acceptance requires an explicit supported host purpose".into(),
+                )
+            }
+        };
+        if !cfg!(debug_assertions) || !legacy.is_empty() {
             return Err("local knowledge acceptance requires an isolated development host".into());
         }
         let temporary_input = std::env::temp_dir();
@@ -86,6 +113,7 @@ impl LocalKnowledgeAcceptanceRequest {
             return Err("local knowledge acceptance directory owners differ".into());
         }
         Ok(LocalKnowledgeAcceptance {
+            purpose,
             user_data,
             data,
             workspace,
@@ -94,6 +122,18 @@ impl LocalKnowledgeAcceptanceRequest {
 }
 
 impl LocalKnowledgeAcceptance {
+    pub(crate) fn permits_sync(&self) -> bool {
+        self.purpose == AcceptancePurpose::KnowledgeSync
+    }
+
+    pub(crate) fn snapshot(&self) -> &'static str {
+        if self.permits_sync() {
+            SYNC_SNAPSHOT
+        } else {
+            SNAPSHOT
+        }
+    }
+
     pub(crate) fn require_current(&self, data: &Path, workspace: &Path) -> Result<(), String> {
         for directory in [&self.user_data, &self.data, &self.workspace] {
             let current = Directory::read(&directory.path)?;
@@ -114,13 +154,60 @@ impl LocalKnowledgeAcceptance {
         self.require_current(data, &self.workspace.path)
     }
 
+    pub(crate) fn require_cloud_profile(
+        &self,
+        profile_id: &str,
+        generation: u64,
+        digest: &str,
+    ) -> Result<(), String> {
+        if !self.permits_sync()
+            || profile_id != CLOUD_SYNC_PROFILE
+            || cloud_profile_digest(generation)? != digest
+        {
+            return Err(
+                "knowledge sync acceptance requires the compiled cloud QA profile digest".into(),
+            );
+        }
+        self.require_storage(&self.data.path)
+    }
+
     pub(crate) fn require_profile(&self, profile_id: &str, digest: &str) -> Result<(), String> {
-        let expected: serde_json::Value = serde_json::from_str(SNAPSHOT).map_err(invalid)?;
-        if profile_id != PROFILE || expected["digest"].as_str() != Some(digest) {
+        let expected: serde_json::Value = serde_json::from_str(self.snapshot()).map_err(invalid)?;
+        let profile = if self.permits_sync() {
+            SYNC_PROFILE
+        } else {
+            PROFILE
+        };
+        if profile_id != profile || expected["digest"].as_str() != Some(digest) {
             return Err("local knowledge acceptance requires the compiled profile digest".into());
         }
         self.require_storage(&self.data.path)
     }
+}
+
+/// Preserve the compiled cloud profile's complete content while rebinding only its generation.
+/// Snapshot digests include generation, so generation 1 is not a runtime comparison constant.
+pub(crate) fn cloud_profile_digest(generation: u64) -> Result<String, String> {
+    use agistack_plugin_host::protocol_v2::parse_profile_snapshot_v2;
+    use sha2::{Digest, Sha256};
+    if generation == 0 || generation > 9_007_199_254_740_991 {
+        return Err("knowledge sync cloud generation is outside the protocol integer range".into());
+    }
+    let compiled = parse_profile_snapshot_v2(CLOUD_SYNC_SNAPSHOT).map_err(invalid)?;
+    if compiled.profile_id != CLOUD_SYNC_PROFILE || compiled.generation != 1 {
+        return Err("knowledge sync cloud QA template is invalid".into());
+    }
+    let mut value: serde_json::Value =
+        serde_json::from_str(CLOUD_SYNC_SNAPSHOT).map_err(invalid)?;
+    value["generation"] = serde_json::json!(generation);
+    value
+        .as_object_mut()
+        .ok_or("knowledge sync cloud QA template is not an object")?
+        .remove("digest");
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(serde_jcs::to_vec(&value).map_err(invalid)?)
+    ))
 }
 
 impl Directory {

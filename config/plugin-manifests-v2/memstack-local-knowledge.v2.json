@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/desktop-sidecar/knowledge-authority",
       "entrypoint": "KnowledgeModuleV2::apply",
       "artifact": {
-        "digest": "sha256:1c37a3cf321e5c833c88d8ac24a93b785133814fda402b8f3c97128a018529d6",
+        "digest": "sha256:9885cf1df497d0fbf406a42ffe8f5574dadc7d80131ebc2d2fb0b547761a5a89",
         "source": "repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/knowledge_authority_v2.rs"
       },
       "targets": [
@@ -56,7 +56,10 @@
               "properties": {
                 "acceptance_contract": {
                   "type": "string",
-                  "const": "local-knowledge-acceptance-v1"
+                  "enum": [
+                    "local-knowledge-acceptance-v1",
+                    "knowledge-sync-acceptance-v1"
+                  ]
                 }
               },
               "required": [
@@ -67,7 +70,7 @@
           "type": "object"
         }
       },
-      "contract_digest": "sha256:ad8f3bd67a58726224ee5ae11c1c8d53f168f11b876ebf0e211231b52d218247"
+      "contract_digest": "sha256:dc663935f760d157244f6c880683deae31e9815481c980c4742bae282f52b4aa"
     }
   ],
   "permissions": [],
