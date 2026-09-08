@@ -160,3 +160,44 @@ manual refresh; backend source invalidation was verified correct. Those fixes,
 remaining conflict/recovery cases, diagnostics, Cloud graph navigation, current
 full-suite/parity regeneration and external scheduler deployment verification
 remain open. Cloud extraction/indexing is not exercised by this worker-free API.
+
+## Web mutations, deletion and restart follow-up
+
+At `22219932c`, the same isolated dataset completed the following additional
+journeys through the real Web and Electron interfaces:
+
+- After the enrolled mutation transport fix (`2b08b338d`), the Web editor saved
+  the original memory as revision 5. Native paged pull displayed that exact body.
+- Web deletion of the conflict copy succeeded. Native pull consumed its tombstone,
+  removed the copy and retained the original; the outbox remained empty.
+- A normal Electron exit and canonical `make -C agi-stack run-desktop` restart
+  retained the edited original and the deletion. The saved account and project
+  association survived; explicit target selection and binding verified the new
+  remote authorization before further synchronization.
+- The next pull returned `applied: 0`, `conflicts: 0`, `has_more: false` and
+  `next_cursor: 10`, without replaying deleted content.
+- Adjacent processing counters refreshed after pull. The new diagnostic panel
+  loaded its empty failure list; a populated failure/retry journey remains pending.
+
+The graph module artifact update changed the compiled QA profile digest. Review
+confirmed that only the profile digest and graph artifact digest changed. After
+stopping the owned QA API, its temporary metadata was backed up and advanced with
+an expected-old-digest check. The same database schema, authentication and content
+were retained. The service then restarted against the newly compiled profile;
+no production profile or database content was rewritten to bypass validation.
+
+Evidence: `/tmp/web-knowledge-sync-edited-2b08b338d.txt`,
+`/tmp/native-knowledge-web-pull-6d04caa74.txt`,
+`/tmp/web-knowledge-delete-6d04caa74.txt`,
+`/tmp/native-knowledge-web-delete-6d04caa74.txt`,
+`/tmp/native-knowledge-restart-22219932c.txt`,
+`/tmp/native-knowledge-profile-rebind-22219932c.txt` and
+`/tmp/cloud-knowledge-qa-profile-transition-22219932c.json`.
+
+The Desktop full suite at `22219932c` finished with 4,697 passed, one failed and
+two skipped (4,700 total). The failure is the reviewed Web redirect source hash
+in `desktop-parity-reviewed-additional-web-entries.test.mjs`; its audit evidence
+is stale. This run is not a green full-suite or release gate. Log:
+`/tmp/desktop-graph-22219932c-full.log`. Graph interactions, metadata/schema/entity
+synchronization, Agent source citation and the remaining release scenarios still
+require their own evidence. The default knowledge release remains closed.
