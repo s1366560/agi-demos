@@ -1,7 +1,7 @@
 use super::*;
 use rusqlite::Connection;
 
-pub(super) const DROP_PROCESSING_SCHEMA: &str = "DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;";
+pub(super) const DROP_PROCESSING_SCHEMA: &str = "DROP TABLE knowledge_community_results; DROP TABLE knowledge_community_audits; DROP TABLE knowledge_community_selection; DROP TABLE knowledge_community_jobs; DROP TABLE knowledge_community_members; DROP TABLE knowledge_community_candidates; DROP TABLE knowledge_community_builds; DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;";
 
 #[tokio::test]
 async fn v7_processing_upgrade_backs_up_source_and_rebuilds_only_pending_work() {
@@ -70,7 +70,7 @@ async fn v7_processing_upgrade_backs_up_source_and_rebuilds_only_pending_work() 
     );
 }
 
-pub(super) const DROP_CLOUD_SCHEMA: &str = "DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;";
+pub(super) const DROP_CLOUD_SCHEMA: &str = "DROP TABLE knowledge_community_results; DROP TABLE knowledge_community_audits; DROP TABLE knowledge_community_selection; DROP TABLE knowledge_community_jobs; DROP TABLE knowledge_community_members; DROP TABLE knowledge_community_candidates; DROP TABLE knowledge_community_builds; DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;";
 
 #[test]
 fn v6_cloud_resolution_upgrade_backs_up_before_journal_and_mapping_creation() {
@@ -318,7 +318,7 @@ async fn v8_to_v9_backup_contains_committed_wal_source_and_lease_before_audit_mi
     drop(repo);
     let knowledge = directory.0.join("knowledge");
     let db = Connection::open(knowledge.join("memories.db")).unwrap();
-    db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; DROP TABLE knowledge_processing_audits; UPDATE knowledge_schema SET version=8; CREATE TABLE retained_v8_wal(value TEXT); INSERT INTO retained_v8_wal VALUES('v8 committed WAL');").unwrap();
+    db.execute_batch("DROP TABLE knowledge_community_results; DROP TABLE knowledge_community_audits; DROP TABLE knowledge_community_selection; DROP TABLE knowledge_community_jobs; DROP TABLE knowledge_community_members; DROP TABLE knowledge_community_candidates; DROP TABLE knowledge_community_builds; PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; DROP TABLE knowledge_processing_audits; UPDATE knowledge_schema SET version=8; CREATE TABLE retained_v8_wal(value TEXT); INSERT INTO retained_v8_wal VALUES('v8 committed WAL');").unwrap();
     assert!(
         fs::metadata(knowledge.join("memories.db-wal"))
             .unwrap()
@@ -374,7 +374,7 @@ fn index_upgrade_backs_up_v9_before_schema_creation_and_reopens_idempotently() {
     let connection = Connection::open(knowledge.join("memories.db")).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE knowledge_index_configuration;
+            "DROP TABLE knowledge_community_results; DROP TABLE knowledge_community_audits; DROP TABLE knowledge_community_selection; DROP TABLE knowledge_community_jobs; DROP TABLE knowledge_community_members; DROP TABLE knowledge_community_candidates; DROP TABLE knowledge_community_builds; DROP TABLE knowledge_index_configuration;
         DROP TABLE knowledge_index_vectors;
         DROP TABLE knowledge_index_jobs; DROP TABLE knowledge_index_active;
         DROP TABLE knowledge_index_builds; UPDATE knowledge_schema SET version=9;
@@ -438,7 +438,7 @@ fn desired_config_upgrade_backs_up_v10_and_never_infers_selection_from_active_in
     let connection = Connection::open(knowledge.join("memories.db")).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE knowledge_index_configuration;
+            "DROP TABLE knowledge_community_results; DROP TABLE knowledge_community_audits; DROP TABLE knowledge_community_selection; DROP TABLE knowledge_community_jobs; DROP TABLE knowledge_community_members; DROP TABLE knowledge_community_candidates; DROP TABLE knowledge_community_builds; DROP TABLE knowledge_index_configuration;
         ALTER TABLE knowledge_index_jobs DROP COLUMN config_revision;
         UPDATE knowledge_schema SET version=10;
         INSERT INTO knowledge_index_active VALUES('t','p','historical-build');",
@@ -508,7 +508,7 @@ async fn metadata_upgrade_backs_up_v11_bytes_before_recovering_trusted_document_
     drop(repo);
     let knowledge = directory.0.join("knowledge");
     let connection = Connection::open(knowledge.join("memories.db")).unwrap();
-    connection.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
+    connection.execute_batch("DROP TABLE knowledge_community_results; DROP TABLE knowledge_community_audits; DROP TABLE knowledge_community_selection; DROP TABLE knowledge_community_jobs; DROP TABLE knowledge_community_members; DROP TABLE knowledge_community_candidates; DROP TABLE knowledge_community_builds; UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
     let original: String = connection
         .query_row("SELECT payload FROM knowledge_memories", [], |r| r.get(0))
         .unwrap();

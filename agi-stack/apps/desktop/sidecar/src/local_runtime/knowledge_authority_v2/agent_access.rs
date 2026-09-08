@@ -91,7 +91,7 @@ impl RunAuthorization {
             && conversation.tenant_id == self.auth.workspace.tenant_id
             && conversation.project_id == self.auth.workspace.project_id
             && run.map(|r| r.id.as_str()) == self.run_id.as_deref()
-            && run.is_none_or(|r| {
+            && run.map_or(true, |r| {
                 r.message_id == self.message_id
                     && r.conversation_id == self.conversation_id
                     && r.project_id == self.auth.workspace.project_id

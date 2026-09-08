@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:c6d24874081449ed83f1dbebd07a162bdc530870cc4f444b65ef9f0c681b52",
-    "36\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:bd474840814c538b6c0fc2a317cc8ad40920356da672ecbda0efd46be92ffa",
+    "c3\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1603,7 +1603,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "85b551a36281cd221e440ea5d\",\"entrypoint\":\"DesktopSidecarHttpRoutesModuleV2::apply\",\"modul",
     "e_ref\":\"builtin://memstack/desktop-sidecar/http-routes\",\"plugin_id\":\"memstack-native-tar",
     "get-hosts\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-sidecar\"]},{\"artifact_digest\":\"s",
-    "ha256:b1288553c1e21948e4bdfec60a70deb7f4b860f753d364cb081e3007f18e6f65\",\"artifact_source",
+    "ha256:31b36c8af8bdd7006ed1eadcb431506c05b071f9f6ef574ed176eaa66bf9bf94\",\"artifact_source",
     "\":\"repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/knowledge_authority_v2.r",
     "s\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\"",
     ",\"oneOf\":[{\"additionalProperties\":false,\"properties\":{\"release_contract\":{\"const\":\"knowl",
@@ -4573,4 +4573,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "chema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:c6d24874081449ed83f1dbebd07a162bdc530870cc4f444b65ef9f0c681b5236";
+    "sha256:bd474840814c538b6c0fc2a317cc8ad40920356da672ecbda0efd46be92ffac3";

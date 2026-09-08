@@ -2,8 +2,9 @@
 
 B2a adds executable core/device contracts for semantic community results and
 explicit active-build selection. B1 supplies immutable inputs and leased jobs.
-Provider HTTP, sidecar execution and product entry points remain a subsequent
-batch; this storage implementation alone is not the community product closure.
+B2b adds internal sidecar execution through the existing Provider configuration.
+Product entry points remain a subsequent batch; these internal contracts alone
+do not complete the community product flow.
 
 ## Agent contract
 
@@ -89,9 +90,25 @@ activation must use the existing online-backup lifecycle before migration.
 Tests that deliberately restore an old schema remove the new result tables;
 those fixtures are not a supported application rollback mechanism.
 
-The next sidecar worker reuses verified processing Provider resolution,
-`MeteredLlm`, authorization/generation admission, periodic lease renewal and
-cancellation handling. It calls the device clock-callback methods, inspects the
-returned audit outcome and attempts revision-fenced activation only after
-completion. The core worker and device repository perform no Provider HTTP or
-renderer work themselves.
+The sidecar worker reuses verified processing Provider resolution, `MeteredLlm`,
+authorization/generation admission, periodic lease renewal and cancellation
+handling. Provider readiness is checked before claiming work. A guard owns the
+attempt immediately after claim, releasing failed pre-audit work without
+fabricating a model invocation. Once audit starts, cancellation records its own
+terminal failure. Provider calls hold no auth, generation or repository locks.
+
+Claim, audit start, renewal and successful completion recheck the current
+generation and write access. Storage publication occurs while the existing auth
+and generation guards are held. Revocation or generation replacement prevents
+late publication, while operation leases retain storage until attempts drain.
+The worker returns the actual durable outcome, including graph or lease
+rejections, and does not activate a build. Selection and activation remain
+separate explicit revision-fenced operations.
+
+Rejected responses are hashed through a bounded streaming writer. Responses
+above 2 MiB retain a typed failure without a digest; raw Provider responses are
+never copied into audits. Real HTTP tests cover ready/insufficient results,
+invalid references, Provider errors, source edits, cancellation, renewal,
+revocation, generation replacement and failed audit persistence. The complete
+sidecar suite passes 807 tests with one separately invoked integration test
+ignored by default; Clippy passes with warnings denied.

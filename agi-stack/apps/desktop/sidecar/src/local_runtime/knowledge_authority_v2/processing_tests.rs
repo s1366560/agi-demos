@@ -8,6 +8,8 @@ use axum::{extract::State, routing::post, Json, Router};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Notify;
 
+#[path = "community_processing_tests.rs"]
+mod community;
 #[path = "processing_lifecycle_tests.rs"]
 mod lifecycle;
 #[path = "processing_rpc_entry_tests.rs"]

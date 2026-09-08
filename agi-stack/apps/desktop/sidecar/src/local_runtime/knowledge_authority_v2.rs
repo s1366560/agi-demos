@@ -25,11 +25,12 @@ use super::{
     platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
 };
 
-pub(super) mod agent_access;
 mod admission;
+pub(super) mod agent_access;
 use admission::KnowledgeAdmission;
 mod capabilities;
 mod capabilities_generated;
+mod community_processing;
 mod embedding_provider;
 mod indexing;
 mod processing;
