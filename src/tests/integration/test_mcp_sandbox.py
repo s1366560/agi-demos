@@ -34,9 +34,13 @@ def workspace_dir():
 
 
 @pytest.fixture
-async def sandbox_adapter():
-    """Create sandbox adapter."""
-    adapter = MCPSandboxAdapter()
+async def sandbox_adapter(unused_tcp_port_factory):
+    """Give real sandbox tests their own ports alongside a running developer stack."""
+    adapter = MCPSandboxAdapter(
+        host_port_start=unused_tcp_port_factory(),
+        desktop_port_start=unused_tcp_port_factory(),
+        terminal_port_start=unused_tcp_port_factory(),
+    )
     yield adapter
     # Cleanup all sandboxes after test
     await adapter.cleanup_expired(max_age_seconds=0)
