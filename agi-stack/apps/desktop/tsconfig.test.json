@@ -10,6 +10,7 @@
     "types": ["node"]
   },
   "include": [
+    "src/plugins/desktopCloudMemoryHttpV2.ts",
     "tests/css.d.ts",
     "tests/projectOverviewControllerTypeContract.ts",
     "electron/main/automaticUpdateLoop.ts",
