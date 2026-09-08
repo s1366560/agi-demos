@@ -6,6 +6,49 @@ use futures::executor::block_on;
 include!("tests/fixtures.rs");
 
 #[test]
+fn metadata_only_edit_invalidates_old_projection_and_preserves_nested_evidence() {
+    block_on(async {
+        let repo = SqliteKnowledgeRepository::in_memory().unwrap();
+        let s = scope("a", "p");
+        let mut memory = create(&repo, &s, "one", "Title", "Unchanged content").await;
+        finish(&repo, &s, true).await;
+        let original = repo.community_snapshot(&s, 2).await.unwrap();
+        let metadata = serde_json::json!({
+            "release": {"version": 2, "reviewed": true},
+            "labels": ["one", "two"], "optional": null
+        });
+        memory.metadata = metadata.as_object().unwrap().clone();
+        repo.update(&s, memory, 1).await.unwrap();
+        let edited = repo.community_snapshot(&s, 2).await.unwrap();
+        assert_eq!(edited.sources[0].source.revision, 2);
+        assert_eq!(edited.sources[0].payload["metadata"], metadata);
+        assert_eq!(
+            edited.sources[0].payload["content"],
+            original.sources[0].payload["content"]
+        );
+        assert!(edited.sources[0].audited_projection.is_none());
+        assert_ne!(edited.graph_digest, original.graph_digest);
+        assert!(SqliteKnowledgeRepository::community_candidates(&edited)
+            .unwrap()
+            .is_empty());
+        finish(&repo, &s, true).await;
+        let completed = repo.community_snapshot(&s, 2).await.unwrap();
+        assert_eq!(completed.sources[0].payload["metadata"], metadata);
+        assert_ne!(completed.graph_digest, edited.graph_digest);
+        assert_eq!(
+            SqliteKnowledgeRepository::community_candidates(&completed)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            original.sources[0].payload["metadata"],
+            serde_json::json!({})
+        );
+    });
+}
+
+#[test]
 fn complete_coverage_and_source_local_members_survive_repeated_reads() {
     block_on(async {
         let repo = SqliteKnowledgeRepository::in_memory().unwrap();

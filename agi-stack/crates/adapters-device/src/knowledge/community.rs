@@ -8,6 +8,7 @@ use agistack_core::knowledge::{
         worker::SUBMIT_PROJECTION_TOOL,
         ProcessingProjection, ProcessingSource, ProcessingState,
     },
+    KnowledgeMemory,
 };
 use rusqlite::{params, Transaction};
 use serde::Serialize;
@@ -91,7 +92,7 @@ fn decode(row: &rusqlite::Row<'_>, scope: &KnowledgeScope) -> KnowledgeResult<Co
     };
     let payload: serde_json::Value =
         serde_json::from_str(&row.get::<_, String>(3).map_err(storage)?).map_err(storage)?;
-    let memory: Memory = serde_json::from_value(payload.clone()).map_err(storage)?;
+    let memory: KnowledgeMemory = serde_json::from_value(payload.clone()).map_err(storage)?;
     if memory.id != source.memory_id
         || memory.project_id != source.project_id
         || memory.version != source.revision

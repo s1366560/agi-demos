@@ -21,6 +21,7 @@ async fn create(
             author_id: "actor".into(),
             content_type: "text".into(),
             tags: vec![],
+            metadata: Default::default(),
             entities: vec![],
             version: 1,
             status: "ENABLED".into(),
