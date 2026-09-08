@@ -71,6 +71,7 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
     const processing = createNativeKnowledgeProcessingController({
       queryClient: binding.processingClient,
       commandClient: binding.processingCommandClient,
+      inputsClient: binding.processingInputsClient,
       authority: binding.authority,
       onAccepted: () => retrieval.refreshConfiguration(),
     });

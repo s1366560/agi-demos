@@ -1,3 +1,4 @@
+import type { NativeKnowledgeProcessingInputsClient } from './nativeKnowledgeProcessingInputs';
 import { createContext, useContext } from 'react';
 
 import type {
@@ -13,6 +14,7 @@ export type NativeMemoriesRouteBinding = Readonly<{
   client: NativeKnowledgeClient;
   listClient: ProjectMemoriesClient;
   processingClient?: NativeKnowledgeProcessingClient;
+  processingInputsClient?: NativeKnowledgeProcessingInputsClient;
   processingCommandClient?: NativeKnowledgeProcessingCommandClient;
 }>;
 const NativeMemoriesContext = createContext<NativeMemoriesRouteBinding | null>(null);

@@ -1,3 +1,9 @@
+import { createDesktopNativeKnowledgeInputsClientV2 } from './desktopNativeKnowledgeInputsClientV2';
+import {
+  createDesktopTenantProvidersOperationsV2,
+  createDesktopTenantProvidersClientV2,
+} from './desktopTenantProvidersAuthorityModuleV2';
+import { createDesktopWorkspaceCatalogOperationsV2 } from './desktopWorkspaceCatalogAuthorityModuleV2';
 import { useMemo, useRef, type ReactNode } from 'react';
 
 import type { AuthState, DesktopRuntimeConfig } from '../types';
@@ -108,12 +114,28 @@ export function NativeMemoriesRouteProvider({
           : null,
     );
     const listClient = createDesktopProjectMemoriesClientV2(operations, config);
+    const processingClient = createDesktopNativeKnowledgeProcessingClientV2(operations, config);
+    const processingInputsClient = authorities.native.available
+      ? createDesktopNativeKnowledgeInputsClientV2(config, {
+          processing: processingClient,
+          providers: createDesktopTenantProvidersClientV2(
+            createDesktopTenantProvidersOperationsV2(() => generation?.actions ?? null),
+            config,
+          ),
+          workspaces: createDesktopWorkspaceCatalogOperationsV2(() => generation?.actions ?? null),
+          isCurrent: (operation) =>
+            live.current.authorities === authorities &&
+            authorities.native.available &&
+            authorities.native.allowedActions.includes(operation),
+        })
+      : undefined;
     return Object.freeze({
       native: Object.freeze({
         authority: authorities.native,
         client: createDesktopNativeKnowledgeClientV2(operations, config),
         listClient,
-        processingClient: createDesktopNativeKnowledgeProcessingClientV2(operations, config),
+        processingClient,
+        processingInputsClient,
         processingCommandClient: createDesktopNativeKnowledgeProcessingCommandClientV2(
           operations,
           config,

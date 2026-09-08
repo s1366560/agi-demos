@@ -69,11 +69,17 @@ function Capture() {
     }),
   );
 }
-function render({ mode = 'cloud', capability = cap, identity = auth, gen = generation } = {}) {
+function render({
+  mode = 'cloud',
+  capability = cap,
+  identity = auth,
+  gen = generation,
+  runtime = config,
+} = {}) {
   const node = h(
     NativeMemoriesRouteProvider,
     {
-      config: { ...config, mode },
+      config: { ...runtime, mode },
       auth: identity,
       capabilitySnapshot: { capabilities: { 'project-project-memories': capability } },
     },
@@ -113,4 +119,14 @@ test('wrong source or identity and generation drift close both surfaces', () => 
     assert.equal(value.cloud.available, false);
     assert.equal(value.local.available, false);
   }
+});
+
+test('signed-out initial render needs no catalog configuration', () => {
+  const value = render({
+    runtime: { ...config, tenantId: '', projectId: '' },
+    identity: { ...auth, status: 'signed_out' },
+    gen: null,
+  });
+  assert.equal(value.local.available, false);
+  assert.equal(value.cloud.available, false);
 });
