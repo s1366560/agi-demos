@@ -13,6 +13,8 @@ pub enum ProjectSchemaStorageError {
     ChangeIdReused,
     #[error("project_schema_admission_changed")]
     AdmissionChanged,
+    #[error("project_schema_response_too_large")]
+    ResponseTooLarge,
     #[error("project_schema_storage_corrupt")]
     CorruptStorage,
     #[error("project_schema_storage: {0}")]
@@ -68,5 +70,17 @@ impl ProjectSchemaReceipt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectSchemaJournalPage {
     pub upper_revision: u32,
+    pub items: Vec<ProjectSchemaReceipt>,
+}
+
+/// One transaction's complete receipt prefix. The caller supplies an envelope
+/// budget derived from this same schema identity and upper revision.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProjectSchemaHistoryPage {
+    pub schema_id: Option<String>,
+    pub after_revision: u32,
+    pub upper_revision: u32,
+    pub next_after_revision: u32,
+    pub has_more: bool,
     pub items: Vec<ProjectSchemaReceipt>,
 }

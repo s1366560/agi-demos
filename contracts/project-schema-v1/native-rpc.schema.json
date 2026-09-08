@@ -1,0 +1,570 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:memstack:project-schema:native-rpc:v1",
+  "title": "Native full-snapshot project schema RPC; independent of cloud HTTP patch intents",
+  "x-maxRequestBytes": 2097152,
+  "x-maxResponseBytes": 2097152,
+  "x-actions": {
+    "schema_read": {
+      "access": "read",
+      "path": "/api/v1/knowledge/schema/read",
+      "request": "NativeProjectSchemaReadRequest",
+      "response": "NativeProjectSchemaReadResponse",
+      "method": "POST"
+    },
+    "schema_bootstrap": {
+      "access": "write",
+      "path": "/api/v1/knowledge/schema/bootstrap",
+      "request": "NativeProjectSchemaBootstrapRequest",
+      "response": "NativeProjectSchemaBootstrapResponse",
+      "method": "POST"
+    },
+    "schema_replace": {
+      "access": "write",
+      "path": "/api/v1/knowledge/schema/replace",
+      "request": "NativeProjectSchemaReplaceRequest",
+      "response": "NativeProjectSchemaReplaceResponse",
+      "method": "POST"
+    },
+    "schema_receipt": {
+      "access": "read",
+      "path": "/api/v1/knowledge/schema/receipt",
+      "request": "NativeProjectSchemaReceiptRequest",
+      "response": "NativeProjectSchemaReceiptResponse",
+      "method": "POST"
+    },
+    "schema_history": {
+      "access": "read",
+      "path": "/api/v1/knowledge/schema/history",
+      "request": "NativeProjectSchemaHistoryRequest",
+      "response": "NativeProjectSchemaHistoryResponse",
+      "method": "POST"
+    }
+  },
+  "$defs": {
+    "NativeProjectSchemaScope": {
+      "$ref": "../../shared/schemas/knowledge/native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeScope"
+    },
+    "NativeProjectSchemaDocument": {
+      "$ref": "document.schema.json"
+    },
+    "NativeProjectSchemaUuid": {
+      "$ref": "document.schema.json#/$defs/uuid"
+    },
+    "NativeProjectSchemaReceipt": {
+      "type": "object",
+      "properties": {
+        "format_version": {
+          "const": 1
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-maxUtf8Bytes": 512
+        },
+        "change_id": {
+          "$ref": "#/$defs/NativeProjectSchemaUuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "x-rust-type": "u32"
+        },
+        "document": {
+          "$ref": "#/$defs/NativeProjectSchemaDocument"
+        }
+      },
+      "required": [
+        "format_version",
+        "actor_id",
+        "change_id",
+        "sequence",
+        "document"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaReadRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SchemaReadRequest"
+    },
+    "NativeProjectSchemaBootstrapRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "change_id": {
+          "$ref": "#/$defs/NativeProjectSchemaUuid"
+        },
+        "expected_revision": {
+          "const": 0,
+          "type": "integer",
+          "x-rust-type": "u32"
+        },
+        "document": {
+          "$ref": "#/$defs/NativeProjectSchemaDocument",
+          "x-rust-type": "Box<serde_json::value::RawValue>"
+        }
+      },
+      "required": [
+        "scope",
+        "change_id",
+        "expected_revision",
+        "document"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SchemaBootstrapRequest"
+    },
+    "NativeProjectSchemaReplaceRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "change_id": {
+          "$ref": "#/$defs/NativeProjectSchemaUuid"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "x-rust-type": "u32"
+        },
+        "document": {
+          "$ref": "#/$defs/NativeProjectSchemaDocument",
+          "x-rust-type": "Box<serde_json::value::RawValue>"
+        }
+      },
+      "required": [
+        "scope",
+        "change_id",
+        "expected_revision",
+        "document"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SchemaReplaceRequest"
+    },
+    "NativeProjectSchemaReceiptRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "change_id": {
+          "$ref": "#/$defs/NativeProjectSchemaUuid"
+        }
+      },
+      "required": [
+        "scope",
+        "change_id"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SchemaReceiptRequest"
+    },
+    "NativeProjectSchemaHistoryRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "after_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "x-rust-type": "u32"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "x-rust-type": "u32"
+        }
+      },
+      "required": [
+        "scope",
+        "after_revision",
+        "limit"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SchemaHistoryRequest"
+    },
+    "NativeProjectSchemaReadResult": {
+      "type": "object",
+      "properties": {
+        "document": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeProjectSchemaDocument"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaMutationResult": {
+      "type": "object",
+      "properties": {
+        "receipt": {
+          "$ref": "#/$defs/NativeProjectSchemaReceipt"
+        }
+      },
+      "required": [
+        "receipt"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaReceiptResult": {
+      "type": "object",
+      "properties": {
+        "receipt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeProjectSchemaReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "receipt"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaHistoryResult": {
+      "type": "object",
+      "properties": {
+        "schema_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeProjectSchemaUuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "x-rust-type": "u32"
+        },
+        "upper_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "x-rust-type": "u32"
+        },
+        "next_after_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "x-rust-type": "u32"
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeProjectSchemaReceipt"
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "schema_id",
+        "after_revision",
+        "upper_revision",
+        "next_after_revision",
+        "has_more",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaReadResponse": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "1.0.0"
+        },
+        "authority": {
+          "const": "native-project-schema"
+        },
+        "operation": {
+          "const": "schema_read"
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-maxUtf8Bytes": 512
+        },
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "result": {
+          "$ref": "#/$defs/NativeProjectSchemaReadResult"
+        }
+      },
+      "required": [
+        "contract_version",
+        "authority",
+        "operation",
+        "actor_id",
+        "scope",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaBootstrapResponse": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "1.0.0"
+        },
+        "authority": {
+          "const": "native-project-schema"
+        },
+        "operation": {
+          "const": "schema_bootstrap"
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-maxUtf8Bytes": 512
+        },
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "result": {
+          "$ref": "#/$defs/NativeProjectSchemaMutationResult"
+        }
+      },
+      "required": [
+        "contract_version",
+        "authority",
+        "operation",
+        "actor_id",
+        "scope",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaReplaceResponse": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "1.0.0"
+        },
+        "authority": {
+          "const": "native-project-schema"
+        },
+        "operation": {
+          "const": "schema_replace"
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-maxUtf8Bytes": 512
+        },
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "result": {
+          "$ref": "#/$defs/NativeProjectSchemaMutationResult"
+        }
+      },
+      "required": [
+        "contract_version",
+        "authority",
+        "operation",
+        "actor_id",
+        "scope",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaReceiptResponse": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "1.0.0"
+        },
+        "authority": {
+          "const": "native-project-schema"
+        },
+        "operation": {
+          "const": "schema_receipt"
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-maxUtf8Bytes": 512
+        },
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "result": {
+          "$ref": "#/$defs/NativeProjectSchemaReceiptResult"
+        }
+      },
+      "required": [
+        "contract_version",
+        "authority",
+        "operation",
+        "actor_id",
+        "scope",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaHistoryResponse": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "1.0.0"
+        },
+        "authority": {
+          "const": "native-project-schema"
+        },
+        "operation": {
+          "const": "schema_history"
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-maxUtf8Bytes": 512
+        },
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "result": {
+          "$ref": "#/$defs/NativeProjectSchemaHistoryResult"
+        }
+      },
+      "required": [
+        "contract_version",
+        "authority",
+        "operation",
+        "actor_id",
+        "scope",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "NativeProjectSchemaCapabilitiesResponse": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "1.0.0"
+        },
+        "authority": {
+          "const": "native-project-schema"
+        },
+        "operation": {
+          "const": "schema_capabilities"
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-maxUtf8Bytes": 512
+        },
+        "scope": {
+          "$ref": "#/$defs/NativeProjectSchemaScope"
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "route_id": {
+              "const": "project-project-schema"
+            },
+            "availability": {
+              "enum": [
+                "unavailable",
+                "degraded"
+              ]
+            },
+            "reason_code": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            },
+            "allowed_actions": {
+              "type": "array",
+              "maxItems": 5,
+              "items": {
+                "enum": [
+                  "schema_read",
+                  "schema_bootstrap",
+                  "schema_replace",
+                  "schema_receipt",
+                  "schema_history"
+                ]
+              }
+            },
+            "provenance": {
+              "const": "observed"
+            },
+            "authority_source": {
+              "const": "sidecar"
+            }
+          },
+          "required": [
+            "route_id",
+            "availability",
+            "reason_code",
+            "allowed_actions",
+            "provenance",
+            "authority_source"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract_version",
+        "authority",
+        "operation",
+        "actor_id",
+        "scope",
+        "result"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "x-capabilities": {
+    "method": "GET",
+    "path": "/api/v1/knowledge/schema/capabilities",
+    "response": "NativeProjectSchemaCapabilitiesResponse"
+  }
+}

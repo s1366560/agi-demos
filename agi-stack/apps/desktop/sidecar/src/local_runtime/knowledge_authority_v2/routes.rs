@@ -27,8 +27,12 @@ mod sync_admission;
 #[path = "sync_connection_routes.rs"]
 mod sync_connection_routes;
 
+#[path = "project_schema_routes.rs"]
+mod project_schema_routes;
+
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
+        .merge(project_schema_routes::router())
         .route("/api/v1/knowledge/context", get(context_route::context))
         .route(
             "/api/v1/knowledge/capabilities",

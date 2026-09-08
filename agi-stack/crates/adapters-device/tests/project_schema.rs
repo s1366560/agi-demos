@@ -1,4 +1,6 @@
 //! Real SQLite tests for portable schema storage, not API/sync acceptance.
+#[path = "project_schema/bounded.rs"]
+mod bounded;
 #[path = "project_schema/commands.rs"]
 mod commands;
 #[path = "project_schema/concurrency.rs"]

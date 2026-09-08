@@ -32,7 +32,7 @@ struct RequestBody {
     document: Value,
 }
 
-struct StoredChange {
+pub(super) struct StoredChange {
     schema_id: String,
     revision: u32,
     actor_id: String,
@@ -42,7 +42,7 @@ struct StoredChange {
     receipt: String,
 }
 
-fn row(row: &Row<'_>) -> rusqlite::Result<StoredChange> {
+pub(super) fn row(row: &Row<'_>) -> rusqlite::Result<StoredChange> {
     Ok(StoredChange {
         schema_id: row.get(0)?,
         revision: row.get(1)?,
@@ -82,7 +82,7 @@ pub(super) fn new_receipt(
     })
 }
 
-fn decode(
+pub(super) fn decode(
     scope: &KnowledgeScope,
     stored: &StoredChange,
 ) -> ProjectSchemaStorageResult<ProjectSchemaReceipt> {
@@ -144,7 +144,7 @@ pub(super) fn receipt(
         .transpose()
 }
 
-fn revision(
+pub(super) fn revision(
     tx: &Transaction<'_>,
     scope: &KnowledgeScope,
     revision: u32,

@@ -13,16 +13,18 @@ use serde_json::json;
 
 use super::{KnowledgeScope, SqliteKnowledgeRepository};
 
+mod bounded;
 mod read;
 mod schema;
 mod types;
 pub(super) use schema::migrate;
 pub use types::{
-    ProjectSchemaJournalPage, ProjectSchemaMutation, ProjectSchemaReceipt,
-    ProjectSchemaStorageError, ProjectSchemaStorageResult,
+    ProjectSchemaHistoryPage, ProjectSchemaJournalPage, ProjectSchemaMutation,
+    ProjectSchemaReceipt, ProjectSchemaStorageError, ProjectSchemaStorageResult,
 };
 
 type Current<'a> = &'a dyn Fn() -> ProjectSchemaStorageResult<()>;
+type ReceiptCheck<'a> = &'a dyn Fn(&ProjectSchemaReceipt) -> ProjectSchemaStorageResult<()>;
 
 fn storage(error: impl std::fmt::Display) -> ProjectSchemaStorageError {
     ProjectSchemaStorageError::Storage(error.to_string())
@@ -105,7 +107,7 @@ impl SqliteKnowledgeRepository {
         if command.expected_revision != 0 {
             return Err(ProjectSchemaError::RevisionConflict.into());
         }
-        self.write_project_schema(scope, actor_id, command, "bootstrap", current)
+        self.write_project_schema(scope, actor_id, command, "bootstrap", current, None)
     }
 
     pub fn replace_project_schema_durable(
@@ -118,7 +120,50 @@ impl SqliteKnowledgeRepository {
         if !(1..=MAX_REVISION).contains(&command.expected_revision) {
             return Err(ProjectSchemaError::RevisionConflict.into());
         }
-        self.write_project_schema(scope, actor_id, command, "replace", current)
+        self.write_project_schema(scope, actor_id, command, "replace", current, None)
+    }
+
+    /// Preflights the exact acceptance inside the write transaction, including replay.
+    pub fn bootstrap_project_schema_checked_durable(
+        &self,
+        scope: &KnowledgeScope,
+        actor_id: &str,
+        command: &ProjectSchemaMutation,
+        current: Current<'_>,
+        receipt_check: ReceiptCheck<'_>,
+    ) -> ProjectSchemaStorageResult<ProjectSchemaReceipt> {
+        if command.expected_revision != 0 {
+            return Err(ProjectSchemaError::RevisionConflict.into());
+        }
+        self.write_project_schema(
+            scope,
+            actor_id,
+            command,
+            "bootstrap",
+            current,
+            Some(receipt_check),
+        )
+    }
+
+    pub fn replace_project_schema_checked_durable(
+        &self,
+        scope: &KnowledgeScope,
+        actor_id: &str,
+        command: &ProjectSchemaMutation,
+        current: Current<'_>,
+        receipt_check: ReceiptCheck<'_>,
+    ) -> ProjectSchemaStorageResult<ProjectSchemaReceipt> {
+        if !(1..=MAX_REVISION).contains(&command.expected_revision) {
+            return Err(ProjectSchemaError::RevisionConflict.into());
+        }
+        self.write_project_schema(
+            scope,
+            actor_id,
+            command,
+            "replace",
+            current,
+            Some(receipt_check),
+        )
     }
 
     fn write_project_schema(
@@ -128,6 +173,7 @@ impl SqliteKnowledgeRepository {
         command: &ProjectSchemaMutation,
         operation: &str,
         current: Current<'_>,
+        receipt_check: Option<ReceiptCheck<'_>>,
     ) -> ProjectSchemaStorageResult<ProjectSchemaReceipt> {
         scope_valid(scope)?;
         identifier(actor_id)?;
@@ -151,6 +197,9 @@ impl SqliteKnowledgeRepository {
             if original != request {
                 return Err(ProjectSchemaStorageError::ChangeIdReused);
             }
+            if let Some(check) = receipt_check {
+                check(&receipt)?;
+            }
             current()?;
             tx.commit().map_err(storage)?;
             return Ok(receipt);
@@ -170,6 +219,9 @@ impl SqliteKnowledgeRepository {
         // The journal insert advances the head in the same SQLite statement.
         if read::head(&tx, scope)?.as_ref() != Some(receipt.document()) {
             return Err(ProjectSchemaStorageError::CorruptStorage);
+        }
+        if let Some(check) = receipt_check {
+            check(&receipt)?;
         }
         current()?;
         tx.commit().map_err(storage)?;
@@ -212,6 +264,27 @@ impl SqliteKnowledgeRepository {
         let tx = conn.transaction().map_err(storage)?;
         current()?;
         let result = read::changes(&tx, scope, after_revision, limit)?;
+        current()?;
+        tx.commit().map_err(storage)?;
+        Ok(result)
+    }
+
+    pub fn project_schema_history_bounded_durable(
+        &self,
+        scope: &KnowledgeScope,
+        after_revision: u32,
+        limit: u32,
+        item_budget: &dyn Fn(&ProjectSchemaHistoryPage) -> ProjectSchemaStorageResult<usize>,
+        current: Current<'_>,
+    ) -> ProjectSchemaStorageResult<ProjectSchemaHistoryPage> {
+        scope_valid(scope)?;
+        if !(1..=100).contains(&limit) {
+            return Err(ProjectSchemaStorageError::InvalidInput);
+        }
+        let mut conn = self.conn.lock().map_err(storage)?;
+        let tx = conn.transaction().map_err(storage)?;
+        current()?;
+        let result = bounded::history(&tx, scope, after_revision, limit, item_budget)?;
         current()?;
         tx.commit().map_err(storage)?;
         Ok(result)
