@@ -107,7 +107,7 @@ desktop-check: desktop-deps ## 桌面:Rust sidecar 与 Electron/renderer 测试
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:electron
 	@echo "==> Electron 外壳与 sidecar 验证通过"
 
-desktop-browser-qa: desktop-deps ## 桌面:执行双语、多视口、明暗主题 Browser QA 矩阵
+desktop-browser-qa: desktop-deps ## 桌面:执行浏览器交互集成测试
 	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) run qa:browser
 
 desktop-deps: ## 桌面:安装/校验前端依赖
