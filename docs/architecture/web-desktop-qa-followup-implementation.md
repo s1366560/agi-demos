@@ -981,3 +981,47 @@ source/diff review and executable checks establish this batch's scope instead.
 Rollback this batch's tests, disposable fixtures, and generated evidence together.
 This does not close I0: exact-commit full Backend/Web/Desktop/Rust release gates
 and formal Desktop parity regeneration remain outstanding.
+
+### I3 index worker/configuration and sync UI integration (2026-09-08)
+
+Integrated provider-bound indexing `605e7f062`, explicit desired configuration
+`1a86a9e35`, and the linked-project sync/conflict interface `639ee1c0e`. Index
+workers and semantic reads recheck current Provider/vault binding, source revision,
+operation generation, session lifetime, and durable configuration revision. SQLite
+v11 leaves legacy leases unbound and requires an explicit configuration choice;
+A-to-B-to-A selection cannot revive an old lease or query. Source data and previous
+builds remain retained, and promotion requires current coverage. External environment
+key replacement across restart without a Provider revision change remains a known
+limitation; no credential hash is persisted as a substitute for a revision.
+
+The sync interface supports existing links, outbox/pending pages, pull/push conflict
+review, exact original-request recovery, and supported reconciliation choices.
+Unknown sync outcomes require refresh before other writes. Identity, project and
+generation changes discard old UI state. Trusted remote project selection, unsupported
+push keep-both, and the production knowledge gate remain closed. These components
+have browser/controller evidence, not completed real Electron acceptance.
+
+### I2 cloud memory command transport (2026-09-08)
+
+`d4ba2b5e9` adds one shared renderer/main memory command wire type, dedicated
+X-Memory-Expected-Revision forwarding, canonical UUID idempotency keys, exact body
+allow-lists, and scoped detail/PATCH/DELETE paths. The specialized command cannot
+be reused on unrelated endpoints. Backend enrollment and object authorization remain
+mandatory; the bridge does not fall back to legacy writes.
+
+The initial focused test reproduced missing transport support, then all 23 broker
+cases passed. A real Node renderer/main to HTTP to isolated PostgreSQL rehearsal
+passed both enabled and disabled project cases: create/update/delete replay, stale
+revision rejection, persistent tombstone, and disabled-protocol 503. Main validation
+at `d4ba2b5e9`: Rust core/device/Sidecar plus doc tests 936 passed, 1 ignored;
+Desktop 4357 passed, 2 binary-gated skips, 1 existing audited-source parity failure;
+cloud bridge plus scoped HTTP PostgreSQL 14 passed. Renderer and Electron type
+checks passed in the isolated transport worktree. Gitleaks and normal hooks passed.
+GitNexus impact/detect were attempted but unavailable (Transport closed/WAL crash),
+so graph validation is not claimed.
+
+Rollback transport `d4ba2b5e9` independently; it changes no stored memory. Revert
+sync UI independently. For the index configuration schema, preserve the pre-upgrade
+backup and closed feature gate; do not delete user content, previous builds, or
+outbox state to simulate rollback. Cloud editing UI, native processing RPC, real
+model/Electron acceptance and formal parity remain follow-up work.
