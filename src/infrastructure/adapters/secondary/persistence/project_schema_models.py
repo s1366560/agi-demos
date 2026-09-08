@@ -1,8 +1,4 @@
-"""Closed schema storage foundation; legacy tables remain the only current authority.
-
-The legacy-only head constraint must be replaced by a later reviewed migration
-when an atomic command authority and its database write guards actually exist.
-"""
+"""Schema head/history; current live members remain in the three relational tables."""
 
 from __future__ import annotations
 
@@ -29,7 +25,7 @@ from src.infrastructure.adapters.secondary.persistence.models import Base
 
 
 class ProjectSchemaHeadModel(Base):
-    """An inactive slot, not a second current-document payload or activation API."""
+    """Explicit legacy/active identity and CAS head; never a second document payload."""
 
     __tablename__ = "project_schema_heads"
     project_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -56,15 +52,17 @@ class ProjectSchemaHeadModel(Base):
         ),
         CheckConstraint("format_version = 1", name="ck_project_schema_head_format"),
         CheckConstraint(
-            "mode = 'legacy' AND schema_id IS NULL AND revision IS NULL "
-            "AND sequence = 0 AND NOT deleted",
-            name="ck_project_schema_head_closed",
+            "(mode = 'legacy' AND schema_id IS NULL AND revision IS NULL "
+            "AND sequence = 0 AND NOT deleted) OR "
+            "(mode = 'active' AND schema_id IS NOT NULL "
+            "AND revision BETWEEN 1 AND 2147483647 AND sequence = revision)",
+            name="ck_project_schema_head_state",
         ),
     )
 
 
 class ProjectSchemaTombstoneModel(Base):
-    """Future immutable member reservations; no writer is supplied in this batch."""
+    """Retained member reservations accepted within the schema command transaction."""
 
     __tablename__ = "project_schema_tombstones"
     schema_id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -94,7 +92,7 @@ class ProjectSchemaTombstoneModel(Base):
 
 
 class ProjectSchemaChangeModel(Base):
-    """Future immutable journal snapshots, never a writable current-document copy."""
+    """Immutable journal snapshots, never a writable current-document copy."""
 
     __tablename__ = "project_schema_changes"
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -139,7 +137,7 @@ class ProjectSchemaChangeModel(Base):
 
 
 class ProjectSchemaReceiptModel(Base):
-    """Future exact request/response bytes scoped to the initiator and schema."""
+    """Exact internal request/response text scoped to the initiator and schema."""
 
     __tablename__ = "project_schema_receipts"
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True)

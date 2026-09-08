@@ -35,6 +35,15 @@ class SqlProjectSchemaInspection:
     session: AsyncSession
 
     async def inspect(self, *, tenant_id: str, project_id: str) -> LegacySchemaInspection:
+        records = await self.read_records(tenant_id=tenant_id, project_id=project_id)
+        return inspect_legacy_project_schema(
+            tenant_id=tenant_id, project_id=project_id, records=records
+        )
+
+    async def read_records(
+        self, *, tenant_id: str, project_id: str
+    ) -> tuple[LegacySchemaRecord, ...]:
+        """Read exact legacy columns; callers performing bootstrap must hold the project lock."""
         scope = (
             select(Project.id)
             .where(Project.id == project_id, Project.tenant_id == tenant_id)
@@ -91,7 +100,7 @@ class SqlProjectSchemaInspection:
         rows = result.mappings().all()
         if not any(row["kind"] == "project" for row in rows):
             raise ProjectSchemaInspectionScopeNotFound("project_schema_inspection_scope_not_found")
-        records = tuple(
+        return tuple(
             LegacySchemaRecord(
                 kind=SchemaRecordKind(row["kind"]),
                 record_id=row["record_id"],
@@ -106,7 +115,4 @@ class SqlProjectSchemaInspection:
             )
             for row in rows
             if row["kind"] != "project"
-        )
-        return inspect_legacy_project_schema(
-            tenant_id=tenant_id, project_id=project_id, records=records
         )

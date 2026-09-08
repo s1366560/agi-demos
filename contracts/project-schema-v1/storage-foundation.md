@@ -5,6 +5,10 @@ read-only legacy inspection. It does not enable schema synchronization or an
 accepted project-schema document. The original `entity_types`, `edge_types`
 and `edge_type_maps` tables remain the sole current authority.
 
+The later [internal command foundation](internal-commands.md) adds explicit
+bootstrap/CAS and database guards in a separate migration. The description below
+records the closed behavior of this original foundation revision.
+
 ## Database scope
 
 The migration adds `project_schema_heads`, `project_schema_tombstones`,

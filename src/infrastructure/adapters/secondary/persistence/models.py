@@ -578,7 +578,10 @@ class Memory(Base):
 
 class EntityType(Base):
     __tablename__ = "entity_types"
-    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_entity_type_project_name"),)
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_entity_type_project_name"),
+        UniqueConstraint("project_id", "id", name="uq_entity_type_project_id"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id"), nullable=False)
@@ -597,7 +600,10 @@ class EntityType(Base):
 
 class EdgeType(Base):
     __tablename__ = "edge_types"
-    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_edge_type_project_name"),)
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_edge_type_project_name"),
+        UniqueConstraint("project_id", "id", name="uq_edge_type_project_id"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id"), nullable=False)
@@ -620,6 +626,27 @@ class EdgeTypeMap(Base):
         UniqueConstraint(
             "project_id", "source_type", "target_type", "edge_type", name="uq_edge_map_unique"
         ),
+        ForeignKeyConstraint(
+            ["project_id", "source_type_id"],
+            ["entity_types.project_id", "entity_types.id"],
+            name="fk_schema_mapping_source_id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["project_id", "target_type_id"],
+            ["entity_types.project_id", "entity_types.id"],
+            name="fk_schema_mapping_target_id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["project_id", "edge_type_id"],
+            ["edge_types.project_id", "edge_types.id"],
+            name="fk_schema_mapping_edge_id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -627,6 +654,9 @@ class EdgeTypeMap(Base):
     source_type: Mapped[str] = mapped_column(String, nullable=False)
     target_type: Mapped[str] = mapped_column(String, nullable=False)
     edge_type: Mapped[str] = mapped_column(String, nullable=False)
+    source_type_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    target_type_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    edge_type_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status: Mapped[str] = mapped_column(String, default=DataStatus.ENABLED)
     source: Mapped[str] = mapped_column(String, default="user")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

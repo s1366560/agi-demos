@@ -37,11 +37,59 @@ def load_migration():
     return module
 
 
-def metadata_subset(names):
+def metadata_subset(names, *, commands=False):
     metadata = sa.MetaData()
     for name in names:
         Base.metadata.tables[name].to_metadata(metadata)
+    if not commands:
+        # Reconstruct the immutable closed-foundation revision even as production
+        # models evolve. This keeps its historical upgrade/rollback tests honest.
+        for name, constraint_name in (
+            ("entity_types", "uq_entity_type_project_id"),
+            ("edge_types", "uq_edge_type_project_id"),
+        ):
+            if name in metadata.tables:
+                table = metadata.tables[name]
+                for constraint in tuple(table.constraints):
+                    if constraint.name == constraint_name:
+                        table.constraints.remove(constraint)
+        _restore_closed_mapping_shape(metadata)
+        _restore_closed_head(metadata)
     return metadata
+
+
+def _restore_closed_mapping_shape(metadata):
+    if "edge_type_maps" not in metadata.tables:
+        return
+    table = metadata.tables["edge_type_maps"]
+    for constraint in tuple(table.constraints):
+        if constraint.name in {
+            "fk_schema_mapping_source_id",
+            "fk_schema_mapping_target_id",
+            "fk_schema_mapping_edge_id",
+        }:
+            table.constraints.remove(constraint)
+            table.foreign_key_constraints.discard(constraint)
+            for element in constraint.elements:
+                table.foreign_keys.discard(element)
+    for name in ("source_type_id", "target_type_id", "edge_type_id"):
+        table._columns.remove(table.c[name])
+
+
+def _restore_closed_head(metadata):
+    if "project_schema_heads" not in metadata.tables:
+        return
+    table = metadata.tables["project_schema_heads"]
+    for constraint in tuple(table.constraints):
+        if constraint.name == "ck_project_schema_head_state":
+            table.constraints.remove(constraint)
+    table.append_constraint(
+        sa.CheckConstraint(
+            "mode = 'legacy' AND schema_id IS NULL AND revision IS NULL "
+            "AND sequence = 0 AND NOT deleted",
+            name="ck_project_schema_head_closed",
+        )
+    )
 
 
 def _invoke(operations, item):
@@ -134,7 +182,7 @@ def bootstrap(connection):
 def snapshot(connection):
     result = {}
     for name in LEGACY_TABLES:
-        table = Base.metadata.tables[name]
+        table = metadata_subset(LEGACY_TABLES).tables[name]
         statement = sa.select(table).order_by(table.c.id)
         if name in {"entity_types", "edge_types"}:
             statement = statement.add_columns(sa.cast(table.c.schema, sa.Text).label("schema_raw"))

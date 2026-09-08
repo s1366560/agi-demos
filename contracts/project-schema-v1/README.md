@@ -1,12 +1,17 @@
 # Project schema document v1: contract foundation
 
-Status: standalone domain contract only. No database, API, local authority,
-sync transport, generated native-knowledge artifact, or extraction integration
-uses this document yet. Metadata synchronization is a separate existing feature.
+Status: portable domain contract with opt-in internal cloud commands and database
+fences. No public API, local authority, sync transport, native-knowledge artifact
+or extraction integration uses this document yet. Metadata synchronization is a
+separate existing feature. No project is automatically activated.
 
 The separately delivered [closed cloud storage foundation](storage-foundation.md)
 adds inactive Alembic tables and read-only inspection; its database rollback
 requirements are documented there.
+
+The subsequent [internal command foundation](internal-commands.md) provides
+explicit authorized bootstrap/CAS transactions and PostgreSQL write fences.
+It is not registered with any legacy writer, API or runtime plugin.
 
 ## Identity and structure
 
