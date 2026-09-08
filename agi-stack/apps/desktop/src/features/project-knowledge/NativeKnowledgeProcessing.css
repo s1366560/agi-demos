@@ -47,3 +47,22 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.native-knowledge-processing label {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 1rem;
+}
+.native-knowledge-processing select {
+  max-width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-7);
+  border-radius: 0.35rem;
+  padding: 0.5rem;
+}
+.native-knowledge-processing select:focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: 2px;
+}

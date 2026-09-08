@@ -1,3 +1,4 @@
+import { NativeKnowledgeProcessingChoices } from './NativeKnowledgeProcessingChoices';
 import { useI18n } from '../../i18n';
 import type {
   NativeKnowledgeProcessingController,
@@ -54,12 +55,7 @@ export function NativeKnowledgeProcessingPanel({
           </div>
         </>
       )}
-      {model.allowedActions.includes('configure_embedding') ? (
-        <p>{t('nativeProcessing.providerContextUnavailable')}</p>
-      ) : null}
-      {model.allowedActions.includes('process_one') ? (
-        <p>{t('nativeProcessing.workspaceContextUnavailable')}</p>
-      ) : null}
+      <NativeKnowledgeProcessingChoices model={model} controller={controller} locked={locked} />
       {model.snapshot ? (
         <dl>
           <dt>{t('nativeRetrieval.desired')}</dt>
@@ -75,8 +71,34 @@ export function NativeKnowledgeProcessingPanel({
           <h3>{t('nativeProcessing.review')}</h3>
           <p>{t(`nativeProcessing.${model.selection.operation}Help`)}</p>
           <dl>
-            <dt>{t('nativeProcessing.targetBuild')}</dt>
-            <dd>{model.selection.build_id}</dd>
+            {model.selection.operation === 'process_one' ? (
+              <>
+                <dt>{t('nativeProcessing.workspace')}</dt>
+                <dd>
+                  {model.workspaceChoice?.name} · {model.selection.workspace_id}
+                </dd>
+              </>
+            ) : (
+              <>
+                <dt>{t('nativeProcessing.targetBuild')}</dt>
+                <dd>{model.selection.build_id}</dd>
+              </>
+            )}
+            {model.selection.operation === 'configure_embedding' ? (
+              <>
+                <dt>{t('nativeProcessing.embeddingModel')}</dt>
+                <dd>
+                  {model.embeddingChoice?.providerName} · {model.selection.model_id}
+                </dd>
+                <dt>{t('nativeProcessing.providerRevision')}</dt>
+                <dd>{model.selection.provider_revision}</dd>
+                <dt>{t('nativeProcessing.expectedRevision')}</dt>
+                <dd>
+                  {model.selection.expected_config_revision ??
+                    t('nativeProcessing.noPreviousConfiguration')}
+                </dd>
+              </>
+            ) : null}
           </dl>
           <button type="button" disabled={busy} onClick={() => void controller.confirm()}>
             {t('nativeProcessing.confirm')}
@@ -115,6 +137,34 @@ export function NativeKnowledgeProcessingPanel({
       ) : null}
       {model.outcome?.operation === 'promote_index' ? (
         <p role="status">{t('nativeProcessing.promoted')}</p>
+      ) : null}
+      {model.outcome?.operation === 'configure_embedding' ? (
+        <p role="status">{t('nativeProcessing.configured')}</p>
+      ) : null}
+      {model.outcome?.operation === 'process_one' ? (
+        model.outcome.result.receipt === null ? (
+          <p role="status">{t('nativeProcessing.noTask')}</p>
+        ) : (
+          <section aria-label={t('nativeProcessing.extractionReceipt')}>
+            <h3>{t('nativeProcessing.extractionReceipt')}</h3>
+            <dl>
+              <dt>{t('nativeRetrieval.source')}</dt>
+              <dd>{model.outcome.result.receipt.source.memory_id}</dd>
+              <dt>{t('nativeRetrieval.sourceRevision')}</dt>
+              <dd>{model.outcome.result.receipt.source.revision}</dd>
+              <dt>{t('nativeProcessing.attempt')}</dt>
+              <dd>{model.outcome.result.receipt.attempt}</dd>
+              <dt>{t('nativeProcessing.taskStatus')}</dt>
+              <dd>{t(`nativeProcessing.status.${model.outcome.result.receipt.status}`)}</dd>
+              {model.outcome.result.receipt.failure ? (
+                <>
+                  <dt>{t('nativeProcessing.failure')}</dt>
+                  <dd>{t(`nativeProcessing.failure.${model.outcome.result.receipt.failure}`)}</dd>
+                </>
+              ) : null}
+            </dl>
+          </section>
+        )
       ) : null}
       {model.outcome?.operation === 'select_embedding' ? (
         <p role="status">{t('nativeProcessing.selected')}</p>

@@ -101,3 +101,89 @@ test('review shows exact target and failed task provenance with translated typed
   assert.match(html, /does not execute the task or retry other failures/);
   assert.doesNotMatch(html, /private-digest/);
 });
+
+test('trusted embedding choices show declared models and CAS review without manual scope inputs', () => {
+  const inputs = {
+    embeddingModels: {
+      availability: 'available',
+      items: [
+        {
+          providerId: 'provider-1',
+          providerRevision: 3,
+          providerName: 'Provider One',
+          modelId: 'embedding-1',
+        },
+      ],
+    },
+    workspaces: { availability: 'unavailable', items: [] },
+  };
+  const chosen = {
+    ...model,
+    inputsAvailable: true,
+    inputs,
+    inputOperation: 'configure_embedding',
+    embeddingChoice: inputs.embeddingModels.items[0],
+  };
+  const html = render(chosen);
+  assert.match(html, /<select/);
+  assert.match(html, /Provider One · embedding-1/);
+  assert.doesNotMatch(html, /<input|api_key|credential|workspaceRoot/);
+  const review = render({
+    ...chosen,
+    phase: 'reviewing',
+    selection: {
+      operation: 'configure_embedding',
+      build_id: 'new-build',
+      provider_id: 'provider-1',
+      provider_revision: 3,
+      model_id: 'embedding-1',
+      expected_config_revision: 8,
+    },
+  });
+  assert.match(review, /Expected previous configuration revision<\/dt><dd>8/);
+  assert.match(review, /Provider revision<\/dt><dd>3/);
+  assert.match(review, /new-build/);
+});
+
+test('workspace selection and extraction receipt expose exact action and failed source', () => {
+  const inputs = {
+    embeddingModels: { availability: 'unavailable', items: [] },
+    workspaces: {
+      availability: 'available',
+      items: [{ id: 'workspace-1', name: 'Workspace One' }],
+    },
+  };
+  const html = render({
+    ...model,
+    inputsAvailable: true,
+    inputs,
+    inputOperation: 'process_one',
+    workspaceChoice: inputs.workspaces.items[0],
+    selection: { operation: 'process_one', workspace_id: 'workspace-1' },
+  });
+  assert.match(html, /Workspace One · workspace-1/);
+  assert.match(html, /configured agent and provider/);
+  const failed = render({
+    ...model,
+    outcome: {
+      operation: 'process_one',
+      result: {
+        receipt: {
+          source: { memory_id: 'source-1', revision: 4 },
+          attempt: 2,
+          status: 'failed',
+          failure: 'invalid_extraction',
+        },
+      },
+    },
+  });
+  assert.match(failed, /Observed extraction task receipt/);
+  assert.match(failed, /source-1/);
+  assert.match(failed, /Invalid extraction returned/);
+  assert.doesNotMatch(failed, /server confirmed|All tasks completed/);
+  const empty = render({
+    ...model,
+    outcome: { operation: 'process_one', result: { receipt: null } },
+  });
+  assert.match(empty, /No available task was claimed/);
+});

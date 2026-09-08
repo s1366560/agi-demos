@@ -1,4 +1,14 @@
 import type {
+  NativeKnowledgeProcessingInputsClient,
+  NativeKnowledgeProcessingInputs,
+  NativeKnowledgeEmbeddingChoice,
+  NativeKnowledgeWorkspaceChoice,
+} from './nativeKnowledgeProcessingInputs';
+import {
+  validateNativeKnowledgeProcessingInputs,
+  sameNativeKnowledgeEmbeddingChoice,
+} from './nativeKnowledgeProcessingInputValidation';
+import type {
   NativeKnowledgeProcessingClient,
   NativeKnowledgeProcessingCommand,
   NativeKnowledgeProcessingCommandClient,
@@ -9,7 +19,7 @@ import type {
 import type { NativeMemoriesAuthority } from './nativeMemoriesController';
 import type { NativeKnowledgeConfigurationSnapshot } from './nativeKnowledgeRetrievalController';
 
-type SupportedOperation = 'index_one' | 'promote_index' | 'retry_index' | 'select_embedding';
+type SupportedOperation = NativeKnowledgeProcessingCommand['operation'];
 type SupportedCommand = Extract<
   NativeKnowledgeProcessingCommand,
   { operation: SupportedOperation }
@@ -36,6 +46,11 @@ export type NativeKnowledgeProcessingModel = Readonly<{
     | 'error'
     | 'unavailable';
   allowedActions: readonly string[];
+  inputsAvailable: boolean;
+  inputs: NativeKnowledgeProcessingInputs | null;
+  inputOperation: 'configure_embedding' | 'process_one' | null;
+  embeddingChoice: NativeKnowledgeEmbeddingChoice | null;
+  workspaceChoice: NativeKnowledgeWorkspaceChoice | null;
   snapshot: NativeKnowledgeConfigurationSnapshot | null;
   selection: SupportedCommand | null;
   failedTask: FailedTask | null;
@@ -47,6 +62,8 @@ export type NativeKnowledgeProcessingModel = Readonly<{
     | 'contextChanged'
     | 'reviewChanged'
     | 'configurationRequired'
+    | 'inputRequired'
+    | 'inputsChanged'
     | 'activeRequired'
     | 'failedReceiptRequired'
     | 'conflict'
@@ -95,9 +112,11 @@ const freezeCommand = (command: SupportedCommand): SupportedCommand => {
 export function createNativeKnowledgeProcessingController({
   queryClient,
   commandClient,
+  inputsClient,
   authority: input,
   onAccepted,
 }: Readonly<{
+  inputsClient?: NativeKnowledgeProcessingInputsClient;
   queryClient?: NativeKnowledgeProcessingClient;
   commandClient?: NativeKnowledgeProcessingCommandClient;
   authority: NativeMemoriesAuthority;
@@ -126,6 +145,11 @@ export function createNativeKnowledgeProcessingController({
     Object.freeze({
       phase: allowedActions.some((action) => OPERATIONS.includes(action)) ? 'idle' : 'unavailable',
       allowedActions: declared,
+      inputsAvailable: Boolean(inputsClient),
+      inputs: null,
+      inputOperation: null,
+      embeddingChoice: null,
+      workspaceChoice: null,
       snapshot: null,
       selection: null,
       failedTask: null,
@@ -186,7 +210,13 @@ export function createNativeKnowledgeProcessingController({
     ].includes(error.message);
   const fail = (error: unknown, writeStarted = false) => {
     const code = error instanceof Error ? error.message : '';
-    if (contextFailure(error)) {
+    if (
+      contextFailure(error) ||
+      (typeof error === 'object' &&
+        error &&
+        'status' in error &&
+        [401, 403].includes(Number(error.status)))
+    ) {
       observed = undefined;
       model = initial();
       emit({ phase: 'error', error: 'contextChanged' });
@@ -204,6 +234,11 @@ export function createNativeKnowledgeProcessingController({
     if (writeStarted && !rejected) {
       emit({
         phase: 'uncertain',
+        inputsAvailable: Boolean(inputsClient),
+        inputs: null,
+        inputOperation: null,
+        embeddingChoice: null,
+        workspaceChoice: null,
         selection: null,
         failedTask: null,
         outcome: null,
@@ -235,7 +270,15 @@ export function createNativeKnowledgeProcessingController({
       return;
     const recovering = model.recoveryRequired;
     const request = begin();
-    emit({ phase: 'loading', selection: null, error: null });
+    emit({
+      phase: 'loading',
+      selection: null,
+      inputs: null,
+      inputOperation: null,
+      embeddingChoice: null,
+      workspaceChoice: null,
+      error: null,
+    });
     try {
       const snapshot = await read(request);
       if (!current(request)) return;
@@ -249,9 +292,73 @@ export function createNativeKnowledgeProcessingController({
       if (current(request)) fail(error);
     }
   };
+  const readInputs = async (
+    operation: 'configure_embedding' | 'process_one',
+    request: ReturnType<typeof begin>,
+  ) => {
+    if (!inputsClient || !observed) throw Error('knowledge_inputs_unavailable');
+    const result = validateNativeKnowledgeProcessingInputs(
+      await inputsClient.load(scope, {
+        operation,
+        expectedScope: observed,
+        signal: request.signal,
+      }),
+    );
+    if (!current(request)) throw Error('request_cancelled');
+    checkScope(result.scope);
+    // A directory must bind to every field of the configuration observation.
+    if (
+      result.scope.profile_id !== observed.profile_id ||
+      result.scope.generation !== observed.generation ||
+      result.scope.digest !== observed.digest
+    )
+      throw Error('knowledge_scope_mismatch');
+    return result;
+  };
+  const prepareInputs = async (operation: 'configure_embedding' | 'process_one') => {
+    if (
+      !['configure_embedding', 'process_one'].includes(operation) ||
+      !permitted(operation) ||
+      locked() ||
+      !inputsClient
+    )
+      return;
+    const request = begin();
+    emit({
+      phase: 'loading',
+      inputs: null,
+      inputOperation: null,
+      embeddingChoice: null,
+      workspaceChoice: null,
+      selection: null,
+      outcome: null,
+      error: null,
+    });
+    try {
+      const snapshot = await read(request);
+      const inputs = await readInputs(operation, request);
+      if (current(request)) emit({ phase: 'idle', snapshot, inputs, inputOperation: operation });
+    } catch (error) {
+      if (current(request)) fail(error);
+    }
+  };
+  const inputMatches = (command: SupportedCommand, inputs: NativeKnowledgeProcessingInputs) =>
+    command.operation === 'configure_embedding'
+      ? inputs.embeddingModels.availability === 'available' &&
+        inputs.embeddingModels.items.some(
+          (item) =>
+            item.providerId === command.provider_id &&
+            item.providerRevision === command.provider_revision &&
+            item.modelId === command.model_id,
+        )
+      : command.operation === 'process_one'
+        ? inputs.workspaces.availability === 'available' &&
+          inputs.workspaces.items.some((item) => item.id === command.workspace_id)
+        : true;
   const review = async (operation: SupportedOperation) => {
     if (
-      !['index_one', 'promote_index', 'retry_index', 'select_embedding'].includes(operation) ||
+      !OPERATIONS.includes(operation) ||
+      ((operation === 'configure_embedding' || operation === 'process_one') && !inputsClient) ||
       !permitted(operation) ||
       locked()
     )
@@ -265,7 +372,45 @@ export function createNativeKnowledgeProcessingController({
       emit({ snapshot });
       const configuration = snapshot.configuration;
       let command: SupportedCommand;
-      if (operation === 'select_embedding') {
+      if (operation === 'configure_embedding' || operation === 'process_one') {
+        const selected =
+          operation === 'configure_embedding' ? model.embeddingChoice : model.workspaceChoice;
+        if (!selected || model.inputOperation !== operation) {
+          emit({ phase: 'idle', error: 'inputRequired' });
+          return;
+        }
+        const inputs = await readInputs(operation, request);
+        if (!current(request)) return;
+        emit({ inputs });
+        if (operation === 'configure_embedding') {
+          const choice = model.embeddingChoice!;
+          if (
+            !inputs.embeddingModels.items.some((item) =>
+              sameNativeKnowledgeEmbeddingChoice(item, choice),
+            )
+          ) {
+            emit({ phase: 'idle', embeddingChoice: null, error: 'inputsChanged' });
+            return;
+          }
+          command = {
+            operation,
+            build_id: crypto.randomUUID(),
+            provider_id: choice.providerId,
+            provider_revision: choice.providerRevision,
+            model_id: choice.modelId,
+            expected_config_revision: configuration?.revision ?? null,
+          };
+        } else command = { operation, workspace_id: model.workspaceChoice!.id };
+        if (!inputMatches(command, inputs)) {
+          emit({
+            phase: 'idle',
+            workspaceChoice: null,
+            embeddingChoice: null,
+            error: 'inputsChanged',
+          });
+          return;
+        }
+      } else if (operation === 'select_embedding') {
         if (!snapshot.active_build_id) {
           emit({ phase: 'idle', error: 'activeRequired' });
           return;
@@ -335,6 +480,21 @@ export function createNativeKnowledgeProcessingController({
         emit({ phase: 'idle', selection: null, failedTask: null, error: 'reviewChanged' });
         return;
       }
+      if (command.operation === 'configure_embedding' || command.operation === 'process_one') {
+        const inputs = await readInputs(command.operation, request);
+        if (!current(request)) return;
+        emit({ inputs });
+        if (!inputMatches(command, inputs)) {
+          emit({
+            phase: 'idle',
+            selection: null,
+            embeddingChoice: null,
+            workspaceChoice: null,
+            error: 'inputsChanged',
+          });
+          return;
+        }
+      }
       writeStarted = true;
       const response = await commandClient!.execute(scope, command, {
         signal: request.signal,
@@ -351,15 +511,19 @@ export function createNativeKnowledgeProcessingController({
         failedTask =
           outcome.result.receipt?.status === 'failed'
             ? {
-                buildId: command.build_id,
+                buildId: snapshot.configuration!.build_id,
                 configRevision: snapshot.configuration!.revision,
                 receipt: outcome.result.receipt,
               }
             : null;
-      if (command.operation === 'retry_index' || command.operation === 'select_embedding')
+      if (
+        command.operation === 'retry_index' ||
+        command.operation === 'select_embedding' ||
+        command.operation === 'configure_embedding'
+      )
         failedTask = null;
       const acknowledgedSnapshot =
-        outcome.operation === 'select_embedding'
+        outcome.operation === 'select_embedding' || outcome.operation === 'configure_embedding'
           ? { ...snapshot, configuration: outcome.result.configuration, index: null }
           : outcome.operation === 'promote_index'
             ? {
@@ -370,6 +534,11 @@ export function createNativeKnowledgeProcessingController({
             : snapshot;
       emit({
         phase: 'accepted',
+        inputsAvailable: Boolean(inputsClient),
+        inputs: null,
+        inputOperation: null,
+        embeddingChoice: null,
+        workspaceChoice: null,
         snapshot: acknowledgedSnapshot,
         selection: null,
         outcome,
@@ -394,6 +563,25 @@ export function createNativeKnowledgeProcessingController({
       };
     },
     refresh,
+    prepareInputs,
+    chooseEmbedding: (providerId: string, modelId: string) => {
+      if (
+        locked() ||
+        model.inputOperation !== 'configure_embedding' ||
+        !permitted('configure_embedding')
+      )
+        return;
+      const choice =
+        model.inputs?.embeddingModels.items.find(
+          (item) => item.providerId === providerId && item.modelId === modelId,
+        ) ?? null;
+      emit({ phase: 'idle', selection: null, embeddingChoice: choice, error: null });
+    },
+    chooseWorkspace: (id: string) => {
+      if (locked() || model.inputOperation !== 'process_one' || !permitted('process_one')) return;
+      const choice = model.inputs?.workspaces.items.find((item) => item.id === id) ?? null;
+      emit({ phase: 'idle', selection: null, workspaceChoice: choice, error: null });
+    },
     review,
     confirm,
     cancelReview: () => {

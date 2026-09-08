@@ -1,4 +1,31 @@
 export const nativeKnowledgeProcessingEnUS = {
+  'nativeProcessing.choose.configure_embedding': 'Choose embedding provider and model',
+  'nativeProcessing.choose.process_one': 'Choose extraction workspace',
+  'nativeProcessing.configure_embedding': 'Review embedding configuration',
+  'nativeProcessing.process_one': 'Review one extraction task',
+  'nativeProcessing.configure_embeddingHelp':
+    'Create this desired embedding build using the selected provider revision and model. The server compares the previous configuration revision before applying it.',
+  'nativeProcessing.process_oneHelp':
+    'Run at most one extraction task in the selected workspace using its configured agent and provider. This does not process all pending sources.',
+  'nativeProcessing.embeddingModel': 'Embedding provider and model',
+  'nativeProcessing.providerRevision': 'Provider revision',
+  'nativeProcessing.workspace': 'Extraction workspace',
+  'nativeProcessing.chooseOne': 'Choose an available item',
+  'nativeProcessing.noModels': 'No embedding models are available in the trusted provider catalog.',
+  'nativeProcessing.noWorkspaces': 'No eligible workspaces are available in this project.',
+  'nativeProcessing.expectedRevision': 'Expected previous configuration revision',
+  'nativeProcessing.noPreviousConfiguration': 'No previous configuration',
+  'nativeProcessing.configured': 'The server confirmed this desired embedding configuration.',
+  'nativeProcessing.inputRequired': 'Choose an available model or workspace before reviewing.',
+  'nativeProcessing.inputsChanged':
+    'The selected provider, model, or workspace changed or became unavailable. Choose again before reviewing.',
+  'nativeProcessing.extractionReceipt': 'Observed extraction task receipt',
+  'nativeProcessing.status.applied': 'Applied',
+  'nativeProcessing.failure.invalid_extraction': 'Invalid extraction returned',
+  'nativeProcessing.failure.lease_lost': 'Task lease lost',
+  'nativeProcessing.failure.admission_changed': 'Task admission changed',
+  'nativeProcessing.failure.internal_failure': 'Internal processing failure',
+
   'nativeProcessing.title': 'Run knowledge processing actions',
   'nativeProcessing.explicitOnly':
     'Each confirmation runs one action. Jobs are not run automatically.',
@@ -28,7 +55,7 @@ export const nativeKnowledgeProcessingEnUS = {
   'nativeProcessing.refreshFailed':
     'Refreshing the state failed. The previous action outcome remains unknown.',
   'nativeProcessing.failure': 'Reported failure',
-  'nativeProcessing.failure.provider_unavailable': 'Embedding provider unavailable',
+  'nativeProcessing.failure.provider_unavailable': 'Provider unavailable',
   'nativeProcessing.failure.profile_changed': 'Embedding profile changed',
   'nativeProcessing.failure.invalid_embedding': 'Invalid embedding returned',
   'nativeProcessing.failure.cancelled': 'Task cancelled',
@@ -66,6 +93,32 @@ export const nativeKnowledgeProcessingZhCN: Record<
   keyof typeof nativeKnowledgeProcessingEnUS,
   string
 > = {
+  'nativeProcessing.choose.configure_embedding': '选择向量提供方和模型',
+  'nativeProcessing.choose.process_one': '选择提取工作区',
+  'nativeProcessing.configure_embedding': '审阅向量配置',
+  'nativeProcessing.process_one': '审阅单次提取任务',
+  'nativeProcessing.configure_embeddingHelp':
+    '使用所选提供方版本和模型创建目标向量构建，服务端会比较先前配置版本后再应用。',
+  'nativeProcessing.process_oneHelp':
+    '使用所选工作区配置的智能体和提供方，最多执行一个提取任务，不会处理全部待处理来源。',
+  'nativeProcessing.embeddingModel': '向量提供方和模型',
+  'nativeProcessing.providerRevision': '提供方版本',
+  'nativeProcessing.workspace': '提取工作区',
+  'nativeProcessing.chooseOne': '选择可用条目',
+  'nativeProcessing.noModels': '可信提供方目录中没有可用向量模型。',
+  'nativeProcessing.noWorkspaces': '当前项目没有可用的提取工作区。',
+  'nativeProcessing.expectedRevision': '预期的先前配置版本',
+  'nativeProcessing.noPreviousConfiguration': '无先前配置',
+  'nativeProcessing.configured': '服务端已确认此次目标向量配置。',
+  'nativeProcessing.inputRequired': '请先选择可用模型或工作区，再审阅操作。',
+  'nativeProcessing.inputsChanged': '所选提供方、模型或工作区已变化或不可用，请重新选择后审阅。',
+  'nativeProcessing.extractionReceipt': '已观察到的提取任务回执',
+  'nativeProcessing.status.applied': '已应用',
+  'nativeProcessing.failure.invalid_extraction': '返回的提取结果无效',
+  'nativeProcessing.failure.lease_lost': '任务租约已失效',
+  'nativeProcessing.failure.admission_changed': '任务准入已变化',
+  'nativeProcessing.failure.internal_failure': '处理内部错误',
+
   'nativeProcessing.title': '执行知识处理操作',
   'nativeProcessing.explicitOnly': '每次确认只执行一个操作，不会自动运行任务。',
   'nativeProcessing.refresh': '刷新处理状态',
@@ -91,7 +144,7 @@ export const nativeKnowledgeProcessingZhCN: Record<
   'nativeProcessing.failed': '操作失败，请刷新状态后再审阅新操作。',
   'nativeProcessing.refreshFailed': '状态刷新失败，先前操作的结果仍然未知。',
   'nativeProcessing.failure': '返回的失败原因',
-  'nativeProcessing.failure.provider_unavailable': '向量提供方不可用',
+  'nativeProcessing.failure.provider_unavailable': '提供方不可用',
   'nativeProcessing.failure.profile_changed': '向量配置已变化',
   'nativeProcessing.failure.invalid_embedding': '返回的向量无效',
   'nativeProcessing.failure.cancelled': '任务已取消',
