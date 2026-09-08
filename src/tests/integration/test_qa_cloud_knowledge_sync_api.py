@@ -21,11 +21,17 @@ from scripts.qa_cloud_knowledge_sync_database import (
 )
 from scripts.qa_cloud_knowledge_sync_graph import QA_NEO4J_URI
 from scripts.qa_cloud_knowledge_sync_runtime import QaNoDispatchTaskManager
+from src.application.services.auth_service_v2 import AuthService
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
+    SqlAPIKeyRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_user_repository import SqlUserRepository
 from src.infrastructure.plugins.v2.background_task_services import (
     BACKGROUND_TASK_MANAGER_SERVICE_V2,
 )
+from src.infrastructure.plugins.v2.web_public_view import project_web_public_view_v2
 
 pytestmark = pytest.mark.skipif(
     os.getenv("KNOWLEDGE_SYNC_POSTGRES_TESTS") != "1",
@@ -234,3 +240,73 @@ async def test_metadata_guards_cleanup_scope_and_no_public_fallback(
             assert await connection.scalar(sa.text("SELECT count(*) FROM users")) == 1
     finally:
         await engine.dispose()
+
+
+async def test_web_public_view_uses_pinned_profile_and_real_membership(qa_database, monkeypatch):
+    metadata, state, email, password = qa_database
+    metadata_bytes = metadata.read_bytes()
+    app = create_qa_cloud_knowledge_sync_app(metadata)
+    view_path = "/api/v1/platform-plugins/v2/web-view"
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://qa.test") as client,
+    ):
+        unauthenticated = await client.get(view_path)
+        assert unauthenticated.status_code in (401, 403)
+        token = await login(client, email, password)
+        actor_id = (await client.get("/api/v1/auth/me")).json()["user_id"]
+        distribution = app.state.qa_host.current_distribution
+        assert distribution.descriptor.digest == state.profile_digest
+        expected = project_web_public_view_v2(
+            distribution.to_payload()["snapshot"], authority_id=actor_id
+        )
+
+        def forbid_unpinned_current(_host):
+            raise AssertionError("The Web view must use the request-pinned generation")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                type(app.state.qa_host), "current_distribution", property(forbid_unpinned_current)
+            )
+            view = await client.get(view_path)
+        assert view.status_code == 200, view.text
+        assert view.json() == expected
+        assert view.headers["cache-control"] == "private, no-store"
+        assert expected["snapshot"]["profile_id"] == "web-public-view-v2"
+        assert expected["snapshot"]["entries"]
+        for path in ("distribution", "data-plane-credentials", "readiness"):
+            assert (await client.get("/api/v1/platform-plugins/v2/" + path)).status_code == 404
+        assert (
+            await client.post("/api/v1/platform-plugins/v2/profile-sources", json={})
+        ).status_code == 404
+        tenant_id, project_id = await tenant_project(client)
+        tenant = await client.get(f"/api/v1/tenants/{tenant_id}")
+        assert tenant.status_code == 200 and tenant.json()["id"] == tenant_id
+        assert (await client.get(f"/api/v1/projects/{project_id}")).status_code == 200
+        outsider_email = "outsider@example.test"
+        outsider_password = secrets.token_urlsafe(24)
+        async with app.state.qa_sessions() as db:
+            service = AuthService(SqlUserRepository(db), SqlAPIKeyRepository(db))
+            await service.create_user(outsider_email, "Outside tenant", outsider_password)
+            await db.commit()
+        await login(client, outsider_email, outsider_password)
+        outsider_view = await client.get(view_path)
+        assert outsider_view.status_code == 200
+        assert outsider_view.json()["snapshot"] == expected["snapshot"]
+        assert outsider_view.json()["view_id"] != expected["view_id"]
+        assert (await client.get(f"/api/v1/tenants/{tenant_id}")).status_code == 403
+        assert (await client.get(f"/api/v1/projects/{project_id}")).status_code == 403
+        assert app.state.qa_database.profile_digest == state.profile_digest
+    restored = create_qa_cloud_knowledge_sync_app(metadata)
+    async with (
+        restored.router.lifespan_context(restored),
+        AsyncClient(
+            transport=ASGITransport(app=restored),
+            base_url="http://qa.test",
+            headers={"Authorization": "Bearer " + token},
+        ) as client,
+    ):
+        view = await client.get(view_path)
+        assert view.status_code == 200 and view.json() == expected
+        assert (await client.get(f"/api/v1/tenants/{tenant_id}")).status_code == 200
+    assert metadata.read_bytes() == metadata_bytes

@@ -9,11 +9,11 @@ import os
 from contextlib import asynccontextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import sqlalchemy as sa
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -37,7 +37,10 @@ from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models imp
 )
 from src.infrastructure.adapters.secondary.persistence.models import Memory, User
 from src.infrastructure.i18n import gettext as _
-from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
+from src.infrastructure.plugins.v2.boundary import (
+    PluginGenerationMiddlewareV2,
+    current_generation_v2,
+)
 from src.infrastructure.plugins.v2.builtin_cloud_knowledge_sync_http_routes import (
     CLOUD_KNOWLEDGE_SYNC_HTTP_ENTRY_V2,
 )
@@ -50,10 +53,12 @@ from src.infrastructure.plugins.v2.http_routes import (
 )
 from src.infrastructure.plugins.v2.protocol import control_envelope_v2, parse_profile_snapshot_v2
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.web_public_view import project_web_public_view_v2
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Awaitable, Callable
 
 # Exact production method/path pairs; no worker, scheduler, plugin-publication or debug routes.
 QA_HTTP_ROUTES = frozenset(
@@ -64,6 +69,8 @@ QA_HTTP_ROUTES = frozenset(
         ("POST", "/api/v1/auth/force-change-password"),
         ("GET", "/api/v1/tenants/"),
         ("POST", "/api/v1/tenants/"),
+        ("GET", "/api/v1/tenants/{tenant_id}"),
+        ("GET", "/api/v1/platform-plugins/v2/web-view"),
         ("GET", "/api/v1/projects/"),
         ("POST", "/api/v1/projects/"),
         ("GET", "/api/v1/projects/{project_id}"),
@@ -113,7 +120,34 @@ async def require_qa_enrolled_memory_write(
         )
 
 
-def select_qa_routes(definitions: tuple[object, ...]) -> tuple[RouteDefinitionV2, ...]:
+def qa_web_public_view_endpoint(
+    host: PlatformPluginRuntimeHostV2,
+) -> Callable[..., Awaitable[dict[str, Any]]]:
+    async def get_qa_web_public_view(
+        response: Response,
+        current_user: Annotated[User, Depends(get_current_user)],
+    ) -> dict[str, Any]:
+        response.headers["Cache-Control"] = "private, no-store"
+        try:
+            distribution = host.distribution_for_generation(current_generation_v2())
+            return project_web_public_view_v2(
+                distribution.to_payload()["snapshot"], authority_id=current_user.id
+            )
+        except RuntimeV2Error:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "web_public_view_unavailable",
+                    "message": _("Public Web plugin view is unavailable"),
+                },
+            ) from None
+
+    return get_qa_web_public_view
+
+
+def select_qa_routes(
+    definitions: tuple[object, ...], *, host: PlatformPluginRuntimeHostV2
+) -> tuple[RouteDefinitionV2, ...]:
     selected: list[RouteDefinitionV2] = []
     found: set[tuple[str, str]] = set()
     cloud_count = 0
@@ -126,6 +160,10 @@ def select_qa_routes(definitions: tuple[object, ...]) -> tuple[RouteDefinitionV2
         elif not keys or not keys <= QA_HTTP_ROUTES:
             continue
         found.update(keys & QA_HTTP_ROUTES)
+        if keys == {("GET", "/api/v1/platform-plugins/v2/web-view")}:
+            # The QA host has no durable ROOT publication ledger. Project its actual
+            # request-pinned snapshot with the production browser-public validator.
+            definition = replace(definition, endpoint=qa_web_public_view_endpoint(host))
         if definition.path.startswith("/api/v1/memories/") and keys & {
             ("POST", "/api/v1/memories/"),
             ("PATCH", "/api/v1/memories/{memory_id}"),
@@ -180,7 +218,7 @@ def create_qa_cloud_knowledge_sync_app(metadata_path: Path) -> FastAPI:
                 )
                 if not isinstance(builder, RouteTableBuilderV2):
                     raise RuntimeError("The QA profile did not supply a route table builder")
-                definitions = select_qa_routes(tuple(builder.definitions))
+                definitions = select_qa_routes(tuple(builder.definitions), host=host)
             private = FastAPI()
             private.dependency_overrides[get_db] = qa_database
             install_route_definitions_v2(private, definitions)

@@ -41,6 +41,16 @@ with mode `0600`. It contains no password, API key, connection URL or bearer tok
 Connect the native Cloud connection form to `http://127.0.0.1:18080` using the
 selected email and password. The local workspace remains active.
 
+For Web QA, point an isolated Vite server's `/api` proxy at the same API and log in
+with the same real user. Web initialization reads
+`GET /api/v1/platform-plugins/v2/web-view`: this QA route uses the production
+`project_web_public_view_v2` validator on the request-pinned host distribution.
+It exposes only authenticated browser-public renderer configuration, with
+`Cache-Control: private, no-store`. It does not expose workload distribution,
+credential, receipt, or publication endpoints, and creates no ROOT ledger rows.
+Tenant deep links use the production membership-checked `GET /api/v1/tenants/{id}`.
+Existing metadata and schemas remain valid across this API-only change.
+
 ## Seed and exercise through production HTTP
 
 1. Log in at `POST /api/v1/auth/token` using form fields `username` and `password`.
