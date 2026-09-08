@@ -470,7 +470,7 @@ export type NativeKnowledgeCapabilityEntry = {
   readonly reason_code: (string) | (null);
   readonly service_version: (string) | (null);
   readonly contract_version: (string) | (null);
-  readonly allowed_actions: readonly ("activate_community_build" | "cloud_conflict_context" | "community_active" | "community_audit" | "community_build" | "configuration" | "configure_embedding" | "create" | "create_community_build" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "index_one" | "list" | "pending_resolutions" | "process_community_one" | "process_one" | "processing_audits" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_community" | "retry_index" | "select_embedding" | "select_community_build" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view" | "retry_processing" | "processing_task")[];
+  readonly allowed_actions: readonly ("activate_community_build" | "cloud_conflict_context" | "community_active" | "community_audit" | "community_build" | "configuration" | "configure_embedding" | "create" | "create_community_build" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "index_one" | "list" | "pending_resolutions" | "process_community_one" | "process_one" | "processing_audits" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_community" | "retry_index" | "select_embedding" | "select_community_build" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view" | "retry_processing" | "processing_task" | "community_builds")[];
   readonly scope: NativeKnowledgeCapabilityScope;
   readonly authority_revision: (number) | (null);
   readonly retryable: boolean;
@@ -710,6 +710,14 @@ export type NativeKnowledgeCommunityBuildPage = {
   readonly status: NativeKnowledgeCommunityBuildStatus;
   readonly current_graph: boolean;
   readonly items: readonly (NativeKnowledgeCommunityCandidateProgress)[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+};
+
+// prettier-ignore
+export type NativeKnowledgeCommunityBuildHistoryPage = {
+  readonly items: readonly (NativeKnowledgeCommunityBuildReceipt)[];
   readonly total: number;
   readonly offset: number;
   readonly limit: number;

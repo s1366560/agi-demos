@@ -35,7 +35,7 @@ export function prepareNativeKnowledgeProcessingQuery<Q extends NativeKnowledgeP
   scope: ProjectKnowledgeScope,
 ): Q {
   if (!s.jsonValue(value) || !definitions.NativeKnowledgeProcessingQuery!(value)) throw invalid();
-  if (value.operation === 'community_active') {
+  if (value.operation === 'community_active' || value.operation === 'community_builds') {
     return s.frozenClone(value);
   } else if (value.operation === 'community_build' || value.operation === 'community_audit') {
     if (!s.identifier(value.build_id)) throw invalid();

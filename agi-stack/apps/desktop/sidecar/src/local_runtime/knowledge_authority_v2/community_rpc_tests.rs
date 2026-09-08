@@ -115,6 +115,18 @@ async fn community_queries_are_scoped_and_writer_commands_reject_viewers() {
 }
 
 struct CoreEndpoint(tokio::task::JoinHandle<()>);
+#[tokio::test]
+async fn unselected_build_receipt_is_recoverable_through_history() {
+    let f = CommunityFixture::new().await;
+    let (status, receipt) = rpc(&f, true, json!({"operation":"create_community_build","idempotency_key":"lost-response","min_community_size":2})).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, history) = rpc(&f, false, json!({"operation":"community_builds","offset":0,"limit":20})).await;
+    assert_eq!(status, StatusCode::OK, "{history}");
+    assert!(history["result"]["page"]["items"].as_array().unwrap().contains(&receipt["result"]["build"]));
+    let (_, active) = rpc(&f, false, json!({"operation":"community_active"})).await;
+    assert_eq!(active["result"]["selection"]["revision"], 0);
+    assert_eq!(rpc(&f, false, json!({"operation":"community_builds","offset":0,"limit":101})).await.0, StatusCode::UNPROCESSABLE_ENTITY);
+}
 impl Drop for CoreEndpoint {
     fn drop(&mut self) {
         self.0.abort();
@@ -180,12 +192,17 @@ async fn public_community_worker_uses_provider_and_only_explicit_activation_publ
     );
     let (_,audit)=rpc(&f,false,json!({"operation":"community_audit","build_id":f.input.build_id,"candidate_id":f.input.candidate.membership_digest,"attempt":1})).await;
     assert_eq!(audit["result"]["audit"]["provider_id"], "local-runtime");
+    assert_eq!(rpc(&f,true,json!({"operation":"create_community_build","idempotency_key":"unselected-history","min_community_size":2})).await.0,StatusCode::OK);
+    let (status,history)=rpc(&f,false,json!({"operation":"community_builds","offset":0,"limit":20})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(history["result"]["page"]["total"], 2);
     if let Ok(path) = std::env::var("AGISTACK_COMMUNITY_RPC_FIXTURE") {
         let fixture = json!({"scope":operation_scope(&f.base.auth,&f.base.operation._lease),
         "query_cases":[
             {"query":{"operation":"community_active"},"response":active},
             {"query":{"operation":"community_build","build_id":f.input.build_id,"offset":0,"limit":20},"response":page},
-            {"query":{"operation":"community_audit","build_id":f.input.build_id,"candidate_id":f.input.candidate.membership_digest,"attempt":1},"response":audit}
+            {"query":{"operation":"community_audit","build_id":f.input.build_id,"candidate_id":f.input.candidate.membership_digest,"attempt":1},"response":audit},
+            {"query":{"operation":"community_builds","offset":0,"limit":20},"response":history}
         ],"command_cases":[
             {"command":{"operation":"process_community_one","build_id":f.input.build_id,"workspace_id":"explicit-workspace"},"response":response}
         ]});

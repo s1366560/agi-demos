@@ -75,6 +75,7 @@ export function validProcessingResult(
 ): boolean {
   switch (operation.operation) {
     case 'community_active':
+    case 'community_builds':
     case 'community_build':
     case 'community_audit':
     case 'create_community_build':

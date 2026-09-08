@@ -593,6 +593,28 @@
             "attempt"
           ],
           "additionalProperties": false
+        },
+        "community_builds": {
+          "type": "object",
+          "properties": {
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295,
+              "x-rust-type": "u32"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "x-rust-type": "u32"
+            }
+          },
+          "required": [
+            "offset",
+            "limit"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -607,7 +629,8 @@
         "processing_task",
         "community_active",
         "community_build",
-        "community_audit"
+        "community_audit",
+        "community_builds"
       ],
       "additionalProperties": false
     },
@@ -918,6 +941,18 @@
             "audit"
           ],
           "additionalProperties": false
+        },
+        "community_builds": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildHistoryPage"
+            }
+          },
+          "required": [
+            "page"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -932,7 +967,8 @@
         "processing_task",
         "community_active",
         "community_build",
-        "community_audit"
+        "community_audit",
+        "community_builds"
       ],
       "additionalProperties": false
     }

@@ -22,6 +22,7 @@ type CommunityOperation = Extract<
   {
     operation:
       | 'community_active'
+      | 'community_builds'
       | 'community_build'
       | 'community_audit'
       | 'create_community_build'
@@ -190,6 +191,25 @@ export function validCommunityResult(
   scope: ProjectKnowledgeScope,
 ): boolean {
   switch (operation.operation) {
+    case 'community_builds': {
+      const p = (value as Results['community_builds']).page;
+      return (
+        p.offset === operation.offset &&
+        p.limit === operation.limit &&
+        p.items.length === Math.min(p.limit, Math.max(0, p.total - p.offset)) &&
+        new Set(p.items.map((item) => item.build_id)).size === p.items.length &&
+        p.items.every((item, index) => {
+          if (!build(item, scope)) return false;
+          const previous = p.items[index - 1];
+          return (
+            previous === undefined ||
+            previous.created_at_ms > item.created_at_ms ||
+            (previous.created_at_ms === item.created_at_ms &&
+              compareBuildIds(previous.build_id, item.build_id) < 0)
+          );
+        })
+      );
+    }
     case 'community_active': {
       const r = value as Results['community_active'];
       if (!selection(r.selection)) return false;
@@ -250,4 +270,15 @@ export function validCommunityResult(
       );
     }
   }
+}
+
+/** Match SQLite BINARY ordering, including non-ASCII protocol identifiers. */
+function compareBuildIds(left: string, right: string): number {
+  const encoder = new TextEncoder();
+  const a = encoder.encode(left),
+    b = encoder.encode(right);
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (a[i] !== b[i]) return a[i]! - b[i]!;
+  }
+  return a.length - b.length;
 }

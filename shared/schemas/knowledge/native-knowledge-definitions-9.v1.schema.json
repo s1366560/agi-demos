@@ -148,7 +148,8 @@
               "update",
               "view",
               "retry_processing",
-              "processing_task"
+              "processing_task",
+              "community_builds"
             ]
           }
         },

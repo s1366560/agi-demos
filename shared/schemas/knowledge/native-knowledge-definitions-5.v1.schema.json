@@ -555,6 +555,32 @@
             "attempt"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "const": "community_builds"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295,
+              "x-rust-type": "u32"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "x-rust-type": "u32"
+            }
+          },
+          "required": [
+            "operation",
+            "offset",
+            "limit"
+          ],
+          "additionalProperties": false
         }
       ],
       "x-rust-name": "ProcessingQuery",

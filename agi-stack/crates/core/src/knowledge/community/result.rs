@@ -131,6 +131,16 @@ pub struct CommunityActiveView {
     pub stale_build_id: Option<String>,
 }
 
+/// Immutable receipts, newest creation timestamp first with build ID as tie breaker.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommunityBuildHistoryPage {
+    pub items: Vec<super::build::CommunityBuildReceipt>,
+    pub total: u32,
+    pub offset: u32,
+    pub limit: u32,
+}
+
 /// One consistent read of a frozen build and its mutable job progress.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

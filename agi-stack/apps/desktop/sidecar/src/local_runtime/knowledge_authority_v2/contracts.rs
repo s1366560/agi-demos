@@ -58,6 +58,10 @@ pub(crate) enum ProcessingQuery {
         candidate_id: String,
         attempt: u32,
     },
+    CommunityBuilds {
+        offset: u32,
+        limit: u32,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

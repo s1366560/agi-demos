@@ -25,6 +25,7 @@ pub(super) async fn query(
         .map_err(IntoResponse::into_response)?;
     let result = match body.query {
         query @ (ProcessingQuery::CommunityActive {}
+        | ProcessingQuery::CommunityBuilds { .. }
         | ProcessingQuery::CommunityBuild { .. }
         | ProcessingQuery::CommunityAudit { .. }) => {
             community::query(&operation, &state, &auth, query)

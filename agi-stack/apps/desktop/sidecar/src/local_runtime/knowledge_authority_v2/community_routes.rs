@@ -38,6 +38,12 @@ pub(super) fn query(
 ) -> Result<Value, KnowledgeAuthorityErrorV2> {
     let repo = operation.authority.repository()?;
     match query {
+        ProcessingQuery::CommunityBuilds { offset, limit } => {
+            let page = processing_context::with_read_current(operation, state, auth, |clock| {
+                repo.community_builds_durable(&operation.scope, offset, limit, clock)
+            })?;
+            Ok(json!({"page":page}))
+        }
         ProcessingQuery::CommunityActive {} => {
             let view = processing_context::with_read_current(operation, state, auth, |_| {
                 repo.active_community_build_durable(&operation.scope)

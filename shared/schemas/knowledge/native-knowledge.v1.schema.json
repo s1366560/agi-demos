@@ -351,6 +351,9 @@
     },
     "NativeKnowledgeCommunityBuildPage": {
       "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildPage"
+    },
+    "NativeKnowledgeCommunityBuildHistoryPage": {
+      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildHistoryPage"
     }
   },
   "x-routes": {
@@ -630,7 +633,8 @@
     "select_community_build": "write",
     "process_community_one": "write",
     "retry_community": "write",
-    "activate_community_build": "write"
+    "activate_community_build": "write",
+    "community_builds": "read"
   },
   "x-local-acceptance-actions": [
     "view",
@@ -662,6 +666,7 @@
     "select_community_build",
     "process_community_one",
     "retry_community",
-    "activate_community_build"
+    "activate_community_build",
+    "community_builds"
   ]
 }

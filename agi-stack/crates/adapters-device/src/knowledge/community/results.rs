@@ -9,6 +9,7 @@ use super::{
 };
 
 mod audit;
+mod history;
 mod page;
 mod read;
 mod schema;

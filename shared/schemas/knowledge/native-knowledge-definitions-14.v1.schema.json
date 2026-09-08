@@ -304,6 +304,40 @@
         "limit"
       ],
       "additionalProperties": false
+    },
+    "NativeKnowledgeCommunityBuildHistoryPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildReceipt"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "offset",
+        "limit"
+      ],
+      "additionalProperties": false
     }
   }
 }

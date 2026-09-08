@@ -25,9 +25,11 @@ const scope = {
   projectId: fixture.scope.project_id,
 };
 const native = fixture.scope;
-const queries = fixture.query_cases;
-const buildCase = queries.find((c) => c.query.operation === 'community_build');
+const buildCase = fixture.query_cases.find((c) => c.query.operation === 'community_build');
 const page = buildCase.response.result.page;
+const historyCase = fixture.query_cases.find((c) => c.query.operation === 'community_builds');
+assert.ok(historyCase, 'Rust RPC fixture must include the build history query');
+const queries = fixture.query_cases;
 const buildId = page.build.build_id;
 const candidateId = page.items[0].candidate_id;
 const commands = [
@@ -115,6 +117,97 @@ const rejectPage = (fn) =>
       ),
     (e) => e.message === 'native_knowledge_response_invalid',
   );
+
+test('build history binds offset, limit, exact row counts and immutable scoped receipts', () => {
+  validate(historyCase);
+  for (const patch of [
+    { offset: -1 },
+    { offset: 1.5 },
+    { offset: 4294967296 },
+    { limit: 0 },
+    { limit: 101 },
+    { build_id: 'unsupported' },
+  ])
+    assert.throws(() => prepare(historyCase, { ...historyCase.query, ...patch }));
+  for (const mutate of [
+    (p) => {
+      p.offset++;
+    },
+    (p) => {
+      p.limit++;
+    },
+    (p) => {
+      p.total++;
+    },
+    (p) => {
+      p.items.pop();
+    },
+    (p) => {
+      p.items[0].tenant_id = 'foreign';
+    },
+    (p) => {
+      p.items[0].project_id = 'foreign';
+    },
+    (p) => {
+      p.items[0].state = 'completed';
+    },
+    (p) => {
+      p.items[0].candidate_count = 0;
+      p.items[0].state = 'pending';
+    },
+  ])
+    assert.throws(() =>
+      validate(
+        historyCase,
+        change(historyCase, (r) => mutate(r.page)),
+      ),
+    );
+  const beyond = { ...historyCase, query: { ...historyCase.query, offset: 10 } };
+  validate(
+    beyond,
+    change(historyCase, (r) => {
+      r.page.offset = 10;
+      r.page.items = [];
+    }),
+  );
+  validate(
+    historyCase,
+    change(historyCase, (r) => {
+      r.page.total = 0;
+      r.page.items = [];
+    }),
+  );
+});
+
+test('build history orders newest first, then exact binary build ID ascending, without duplicates', () => {
+  const sameTime = change(historyCase, (r) => {
+    r.page.items = ['build-A', 'build-B'].map((build_id) => ({ ...page.build, build_id }));
+    r.page.total = 2;
+  });
+  validate(historyCase, sameTime);
+  for (const mutate of [
+    (p) => {
+      p.items.reverse();
+    },
+    (p) => {
+      p.items[1].build_id = p.items[0].build_id;
+    },
+    (p) => {
+      p.items[1].created_at_ms++;
+    },
+  ]) {
+    const bad = structuredClone(sameTime);
+    mutate(bad.result.page);
+    assert.throws(() => validate(historyCase, bad));
+  }
+  // SQLite BINARY compares UTF-8, not JavaScript's UTF-16 or the user's locale.
+  const unicode = structuredClone(sameTime);
+  unicode.result.page.items[0].build_id = '\uE000';
+  unicode.result.page.items[1].build_id = '\u{10000}';
+  validate(historyCase, unicode);
+  unicode.result.page.items.reverse();
+  assert.throws(() => validate(historyCase, unicode));
+});
 
 for (const row of cases) {
   test(`${op(row).operation} accepts the scoped producer contract and freezes it`, () => {

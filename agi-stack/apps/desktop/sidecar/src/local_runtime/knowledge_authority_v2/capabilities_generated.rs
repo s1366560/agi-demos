@@ -5,6 +5,7 @@ pub(super) const READ_ACTIONS: &[&str] = &[
     "community_active",
     "community_audit",
     "community_build",
+    "community_builds",
     "configuration",
     "entities",
     "failed_index",
@@ -59,6 +60,7 @@ pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &[
     "community_active",
     "community_audit",
     "community_build",
+    "community_builds",
     "configuration",
     "configure_embedding",
     "create",
@@ -101,6 +103,7 @@ impl ProcessingQuery {
             Self::CommunityActive { .. } => "community_active",
             Self::CommunityBuild { .. } => "community_build",
             Self::CommunityAudit { .. } => "community_audit",
+            Self::CommunityBuilds { .. } => "community_builds",
         }
     }
 }
