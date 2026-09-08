@@ -5,7 +5,7 @@ use agistack_adapters_postgres::{
     ChannelSessionBindingRecord, ChannelStatusRecord, ChannelWebhookEventRecord,
     ChannelWebhookIngressRecord,
 };
-use agistack_parity::assert_parity;
+use crate::response_assertions::assert_parity;
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};

@@ -11,7 +11,7 @@ fn skill_response_matches_golden() {
     let actual = serde_json::to_value(SkillView::from(sample_skill_record())).unwrap();
     let golden: Value =
         serde_json::from_str(include_str!("../../../tests/golden/skill_response.json")).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn skill_list_matches_golden() {
     .unwrap();
     let golden: Value =
         serde_json::from_str(include_str!("../../../tests/golden/skill_list.json")).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[tokio::test]
@@ -58,7 +58,7 @@ async fn system_skill_list_matches_golden() {
     let actual = serde_json::to_value(SkillListView { skills, total: 3 }).unwrap();
     let golden: Value =
         serde_json::from_str(include_str!("../../../tests/golden/skill_system_list.json")).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[tokio::test]
@@ -100,7 +100,7 @@ fn skill_content_matches_golden() {
     .unwrap();
     let golden: Value =
         serde_json::from_str(include_str!("../../../tests/golden/skill_content.json")).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn skill_version_shapes_match_goldens() {
         "../../../tests/golden/skill_version_response.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 
     let actual =
         serde_json::to_value(SkillVersionDetailView::from(sample_version_record())).unwrap();
@@ -118,7 +118,7 @@ fn skill_version_shapes_match_goldens() {
         "../../../tests/golden/skill_version_detail.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn skill_package_export_matches_golden() {
         "../../../tests/golden/skill_package_export.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[tokio::test]
@@ -146,7 +146,7 @@ async fn system_skill_package_export_matches_golden() {
         "../../../tests/golden/skill_system_package_export.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn skill_import_lifecycle_matches_golden() {
         "../../../tests/golden/skill_import_lifecycle.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn skill_evolution_config_shapes_match_goldens() {
         "../../../tests/golden/skill_evolution_config.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&default_golden, &default_actual);
+    crate::response_assertions::assert_parity(&default_golden, &default_actual);
 
     let updated_actual =
         serde_json::to_value(SkillEvolutionConfigView::from(SkillEvolutionConfig {
@@ -201,7 +201,7 @@ fn skill_evolution_config_shapes_match_goldens() {
         "../../../tests/golden/skill_evolution_config_updated.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&updated_golden, &updated_actual);
+    crate::response_assertions::assert_parity(&updated_golden, &updated_actual);
 }
 
 #[test]
@@ -287,7 +287,7 @@ fn skill_evolution_overview_matches_golden() {
         "../../../tests/golden/skill_evolution_overview.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn skill_evolution_detail_matches_golden() {
         "../../../tests/golden/skill_evolution_detail.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -353,8 +353,8 @@ fn skill_evolution_run_shapes_match_goldens() {
         "../../../tests/golden/skill_evolution_tenant_run.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&skill_golden, &skill_actual);
-    agistack_parity::assert_parity(&tenant_golden, &tenant_actual);
+    crate::response_assertions::assert_parity(&skill_golden, &skill_actual);
+    crate::response_assertions::assert_parity(&tenant_golden, &tenant_actual);
 }
 
 #[test]
@@ -374,7 +374,7 @@ fn skill_evolution_applied_job_matches_golden() {
         "../../../tests/golden/skill_evolution_job_applied.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]

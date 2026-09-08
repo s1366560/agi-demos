@@ -39,7 +39,7 @@ fn share_response_matches_golden() {
             .expect("share response golden must be valid JSON");
     let actual = serde_json::to_value(ShareView::from(sample_share()))
         .expect("share response must serialize");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn share_list_matches_golden() {
         .expect("share list golden must be valid JSON");
     let actual = serde_json::to_value(ShareList::from_records(vec![sample_share()]))
         .expect("share list must serialize");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -57,7 +57,7 @@ fn shared_memory_matches_golden() {
         .expect("shared memory golden must be valid JSON");
     let actual = serde_json::to_value(shared_memory_view(sample_memory(), sample_share()))
         .expect("shared memory must serialize");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]

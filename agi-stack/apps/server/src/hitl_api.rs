@@ -1151,7 +1151,7 @@ mod tests {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/hitl_response.json")).unwrap();
 
-        agistack_parity::assert_parity(&golden, &actual);
+        crate::response_assertions::assert_parity(&golden, &actual);
     }
 
     #[test]

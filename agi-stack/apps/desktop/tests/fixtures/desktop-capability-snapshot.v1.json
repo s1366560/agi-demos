@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "mode": "local",
+  "capabilities": {
+    "automation_run": {
+      "available": false,
+      "reason_code": "local_scheduler_unavailable"
+    },
+    "search": {
+      "available": false,
+      "reason_code": "local_search_routes_unavailable"
+    },
+    "workspace_collaboration": {
+      "available": false,
+      "reason_code": "local_workspace_collaboration_unavailable"
+    },
+    "sandbox_isolation": {
+      "available": false,
+      "reason_code": "local_isolation_not_applicable"
+    }
+  }
+}

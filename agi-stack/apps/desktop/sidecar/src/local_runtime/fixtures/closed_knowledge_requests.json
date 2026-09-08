@@ -1,0 +1,248 @@
+[
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/query",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "idempotency_key": "closed-knowledge-probe",
+    "body": {
+      "query": {
+        "operation": "list",
+        "limit": 20,
+        "offset": 0
+      }
+    }
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/mutations",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "idempotency_key": "closed-knowledge-probe",
+    "body": {
+      "mutation": {
+        "operation": "delete",
+        "id": "closed-probe",
+        "expected_revision": 1
+      }
+    }
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-link",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {
+      "link": {
+        "remote_tenant_id": "remote-tenant",
+        "remote_project_id": "remote-project",
+        "remote_actor_id": "remote-actor"
+      }
+    }
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-push",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {}
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-pull",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {}
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-resolve-pull",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {
+      "resolution": {
+        "memory_id": "memory",
+        "conflict_sequences": [
+          1
+        ],
+        "expected_local_revision": 1,
+        "expected_remote_revision": 1,
+        "expected_baseline_revision": 0,
+        "choice": {
+          "decision": "use_remote"
+        }
+      }
+    },
+    "idempotency_key": "closed-resolution"
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-cloud-query",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {
+      "query": {
+        "operation": "pending_resolutions",
+        "before_resolution_id": null,
+        "limit": 20
+      }
+    },
+    "idempotency_key": "closed-cloud-resolution"
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-resolve-push",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {
+      "resolution": {
+        "local_sequence": 1,
+        "memory_id": "memory",
+        "conflict_id": "conflict",
+        "guard": {
+          "expected_local_revision": 1,
+          "expected_remote_revision": 1,
+          "expected_baseline_revision": 0,
+          "conflict_sequences": []
+        },
+        "choice": {
+          "decision": "keep_current"
+        }
+      }
+    },
+    "idempotency_key": "closed-cloud-resolution"
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-resume-resolution",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {
+      "resolution_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "idempotency_key": "closed-cloud-resolution"
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-reconcile-resolution",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {
+      "resolution_id": "00000000-0000-4000-8000-000000000001",
+      "reconciliation": {
+        "guard": {
+          "expected_local_revision": 1,
+          "expected_remote_revision": 1,
+          "expected_baseline_revision": 0,
+          "conflict_sequences": []
+        },
+        "choice": {
+          "decision": "use_local"
+        }
+      }
+    },
+    "idempotency_key": "closed-cloud-resolution"
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/processing-query",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {
+      "query": {
+        "operation": "configuration"
+      }
+    }
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/processing-command",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {
+      "command": {
+        "operation": "index_one",
+        "build_id": "closed-build",
+        "config_revision": 1
+      }
+    }
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-connection",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {}
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-tenants",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {}
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-projects",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {}
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-enrollment",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {}
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-enroll",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {}
+  },
+  {
+    "area": "project_memories",
+    "method": "POST",
+    "uri": "/api/v1/knowledge/sync-bind",
+    "authority": "knowledge_release_closed",
+    "expected_status": 503,
+    "expected_reason_code": "knowledge_release_closed",
+    "body": {}
+  }
+]

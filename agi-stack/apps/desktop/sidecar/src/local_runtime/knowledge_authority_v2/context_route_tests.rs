@@ -31,23 +31,11 @@ async fn authenticated_scope_discovery_tracks_sidecar_generation_without_opening
         discover(Arc::clone(&state), true).await.0,
         StatusCode::SERVICE_UNAVAILABLE
     );
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../../../../contracts/local-route-parity.v1.json"
-    ))
-    .unwrap();
-    let probe = fixture["negative_routes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|p| p["uri"] == "/api/v1/knowledge/context")
-        .unwrap();
-    assert_eq!(probe["method"], "GET");
-    assert_eq!(probe["authority"], "native_session_required");
     for generation in [1, 2] {
         publish(&state, &directory, generation, false).await;
         assert_eq!(
             discover(Arc::clone(&state), false).await.0.as_u16(),
-            probe["expected_status"].as_u64().unwrap() as u16
+            StatusCode::UNAUTHORIZED.as_u16()
         );
         let result = discover(Arc::clone(&state), true).await;
         assert_eq!(result.0, StatusCode::OK);

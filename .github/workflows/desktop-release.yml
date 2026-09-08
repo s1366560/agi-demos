@@ -1,6 +1,13 @@
 name: Desktop Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Publish as a prerelease (select a protected release tag)
+        type: boolean
+        default: true
+
   push:
     tags:
       - 'v*'
@@ -94,14 +101,12 @@ jobs:
           appendFileSync(process.env.GITHUB_OUTPUT, `version=${packageJson.version}\n`, 'utf8');
           NODE
 
-  parity-preflight:
-    name: Desktop parity preflight
+  tests:
+    name: Desktop unit and integration tests
     needs: authorize
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     permissions:
       contents: read
-    env:
-      AGISTACK_RELEASE_VERSION: ${{ needs.authorize.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -123,45 +128,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
 
-      - name: Validate dynamically authorized release version and tag
-        shell: node {0}
-        working-directory: agi-stack/apps/desktop
-        run: |
-          const packageJson = require('./package.json');
-          const expectedVersion = process.env.AGISTACK_RELEASE_VERSION;
-          if (packageJson.version !== expectedVersion) {
-            throw new Error(
-              `desktop package version must remain ${expectedVersion}; found ${packageJson.version}`,
-            );
-          }
-          const expectedTag = `v${expectedVersion}`;
-          if (process.env.GITHUB_REF_NAME !== expectedTag) {
-            throw new Error(`release tag must exactly match ${expectedTag}`);
-          }
-
-      - name: Install desktop dependencies
-        working-directory: agi-stack/apps/desktop
-        run: corepack pnpm install --frozen-lockfile
-
-      - name: Install parity browser
-        working-directory: agi-stack/apps/desktop
-        run: corepack pnpm exec playwright install --with-deps chromium
-
-      - name: Run desktop parity preflight
-        run: make -C agi-stack desktop-parity-check
-
-      - name: Upload paired renderer evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: desktop-paired-renderer-evidence
-          path: agi-stack/apps/desktop/browser-qa/paired-results
-          if-no-files-found: error
-          retention-days: 90
+      - name: Run desktop unit and integration tests
+        run: make -C agi-stack desktop-check
 
   build:
     name: Build ${{ matrix.platform }}
-    needs: [authorize, parity-preflight]
+    needs: [authorize, tests]
     runs-on: ${{ matrix.os }}
     environment: desktop-release-signing
     permissions:
@@ -426,10 +398,6 @@ jobs:
           AGISTACK_EXPECTED_TAG: ${{ github.ref_name }}
           AGISTACK_EXPECTED_MAC_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           AGISTACK_REQUIRE_NOTARIZATION: ${{ runner.os == 'macOS' && '1' || '0' }}
-          AGISTACK_RELEASE_COMMIT_SHA: ${{ github.sha }}
-          AGISTACK_RELEASE_RUN_ID: ${{ github.run_id }}
-          AGISTACK_RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
-          AGISTACK_RELEASE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           WIN_CSC_SHA1: ${{ secrets.WIN_CSC_SHA1 }}
 
       - name: Remove App Store Connect API key
@@ -459,11 +427,10 @@ jobs:
             agi-stack/apps/desktop/release/*.deb
             agi-stack/apps/desktop/release/*.blockmap
             agi-stack/apps/desktop/release/latest*.yml
-            agi-stack/apps/desktop/release/release-evidence-*.json
           if-no-files-found: error
 
   stage-draft:
-    name: Stage verified desktop prerelease
+    name: Stage verified desktop release
     needs: [authorize, build]
     runs-on: ubuntu-latest
     concurrency:
@@ -474,12 +441,27 @@ jobs:
       contents: write
     env:
       AGISTACK_RELEASE_VERSION: ${{ needs.authorize.outputs.version }}
+      RELEASE_PRERELEASE: ${{ github.event_name != 'workflow_dispatch' && 'true' || (inputs.prerelease && 'true' || 'false') }}
     steps:
       - name: Checkout immutable draft validator
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: 11.15.1
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Install release validator dependencies
+        working-directory: agi-stack/apps/desktop
+        run: corepack pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Download verified macOS artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -654,18 +636,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Publish verified assets as a prerelease
+      - name: Publish verified assets
         shell: bash
         run: |
           set -euo pipefail
           gh release edit "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false \
-            --prerelease
+            --prerelease="$RELEASE_PRERELEASE"
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Assert the release is prerelease-only
+      - name: Assert the requested release state
         shell: bash
         run: |
           set -euo pipefail
@@ -677,8 +659,8 @@ jobs:
           is_draft="$(jq -r '.isDraft' <<<"$release_json")"
           is_prerelease="$(jq -r '.isPrerelease' <<<"$release_json")"
           release_tag="$(jq -r '.tagName' <<<"$release_json")"
-          if [[ "$is_draft" != "false" || "$is_prerelease" != "true" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
-            echo "Release must be prerelease-only for the exact tag" >&2
+          if [[ "$is_draft" != "false" || "$is_prerelease" != "$RELEASE_PRERELEASE" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
+            echo "Release must match the requested state for the exact tag" >&2
             exit 1
           fi
         env:

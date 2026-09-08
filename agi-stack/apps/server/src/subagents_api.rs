@@ -203,6 +203,6 @@ mod tests {
         ))
         .expect("subagent template categories golden parses");
         let actual = serde_json::to_value(&response).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
+        crate::response_assertions::assert_parity(&golden, &actual);
     }
 }

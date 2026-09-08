@@ -537,6 +537,6 @@ mod tests {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/deploy_list_response.json"))
                 .expect("deploy list golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 }

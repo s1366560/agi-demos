@@ -140,11 +140,8 @@ async fn sync_link_and_outbox_use_admitted_authority_without_claiming_remote_suc
 
 #[tokio::test]
 async fn executable_catalog_negative_routes_enforce_closed_release() {
-    let catalog: Value = serde_json::from_str(include_str!(
-        "../../../../contracts/local-route-parity.v1.json"
-    ))
-    .unwrap();
-    let probes = catalog["negative_routes"].as_array().unwrap();
+    let probes: Vec<Value> =
+        serde_json::from_str(include_str!("../fixtures/closed_knowledge_requests.json")).unwrap();
     let directory = TestDirectory::new();
     let state = test_state(TOKEN);
     publish(&state, &directory, 1, false).await;
@@ -155,16 +152,10 @@ async fn executable_catalog_negative_routes_enforce_closed_release() {
     {
         assert_eq!(probe["area"], "project_memories");
         assert_eq!(probe["authority"], "knowledge_release_closed");
-        assert_eq!(probe["source"], "sidecar_knowledge");
         assert_eq!(probe["method"], "POST");
         assert_eq!(probe["expected_status"], 503);
         assert_eq!(probe["expected_reason_code"], "knowledge_release_closed");
         let uri = probe["uri"].as_str().unwrap();
-        assert_eq!(probe["source_marker"], uri);
-        assert!(
-            include_str!("routes.rs").contains(uri)
-                || include_str!("sync_connection_routes.rs").contains(uri)
-        );
         assert!(observed.insert(uri));
         let mut body = probe["body"].clone();
         body["scope"] = serde_json::to_value(request_scope(&state)).unwrap();

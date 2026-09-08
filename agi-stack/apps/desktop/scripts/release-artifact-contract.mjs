@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, chmod, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { access, readFile, readdir, stat } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { gunzipSync, inflateRawSync } from 'node:zlib';
 import { parseDocument } from 'yaml';
 
-const RELEASE_EVIDENCE_CONTRACT = 'desktop-release-package-evidence-v1';
 const BLOCKMAP_VERIFICATION_SCOPE = 'blockmap_structure_and_coverage_only';
 const DIAGNOSTIC_ROOT_FILES = new Set(['builder-debug.yml', 'builder-effective-config.yaml']);
 const PLATFORM_POLICIES = Object.freeze({
@@ -16,7 +15,6 @@ const PLATFORM_POLICIES = Object.freeze({
     installerSuffixes: Object.freeze(['.dmg', '.zip']),
     externalBlockmapSuffixes: Object.freeze(['.zip']),
     embeddedBlockmapSuffixes: Object.freeze([]),
-    evidencePlatform: 'macos',
   }),
   win32: Object.freeze({
     metadata: 'latest.yml',
@@ -25,7 +23,6 @@ const PLATFORM_POLICIES = Object.freeze({
     installerSuffixes: Object.freeze(['.exe']),
     externalBlockmapSuffixes: Object.freeze(['.exe']),
     embeddedBlockmapSuffixes: Object.freeze([]),
-    evidencePlatform: 'windows',
   }),
   linux: Object.freeze({
     metadata: 'latest-linux.yml',
@@ -34,7 +31,6 @@ const PLATFORM_POLICIES = Object.freeze({
     installerSuffixes: Object.freeze(['.AppImage', '.deb']),
     externalBlockmapSuffixes: Object.freeze([]),
     embeddedBlockmapSuffixes: Object.freeze(['.AppImage']),
-    evidencePlatform: 'linux',
   }),
 });
 
@@ -460,173 +456,4 @@ export async function verifyReleaseRootMetadata({
       .map((name) => resolve(root, name))
       .sort(),
   };
-}
-
-function assertEvidenceText(value, label, pattern) {
-  if (typeof value !== 'string' || !pattern.test(value)) {
-    throw new Error(`${label} is invalid`);
-  }
-  return value;
-}
-
-export function buildReleaseEvidence({
-  platform,
-  version,
-  expectedVersion,
-  tag,
-  commitSha,
-  runId,
-  runAttempt,
-  runUrl,
-  assets,
-  packageVerification,
-}) {
-  if (!['macos', 'windows', 'linux'].includes(platform)) {
-    throw new Error('release evidence platform is invalid');
-  }
-  if (version !== expectedVersion) {
-    throw new Error(`desktop package version must remain ${expectedVersion}; found ${version}`);
-  }
-  if (tag !== `v${version}`) {
-    throw new Error(`release evidence tag must exactly match v${version}`);
-  }
-  assertEvidenceText(commitSha, 'release evidence commit SHA', /^[a-f0-9]{40}$/u);
-  assertEvidenceText(runId, 'release evidence run id', /^[1-9][0-9]*$/u);
-  assertEvidenceText(runAttempt, 'release evidence run attempt', /^[1-9][0-9]*$/u);
-  let parsedRunUrl;
-  try {
-    parsedRunUrl = new URL(runUrl);
-  } catch {
-    throw new Error('release evidence run URL is invalid');
-  }
-  const runUrlSegments = parsedRunUrl.pathname.split('/').filter(Boolean);
-  if (
-    parsedRunUrl.protocol !== 'https:' ||
-    parsedRunUrl.hostname !== 'github.com' ||
-    parsedRunUrl.port !== '' ||
-    parsedRunUrl.username !== '' ||
-    parsedRunUrl.password !== '' ||
-    parsedRunUrl.search !== '' ||
-    parsedRunUrl.hash !== '' ||
-    runUrlSegments.length !== 5 ||
-    !runUrlSegments.slice(0, 2).every((segment) => /^[A-Za-z0-9_.-]+$/u.test(segment)) ||
-    runUrlSegments[2] !== 'actions' ||
-    runUrlSegments[3] !== 'runs' ||
-    runUrlSegments[4] !== runId
-  ) {
-    throw new Error('release evidence run URL is invalid');
-  }
-  if (!Array.isArray(assets) || assets.length === 0) {
-    throw new Error('release evidence assets must not be empty');
-  }
-  const normalizedAssets = assets
-    .map((asset) => {
-      if (!asset || typeof asset !== 'object' || Array.isArray(asset)) {
-        throw new Error('release evidence asset contract is invalid');
-      }
-      const name = assertSafeRootFilename(asset.name, 'release evidence asset name');
-      if (!Number.isSafeInteger(asset.size) || asset.size <= 0) {
-        throw new Error(`release evidence asset size is invalid: ${name}`);
-      }
-      return {
-        name,
-        size: asset.size,
-        sha512: canonicalSha512(asset.sha512, `release evidence asset SHA-512 for ${name}`),
-      };
-    })
-    .sort((left, right) => left.name.localeCompare(right.name));
-  if (new Set(normalizedAssets.map((asset) => asset.name)).size !== normalizedAssets.length) {
-    throw new Error('release evidence assets contain duplicate names');
-  }
-  if (
-    !packageVerification ||
-    typeof packageVerification !== 'object' ||
-    Array.isArray(packageVerification) ||
-    Object.keys(packageVerification).length === 0
-  ) {
-    throw new Error('release evidence package verification is invalid');
-  }
-
-  return {
-    contract_version: RELEASE_EVIDENCE_CONTRACT,
-    evidence_scope: 'package_artifacts_and_promotion_requirements',
-    blockmap_verification_scope: BLOCKMAP_VERIFICATION_SCOPE,
-    artifact_verification_status: 'verified_by_tag_ci',
-    release_disposition: 'prerelease_only',
-    release_blocker_reason_code: 'stable_promotion_native_evidence_required',
-    required_native_checks: ['install', 'launch', 'updater_apply', 'updater_failure_rollback'],
-    verification_checks: [
-      { id: 'package_artifacts', status: 'passed', reason_code: null },
-      { id: 'install', status: 'blocked', reason_code: 'native_install_evidence_missing' },
-      { id: 'launch', status: 'blocked', reason_code: 'native_launch_evidence_missing' },
-      { id: 'updater_apply', status: 'blocked', reason_code: 'updater_apply_evidence_missing' },
-      {
-        id: 'updater_failure_rollback',
-        status: 'blocked',
-        reason_code: 'updater_failure_rollback_evidence_missing',
-      },
-    ],
-    platform,
-    version,
-    tag,
-    commit_sha: commitSha,
-    workflow_run: {
-      id: runId,
-      attempt: runAttempt,
-      url: parsedRunUrl.toString(),
-    },
-    package_verification: packageVerification,
-    assets: normalizedAssets,
-  };
-}
-
-async function releaseAssetEvidence(paths) {
-  return Promise.all(
-    paths.map(async (path) => {
-      const fileStats = await stat(path);
-      if (!fileStats.isFile() || fileStats.size <= 0) {
-        throw new Error(`release evidence asset is not a non-empty file: ${path}`);
-      }
-      return {
-        name: basename(path),
-        size: fileStats.size,
-        sha512: await fileSha512(path),
-      };
-    }),
-  );
-}
-
-export async function writeReleaseEvidence({
-  releaseRoot,
-  policy,
-  version,
-  expectedVersion,
-  tag,
-  commitSha,
-  runId,
-  runAttempt,
-  runUrl,
-  artifactPaths,
-  packageVerification,
-}) {
-  const evidence = buildReleaseEvidence({
-    platform: policy.evidencePlatform,
-    version,
-    expectedVersion,
-    tag,
-    commitSha,
-    runId,
-    runAttempt,
-    runUrl,
-    assets: await releaseAssetEvidence(artifactPaths),
-    packageVerification,
-  });
-  const evidencePath = resolve(releaseRoot, `release-evidence-${policy.evidencePlatform}.json`);
-  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, {
-    encoding: 'utf8',
-    flag: 'wx',
-    mode: 0o444,
-  });
-  await chmod(evidencePath, 0o444);
-  return evidencePath;
 }

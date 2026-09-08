@@ -2,7 +2,7 @@
 # I0 strangler migration gate.
 #
 # This keeps every Rust-owned API slice honest before adding or changing gateway
-# flip rules: core portability, wire-contract goldens, parity harness, full
+# flip rules: core portability, wire-contract goldens, full
 # workspace tests, and conservative gateway routing policy.
 set -euo pipefail
 
@@ -57,9 +57,6 @@ if [ "$RUN_CLIPPY" = "1" ]; then
 else
   echo "skipping clippy because AGISTACK_STRANGLER_GATE_CLIPPY=$RUN_CLIPPY"
 fi
-
-step "checking parity harness"
-"$CARGO" test -p agistack-parity
 
 step "checking portable core wasm build"
 "$RUSTUP" target add "$WASM_TARGET" >/dev/null

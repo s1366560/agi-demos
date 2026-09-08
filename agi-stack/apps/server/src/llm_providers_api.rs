@@ -4506,7 +4506,7 @@ mod tests {
         let value =
             serde_json::to_value(list_provider_types().await.0).expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -5186,7 +5186,7 @@ mod tests {
 
         let value = serde_json::to_value(response).expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
         assert_eq!(
             value["detected_providers"]["openai"]["environment_variable"],
             "OPENAI_API_KEY"
@@ -5375,7 +5375,7 @@ mod tests {
         )
         .expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[tokio::test]
@@ -5406,7 +5406,7 @@ mod tests {
             value["total"], 1,
             "current model search must remain a positive fixture"
         );
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[tokio::test]
@@ -5437,7 +5437,7 @@ mod tests {
         )
         .expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[tokio::test]
@@ -5481,7 +5481,7 @@ mod tests {
         });
         let value = serde_json::to_value(response.clone()).expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
 
         let current_config = ProviderProbeConfig {
             provider_id: response.provider_id.clone(),
@@ -5531,7 +5531,7 @@ mod tests {
         });
         let value = serde_json::to_value(response).expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -5584,7 +5584,7 @@ mod tests {
         let current = provider_response_from_record(record.clone(), Some(health.clone()));
         let value = serde_json::to_value(current).expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
 
         let stale = provider_response_from_record(
             LlmProviderRecord {
@@ -6712,7 +6712,7 @@ mod tests {
         )])
         .expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -6778,7 +6778,7 @@ mod tests {
         };
         let value = serde_json::to_value(response).expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]

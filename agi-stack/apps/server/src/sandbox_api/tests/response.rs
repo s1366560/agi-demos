@@ -252,7 +252,7 @@ fn sandbox_profiles_match_python_wire_shape() {
     ))
     .unwrap();
     let actual = serde_json::to_value(&response).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -276,7 +276,7 @@ fn response_keeps_python_wire_fields_and_null_proxy_urls() {
     let actual = serde_json::to_value(&response).unwrap();
     assert!(!actual.to_string().contains("private-capability"));
     assert!(actual.get("runtime_auth_token").is_none());
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 #[test]
 fn response_surfaces_persisted_mcp_connection_fields() {
@@ -362,7 +362,7 @@ fn interactive_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_desktop_start.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&desktop_golden, &serde_json::to_value(&desktop).unwrap());
+    crate::response_assertions::assert_parity(&desktop_golden, &serde_json::to_value(&desktop).unwrap());
 
     let custom_desktop = DesktopServiceResponse::from_info(&info, "1280x720".to_string());
     assert_eq!(custom_desktop.resolution, "1280x720");
@@ -377,14 +377,14 @@ fn interactive_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_terminal_start.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&terminal_golden, &serde_json::to_value(&terminal).unwrap());
+    crate::response_assertions::assert_parity(&terminal_golden, &serde_json::to_value(&terminal).unwrap());
 
     let stop = SandboxServiceStopResponse { success: true };
     let stop_golden: serde_json::Value = serde_json::from_str(include_str!(
         "../../../tests/golden/project_sandbox_service_stop.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&stop_golden, &serde_json::to_value(&stop).unwrap());
+    crate::response_assertions::assert_parity(&stop_golden, &serde_json::to_value(&stop).unwrap());
 
     let missing = sample_info();
     assert!(
@@ -414,7 +414,7 @@ fn http_service_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_http_service_response.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &serde_json::to_value(&response).unwrap());
+    crate::response_assertions::assert_parity(&golden, &serde_json::to_value(&response).unwrap());
 
     let list = ListHttpServicesResponse {
         services: vec![HttpServiceResponse::from(service.clone())],
@@ -424,7 +424,7 @@ fn http_service_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_http_services_list.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&list_golden, &serde_json::to_value(&list).unwrap());
+    crate::response_assertions::assert_parity(&list_golden, &serde_json::to_value(&list).unwrap());
 
     let mut stopped = service;
     stopped.status = "stopped".to_string();
@@ -437,7 +437,7 @@ fn http_service_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_http_service_action.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&action_golden, &serde_json::to_value(&action).unwrap());
+    crate::response_assertions::assert_parity(&action_golden, &serde_json::to_value(&action).unwrap());
 
     let preview = HttpServicePreviewSessionResponse {
         preview_url: append_query_param(
@@ -451,7 +451,7 @@ fn http_service_control_responses_match_python_wire_shape() {
         "../../../tests/golden/project_sandbox_http_service_preview_session.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&preview_golden, &serde_json::to_value(&preview).unwrap());
+    crate::response_assertions::assert_parity(&preview_golden, &serde_json::to_value(&preview).unwrap());
 
     assert_eq!(normalize_http_service_id(Some(" web:1 ")).unwrap(), "web:1");
     assert!(normalize_http_service_id(Some("bad/id")).is_err());
@@ -469,7 +469,7 @@ fn proxy_auth_cookie_response_and_header_match_python_contract() {
         "../../../tests/golden/project_sandbox_proxy_auth_cookie.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &serde_json::to_value(&response).unwrap());
+    crate::response_assertions::assert_parity(&golden, &serde_json::to_value(&response).unwrap());
 
     let cookie = sandbox_proxy_auth_cookie("p1", "ms_sk_test", false).unwrap();
     assert_eq!(
@@ -509,7 +509,7 @@ fn health_stats_and_action_responses_match_goldens() {
         "../../../tests/golden/project_sandbox_health.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&health_golden, &serde_json::to_value(&health).unwrap());
+    crate::response_assertions::assert_parity(&health_golden, &serde_json::to_value(&health).unwrap());
 
     let stats = SandboxStatsResponse {
         project_id: "p1".to_string(),
@@ -533,7 +533,7 @@ fn health_stats_and_action_responses_match_goldens() {
         "../../../tests/golden/project_sandbox_stats.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&stats_golden, &serde_json::to_value(&stats).unwrap());
+    crate::response_assertions::assert_parity(&stats_golden, &serde_json::to_value(&stats).unwrap());
 
     let action = SandboxActionResponse {
         success: true,
@@ -544,7 +544,7 @@ fn health_stats_and_action_responses_match_goldens() {
         "../../../tests/golden/project_sandbox_action.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&action_golden, &serde_json::to_value(&action).unwrap());
+    crate::response_assertions::assert_parity(&action_golden, &serde_json::to_value(&action).unwrap());
 
     let list = ListProjectSandboxesResponse {
         sandboxes: vec![ProjectSandboxResponse::from(sample_info())],
@@ -554,5 +554,5 @@ fn health_stats_and_action_responses_match_goldens() {
         "../../../tests/golden/project_sandbox_list.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&list_golden, &serde_json::to_value(&list).unwrap());
+    crate::response_assertions::assert_parity(&list_golden, &serde_json::to_value(&list).unwrap());
 }

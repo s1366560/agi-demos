@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 
@@ -8,16 +7,6 @@ const {
   AGENT_WORKSPACE_JOURNEY_IDS,
   createAgentWorkspaceJourneyAuthorityClient,
 } = require("/tmp/agistack-desktop-test-dist/src/features/agent-workspace/agentWorkspaceJourneyAuthorityClient.js");
-
-const journeyOverrides = JSON.parse(
-  readFileSync(
-    new URL(
-      "../contracts/desktop-web-parity/parity-journey-overrides.v3.json",
-      import.meta.url,
-    ),
-    "utf8",
-  ),
-);
 
 const cloudConfig = Object.freeze({
   apiBaseUrl: "https://cloud.memstack.test",
@@ -29,18 +18,6 @@ const cloudConfig = Object.freeze({
   workspaceId: "workspace-1",
   mode: "cloud",
   workspaceRoot: "/workspace",
-});
-
-test("journey authority catalog covers every Agent Workspace v3 journey exactly once", () => {
-  const declared = journeyOverrides.capabilities
-    .find(
-      (entry) =>
-        entry.capability_id === "agent-workspace-tenant-agent-workspace",
-    )
-    .journeys.map((journey) => journey.id)
-    .sort();
-  assert.deepEqual([...AGENT_WORKSPACE_JOURNEY_IDS].sort(), declared);
-  assert.equal(new Set(AGENT_WORKSPACE_JOURNEY_IDS).size, 8);
 });
 
 test("tenant-level production scope remains revision-bound without inferring a workspace", async () => {
@@ -61,7 +38,10 @@ test("tenant-level production scope remains revision-bound without inferring a w
     (call) => new URL(call.input).pathname === "/api/v1/agent/conversations",
   );
   assert.ok(catalogCall);
-  assert.equal(new URL(catalogCall.input).searchParams.get("workspace_id"), null);
+  assert.equal(
+    new URL(catalogCall.input).searchParams.get("workspace_id"),
+    null,
+  );
 });
 
 test("Cloud probe publishes only actions backed by successful scoped GET authorities", async () => {
@@ -142,9 +122,10 @@ test("Cloud probe publishes only actions backed by successful scoped GET authori
     2,
   );
   assert.equal(
-    requestUrl(calls, "/api/v1/agent/conversations/conversation-1").searchParams.get(
-      "project_id",
-    ),
+    requestUrl(
+      calls,
+      "/api/v1/agent/conversations/conversation-1",
+    ).searchParams.get("project_id"),
     "project-1",
   );
   assert.equal(
@@ -255,10 +236,7 @@ test("Local probe uses launch authority and preserves structured runtime unavail
     false,
   );
   assert.ok(
-    requestUrl(
-      calls,
-      "/api/v1/agent/conversations/conversation-1/session",
-    ),
+    requestUrl(calls, "/api/v1/agent/conversations/conversation-1/session"),
   );
   assert.equal(
     requestUrl(
@@ -476,18 +454,21 @@ test("authority scope and revision are revalidated after all journey probes", as
     const calls = [];
     const baseFetch = fixtureFetch("cloud", calls);
     let contextReads = 0;
-    const result = await createAgentWorkspaceJourneyAuthorityClient(cloudConfig, {
-      fetchImpl: async (input, init) => {
-        if (new URL(String(input)).pathname === "/api/v1/workspace-context") {
-          calls.push({ input: String(input), init });
-          contextReads += 1;
-          return jsonResponse(
-            contextReads === 1 ? workspaceContext() : scenario.finalContext,
-          );
-        }
-        return baseFetch(input, init);
+    const result = await createAgentWorkspaceJourneyAuthorityClient(
+      cloudConfig,
+      {
+        fetchImpl: async (input, init) => {
+          if (new URL(String(input)).pathname === "/api/v1/workspace-context") {
+            calls.push({ input: String(input), init });
+            contextReads += 1;
+            return jsonResponse(
+              contextReads === 1 ? workspaceContext() : scenario.finalContext,
+            );
+          }
+          return baseFetch(input, init);
+        },
       },
-    }).probe();
+    ).probe();
 
     assert.equal(contextReads, 2, scenario.name);
     assert.equal(result.authorityRevision, null, scenario.name);
@@ -501,19 +482,22 @@ test("authority scope and revision are revalidated after all journey probes", as
 
 test("missing and unsafe workspace revisions fail closed with a stable reason", async () => {
   for (const revision of [undefined, Number.MAX_SAFE_INTEGER + 1]) {
-    const result = await createAgentWorkspaceJourneyAuthorityClient(cloudConfig, {
-      fetchImpl: async (input) => {
-        const path = new URL(String(input)).pathname;
-        if (path === "/api/v1/auth/me") return jsonResponse(user());
-        if (path === "/api/v1/workspace-context") {
-          const context = workspaceContext();
-          if (revision === undefined) delete context.context.revision;
-          else context.context.revision = revision;
-          return jsonResponse(context);
-        }
-        throw new Error(`unexpected request after invalid revision: ${path}`);
+    const result = await createAgentWorkspaceJourneyAuthorityClient(
+      cloudConfig,
+      {
+        fetchImpl: async (input) => {
+          const path = new URL(String(input)).pathname;
+          if (path === "/api/v1/auth/me") return jsonResponse(user());
+          if (path === "/api/v1/workspace-context") {
+            const context = workspaceContext();
+            if (revision === undefined) delete context.context.revision;
+            else context.context.revision = revision;
+            return jsonResponse(context);
+          }
+          throw new Error(`unexpected request after invalid revision: ${path}`);
+        },
       },
-    }).probe();
+    ).probe();
 
     assert.equal(result.authorityRevision, null);
     for (const observation of Object.values(result.journeys)) {
@@ -588,7 +572,9 @@ function actions(snapshot, journeyId) {
 }
 
 function requestUrl(calls, path) {
-  const call = calls.find((candidate) => new URL(candidate.input).pathname === path);
+  const call = calls.find(
+    (candidate) => new URL(candidate.input).pathname === path,
+  );
   assert.ok(call, `missing request ${path}`);
   return new URL(call.input);
 }
@@ -612,7 +598,9 @@ function fixtureFetch(mode, calls) {
         page_size: 100,
       });
     }
-    if (path === (mode === "local" ? "/api/v1/projects" : "/api/v1/projects/")) {
+    if (
+      path === (mode === "local" ? "/api/v1/projects" : "/api/v1/projects/")
+    ) {
       return jsonResponse({
         projects: [{ id: "project-1", tenant_id: "tenant-1", name: "Project" }],
         total: 1,
@@ -816,7 +804,12 @@ function sessionProjection() {
       can_respond_to_hitl: true,
       can_steer_now: true,
       can_queue_next: true,
-      allowed_actions: ["send_message", "respond_to_hitl", "steer_now", "queue_next"],
+      allowed_actions: [
+        "send_message",
+        "respond_to_hitl",
+        "steer_now",
+        "queue_next",
+      ],
     },
     snapshot_revision: "session-revision-1",
     updated_at: "2026-08-05T00:00:00Z",

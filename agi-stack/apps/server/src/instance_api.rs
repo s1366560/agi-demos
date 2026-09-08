@@ -2064,7 +2064,7 @@ mod tests {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/instance_list_response.json"))
                 .expect("instance list golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -2079,7 +2079,7 @@ mod tests {
             "../tests/golden/instance_config_response.json"
         ))
         .expect("instance config golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -2094,7 +2094,7 @@ mod tests {
             "../tests/golden/instance_llm_config_response.json"
         ))
         .expect("instance llm config golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -2109,7 +2109,7 @@ mod tests {
             "../tests/golden/instance_llm_config_override_response.json"
         ))
         .expect("instance llm override golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -2130,7 +2130,7 @@ mod tests {
             "../tests/golden/instance_member_list_response.json"
         ))
         .expect("instance member list golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -2146,7 +2146,7 @@ mod tests {
             "../tests/golden/instance_member_response.json"
         ))
         .expect("instance member golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -2163,7 +2163,7 @@ mod tests {
             "../tests/golden/instance_pending_config_response.json"
         ))
         .expect("instance pending config golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -2178,7 +2178,7 @@ mod tests {
             "../tests/golden/instance_user_search_response.json"
         ))
         .expect("instance user search golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -2201,6 +2201,6 @@ mod tests {
             "../tests/golden/instance_channel_list_response.json"
         ))
         .expect("instance channel list golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 }

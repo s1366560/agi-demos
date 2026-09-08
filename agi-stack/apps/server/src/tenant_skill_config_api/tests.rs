@@ -29,7 +29,7 @@ fn tenant_skill_config_response_matches_golden() {
         "../../tests/golden/tenant_skill_config_response.json"
     ))
     .expect("tenant skill config response golden must be valid JSON");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn tenant_skill_config_list_matches_golden() {
         "../../tests/golden/tenant_skill_config_list.json"
     ))
     .expect("tenant skill config list golden must be valid JSON");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -57,7 +57,7 @@ fn tenant_skill_status_matches_goldens() {
         "../../tests/golden/tenant_skill_config_status_overridden.json"
     ))
     .expect("tenant skill status overridden golden must be valid JSON");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 
     let actual = serde_json::to_value(skill_status_view("code-review", None))
         .expect("tenant skill status enabled response must serialize");
@@ -65,7 +65,7 @@ fn tenant_skill_status_matches_goldens() {
         "../../tests/golden/tenant_skill_config_status_enabled.json"
     ))
     .expect("tenant skill status enabled golden must be valid JSON");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[tokio::test]

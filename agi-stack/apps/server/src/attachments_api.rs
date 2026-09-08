@@ -970,7 +970,7 @@ mod tests {
             "../tests/golden/attachment_list_response.json"
         ))
         .expect("attachment list golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -989,7 +989,7 @@ mod tests {
             "../tests/golden/attachment_detail_response.json"
         ))
         .expect("attachment detail golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1000,7 +1000,7 @@ mod tests {
             "../tests/golden/attachment_delete_response.json"
         ))
         .expect("attachment delete golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1021,7 +1021,7 @@ mod tests {
             "../tests/golden/attachment_upload_simple_response.json"
         ))
         .expect("attachment upload golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[tokio::test]

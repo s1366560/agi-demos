@@ -1052,7 +1052,7 @@ mod tests {
         let value = serde_json::to_value(list_store_types().await.0)
             .expect("graph store types response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1090,7 +1090,7 @@ mod tests {
         ))
         .expect("graph store list golden must be valid JSON");
         let value = serde_json::to_value(response).expect("graph store list serializes");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1104,7 +1104,7 @@ mod tests {
         ))
         .expect("graph store detail golden must be valid JSON");
         let value = serde_json::to_value(response).expect("graph store detail serializes");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1118,7 +1118,7 @@ mod tests {
         ))
         .expect("graph store create golden must be valid JSON");
         let value = serde_json::to_value(response).expect("graph store create serializes");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1132,7 +1132,7 @@ mod tests {
         ))
         .expect("graph store update golden must be valid JSON");
         let value = serde_json::to_value(response).expect("graph store update serializes");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]

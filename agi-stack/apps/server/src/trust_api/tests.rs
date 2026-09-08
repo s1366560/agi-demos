@@ -52,7 +52,7 @@ fn trust_policy_response_matches_golden() {
     .expect("trust policy response golden must be valid JSON");
     let actual = serde_json::to_value(TrustPolicyView::from(sample_policy()))
         .expect("trust policy response must serialize");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn trust_policy_list_matches_golden() {
         items: vec![TrustPolicyView::from(sample_policy())],
     })
     .expect("trust policy list must serialize");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn trust_check_matches_golden() {
             .expect("trust check golden must be valid JSON");
     let actual =
         serde_json::to_value(TrustCheckView { trusted: true }).expect("trust check must serialize");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn decision_record_response_matches_golden() {
     .expect("decision record response golden must be valid JSON");
     let actual = serde_json::to_value(DecisionRecordView::from(sample_decision()))
         .expect("decision record response must serialize");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn decision_record_list_matches_golden() {
         items: vec![DecisionRecordView::from(sample_decision())],
     })
     .expect("decision record list must serialize");
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[tokio::test]

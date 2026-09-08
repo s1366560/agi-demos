@@ -1256,7 +1256,7 @@ mod tests {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/admin_dlq_list_response.json"))
                 .expect("DLQ list golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1267,7 +1267,7 @@ mod tests {
             "../tests/golden/admin_dlq_stats_response.json"
         ))
         .expect("DLQ stats golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1281,7 +1281,7 @@ mod tests {
             "../tests/golden/admin_dlq_discard_response.json"
         ))
         .expect("DLQ discard golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1292,7 +1292,7 @@ mod tests {
             "../tests/golden/admin_dlq_retry_response.json"
         ))
         .expect("DLQ retry golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1306,7 +1306,7 @@ mod tests {
             "../tests/golden/admin_dlq_retry_batch_response.json"
         ))
         .expect("DLQ retry batch golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1317,6 +1317,6 @@ mod tests {
             "../tests/golden/admin_dlq_cleanup_response.json"
         ))
         .expect("DLQ cleanup golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 }

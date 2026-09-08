@@ -281,7 +281,7 @@ mod tests {
         ))
         .expect("maintenance status golden must be valid JSON");
         let actual = serde_json::to_value(response).expect("response must serialize");
-        agistack_parity::assert_parity(&golden, &actual);
+        crate::response_assertions::assert_parity(&golden, &actual);
     }
 
     #[test]

@@ -1088,7 +1088,7 @@ mod tests {
         let value = serde_json::to_value(list_store_types().await.0)
             .expect("retrieval store types response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1126,7 +1126,7 @@ mod tests {
         ))
         .expect("retrieval store list golden must be valid JSON");
         let value = serde_json::to_value(response).expect("retrieval store list serializes");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1140,7 +1140,7 @@ mod tests {
         ))
         .expect("retrieval store detail golden must be valid JSON");
         let value = serde_json::to_value(response).expect("retrieval store detail serializes");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1154,7 +1154,7 @@ mod tests {
         ))
         .expect("retrieval store create golden must be valid JSON");
         let value = serde_json::to_value(response).expect("retrieval store create serializes");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1168,7 +1168,7 @@ mod tests {
         ))
         .expect("retrieval store update golden must be valid JSON");
         let value = serde_json::to_value(response).expect("retrieval store update serializes");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]

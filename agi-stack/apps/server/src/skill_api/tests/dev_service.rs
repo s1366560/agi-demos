@@ -67,7 +67,7 @@ async fn dev_service_imports_filesystem_system_skill_as_managed_skill() {
         "../../../tests/golden/skill_system_import_lifecycle.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[tokio::test]

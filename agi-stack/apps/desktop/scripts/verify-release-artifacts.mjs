@@ -6,19 +6,14 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  buildReleaseEvidence,
-  platformPolicy,
-  verifyReleaseRootMetadata,
-  writeReleaseEvidence,
-} from './release-artifact-contract.mjs';
+import { verifyReleaseRootMetadata } from './release-artifact-contract.mjs';
 import {
   inspectPortableExecutableArchitecture,
   verifyMacPackageArtifacts,
   verifyWindowsInstallerArtifact,
 } from './release-package-verification.mjs';
 
-export { buildReleaseEvidence, verifyReleaseRootMetadata };
+export { verifyReleaseRootMetadata };
 
 const scriptPath = fileURLToPath(import.meta.url);
 const desktopRoot = resolve(dirname(scriptPath), '..');
@@ -509,7 +504,6 @@ async function verifyLinuxPackages({
 async function main() {
   const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
   const platform = process.platform;
-  const policy = platformPolicy(platform);
   const releaseRoot = defaultReleaseRoot;
   const expectedVersion = process.env.AGISTACK_EXPECTED_VERSION;
   const expectedTag = process.env.AGISTACK_EXPECTED_TAG;
@@ -639,22 +633,9 @@ async function main() {
     throw new Error(`unsupported release verification platform: ${platform}`);
   }
 
-  const evidencePath = await writeReleaseEvidence({
-    releaseRoot,
-    policy,
-    version: packageJson.version,
-    expectedVersion,
-    tag: expectedTag,
-    commitSha: process.env.AGISTACK_RELEASE_COMMIT_SHA,
-    runId: process.env.AGISTACK_RELEASE_RUN_ID,
-    runAttempt: process.env.AGISTACK_RELEASE_RUN_ATTEMPT,
-    runUrl: process.env.AGISTACK_RELEASE_RUN_URL,
-    artifactPaths: metadataResult.publishableArtifacts,
-    packageVerification,
-  });
   process.stdout.write(
     `DESKTOP_RELEASE_ARTIFACTS_VERIFIED platform=${platform} ` +
-      `sidecar=${verifiedSidecarSource} evidence=${basename(evidencePath)}\n`,
+      `sidecar=${verifiedSidecarSource}\n`,
   );
 }
 

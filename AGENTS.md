@@ -10,6 +10,7 @@ Guidance for AI coding assistants (Copilot, Claude, Cursor, Gemini, ...) working
 
 - **Plan before execute** for non-trivial changes; delegate to specialized agents when useful.
 - **TDD**: write/adjust tests alongside code; maintain 80%+ coverage.
+- **Delivery verification**: use executable unit and integration tests. Do not create or require parity manifests, route inventories, judgment ledgers, source/revision evidence binding, or manual evidence promotion gates. Keep compilation, package signing, updater artifact validation, and application authorization checks.
 - **Security first**: never paste secrets (API keys, tokens, JWTs, passwords). Redact logs.
 - **Code style**: no emojis in code/docs. Prefer immutability. Small files (200–400 lines typical, 800 max). Commit subjects MUST use Conventional Commit syntax with an optional scope, for example `feat(agent): add supervisor verdict tool`, `fix(sandbox): clarify read offset semantics`, `refactor(skills): lift curated lineage into domain`. Keep the first line in that format, then use the Lore protocol trailers below in the body when a body is present.
 - Before editing a symbol: run `gitnexus impact` (see GitNexus section) and report blast radius.

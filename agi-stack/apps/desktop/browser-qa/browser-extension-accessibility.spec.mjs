@@ -1,18 +1,9 @@
-import { readFileSync } from "node:fs";
-
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import {
-  buildReleaseAccessibilitySurfaceInventory,
-  deriveZoomEquivalentViewport,
-} from "../contracts/accessibility/accessibility-automation-contract.mjs";
+import { deriveZoomEquivalentViewport } from "../contracts/accessibility/viewport.mjs";
 import { auditKeyboardTraversal } from "../contracts/accessibility/playwright-keyboard-audit.mjs";
 
-const CONTRACT_URL = new URL(
-  "../contracts/desktop-web-parity/web-route-inventory.v2.json",
-  import.meta.url,
-);
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const ZOOM_400_VIEWPORT = deriveZoomEquivalentViewport(
   { width: 1280, height: 720 },
@@ -33,30 +24,29 @@ const STATES = Object.freeze([
   "data-empty",
   "data-error",
 ]);
-const inventory = buildReleaseAccessibilitySurfaceInventory(
-  JSON.parse(readFileSync(CONTRACT_URL, "utf8")),
-);
-
-for (const route of inventory.surfaces.browser_extension) {
-  test(`WCAG 2.2 AA Browser Extension: ${route.routeId}`, async ({ page }, testInfo) => {
-    const pageName = route.launchTarget.split("/").at(-1);
-    if (!pageName) throw new Error("browser_extension_accessibility_target_invalid");
+for (const pageName of ["options.html", "sidepanel.html"]) {
+  const routeId = `browser-extension-${pageName.replace(".html", "")}`;
+  test(`WCAG 2.2 AA Browser Extension: ${routeId}`, async ({
+    page,
+  }, testInfo) => {
     const results = [];
     for (const stateId of STATES) {
       try {
         const evidence = await test.step(stateId, () =>
-          runExtensionState(page, testInfo, route.routeId, pageName, stateId),
+          runExtensionState(page, testInfo, routeId, pageName, stateId),
         );
         results.push({ stateId, status: "passed", evidence });
       } catch (error) {
         results.push({
           stateId,
           status: "failed",
-          evidence: [`error:${error instanceof Error ? error.message : String(error)}`],
+          evidence: [
+            `error:${error instanceof Error ? error.message : String(error)}`,
+          ],
         });
       }
     }
-    await testInfo.attach(`${route.routeId}-accessibility-state-results`, {
+    await testInfo.attach(`${routeId}-accessibility-state-results`, {
       body: JSON.stringify(results, null, 2),
       contentType: "application/json",
     });
@@ -78,7 +68,9 @@ async function runExtensionState(page, testInfo, routeId, pageName, stateId) {
     colorScheme: stateId === "theme-dark" ? "dark" : "light",
   });
   await installExtensionApiFixture(page, stateId);
-  const response = await page.goto(`/${pageName}`, { waitUntil: "domcontentloaded" });
+  const response = await page.goto(`/${pageName}`, {
+    waitUntil: "domcontentloaded",
+  });
   expect(response?.status()).toBeLessThan(400);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page).toHaveTitle(/MemStack/u);
@@ -116,10 +108,14 @@ async function runExtensionState(page, testInfo, routeId, pageName, stateId) {
     await expect(page.locator("#connection-state")).toHaveText("disconnected");
   }
   if (stateId === "data-empty" && pageName === "sidepanel.html") {
-    await expect(page.locator("#conversation-picker option")).toHaveText("No conversations yet");
+    await expect(page.locator("#conversation-picker option")).toHaveText(
+      "No conversations yet",
+    );
   }
   if (stateId === "data-error" && pageName === "sidepanel.html") {
-    await expect(page.locator("#status")).toContainText("accessibility fixture unavailable");
+    await expect(page.locator("#status")).toContainText(
+      "accessibility fixture unavailable",
+    );
   }
   evidence.push(...(await runAxeScan(page, testInfo, routeId, stateId)));
   return evidence;
@@ -134,7 +130,8 @@ async function installExtensionApiFixture(page, stateId) {
       runtime: {
         id: "enbljdpbhdllbbkcjhccmbgpkfmcdkkl",
         sendMessage: async (message) => {
-          if (failCalls) return { ok: false, error: "accessibility fixture unavailable" };
+          if (failCalls)
+            return { ok: false, error: "accessibility fixture unavailable" };
           if (message?.method === "sidepanel.listConversations") {
             return { ok: true, result: { conversations: [] } };
           }
@@ -161,7 +158,10 @@ async function installExtensionApiFixture(page, stateId) {
 function pageHorizontalOverflow() {
   const root = document.documentElement;
   const body = document.body;
-  return Math.max(root.scrollWidth, body.scrollWidth) - Math.max(root.clientWidth, body.clientWidth);
+  return (
+    Math.max(root.scrollWidth, body.scrollWidth) -
+    Math.max(root.clientWidth, body.clientWidth)
+  );
 }
 
 async function runAxeScan(page, testInfo, routeId, stateId) {
@@ -173,7 +173,11 @@ async function runAxeScan(page, testInfo, routeId, stateId) {
     });
   }
   expect(
-    result.violations.map(({ id, impact, nodes }) => ({ id, impact, nodes: nodes.length })),
+    result.violations.map(({ id, impact, nodes }) => ({
+      id,
+      impact,
+      nodes: nodes.length,
+    })),
   ).toEqual([]);
   return [`axe:violations=0`, `axe:passes=${result.passes.length}`];
 }

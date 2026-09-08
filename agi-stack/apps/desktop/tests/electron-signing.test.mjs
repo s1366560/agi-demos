@@ -87,6 +87,27 @@ test('desktop release workflow is valid YAML without duplicate mapping keys', ()
   );
 });
 
+test('release dispatch defaults to prerelease and exposes an explicit stable choice', () => {
+  const workflow = parseDocument(releaseWorkflow).toJSON();
+  const input = workflow.on.workflow_dispatch.inputs.prerelease;
+  assert.equal(input.type, 'boolean');
+  assert.equal(input.default, true);
+  const stage = workflow.jobs['stage-draft'];
+  assert.equal(stage.env.RELEASE_PRERELEASE,
+    "${{ github.event_name != 'workflow_dispatch' && 'true' || (inputs.prerelease && 'true' || 'false') }}");
+  const publish = stage.steps.find(({ name }) => name === 'Publish verified assets');
+  assert.match(publish.run, /--prerelease="\$RELEASE_PRERELEASE"/u);
+});
+
+test('release packaging waits for executable desktop unit and integration tests', () => {
+  const workflow = parseDocument(releaseWorkflow).toJSON();
+  assert.deepEqual(workflow.jobs.build.needs, ['authorize', 'tests']);
+  assert.equal(workflow.jobs.tests.needs, 'authorize');
+  const step = workflow.jobs.tests.steps.find(({ name }) =>
+    name === 'Run desktop unit and integration tests');
+  assert.equal(step.run, 'make -C agi-stack desktop-check');
+});
+
 test('macOS packaging signs the sidecar and enables hardened notarized builds', () => {
   assert.match(builderConfig, /hardenedRuntime:\s*true/u);
   assert.match(builderConfig, /notarize:\s*true/u);
@@ -159,7 +180,7 @@ test('packaging stages an integrity digest and enables signed auto-updates', () 
   assert.equal(packageJson.dependencies.yaml, '2.8.1');
 });
 
-test('tag releases fail closed and publish only a prerelease after package verification', () => {
+test('tag releases fail closed and publish the requested state after package verification', () => {
   assert.match(releaseWorkflow, /tags:\s*\n\s*-\s*["']v\*["']/u);
   assert.match(releaseWorkflow, /macos-latest/u);
   assert.match(releaseWorkflow, /windows-latest/u);
@@ -188,10 +209,6 @@ test('tag releases fail closed and publish only a prerelease after package verif
   );
   assert.equal(releaseWorkflow.match(/--publish never/gu)?.length, 3);
   assert.doesNotMatch(releaseWorkflow, /--publish always/u);
-  assert.match(releaseWorkflow, /parity-preflight:/u);
-  assert.match(releaseWorkflow, /make -C agi-stack desktop-parity-check/u);
-  assert.match(releaseWorkflow, /playwright install --with-deps chromium/u);
-  assert.match(releaseWorkflow, /needs:\s*\[authorize,\s*parity-preflight\]/u);
   assert.doesNotMatch(releaseWorkflow, /AGISTACK_RELEASE_VERSION:\s*["']0\.1\.0["']/u);
   assert.match(releaseWorkflow, /AGISTACK_RELEASE_VERSION:\s*\$\{\{\s*needs\.authorize\.outputs\.version\s*\}\}/u);
   assert.match(releaseWorkflow, /packageJson\.version\s*!==\s*expectedVersion/u);
@@ -201,15 +218,12 @@ test('tag releases fail closed and publish only a prerelease after package verif
   assert.match(releaseWorkflow, /lipo -create/u);
   assert.match(releaseWorkflow, /xcrun notarytool submit/u);
   assert.match(releaseWorkflow, /xcrun stapler staple/u);
-  assert.match(releaseWorkflow, /release-evidence-\*\.json/u);
 
   const stageIndex = releaseWorkflow.indexOf('pnpm run stage:sidecar');
   const authorizeJobIndex = releaseWorkflow.indexOf('\n  authorize:');
-  const parityJobIndex = releaseWorkflow.indexOf('\n  parity-preflight:');
   const buildJobIndex = releaseWorkflow.indexOf('\n  build:');
-  const authorizeJob = releaseWorkflow.slice(authorizeJobIndex, parityJobIndex);
-  assert.ok(authorizeJobIndex >= 0 && authorizeJobIndex < parityJobIndex);
-  assert.ok(parityJobIndex < buildJobIndex);
+  const authorizeJob = releaseWorkflow.slice(authorizeJobIndex, releaseWorkflow.indexOf('\n  tests:'));
+  assert.ok(authorizeJobIndex >= 0 && authorizeJobIndex < buildJobIndex);
   assert.match(authorizeJob, /permissions:\s*\n\s*contents:\s*read/u);
   assert.match(authorizeJob, /github\.ref_protected/u);
   assert.match(authorizeJob, /DESKTOP_RELEASE_ALLOWED_ACTORS/u);
@@ -220,10 +234,9 @@ test('tag releases fail closed and publish only a prerelease after package verif
   assert.doesNotMatch(authorizeJob, /secrets\./u);
   assert.match(
     releaseWorkflow,
-    /build:[\s\S]*needs:\s*\[[^\]]*authorize[^\]]*parity-preflight[^\]]*\]/u,
+    /build:[\s\S]*needs:\s*\[[^\]]*authorize[^\]]*\]/u,
   );
   assert.match(releaseWorkflow, /build:[\s\S]*environment:\s*desktop-release-signing/u);
-  assert.match(releaseWorkflow, /parity-preflight:[\s\S]*needs:\s*authorize/u);
   const materializeIndex = releaseWorkflow.indexOf('Materialize App Store Connect API key');
   const macBuildIndex = releaseWorkflow.indexOf('Build macOS release artifacts');
   const dmgNotarizeIndex = releaseWorkflow.indexOf('Notarize and staple macOS disk image');
@@ -245,8 +258,8 @@ test('tag releases fail closed and publish only a prerelease after package verif
   const exactRemoteIndex = releaseWorkflow.indexOf(
     'Download and verify the exact remote asset bytes',
   );
-  const publishPrereleaseIndex = releaseWorkflow.indexOf('Publish verified assets as a prerelease');
-  const assertPrereleaseIndex = releaseWorkflow.indexOf('Assert the release is prerelease-only');
+  const publishPrereleaseIndex = releaseWorkflow.indexOf('Publish verified assets');
+  const assertPrereleaseIndex = releaseWorkflow.indexOf('Assert the requested release state');
   assert.ok(stageIndex >= 0 && stageIndex < materializeIndex);
   assert.ok(materializeIndex < macBuildIndex);
   assert.ok(macBuildIndex < dmgNotarizeIndex);
@@ -271,7 +284,6 @@ test('tag releases fail closed and publish only a prerelease after package verif
   assert.match(releaseWorkflow, /name:\s*agistack-desktop-macOS/u);
   assert.match(releaseWorkflow, /name:\s*agistack-desktop-Windows/u);
   assert.match(releaseWorkflow, /name:\s*agistack-desktop-Linux/u);
-  assert.match(releaseWorkflow, /needs:\s*\[authorize,\s*build\]/u);
   assert.match(releaseWorkflow, /Validate the combined release asset set/u);
   assert.match(
     releaseWorkflow,
@@ -290,7 +302,7 @@ test('tag releases fail closed and publish only a prerelease after package verif
   assert.doesNotMatch(releaseWorkflow, /desktop-release-draft-tools/u);
   assert.doesNotMatch(releaseWorkflow, /const policies\s*=/u);
   assert.doesNotMatch(releaseWorkflow, /validatePackageEvidence/u);
-  assert.match(releaseDraftValidation, /basename\(name\)\s*!==\s*name/u);
+  assert.match(releaseDraftValidation, /basename\(asset.name\)\s*!==\s*asset.name/u);
   assert.match(releaseDraftValidation, /release asset basename collision/u);
   assert.match(
     releaseDraftValidation,
@@ -327,10 +339,10 @@ test('tag releases fail closed and publish only a prerelease after package verif
   assert.match(releaseWorkflow, /--draft=false/u);
   assert.match(releaseWorkflow, /--prerelease/u);
   assert.doesNotMatch(releaseWorkflow, /\bnative verification\b/iu);
-  assert.match(releaseWorkflow, /name:\s*Stage verified desktop prerelease/u);
+  assert.match(releaseWorkflow, /name:\s*Stage verified desktop release/u);
   assert.match(
     releaseWorkflow,
-    /Assert the release is prerelease-only[\s\S]*--json isDraft,isPrerelease,tagName/u,
+    /Assert the requested release state[\s\S]*--json isDraft,isPrerelease,tagName/u,
   );
   assert.match(releaseWorkflow, /permissions:\s*\{\}/u);
   assert.match(releaseWorkflow, /build:[\s\S]*permissions:\s*\n\s*contents:\s*read/u);
@@ -381,23 +393,13 @@ test('tag releases fail closed and publish only a prerelease after package verif
   assert.match(releaseVerification, /dpkg-deb/u);
   assert.match(releaseVerification, /--appimage-extract/u);
   assert.match(releaseVerification, /Desktop Entry/u);
-  assert.match(releaseArtifactContract, /desktop-release-package-evidence-v1/u);
-  assert.match(releaseArtifactContract, /package_artifacts_and_promotion_requirements/u);
   assert.match(releaseArtifactContract, /blockmap_structure_and_coverage_only/u);
   assert.match(releaseWorkflow, /blockmap_structure_and_coverage_only/u);
-  assert.match(releaseArtifactContract, /artifact_verification_status/u);
-  assert.match(releaseArtifactContract, /release_disposition/u);
-  assert.match(releaseArtifactContract, /stable_promotion_native_evidence_required/u);
-  assert.match(releaseArtifactContract, /verification_checks/u);
-  assert.match(releaseArtifactContract, /package_verification/u);
   assert.doesNotMatch(releaseArtifactContract, /native_verification/u);
   assert.doesNotMatch(releaseArtifactContract, /(?:^|\n)\s*verification_status:/u);
-  assert.match(releaseDraftValidation, /RELEASE_EVIDENCE_KEYS/u);
-  assert.match(releaseDraftValidation, /PACKAGE_VERIFICATION_KEYS/u);
   assert.match(releaseDraftValidation, /contains unexpected field/u);
   assert.match(releaseVerification, /DESKTOP_RELEASE_ARTIFACTS_VERIFIED/u);
   assert.doesNotMatch(releaseVerification, /\bnativeVerification\b/u);
-  assert.match(releaseArtifactContract, /flag:\s*'wx'/u);
   assert.match(releaseVerification, /\['sidecar',\s*sidecarSignature\]/u);
   assert.match(releaseVerification, /\['Workspace Core',\s*workspaceCoreSignature\]/u);
   assert.match(

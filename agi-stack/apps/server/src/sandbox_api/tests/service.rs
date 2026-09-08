@@ -309,7 +309,7 @@ async fn service_executes_tool_and_matches_python_wire_shape() {
         "../../../tests/golden/project_sandbox_execute.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&execute_golden, &serde_json::to_value(&response).unwrap());
+    crate::response_assertions::assert_parity(&execute_golden, &serde_json::to_value(&response).unwrap());
 }
 #[tokio::test]
 async fn service_prefers_record_mcp_endpoint_for_tool_execution() {

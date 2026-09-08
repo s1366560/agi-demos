@@ -30,6 +30,9 @@ use std::{
 
 const DEFAULT_SANDBOX_IMAGE: &str = "sandbox-mcp-server:latest";
 
+#[cfg(test)]
+mod response_assertions;
+
 mod admin_access;
 mod admin_dlq_api;
 mod agent_commands_api;

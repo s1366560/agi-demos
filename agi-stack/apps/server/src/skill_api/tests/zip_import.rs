@@ -39,7 +39,7 @@ async fn zip_import_package_matches_lifecycle_golden() {
         "../../../tests/golden/skill_zip_import_lifecycle.json"
     ))
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[tokio::test]

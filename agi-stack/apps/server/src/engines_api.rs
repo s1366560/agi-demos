@@ -79,7 +79,7 @@ mod tests {
         let value =
             serde_json::to_value(list_engines().await.0).expect("runtime engines serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]

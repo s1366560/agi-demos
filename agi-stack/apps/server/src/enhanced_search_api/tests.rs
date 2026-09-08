@@ -336,7 +336,7 @@ async fn memory_search_fanout_uses_identity_project_membership() {
         "../../tests/golden/enhanced_search_memory_fanout.json"
     ))
     .expect("enhanced search fanout golden parses");
-    agistack_parity::assert_parity(&golden, &result);
+    crate::response_assertions::assert_parity(&golden, &result);
     assert_eq!(result["total"], 1);
     assert_eq!(result["results"][0]["uuid"], "dev-alpha");
     assert_eq!(
@@ -471,7 +471,7 @@ async fn graph_traversal_fanout_uses_identity_project_membership_for_start_entit
         "../../tests/golden/enhanced_search_traversal_fanout.json"
     ))
     .expect("enhanced search traversal fanout golden parses");
-    agistack_parity::assert_parity(&golden, &result);
+    crate::response_assertions::assert_parity(&golden, &result);
     assert_eq!(result["total"], 3);
     assert_eq!(result["scope"]["project_ids"][0], "dev-project");
     assert!(result["results"].as_array().unwrap().iter().all(|item| {
@@ -605,7 +605,7 @@ async fn community_search_fanout_uses_identity_project_membership() {
         "../../tests/golden/enhanced_search_community_fanout.json"
     ))
     .expect("enhanced search community fanout golden parses");
-    agistack_parity::assert_parity(&golden, &result);
+    crate::response_assertions::assert_parity(&golden, &result);
     assert_eq!(result["total"], 2);
     assert_eq!(result["scope"]["project_ids"][0], "dev-project");
     assert_eq!(
@@ -648,7 +648,7 @@ async fn capabilities_and_error_envelopes_are_fastapi_compatible() {
         "../../tests/golden/enhanced_search_capabilities.json"
     ))
     .expect("enhanced search capabilities golden parses");
-    agistack_parity::assert_parity(&golden, &capabilities);
+    crate::response_assertions::assert_parity(&golden, &capabilities);
 
     let app = test_state();
     let err = memory_search(

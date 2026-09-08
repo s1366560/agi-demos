@@ -1308,7 +1308,7 @@ mod unit {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/memory_response.json")).unwrap();
         let actual = serde_json::to_value(MemoryResponse::from(sample_memory())).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
+        crate::response_assertions::assert_parity(&golden, &actual);
     }
 
     #[test]
@@ -1327,7 +1327,7 @@ mod unit {
             workflow_id: None,
         };
         let actual = serde_json::to_value(&resp).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
+        crate::response_assertions::assert_parity(&golden, &actual);
     }
 
     #[test]
@@ -1350,6 +1350,6 @@ mod unit {
             window_minutes: 1440,
         };
         let actual = serde_json::to_value(&resp).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
+        crate::response_assertions::assert_parity(&golden, &actual);
     }
 }

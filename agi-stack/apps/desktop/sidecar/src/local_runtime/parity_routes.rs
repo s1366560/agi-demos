@@ -41,6 +41,7 @@ mod tenant_projects_tests;
 #[cfg(test)]
 mod v1_retirement_tests;
 
+// Historical wire identifier retained for existing clients; this is not a parity gate.
 const LOCAL_ROUTE_CONTRACT_VERSION: &str = "desktop-local-route-parity-v1";
 const PLUGIN_MARKETPLACE_V2_PATH: &str = "/api/v1/plugin-marketplace";
 const PLUGIN_PROTOCOL_V1_RETIRED_CODE: &str = "plugin_protocol_v1_retired";

@@ -154,12 +154,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test desktop parity route inventory
-        run: node --test scripts/web-route-inventory.test.mjs
-
-      - name: Verify desktop parity route inventory
-        run: node scripts/web-route-inventory.mjs
-
       - name: Typecheck
         run: pnpm run type-check
 
@@ -333,21 +327,8 @@ jobs:
       - name: Install desktop dependencies
         run: make desktop-deps
 
-      - name: Install desktop parity browser
-        working-directory: agi-stack/apps/desktop
-        run: corepack pnpm exec playwright install chromium
-
-      - name: Verify desktop parity
-        run: make desktop-parity-check
-
-      - name: Upload paired renderer evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: desktop-paired-renderer-evidence
-          path: agi-stack/apps/desktop/browser-qa/paired-results
-          if-no-files-found: error
-          retention-days: 30
+      - name: Run desktop unit and integration tests
+        run: make desktop-check
 
       - name: Build desktop bundle
         run: make desktop-bundle

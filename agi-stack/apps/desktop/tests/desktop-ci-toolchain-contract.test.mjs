@@ -73,76 +73,6 @@ const assertFrontendToolchain = (job) => {
   );
 };
 
-test('ordinary PR CI runs the complete desktop parity gate', () => {
-  const webJob = ciWorkflow.jobs.web;
-  const routeInventoryStep = webJob.steps.find(
-    (step) => step.name === 'Verify desktop parity route inventory',
-  );
-  const routeInventoryTestsStep = webJob.steps.find(
-    (step) => step.name === 'Test desktop parity route inventory',
-  );
-  assert.ok(
-    routeInventoryTestsStep,
-    'ordinary CI must run the production route inventory unit tests',
-  );
-  assert.equal(routeInventoryTestsStep.run, 'node --test scripts/web-route-inventory.test.mjs');
-  assert.ok(routeInventoryStep, 'ordinary CI must reject a stale Web route inventory');
-  assert.equal(routeInventoryStep.run, 'node scripts/web-route-inventory.mjs');
-
-  const desktopJob = ciWorkflow.jobs['agi-stack-desktop-bundle'];
-  assert.ok(desktopJob, 'ordinary CI must retain the desktop bundle job');
-
-  const installBrowserIndex = desktopJob.steps.findIndex(
-    (step) => step.name === 'Install desktop parity browser',
-  );
-  const installDependenciesIndex = desktopJob.steps.findIndex(
-    (step) => step.name === 'Install desktop dependencies',
-  );
-  const parityGateIndex = desktopJob.steps.findIndex(
-    (step) => step.name === 'Verify desktop parity',
-  );
-  assert.ok(
-    installDependenciesIndex >= 0 && installDependenciesIndex < installBrowserIndex,
-    'desktop dependencies must be installed before the parity browser',
-  );
-  assert.ok(installBrowserIndex >= 0, 'ordinary CI must install the parity browser');
-  assert.ok(parityGateIndex > installBrowserIndex, 'parity must run after browser installation');
-  assert.equal(desktopJob.steps[installDependenciesIndex].run, 'make desktop-deps');
-  assert.equal(
-    desktopJob.steps[installBrowserIndex]['working-directory'],
-    'agi-stack/apps/desktop',
-  );
-  assert.equal(
-    desktopJob.steps[installBrowserIndex].run,
-    'corepack pnpm exec playwright install chromium',
-  );
-  assert.equal(desktopJob.steps[parityGateIndex].run, 'make desktop-parity-check');
-  assert.match(
-    makefile,
-    /desktop-web-deps:[\s\S]*cd \.\.\/web && CI=true corepack pnpm install --frozen-lockfile/u,
-  );
-  assert.match(makefile, /desktop-route-inventory:\s+desktop-web-deps/u);
-  assert.match(
-    makefile,
-    /desktop-parity-contract:\s+desktop-deps[\s\S]*generate-parity-manifest-v2\.mjs --check/u,
-  );
-  assert.match(
-    makefile,
-    /desktop-parity-contract:\s+desktop-deps[\s\S]*generate-parity-manifest-v3\.mjs --check/u,
-  );
-  assert.match(makefile, /desktop-parity-check:[^\n]*desktop-parity-contract/u);
-  assert.match(makefile, /desktop-paired-browser-qa:\s+desktop-deps desktop-web-deps/u);
-
-  const uploadEvidence = desktopJob.steps.find(
-    (step) => step.name === 'Upload paired renderer evidence',
-  );
-  assert.ok(uploadEvidence, 'ordinary CI must retain successful paired renderer evidence');
-  assert.equal(uploadEvidence.if, 'always()');
-  assert.equal(uploadEvidence.with.path, 'agi-stack/apps/desktop/browser-qa/paired-results');
-  assert.equal(uploadEvidence.with['if-no-files-found'], 'error');
-  assert.equal(uploadEvidence.with['retention-days'], 30);
-});
-
 test('all JavaScript projects and delivery paths use one integrity-pinned pnpm toolchain', () => {
   assert.equal(rootPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
   assert.equal(webPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
@@ -222,14 +152,7 @@ test('all JavaScript projects and delivery paths use one integrity-pinned pnpm t
     releaseBuilderCommands.every((run) => run.startsWith('corepack pnpm exec electron-builder')),
   );
 
-  const releaseEvidenceUpload = releaseWorkflow.jobs['parity-preflight'].steps.find(
-    (step) => step.name === 'Upload paired renderer evidence',
-  );
-  assert.ok(releaseEvidenceUpload);
-  assert.equal(releaseEvidenceUpload.if, 'always()');
-  assert.equal(releaseEvidenceUpload.with.path, 'agi-stack/apps/desktop/browser-qa/paired-results');
-  assert.equal(releaseEvidenceUpload.with['if-no-files-found'], 'error');
-  assert.equal(releaseEvidenceUpload.with['retention-days'], 90);
+
 });
 
 test('install roots stay isolated behind pnpm-only lockfiles', () => {

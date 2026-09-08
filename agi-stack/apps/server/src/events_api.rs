@@ -345,7 +345,7 @@ mod tests {
 
         let value = serde_json::to_value(response).expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -410,6 +410,6 @@ mod tests {
         )
         .expect("response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 }

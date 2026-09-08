@@ -282,91 +282,10 @@ async def test_disposable_cleanup_verifies_every_legacy_object_is_absent(
     assert dirty_connection.closed is True
 
 
-def test_evidence_attestation_requires_every_suite_to_execute_and_pass() -> None:
-    verifier = _load_script("verify-implementation-evidence.py")
-    evidence: dict[str, Any] = {
-        "sourceRevision": f"sha256:{'d' * 64}",
-        "schemaRevision": "head-1",
-        "sourcesSha256": "a" * 64,
-        "suites": [{"id": "one"}, {"id": "two"}],
-    }
-
-    incomplete = verifier.build_attestation(
-        evidence,
-        [{"id": "one", "passed": True, "exitCode": 0}],
-        source_sha256="d" * 64,
-        source_revision=f"sha256:{'d' * 64}",
-        route_contract_sha256="b" * 64,
-        implemented_route_keys_sha256="c" * 64,
-    )
-    failed = verifier.build_attestation(
-        evidence,
-        [
-            {"id": "one", "passed": True, "exitCode": 0},
-            {"id": "two", "passed": False, "exitCode": 1},
-        ],
-        source_sha256="d" * 64,
-        source_revision=f"sha256:{'d' * 64}",
-        route_contract_sha256="b" * 64,
-        implemented_route_keys_sha256="c" * 64,
-    )
-    passed = verifier.build_attestation(
-        evidence,
-        [
-            {"id": "one", "passed": True, "exitCode": 0},
-            {"id": "two", "passed": True, "exitCode": 0},
-        ],
-        source_sha256="d" * 64,
-        source_revision=f"sha256:{'d' * 64}",
-        route_contract_sha256="b" * 64,
-        implemented_route_keys_sha256="c" * 64,
-    )
-
-    assert incomplete["passed"] is False
-    assert failed["passed"] is False
-    assert passed["passed"] is True
-    assert passed["schemaRevision"] == "head-1"
-    assert passed["evidenceSourcesSha256"] == "a" * 64
-    assert passed["routeContractSha256"] == "b" * 64
-    assert passed["implementedRouteKeysSha256"] == "c" * 64
-    assert passed["attestationVersion"] == 2
-    assert passed["sourceSha256"] == "d" * 64
-    assert passed["sourceRevision"] == f"sha256:{'d' * 64}"
 
 
-def test_evidence_runner_rejects_unknown_suite_ids() -> None:
-    verifier = _load_script("verify-implementation-evidence.py")
-    evidence = {"suites": [{"id": "known", "command": "true"}]}
-
-    with pytest.raises(ValueError, match="unknown evidence suite ids"):
-        verifier.run_evidence_suites(evidence, selected_suite_ids=frozenset({"missing"}))
 
 
-def test_evidence_runner_executes_all_commands_in_a_suite(monkeypatch: pytest.MonkeyPatch) -> None:
-    verifier = _load_script("verify-implementation-evidence.py")
-    commands: list[list[str]] = []
-
-    class Completed:
-        returncode = 0
-
-    def run(command: list[str], **_kwargs: Any) -> Completed:
-        commands.append(command)
-        return Completed()
-
-    monkeypatch.setattr(verifier.subprocess, "run", run)
-    evidence = {"suites": [{"id": "migration", "command": "first && second"}]}
-
-    results = verifier.run_evidence_suites(evidence)
-
-    assert commands == [["/bin/sh", "-eu", "-c", "first && second"]]
-    assert results == [
-        {
-            "id": "migration",
-            "command": "first && second",
-            "exitCode": 0,
-            "passed": True,
-        }
-    ]
 
 
 def test_event_delivery_runner_executes_the_ignored_redis_contract(
@@ -399,48 +318,8 @@ def test_event_delivery_runner_executes_the_ignored_redis_contract(
     assert calls[0][1]["BCS_TEST_REDIS_PORT"] == "6380"
 
 
-def test_evidence_attestation_rejects_source_revision_drift() -> None:
-    verifier = _load_script("verify-implementation-evidence.py")
-    evidence: dict[str, Any] = {
-        "sourceRevision": f"sha256:{'d' * 64}",
-        "schemaRevision": "head-1",
-        "sourcesSha256": "a" * 64,
-        "suites": [{"id": "one"}],
-    }
-
-    with pytest.raises(ValueError, match="attestation source revision drifted"):
-        verifier.build_attestation(
-            evidence,
-            [{"id": "one", "passed": True, "exitCode": 0}],
-            source_sha256="d" * 64,
-            source_revision="0" * 40,
-            route_contract_sha256="b" * 64,
-            implemented_route_keys_sha256="c" * 64,
-        )
 
 
-def test_selected_evidence_attestation_requires_only_selected_suites() -> None:
-    verifier = _load_script("verify-implementation-evidence.py")
-    evidence: dict[str, Any] = {
-        "sourceRevision": f"sha256:{'d' * 64}",
-        "schemaRevision": "head-1",
-        "sourcesSha256": "a" * 64,
-        "suites": [{"id": "one"}, {"id": "two"}],
-    }
-
-    attestation = verifier.build_attestation(
-        evidence,
-        [{"id": "one", "passed": True, "exitCode": 0}],
-        source_sha256="d" * 64,
-        source_revision=f"sha256:{'d' * 64}",
-        route_contract_sha256="b" * 64,
-        implemented_route_keys_sha256="c" * 64,
-        expected_suite_ids=frozenset({"one"}),
-    )
-
-    assert attestation["passed"] is True
-    assert attestation["suiteCount"] == 1
-    assert attestation["completedSuiteCount"] == 1
 
 
 def test_legacy_workspace_reference_gate_accepts_current_retired_runtime_surface() -> None:

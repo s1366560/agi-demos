@@ -24,7 +24,6 @@ on:
       - 'src/infrastructure/agent/**'
       - 'src/infrastructure/workspace_core/**'
       - 'src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py'
-      - 'src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py'
       - 'src/tests/unit/scripts/test_workspace_core_evidence_gates.py'
       - 'src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py'
       - 'third_party/avernet-bcs/**'
@@ -52,7 +51,6 @@ on:
       - 'src/infrastructure/agent/**'
       - 'src/infrastructure/workspace_core/**'
       - 'src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py'
-      - 'src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py'
       - 'src/tests/unit/scripts/test_workspace_core_evidence_gates.py'
       - 'src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py'
       - 'third_party/avernet-bcs/**'
@@ -103,7 +101,7 @@ jobs:
         run: make -C third_party/avernet-bcs test
 
   workspace-authority-gates:
-    name: Current-head schema, migration, and evidence
+    name: Schema and migration tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
     services:
@@ -154,14 +152,6 @@ jobs:
       - name: Verify frozen Workspace route contract
         run: uv run python scripts/workspace-core/generate-route-manifest.py --check
 
-      - name: Execute revision-bound implementation evidence
-        env:
-          BCS_TEST_REDIS_PORT: '6379'
-        run: uv run python scripts/workspace-core/verify-implementation-evidence.py
-
-      - name: Verify revision-bound implementation evidence
-        run: uv run python scripts/workspace-core/generate-implementation-ledger.py --check
-
       - name: Reject legacy Workspace runtime references
         run: uv run python scripts/workspace-core/verify-legacy-workspace-references.py
 
@@ -174,22 +164,18 @@ jobs:
       - name: Verify paired SQLite and PostgreSQL authority state
         run: uv run python scripts/workspace-core/verify-cross-store-scenarios.py
 
-      - name: Verify Workspace event authority and replay evidence
-        run: uv run python scripts/workspace-core/verify-event-parity.py
-
       - name: Check retired Rust Server surface
         run: cargo check --manifest-path agi-stack/Cargo.toml -p agistack-server
 
       - name: Test Desktop authority and cutover surface
         run: cargo test --manifest-path agi-stack/Cargo.toml -p agistack-desktop-sidecar
 
-      - name: Verify migration and evidence unit contracts
+      - name: Verify migration unit contracts
         run: >-
           uv run pytest
           src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py
-          src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py
-          src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py
           src/tests/unit/scripts/test_workspace_core_evidence_gates.py
+          src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py
           -q
 
   dependency-audit:

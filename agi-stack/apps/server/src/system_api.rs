@@ -240,7 +240,7 @@ mod tests {
         let value = serde_json::to_value(features_for_edition("ce"))
             .expect("system features response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -252,7 +252,7 @@ mod tests {
         let value = serde_json::to_value(system_info_response(SystemRuntimeConfig::default()))
             .expect("system info response serializes");
 
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]

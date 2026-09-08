@@ -275,7 +275,6 @@ def test_workspace_authority_ci_tracks_every_cross_layer_runtime_and_gate() -> N
         "verify-postgres-schema.py",
         "verify-workspace-migration.py",
         "verify-cross-store-scenarios.py",
-        "verify-event-parity.py",
         "verify-legacy-workspace-references.py",
     ):
         assert gate in workflow

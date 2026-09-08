@@ -1,3 +1,5 @@
+> Historical design observations. Dated parity, visual matrices and evidence gates below are retired and are not current development requirements. Current checks are described in [QA.md](QA.md).
+
 # Login screen design QA
 
 > Historical entries mentioning Tauri document earlier validation runs. Electron is now the only

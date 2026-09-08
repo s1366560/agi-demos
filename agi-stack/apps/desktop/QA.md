@@ -1,3 +1,13 @@
+# Desktop testing
+
+Current delivery verification uses unit and integration tests. Run `make -C agi-stack desktop-check` for Rust sidecar and Electron/renderer tests and compilation. Run `make -C agi-stack desktop-browser-qa` for browser integration behavior. Native debugging starts only with `make -C agi-stack run-desktop` from the repository root.
+
+Release builds retain platform signing, notarization, updater metadata/digest/blockmap and package payload checks. Tag pushes publish prereleases by default; workflow dispatch on a protected release tag can request a stable release with `prerelease: false`. No parity ledger, source-revision judgment, or manual evidence promotion is required.
+
+The dated observations below are historical records, not current commands or acceptance requirements. Superseded artifacts mentioned there have been removed.
+
+---
+
 # Desktop QA Log
 
 ## Desktop/Web parity completion audit: 2026-07-29

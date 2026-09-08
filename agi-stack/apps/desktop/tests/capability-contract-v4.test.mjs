@@ -1,97 +1,77 @@
-import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
-import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
-import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
-import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { test } from 'node:test';
+import { projectMcpServersOperationsV2Fixture } from "./projectMcpServersOperationsV2Fixture.mjs";
+import { tenantProvidersOperationsV2Fixture } from "./tenantProvidersOperationsV2Fixture.mjs";
+import { tenantSkillDefinitionsOperationsV2Fixture } from "./tenantSkillOperationsV2Fixture.mjs";
+import assert from "node:assert/strict";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { test } from "node:test";
 
-import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
-import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
-import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
-import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
-import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
-import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
-import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
-import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
-import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
-import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
-import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
-import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
-import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
-import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
-import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
-import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
-import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
-import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
-import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
-import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
-import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
-import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
-import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
-import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
+import { projectOverviewOperationsV2Fixture } from "./projectOverviewOperationsV2Fixture.mjs";
+import { projectAgentDashboardOperationsV2Fixture } from "./projectAgentDashboardOperationsV2Fixture.mjs";
+import { projectAgentLogsOperationsV2Fixture } from "./projectAgentLogsOperationsV2Fixture.mjs";
+import { projectAgentPatternsOperationsV2Fixture } from "./projectAgentPatternsOperationsV2Fixture.mjs";
+import { projectCommunitiesOperationsV2Fixture } from "./projectCommunitiesOperationsV2Fixture.mjs";
+import { projectMemoriesOperationsV2Fixture } from "./projectMemoriesOperationsV2Fixture.mjs";
+import { projectTeamOperationsV2Fixture } from "./projectTeamOperationsV2Fixture.mjs";
+import { projectSchemaOperationsV2Fixture } from "./projectSchemaOperationsV2Fixture.mjs";
+import { projectMaintenanceOperationsV2Fixture } from "./projectMaintenanceOperationsV2Fixture.mjs";
+import { projectSettingsOperationsV2Fixture } from "./projectSettingsOperationsV2Fixture.mjs";
+import { projectEntitiesOperationsV2Fixture } from "./projectEntitiesOperationsV2Fixture.mjs";
+import { projectGraphOperationsV2Fixture } from "./projectGraphOperationsV2Fixture.mjs";
+import { projectBlackboardOperationsV2Fixture } from "./projectBlackboardOperationsV2Fixture.mjs";
+import { projectWorkspacesClientV2Fixture } from "./projectWorkspacesClientV2Fixture.mjs";
+import { runtimePoolOperationsV2Fixture } from "./runtimePoolOperationsV2Fixture.mjs";
+import { runtimeClustersOperationsV2Fixture } from "./runtimeClustersOperationsV2Fixture.mjs";
+import { runtimeInstancesOperationsV2Fixture } from "./runtimeInstancesOperationsV2Fixture.mjs";
+import { runtimeDeploymentsOperationsV2Fixture } from "./runtimeDeploymentsOperationsV2Fixture.mjs";
+import { tenantAnalyticsOperationsV2Fixture } from "./tenantAnalyticsOperationsV2Fixture.mjs";
+import { tenantAgentBindingsOperationsV2Fixture } from "./tenantAgentBindingsOperationsV2Fixture.mjs";
+import { tenantProjectsOperationsV2Fixture } from "./tenantProjectsOperationsV2Fixture.mjs";
+import { tenantTasksOperationsV2Fixture } from "./tenantTasksOperationsV2Fixture.mjs";
+import { tenantAgentDashboardOperationsV2Fixture } from "./tenantAgentDashboardOperationsV2Fixture.mjs";
+import { tenantAgentDefinitionsOperationsV2Fixture } from "./tenantAgentDefinitionsOperationsV2Fixture.mjs";
 
 const require = createRequire(import.meta.url);
-const compiledNavigationDirectory = '/tmp/agistack-desktop-test-dist/src/features/navigation';
+const compiledNavigationDirectory =
+  "/tmp/agistack-desktop-test-dist/src/features/navigation";
 mkdirSync(compiledNavigationDirectory, { recursive: true });
-writeFileSync(`${compiledNavigationDirectory}/NativeUnavailableRoute.css`, '');
-require.extensions['.css'] = () => {};
+writeFileSync(`${compiledNavigationDirectory}/NativeUnavailableRoute.css`, "");
+require.extensions[".css"] = () => {};
 const {
-  DESKTOP_CAPABILITY_NAMES,
-  DESKTOP_INTERNAL_CAPABILITY_NAMES,
-  DESKTOP_PARITY_CAPABILITY_NAMES,
   desktopCapability,
   parseDesktopCapabilitySnapshot,
-} = require('/tmp/agistack-desktop-test-dist/src/features/runtime/capabilitySnapshot.js');
+} = require("/tmp/agistack-desktop-test-dist/src/features/runtime/capabilitySnapshot.js");
 const {
   createDesktopWorkbenchCapabilityClient,
-} = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
+} = require("/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js");
 const {
   DESKTOP_IMPLEMENTED_ROUTE_IDS,
   createDesktopProductionRouteRegistry,
-} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
+} = require("/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js");
 const {
   evaluateDesktopRouteAccess,
-} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js');
+} = require("/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js");
 const {
   createDesktopRouteRegistry,
   matchDesktopRoute,
-} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
-const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+} = require("/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js");
+const {
+  DEFAULT_CONFIG,
+} = require("/tmp/agistack-desktop-test-dist/src/types.js");
 
-const parityManifest = JSON.parse(
-  readFileSync(
-    new URL('../contracts/desktop-web-parity/parity-manifest.v4.json', import.meta.url),
-    'utf8',
-  ),
-);
-
-test('Snapshot v5 capability catalog closes every parity-manifest v4 capability exactly once', () => {
-  const manifestIds = parityManifest.capabilities.map(({ id }) => id);
-  assert.equal(new Set(DESKTOP_CAPABILITY_NAMES).size, DESKTOP_CAPABILITY_NAMES.length);
-  assert.deepEqual([...DESKTOP_PARITY_CAPABILITY_NAMES].sort(), manifestIds.sort());
-  assert.deepEqual(DESKTOP_INTERNAL_CAPABILITY_NAMES, [
-    'automation_run',
-    'search',
-    'workspace_collaboration',
-    'sandbox_isolation',
-  ]);
-  assert.deepEqual(DESKTOP_CAPABILITY_NAMES, [
-    ...DESKTOP_INTERNAL_CAPABILITY_NAMES,
-    ...DESKTOP_PARITY_CAPABILITY_NAMES,
-  ]);
-});
-
-const desktopRoot = new URL('../', import.meta.url);
+const desktopRoot = new URL("../", import.meta.url);
 const v3Fixture = JSON.parse(
-  readFileSync(new URL('tests/fixtures/desktop-capability-snapshot.v3.json', desktopRoot), 'utf8'),
+  readFileSync(
+    new URL("tests/fixtures/desktop-capability-snapshot.v3.json", desktopRoot),
+    "utf8",
+  ),
 );
 const v2Fixture = JSON.parse(
   readFileSync(
-    new URL('contracts/desktop-web-parity/fixtures/capability-snapshot.v2.json', desktopRoot),
-    'utf8',
+    new URL("tests/fixtures/desktop-capability-snapshot.v2.json", desktopRoot),
+    "utf8",
   ),
-).input.snapshot;
+);
 
 const nullScope = {
   tenant_id: null,
@@ -102,15 +82,15 @@ const nullScope = {
 
 function v4Capability(overrides = {}) {
   return {
-    availability: 'available',
+    availability: "available",
     reason_code: null,
-    service_version: '0.1.0',
-    contract_version: '3.0.0',
-    allowed_actions: ['view'],
+    service_version: "0.1.0",
+    contract_version: "3.0.0",
+    allowed_actions: ["view"],
     scope: nullScope,
     authority_revision: 1,
-    authority_source: 'cloud_service',
-    provenance: 'observed',
+    authority_source: "cloud_service",
+    provenance: "observed",
     ...overrides,
   };
 }
@@ -118,55 +98,55 @@ function v4Capability(overrides = {}) {
 function routeMatch() {
   const registry = createDesktopRouteRegistry([
     {
-      id: 'tenant-overview',
-      path: '/tenant/:tenantId/overview',
-      scope: ['tenant'],
-      navGroup: 'tenant-core',
-      capability: 'tenant-tenant-overview',
-      requiredPermission: [['authenticated', 'tenant_member']],
-      localPolicy: 'native_equivalent',
-      loader: async () => ({ default: 'TenantOverview' }),
+      id: "tenant-overview",
+      path: "/tenant/:tenantId/overview",
+      scope: ["tenant"],
+      navGroup: "tenant-core",
+      capability: "tenant-tenant-overview",
+      requiredPermission: [["authenticated", "tenant_member"]],
+      localPolicy: "native_equivalent",
+      loader: async () => ({ default: "TenantOverview" }),
     },
   ]);
-  const match = matchDesktopRoute(registry, '#/tenant/tenant-1/overview');
+  const match = matchDesktopRoute(registry, "#/tenant/tenant-1/overview");
   assert.ok(match);
   return match;
 }
 
-test('DesktopCapabilitySnapshot v4 accepts only observed active authority from the current mode', () => {
+test("DesktopCapabilitySnapshot v4 accepts only observed active authority from the current mode", () => {
   const snapshot = parseDesktopCapabilitySnapshot({
-    version: '4.0.0',
-    mode: 'cloud',
+    version: "4.0.0",
+    mode: "cloud",
     capabilities: { search: v4Capability() },
   });
 
-  assert.equal(snapshot?.version, '5.0.0');
+  assert.equal(snapshot?.version, "5.0.0");
   assert.deepEqual(snapshot?.capabilities.search, {
     ...v4Capability(),
     retryable: false,
     supporting_authority_sources: [],
   });
   assert.deepEqual(snapshot?.capabilities.workspace_collaboration, {
-    availability: 'unavailable',
-    reason_code: 'capability_not_declared',
+    availability: "unavailable",
+    reason_code: "capability_not_declared",
     service_version: null,
     contract_version: null,
     allowed_actions: [],
     scope: nullScope,
     authority_revision: null,
     retryable: false,
-    authority_source: 'renderer',
+    authority_source: "renderer",
     supporting_authority_sources: [],
-    provenance: 'declared',
+    provenance: "declared",
   });
 
   const declaredActive = {
-    version: '4.0.0',
-    mode: 'cloud',
+    version: "4.0.0",
+    mode: "cloud",
     capabilities: {
       search: v4Capability({
-        authority_source: 'renderer',
-        provenance: 'declared',
+        authority_source: "renderer",
+        provenance: "declared",
       }),
     },
   };
@@ -175,7 +155,7 @@ test('DesktopCapabilitySnapshot v4 accepts only observed active authority from t
     parseDesktopCapabilitySnapshot({
       ...declaredActive,
       capabilities: {
-        search: v4Capability({ authority_source: 'sidecar' }),
+        search: v4Capability({ authority_source: "sidecar" }),
       },
     }),
     null,
@@ -209,21 +189,21 @@ test('DesktopCapabilitySnapshot v4 accepts only observed active authority from t
   );
 });
 
-test('v2 and v3 snapshots remain readable but normalize to declared, non-ready authority', () => {
+test("v2 and v3 snapshots remain readable but normalize to declared, non-ready authority", () => {
   const v3 = parseDesktopCapabilitySnapshot(v3Fixture);
   const v2 = parseDesktopCapabilitySnapshot(v2Fixture);
 
-  assert.equal(v3?.version, '5.0.0');
-  assert.equal(v2?.version, '5.0.0');
+  assert.equal(v3?.version, "5.0.0");
+  assert.equal(v2?.version, "5.0.0");
   assert.deepEqual(
     {
       authority_source: v3?.capabilities.search.authority_source,
       provenance: v3?.capabilities.search.provenance,
-      available: desktopCapability(v3, 'search').available,
+      available: desktopCapability(v3, "search").available,
     },
     {
-      authority_source: 'renderer',
-      provenance: 'declared',
+      authority_source: "renderer",
+      provenance: "declared",
       available: false,
     },
   );
@@ -231,114 +211,114 @@ test('v2 and v3 snapshots remain readable but normalize to declared, non-ready a
     {
       authority_source: v2?.capabilities.search.authority_source,
       provenance: v2?.capabilities.search.provenance,
-      available: desktopCapability(v2, 'search').available,
+      available: desktopCapability(v2, "search").available,
     },
     {
-      authority_source: 'renderer',
-      provenance: 'declared',
+      authority_source: "renderer",
+      provenance: "declared",
       available: false,
     },
   );
 });
 
-test('route host rejects legacy declared authority and mode-mismatched observed authority', () => {
+test("route host rejects legacy declared authority and mode-mismatched observed authority", () => {
   const legacy = parseDesktopCapabilitySnapshot(v3Fixture);
   const legacyCapability = legacy?.capabilities.search;
   assert.ok(legacyCapability);
   assert.deepEqual(
     evaluateDesktopRouteAccess({
       match: routeMatch(),
-      mode: 'cloud',
-      permissions: new Set(['authenticated', 'tenant_member']),
+      mode: "cloud",
+      permissions: new Set(["authenticated", "tenant_member"]),
       capability: legacyCapability,
     }),
     {
-      status: 'unavailable',
-      reasonCode: 'desktop_route_capability_authority_unobserved',
+      status: "unavailable",
+      reasonCode: "desktop_route_capability_authority_unobserved",
       capability: legacyCapability,
     },
   );
 
   const wrongSource = v4Capability({
-    scope: { ...nullScope, tenant_id: 'tenant-1' },
-    authority_source: 'sidecar',
+    scope: { ...nullScope, tenant_id: "tenant-1" },
+    authority_source: "sidecar",
   });
   assert.deepEqual(
     evaluateDesktopRouteAccess({
       match: routeMatch(),
-      mode: 'cloud',
-      permissions: new Set(['authenticated', 'tenant_member']),
+      mode: "cloud",
+      permissions: new Set(["authenticated", "tenant_member"]),
       capability: wrongSource,
     }),
     {
-      status: 'unavailable',
-      reasonCode: 'desktop_route_capability_authority_source_mismatch',
+      status: "unavailable",
+      reasonCode: "desktop_route_capability_authority_source_mismatch",
       capability: wrongSource,
     },
   );
 });
 
-test('route host requires observed active authority to bind every routed scope', () => {
+test("route host requires observed active authority to bind every routed scope", () => {
   const unbound = v4Capability();
   assert.deepEqual(
     evaluateDesktopRouteAccess({
       match: routeMatch(),
-      mode: 'cloud',
-      permissions: new Set(['authenticated', 'tenant_member']),
+      mode: "cloud",
+      permissions: new Set(["authenticated", "tenant_member"]),
       capability: unbound,
     }),
     {
-      status: 'unavailable',
-      reasonCode: 'desktop_route_capability_scope_mismatch',
+      status: "unavailable",
+      reasonCode: "desktop_route_capability_scope_mismatch",
       capability: unbound,
     },
   );
 
   const bound = v4Capability({
-    scope: { ...nullScope, tenant_id: 'tenant-1' },
+    scope: { ...nullScope, tenant_id: "tenant-1" },
   });
   assert.equal(
     evaluateDesktopRouteAccess({
       match: routeMatch(),
-      mode: 'cloud',
-      permissions: new Set(['authenticated', 'tenant_member']),
+      mode: "cloud",
+      permissions: new Set(["authenticated", "tenant_member"]),
       capability: bound,
     }).status,
-    'allowed',
+    "allowed",
   );
 });
 
-test('workbench v4 marks transport authority observed and renderer declarations fail closed', async () => {
+test("workbench v4 marks transport authority observed and renderer declarations fail closed", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     new Response(
       JSON.stringify({
-        service_version: '0.1.0',
-        contract_version: '2.0.0',
-        mode: 'keyword_degraded',
-        reason_code: 'local_embeddings_unavailable',
-        tenant_id: 'local',
-        project_id: 'local-project',
+        service_version: "0.1.0",
+        contract_version: "2.0.0",
+        mode: "keyword_degraded",
+        reason_code: "local_embeddings_unavailable",
+        tenant_id: "local",
+        project_id: "local-project",
         projection_revision: 21,
         backfill_cursor: null,
-        supported_search_types: ['advanced', 'temporal', 'faceted'],
-        unavailable_search_types: ['graph_traversal', 'community'],
+        supported_search_types: ["advanced", "temporal", "faceted"],
+        unavailable_search_types: ["graph_traversal", "community"],
       }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
+      { status: 200, headers: { "content-type": "application/json" } },
     );
 
   try {
     const client = createDesktopWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => ({
-          service_version: '0.1.0',
-          contract_version: '2.0.0',
+          service_version: "0.1.0",
+          contract_version: "2.0.0",
           schema_version: 1,
           read: true,
           revision_guarded: true,
           idempotency_guarded: true,
           durable_execution: true,
-          supported_read_trigger_kinds: ['manual', 'schedule', 'event'],
+          supported_read_trigger_kinds: ["manual", "schedule", "event"],
           create: { allowed: true },
           edit: { allowed: true },
           toggle: { allowed: true },
@@ -348,19 +328,23 @@ test('workbench v4 marks transport authority observed and renderer declarations 
       },
       {
         ...DEFAULT_CONFIG,
-        mode: 'local',
-        tenantId: 'local',
-        projectId: 'local-project',
-        workspaceId: 'local-workspace',
+        mode: "local",
+        tenantId: "local",
+        projectId: "local-project",
+        workspaceId: "local-workspace",
       },
       {
-        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        projectAgentDashboardOperationsV2:
+          projectAgentDashboardOperationsV2Fixture(),
         tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
         projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
-        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
-        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2:
+          tenantSkillDefinitionsOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2:
+          tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
-        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+        projectAgentPatternsOperationsV2:
+          projectAgentPatternsOperationsV2Fixture(),
         projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
         projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
         projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
@@ -377,68 +361,86 @@ test('workbench v4 marks transport authority observed and renderer declarations 
         runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
         instanceTemplatesOperationsV2: {
           async probe({ config }) {
-            return config.mode === 'local'
+            return config.mode === "local"
               ? {
-                  availability: 'not_applicable',
-                  reasonCode: 'local_instance_template_authority_unavailable',
+                  availability: "not_applicable",
+                  reasonCode: "local_instance_template_authority_unavailable",
                   allowedActions: [],
                   authorityRevision: null,
                 }
               : {
-                  availability: 'available',
-                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
-                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  availability: "available",
+                  reasonCode:
+                    "instance_templates_nested_deep_link_and_deploy_partial",
+                  allowedActions: [
+                    "view",
+                    "list",
+                    "create",
+                    "delete",
+                    "publish",
+                    "clone",
+                  ],
                   authorityRevision: null,
                 };
           },
         },
         deadLetterQueueOperationsV2: {
           async probe({ config }) {
-            return config.mode === 'local'
+            return config.mode === "local"
               ? {
-                  availability: 'not_applicable',
-                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  availability: "not_applicable",
+                  reasonCode: "cloud_message_bus_dlq_not_applicable",
                   allowedActions: [],
                   authorityRevision: null,
                 }
               : {
-                  availability: 'available',
+                  availability: "available",
                   reasonCode: null,
-                  allowedActions: ['view', 'list'],
+                  allowedActions: ["view", "list"],
                   authorityRevision: null,
                 };
           },
         },
         backendStoresOperationsV2: {
           async probeBackendStores({ config }) {
-            return config.mode === 'local'
+            return config.mode === "local"
               ? {
-                  availability: 'not_applicable',
-                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  availability: "not_applicable",
+                  reasonCode:
+                    "local_backend_stores_cloud_authority_unavailable",
                   allowedActions: [],
                   authorityRevision: null,
                 }
               : {
-                  availability: 'available',
+                  availability: "available",
                   reasonCode: null,
-                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  allowedActions: [
+                    "view",
+                    "list",
+                    "create",
+                    "update",
+                    "delete",
+                    "test",
+                  ],
                   authorityRevision: 23,
                 };
           },
         },
         projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
-        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+        tenantAgentBindingsOperationsV2:
+          tenantAgentBindingsOperationsV2Fixture(),
 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
         tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
-        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAgentDashboardOperationsV2:
+          tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       },
     );
     const snapshot = await client.loadSnapshot();
 
-    assert.equal(snapshot.version, '5.0.0');
-    assert.equal(snapshot.runtime_state, 'local_offline');
+    assert.equal(snapshot.version, "5.0.0");
+    assert.equal(snapshot.runtime_state, "local_offline");
     assert.deepEqual(
       {
         authority_source: snapshot.capabilities.search.authority_source,
@@ -446,24 +448,26 @@ test('workbench v4 marks transport authority observed and renderer declarations 
         availability: snapshot.capabilities.search.availability,
       },
       {
-        authority_source: 'sidecar',
-        provenance: 'observed',
-        availability: 'degraded',
+        authority_source: "sidecar",
+        provenance: "observed",
+        availability: "degraded",
       },
     );
     assert.deepEqual(
       {
-        authority_source: snapshot.capabilities['tenant-tenant-tasks'].authority_source,
-        provenance: snapshot.capabilities['tenant-tenant-tasks'].provenance,
-        availability: snapshot.capabilities['tenant-tenant-tasks'].availability,
-        reason_code: snapshot.capabilities['tenant-tenant-tasks'].reason_code,
-        allowed_actions: snapshot.capabilities['tenant-tenant-tasks'].allowed_actions,
+        authority_source:
+          snapshot.capabilities["tenant-tenant-tasks"].authority_source,
+        provenance: snapshot.capabilities["tenant-tenant-tasks"].provenance,
+        availability: snapshot.capabilities["tenant-tenant-tasks"].availability,
+        reason_code: snapshot.capabilities["tenant-tenant-tasks"].reason_code,
+        allowed_actions:
+          snapshot.capabilities["tenant-tenant-tasks"].allowed_actions,
       },
       {
-        authority_source: 'sidecar',
-        provenance: 'observed',
-        availability: 'unavailable',
-        reason_code: 'capability_authority_revision_unavailable',
+        authority_source: "sidecar",
+        provenance: "observed",
+        availability: "unavailable",
+        reason_code: "capability_authority_revision_unavailable",
         allowed_actions: [],
       },
     );
@@ -472,7 +476,7 @@ test('workbench v4 marks transport authority observed and renderer declarations 
   }
 });
 
-test('v4 route readiness rejects callable placeholders before capability authority', () => {
+test("v4 route readiness rejects callable placeholders before capability authority", () => {
   const implementedRouteIds = new Set(DESKTOP_IMPLEMENTED_ROUTE_IDS);
   const implementedLoaders = Object.fromEntries(
     DESKTOP_IMPLEMENTED_ROUTE_IDS.map((routeId) => [routeId, async () => null]),
@@ -483,7 +487,9 @@ test('v4 route readiness rejects callable placeholders before capability authori
   const implementedDefinitions = registry.definitions.filter(({ id }) =>
     implementedRouteIds.has(id),
   );
-  const plannedDefinitions = registry.definitions.filter(({ id }) => !implementedRouteIds.has(id));
+  const plannedDefinitions = registry.definitions.filter(
+    ({ id }) => !implementedRouteIds.has(id),
+  );
 
   assert.equal(implementedDefinitions.length, implementedRouteIds.size);
   assert.equal(plannedDefinitions.length, 0);
@@ -496,24 +502,24 @@ test('v4 route readiness rejects callable placeholders before capability authori
     });
     const permissions = new Set(definition.requiredPermission.flat());
     assert.deepEqual(definition.structuralReadiness, {
-      status: 'unavailable',
-      reasonCode: 'desktop_route_structural_loader_missing',
+      status: "unavailable",
+      reasonCode: "desktop_route_structural_loader_missing",
     });
     for (const capability of [
-      v4Capability({ authority_source: 'renderer', provenance: 'declared' }),
-      v4Capability({ authority_source: 'sidecar' }),
+      v4Capability({ authority_source: "renderer", provenance: "declared" }),
+      v4Capability({ authority_source: "sidecar" }),
       v4Capability(),
     ]) {
       assert.deepEqual(
         evaluateDesktopRouteAccess({
           match,
-          mode: 'cloud',
+          mode: "cloud",
           permissions,
           capability,
         }),
         {
-          status: 'unavailable',
-          reasonCode: 'desktop_route_structural_loader_missing',
+          status: "unavailable",
+          reasonCode: "desktop_route_structural_loader_missing",
           capability: null,
         },
       );
@@ -527,8 +533,8 @@ test('v4 route readiness rejects callable placeholders before capability authori
     implementedRouteIds.has(id),
   )) {
     assert.deepEqual(definition.structuralReadiness, {
-      status: 'unavailable',
-      reasonCode: 'desktop_route_structural_app_binding_missing',
+      status: "unavailable",
+      reasonCode: "desktop_route_structural_app_binding_missing",
     });
   }
 });

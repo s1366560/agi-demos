@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { validateJsonSchema } from "../contracts/desktop-web-parity/schema-validator.mjs";
+import { validateJsonSchema } from "../contracts/schema-validator.mjs";
 
 test("schema validator enforces numeric and object cardinality keywords", () => {
   assert.deepEqual(

@@ -933,7 +933,7 @@ mod tests {
             "../tests/golden/artifact_content_update_response.json"
         ))
         .expect("artifact content update golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[tokio::test]
@@ -988,7 +988,7 @@ mod tests {
             "../tests/golden/artifact_delete_response.json"
         ))
         .expect("artifact delete golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1021,7 +1021,7 @@ mod tests {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/artifact_list_response.json"))
                 .expect("artifact list golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1040,7 +1040,7 @@ mod tests {
             "../tests/golden/artifact_detail_response.json"
         ))
         .expect("artifact detail golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[test]
@@ -1051,7 +1051,7 @@ mod tests {
             "../tests/golden/artifact_categories_response.json"
         ))
         .expect("artifact categories golden must be valid JSON");
-        agistack_parity::assert_parity(&golden, &value);
+        crate::response_assertions::assert_parity(&golden, &value);
     }
 
     #[tokio::test]

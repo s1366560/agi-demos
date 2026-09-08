@@ -1,0 +1,475 @@
+{
+  "routes": [
+    {
+      "id": "agent-workspace-tenant-agent-workspace",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-overview",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-projects",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-workspaces",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-tasks",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-analytics",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-agent-configuration",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-agent-definitions",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-agent-bindings",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-skills",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        },
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-evolution",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-patterns",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-plugins",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-mcp-servers",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-acp",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-templates",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-providers",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": []
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-webhooks",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-runtimes",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["global_admin"]
+        },
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-pool",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["global_admin"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-instances",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-clusters",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-deploy",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-instance-templates",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-genes",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-users",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-audit-logs",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-events",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-dead-letter-queue",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["global_admin"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-trust-policies",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-decision-records",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-billing",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"]
+        },
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_owner"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-org-settings",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-settings",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-overview",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-workspaces",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-blackboard-dynamic-project-blackboard",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-team",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-memories",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-entities",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-communities",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-graph",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-search",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-schema",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-channels",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member", "project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-maintenance",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-cron-jobs",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-settings",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-agent-dashboard",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": []
+        }
+      ]
+    },
+    {
+      "id": "project-agent-logs",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": []
+        }
+      ]
+    },
+    {
+      "id": "project-agent-patterns",
+      "requirements": [
+        {
+          "authentication": "authenticated",
+          "authorization": []
+        }
+      ]
+    }
+  ]
+}

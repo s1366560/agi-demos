@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   copyFileSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -20,7 +21,6 @@ import { parse, stringify } from 'yaml';
 
 import {
   assertMacAudioInputEntitlement,
-  buildReleaseEvidence,
   verifyReleaseRootMetadata,
 } from '../scripts/verify-release-artifacts.mjs';
 import {
@@ -28,8 +28,8 @@ import {
   verifyMacPackageArtifacts,
   verifyWindowsInstallerArtifact,
 } from '../scripts/release-package-verification.mjs';
-import { platformPolicy, writeReleaseEvidence } from '../scripts/release-artifact-contract.mjs';
-import { verifyDownloadedReleaseAssets } from '../scripts/release-draft-validation.mjs';
+import { platformPolicy } from '../scripts/release-artifact-contract.mjs';
+import { validateCombinedReleaseAssets, verifyDownloadedReleaseAssets } from '../scripts/release-draft-validation.mjs';
 
 const VERSION = '0.1.0';
 const PLATFORM_FIXTURES = Object.freeze({
@@ -135,42 +135,6 @@ function withFixture(platform, run) {
   return Promise.resolve(run(fixture)).finally(() => {
     rmSync(fixture.releaseRoot, { recursive: true, force: true });
   });
-}
-
-function writeCombinedEvidencePlatform({
-  root,
-  platform,
-  evidencePlatform,
-  names,
-  packageVerification,
-}) {
-  const directory = join(root, 'verified', platform);
-  mkdirSync(directory, { recursive: true });
-  const assets = names.map((name, index) => {
-    const content = Buffer.from(`${platform}-release-asset-${index}`);
-    writeFileSync(join(directory, name), content);
-    return {
-      name,
-      size: content.byteLength,
-      sha512: sha512(content),
-    };
-  });
-  const evidence = buildReleaseEvidence({
-    platform: evidencePlatform,
-    version: VERSION,
-    expectedVersion: VERSION,
-    tag: `v${VERSION}`,
-    commitSha: 'a'.repeat(40),
-    runId: '12345',
-    runAttempt: '2',
-    runUrl: 'https://github.com/example/repository/actions/runs/12345',
-    assets,
-    packageVerification,
-  });
-  writeFileSync(
-    join(directory, `release-evidence-${evidencePlatform}.json`),
-    JSON.stringify(evidence),
-  );
 }
 
 for (const platform of Object.keys(PLATFORM_FIXTURES)) {
@@ -567,418 +531,22 @@ test('macOS release metadata accepts only universal artifacts', async () => {
   }
 });
 
-test('release evidence binds tag CI identity and package-only artifact checks', () => {
-  const input = {
-    platform: 'linux',
-    version: VERSION,
-    expectedVersion: VERSION,
-    tag: `v${VERSION}`,
-    commitSha: 'a'.repeat(40),
-    runId: '12345',
-    runAttempt: '2',
-    runUrl: 'https://github.com/example/repository/actions/runs/12345',
-    assets: [
-      {
-        name: 'agi-stack-desktop-0.1.0-linux-x64.AppImage',
-        size: 42,
-        sha512: Buffer.alloc(64, 3).toString('base64'),
-      },
-    ],
-    packageVerification: {
-      architecture: 'x64',
-      appimage_extract_smoke: true,
-      deb_extract_smoke: true,
-      desktop_entry: 'agi-stack-desktop.desktop',
-      sidecar_executable: true,
-    },
-  };
-  const evidence = buildReleaseEvidence(input);
-  assert.deepEqual(Object.keys(evidence), [
-    'contract_version',
-    'evidence_scope',
-    'blockmap_verification_scope',
-    'artifact_verification_status',
-    'release_disposition',
-    'release_blocker_reason_code',
-    'required_native_checks',
-    'verification_checks',
-    'platform',
-    'version',
-    'tag',
-    'commit_sha',
-    'workflow_run',
-    'package_verification',
-    'assets',
-  ]);
-  assert.equal(evidence.contract_version, 'desktop-release-package-evidence-v1');
-  assert.equal(evidence.evidence_scope, 'package_artifacts_and_promotion_requirements');
-  assert.equal(evidence.blockmap_verification_scope, 'blockmap_structure_and_coverage_only');
-  assert.equal(evidence.artifact_verification_status, 'verified_by_tag_ci');
-  assert.equal(evidence.release_disposition, 'prerelease_only');
-  assert.equal(evidence.release_blocker_reason_code, 'stable_promotion_native_evidence_required');
-  assert.deepEqual(evidence.required_native_checks, [
-    'install',
-    'launch',
-    'updater_apply',
-    'updater_failure_rollback',
-  ]);
-  assert.deepEqual(evidence.verification_checks, [
-    { id: 'package_artifacts', status: 'passed', reason_code: null },
-    { id: 'install', status: 'blocked', reason_code: 'native_install_evidence_missing' },
-    { id: 'launch', status: 'blocked', reason_code: 'native_launch_evidence_missing' },
-    { id: 'updater_apply', status: 'blocked', reason_code: 'updater_apply_evidence_missing' },
-    {
-      id: 'updater_failure_rollback',
-      status: 'blocked',
-      reason_code: 'updater_failure_rollback_evidence_missing',
-    },
-  ]);
-  assert.deepEqual(evidence.package_verification, input.packageVerification);
-  assert.equal('verification_status' in evidence, false);
-  assert.equal('native_verification' in evidence, false);
-  assert.equal(evidence.tag, 'v0.1.0');
-  assert.equal(evidence.commit_sha, 'a'.repeat(40));
-  assert.deepEqual(
-    evidence.assets.map((asset) => asset.name),
-    ['agi-stack-desktop-0.1.0-linux-x64.AppImage'],
-  );
-
-  assert.throws(
-    () =>
-      buildReleaseEvidence({
-        ...input,
-        tag: 'v9.9.9',
-      }),
-    /tag must exactly match/u,
-  );
-  assert.throws(
-    () =>
-      buildReleaseEvidence({
-        ...input,
-        runUrl: 'https://attacker.invalid/example/repository/actions/runs/12345',
-      }),
-    /run URL is invalid/u,
-  );
-});
-
-test('release evidence is created once with read-only permissions', async () => {
-  const fixture = createFixture('linux');
+test('combined release validates real update metadata without a review ledger', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'agistack-combined-release-'));
+  const env = { AGISTACK_RELEASE_VERSION: VERSION, GITHUB_REF_NAME: `v${VERSION}` };
   try {
-    const metadataResult = await verifyReleaseRootMetadata({
-      releaseRoot: fixture.releaseRoot,
-      platform: 'linux',
-      version: VERSION,
-      expectedVersion: VERSION,
-      expectedTag: `v${VERSION}`,
-    });
-    const input = {
-      releaseRoot: fixture.releaseRoot,
-      policy: platformPolicy('linux'),
-      version: VERSION,
-      expectedVersion: VERSION,
-      tag: `v${VERSION}`,
-      commitSha: 'b'.repeat(40),
-      runId: '54321',
-      runAttempt: '1',
-      runUrl: 'https://github.com/example/repository/actions/runs/54321',
-      artifactPaths: metadataResult.publishableArtifacts,
-      packageVerification: { package_verification_fixture: true },
-    };
-    const evidencePath = await writeReleaseEvidence(input);
-    assert.equal(basename(evidencePath), 'release-evidence-linux.json');
-    assert.equal(statSync(evidencePath).mode & 0o777, 0o444);
-    assert.equal(
-      JSON.parse(readFileSync(evidencePath, 'utf8')).artifact_verification_status,
-      'verified_by_tag_ci',
-    );
-    await assert.rejects(writeReleaseEvidence(input), { code: 'EEXIST' });
-  } finally {
-    rmSync(fixture.releaseRoot, { recursive: true, force: true });
-  }
-});
-
-test('draft staging validation accepts exact evidence and rejects a mutated asset', () => {
-  const root = mkdtempSync(join(tmpdir(), 'agistack-combined-evidence-'));
-  try {
-    writeCombinedEvidencePlatform({
-      root,
-      platform: 'macos',
-      evidencePlatform: 'macos',
-      names: [
-        'agi-stack-desktop-0.1.0-mac-universal.dmg',
-        'agi-stack-desktop-0.1.0-mac-universal.zip',
-        'agi-stack-desktop-0.1.0-mac-universal.zip.blockmap',
-        'latest-mac.yml',
-      ],
-      packageVerification: {
-        architecture: 'universal',
-        app_architectures: ['arm64', 'x86_64'],
-        sidecar_architectures: ['arm64', 'x86_64'],
-        developer_id_authority: 'Developer ID Application: Example Company (TEAMID1234)',
-        team_identifier: 'TEAMID1234',
-        signing_certificate_sha256: 'b'.repeat(64),
-        same_signature_identity: true,
-        app_signature_valid: true,
-        sidecar_signature_valid: true,
-        package_sidecars_identical: true,
-        zip_app_verified: true,
-        dmg_app_verified: true,
-        notarization_verified: true,
-        app_stapler_valid: true,
-        dmg_stapler_valid: true,
-        app_spctl_valid: true,
-        dmg_spctl_valid: true,
-        sidecar_sha256: 'c'.repeat(64),
-        zip_sidecar_sha256: 'c'.repeat(64),
-        dmg_sidecar_sha256: 'c'.repeat(64),
-      },
-    });
-    writeCombinedEvidencePlatform({
-      root,
-      platform: 'windows',
-      evidencePlatform: 'windows',
-      names: [
-        'agi-stack-desktop-0.1.0-win-x64.exe',
-        'agi-stack-desktop-0.1.0-win-x64.exe.blockmap',
-        'latest.yml',
-      ],
-      packageVerification: {
-        architecture: 'x64',
-        signer_thumbprint: 'D'.repeat(40),
-        installer_authenticode_valid: true,
-        sidecar_authenticode_valid: true,
-        installer_payload_extracted: true,
-        installer_payload_archive: 'app-64.7z',
-        sidecar_architecture: 'x64',
-        sidecar_sha256: 'e'.repeat(64),
-      },
-    });
-    writeCombinedEvidencePlatform({
-      root,
-      platform: 'linux',
-      evidencePlatform: 'linux',
-      names: [
-        'agi-stack-desktop-0.1.0-linux-x64.AppImage',
-        'agi-stack-desktop-0.1.0-linux-x64.deb',
-        'latest-linux.yml',
-      ],
-      packageVerification: {
-        architecture: 'x64',
-        deb_architecture: 'amd64',
-        sidecar_executable: true,
-        package_sidecars_identical: true,
-        appimage_executable: true,
-        appimage_extract_smoke: true,
-        deb_extract_smoke: true,
-        appimage_desktop_entry: 'agi-stack-desktop.desktop',
-        deb_desktop_entry: 'agi-stack-desktop.desktop',
-        sidecar_sha256: 'f'.repeat(64),
-      },
-    });
-
-    const validationTool = fileURLToPath(
-      new URL('../scripts/release-draft-validation.mjs', import.meta.url),
-    );
-    const evidenceIndexTool = fileURLToPath(
-      new URL('../scripts/release-evidence-index.mjs', import.meta.url),
-    );
-    const evidenceIndexSchema = fileURLToPath(
-      new URL('../scripts/desktop-release-package-evidence-index.v1.schema.json', import.meta.url),
-    );
-    const schemaValidator = fileURLToPath(
-      new URL('../contracts/desktop-web-parity/schema-validator.mjs', import.meta.url),
-    );
-    const toolDirectory = join(root, 'release-tools');
-    mkdirSync(toolDirectory);
-    copyFileSync(validationTool, join(toolDirectory, 'release-draft-validation.mjs'));
-    copyFileSync(evidenceIndexTool, join(toolDirectory, 'release-evidence-index.mjs'));
-    copyFileSync(
-      evidenceIndexSchema,
-      join(toolDirectory, 'desktop-release-package-evidence-index.v1.schema.json'),
-    );
-    const contractDirectory = join(root, 'contracts', 'desktop-web-parity');
-    mkdirSync(contractDirectory, { recursive: true });
-    copyFileSync(schemaValidator, join(contractDirectory, 'schema-validator.mjs'));
-    assert.match(
-      readFileSync(join(toolDirectory, 'release-draft-validation.mjs'), 'utf8'),
-      /assertExactRecordKeys/u,
-    );
-    const workflow = parse(
-      readFileSync(
-        new URL('../../../../.github/workflows/desktop-release.yml', import.meta.url),
-        'utf8',
-      ),
-    );
-    const validationScript = workflow.jobs['stage-draft'].steps.find(
-      (step) => step.name === 'Validate the combined release asset set',
-    ).run;
-    assert.equal(
-      validationScript.trim(),
-      'node agi-stack/apps/desktop/scripts/release-draft-validation.mjs validate-combined',
-    );
-    const env = {
-      ...process.env,
-      AGISTACK_RELEASE_VERSION: VERSION,
-      GITHUB_REPOSITORY: 'example/repository',
-      GITHUB_REF_NAME: `v${VERSION}`,
-      GITHUB_SHA: 'a'.repeat(40),
-      GITHUB_RUN_ID: '12345',
-      GITHUB_RUN_ATTEMPT: '2',
-    };
-    const validate = () =>
-      spawnSync(
-        process.execPath,
-        ['release-tools/release-draft-validation.mjs', 'validate-combined'],
-        {
-          cwd: root,
-          encoding: 'utf8',
-          env,
-        },
-      );
-
-    const valid = validate();
-    assert.equal(valid.status, 0, valid.stderr);
-
-    const macEvidencePath = join(root, 'verified', 'macos', 'release-evidence-macos.json');
-    const macEvidence = JSON.parse(readFileSync(macEvidencePath, 'utf8'));
-    const unexpectedMacAssetPath = join(
-      root,
-      'verified',
-      'macos',
-      'unexpected-windows-payload.exe',
-    );
-    const unexpectedMacAsset = Buffer.from('cross-platform payload');
-    writeFileSync(unexpectedMacAssetPath, unexpectedMacAsset);
-    writeFileSync(
-      macEvidencePath,
-      JSON.stringify({
-        ...macEvidence,
-        assets: [
-          ...macEvidence.assets,
-          {
-            name: basename(unexpectedMacAssetPath),
-            size: unexpectedMacAsset.byteLength,
-            sha512: sha512(unexpectedMacAsset),
-          },
-        ],
-      }),
-    );
-    const crossPlatformAsset = validate();
-    assert.notEqual(crossPlatformAsset.status, 0);
-    assert.match(crossPlatformAsset.stderr, /unexpected macos release asset/u);
-    writeFileSync(macEvidencePath, JSON.stringify(macEvidence));
-    rmSync(unexpectedMacAssetPath);
-
-    const linuxEvidencePath = join(root, 'verified', 'linux', 'release-evidence-linux.json');
-    const packageEvidence = JSON.parse(readFileSync(linuxEvidencePath, 'utf8'));
-    writeFileSync(
-      linuxEvidencePath,
-      JSON.stringify({
-        ...packageEvidence,
-        contract_version: 'desktop-release-evidence-v1',
-      }),
-    );
-    const legacyContract = validate();
-    assert.notEqual(legacyContract.status, 0);
-    assert.match(legacyContract.stderr, /release evidence contract is invalid/u);
-    writeFileSync(linuxEvidencePath, JSON.stringify(packageEvidence));
-
-    for (const [label, mutate] of [
-      [
-        'top-level',
-        (evidence) => {
-          evidence.verification_status = 'verified';
-        },
-      ],
-      [
-        'workflow-run',
-        (evidence) => {
-          evidence.workflow_run.native_verification = true;
-        },
-      ],
-      [
-        'asset',
-        (evidence) => {
-          evidence.assets[0].release_ready = true;
-        },
-      ],
-    ]) {
-      const mutatedEvidence = structuredClone(packageEvidence);
-      mutate(mutatedEvidence);
-      writeFileSync(linuxEvidencePath, JSON.stringify(mutatedEvidence));
-      const mutationResult = validate();
-      assert.notEqual(mutationResult.status, 0, label);
-      assert.match(mutationResult.stderr, /unexpected field/u, label);
-      writeFileSync(linuxEvidencePath, JSON.stringify(packageEvidence));
+    for (const [name, platform] of Object.entries({ macos: 'darwin', windows: 'win32', linux: 'linux' })) {
+      const fixture = createFixture(platform);
+      try { cpSync(fixture.releaseRoot, join(root, 'verified', name), { recursive: true }); }
+      finally { rmSync(fixture.releaseRoot, { recursive: true, force: true }); }
     }
-
-    const packageBooleanFields = {
-      macos: 'same_signature_identity',
-      windows: 'installer_authenticode_valid',
-      linux: 'sidecar_executable',
-    };
-    for (const platform of Object.keys(packageBooleanFields)) {
-      const evidencePath = join(root, 'verified', platform, `release-evidence-${platform}.json`);
-      const originalEvidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
-      const mutatedEvidence = structuredClone(originalEvidence);
-      mutatedEvidence.package_verification.native_verification = true;
-      writeFileSync(evidencePath, JSON.stringify(mutatedEvidence));
-      const mutationResult = validate();
-      assert.notEqual(mutationResult.status, 0, platform);
-      assert.match(
-        mutationResult.stderr,
-        new RegExp(`${platform} package verification.*unexpected field`, 'u'),
-        platform,
-      );
-      writeFileSync(evidencePath, JSON.stringify(originalEvidence));
-
-      const mistypedEvidence = structuredClone(originalEvidence);
-      mistypedEvidence.package_verification[packageBooleanFields[platform]] = 'true';
-      writeFileSync(evidencePath, JSON.stringify(mistypedEvidence));
-      const mistypedResult = validate();
-      assert.notEqual(mistypedResult.status, 0, platform);
-      assert.match(mistypedResult.stderr, /must be true/u, platform);
-      writeFileSync(evidencePath, JSON.stringify(originalEvidence));
-    }
-
-    const missingScopeEvidence = structuredClone(packageEvidence);
-    delete missingScopeEvidence.blockmap_verification_scope;
-    writeFileSync(linuxEvidencePath, JSON.stringify(missingScopeEvidence));
-    const missingScope = validate();
-    assert.notEqual(missingScope.status, 0);
-    assert.match(missingScope.stderr, /missing required field/u);
-    writeFileSync(linuxEvidencePath, JSON.stringify(packageEvidence));
-
-    const overstatedBlockmapEvidence = structuredClone(packageEvidence);
-    overstatedBlockmapEvidence.blockmap_verification_scope = 'blockmap_chunk_checksums_verified';
-    writeFileSync(linuxEvidencePath, JSON.stringify(overstatedBlockmapEvidence));
-    const overstatedBlockmapScope = validate();
-    assert.notEqual(overstatedBlockmapScope.status, 0);
-    assert.match(overstatedBlockmapScope.stderr, /package artifact evidence status is invalid/u);
-    writeFileSync(linuxEvidencePath, JSON.stringify(packageEvidence));
-
-    writeFileSync(
-      linuxEvidencePath,
-      JSON.stringify({
-        ...packageEvidence,
-        release_disposition: 'publishable',
-      }),
-    );
-    const publishableClaim = validate();
-    assert.notEqual(publishableClaim.status, 0);
-    assert.match(publishableClaim.stderr, /release evidence must remain prerelease-only/u);
-    writeFileSync(linuxEvidencePath, JSON.stringify(packageEvidence));
-
-    writeFileSync(
-      join(root, 'verified', 'linux', 'agi-stack-desktop-0.1.0-linux-x64.AppImage'),
-      'mutated after package verification',
-    );
-    const mutated = validate();
-    assert.notEqual(mutated.status, 0);
-    assert.match(mutated.stderr, /release evidence digest mismatch/u);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+    const manifest = await validateCombinedReleaseAssets({ root, env });
+    assert.equal(manifest.length, 10);
+    assert.ok(manifest.every(({ name }) => !name.endsWith('.json')));
+    const target = manifest.find(({ name }) => name.endsWith('.exe'));
+    writeFileSync(target.path, 'tampered installer');
+    await assert.rejects(validateCombinedReleaseAssets({ root, env }), /SHA-512|size/u);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('downloaded draft assets are compared by exact size and SHA-256', () => {

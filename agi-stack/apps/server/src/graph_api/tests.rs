@@ -486,7 +486,7 @@ async fn rebuild_communities_background_persists_job_events_and_worker_completio
     ))
     .unwrap();
     let actual = serde_json::to_value(&response).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 
     let job_id = response.job_id.clone().unwrap();
     let events = wait_for_graph_rebuild_completion(&app, "p1", &job_id).await;
@@ -553,7 +553,7 @@ async fn rebuild_communities_job_status_matches_golden() {
     ))
     .unwrap();
     let actual = serde_json::to_value(&status).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 
     let err = get_rebuild_job(
         State(app),
@@ -782,7 +782,7 @@ async fn graph_export_matches_golden_and_import_roundtrips_project_snapshot() {
     ))
     .unwrap();
     let actual = serde_json::to_value(&exported).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 
     let imported_app = test_state();
     let Json(imported) = import_graph(

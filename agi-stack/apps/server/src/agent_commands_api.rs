@@ -324,7 +324,7 @@ mod tests {
             serde_json::from_str(include_str!("../tests/golden/agent_commands_response.json"))
                 .expect("agent command catalog golden parses");
         let actual = serde_json::to_value(&response).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
+        crate::response_assertions::assert_parity(&golden, &actual);
     }
 
     #[tokio::test]

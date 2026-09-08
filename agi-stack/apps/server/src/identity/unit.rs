@@ -424,7 +424,7 @@ fn project_defaults_expand_python_shapes() {
 
 // ---- F3 parity gate: assert the wire shapes against contract-derived
 // goldens (plan.md §14.2 F3). The goldens live in `apps/server/tests/golden/`
-// and encode the Python schema contract; `agistack_parity::compare` checks
+// and encode the Python schema contract; `crate::response_assertions::compare` checks
 // key-set + type + scalar-format parity so a strangler flip is safe.
 
 fn sample_tenant_record() -> TenantRecord {
@@ -510,7 +510,7 @@ fn current_user_view_matches_golden() {
     ))
     .unwrap();
     let actual = serde_json::to_value(CurrentUserView::from(sample_current_user_record())).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -526,7 +526,7 @@ fn tenant_view_matches_golden() {
     let golden: serde_json::Value =
         serde_json::from_str(include_str!("../../tests/golden/tenant_view.json")).unwrap();
     let actual = serde_json::to_value(TenantView::from(sample_tenant_record())).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -540,7 +540,7 @@ fn tenant_page_matches_golden() {
         page_size: 20,
     };
     let actual = serde_json::to_value(&page).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -553,7 +553,7 @@ fn tenant_member_added_matches_golden() {
         role: "member".into(),
     };
     let actual = serde_json::to_value(&view).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -568,7 +568,7 @@ fn tenant_member_updated_matches_golden() {
         role: "viewer".into(),
     };
     let actual = serde_json::to_value(&view).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -589,7 +589,7 @@ fn project_view_matches_golden() {
     let golden: serde_json::Value =
         serde_json::from_str(include_str!("../../tests/golden/project_view.json")).unwrap();
     let actual = serde_json::to_value(ProjectView::from(sample_project_record())).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -604,7 +604,7 @@ fn project_page_matches_golden() {
         owner_ids: vec!["33333333-3333-4333-8333-333333333333".into()],
     };
     let actual = serde_json::to_value(&page).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -627,7 +627,7 @@ fn project_stats_matches_golden() {
         1_700_000_600_000,
     );
     let actual = serde_json::to_value(&stats).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -651,7 +651,7 @@ fn project_members_matches_golden() {
         total: 1,
     });
     let actual = serde_json::to_value(&members).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -664,7 +664,7 @@ fn project_member_added_matches_golden() {
         role: "member".into(),
     };
     let actual = serde_json::to_value(&view).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -679,7 +679,7 @@ fn project_member_updated_matches_golden() {
         role: "viewer".into(),
     };
     let actual = serde_json::to_value(&view).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -698,7 +698,7 @@ fn invitation_response_matches_golden() {
     let golden: serde_json::Value =
         serde_json::from_str(include_str!("../../tests/golden/invitation_response.json")).unwrap();
     let actual = serde_json::to_value(InvitationView::from(sample_invitation_record())).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -712,7 +712,7 @@ fn invitation_list_matches_golden() {
         offset: 0,
     };
     let actual = serde_json::to_value(&list).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -721,7 +721,7 @@ fn invitation_verify_matches_golden_and_invalid_shape() {
         serde_json::from_str(include_str!("../../tests/golden/invitation_verify.json")).unwrap();
     let actual =
         serde_json::to_value(InvitationVerifyView::valid(sample_invitation_record())).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 
     let invalid = serde_json::to_value(InvitationVerifyView::invalid()).unwrap();
     assert_eq!(invalid["valid"], false);
@@ -742,7 +742,7 @@ fn device_code_response_matches_golden() {
         interval: DEVICE_CODE_INTERVAL_SECS,
     };
     let actual = serde_json::to_value(&response).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -755,7 +755,7 @@ fn device_approve_response_matches_golden() {
         status: "approved".into(),
     })
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[test]
@@ -769,7 +769,7 @@ fn device_token_response_matches_golden() {
         token_type: "bearer".into(),
     })
     .unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
 
 #[tokio::test]
@@ -783,8 +783,8 @@ async fn dev_device_code_flow_matches_python_states() {
     );
     assert_eq!(code.expires_in, DEVICE_CODE_TTL_SECS);
     assert_eq!(code.interval, DEVICE_CODE_INTERVAL_SECS);
-    assert!(agistack_parity::is_urlsafe_token_32(&code.device_code));
-    assert!(agistack_parity::is_device_user_code(&code.user_code));
+    assert!(crate::response_assertions::is_urlsafe_token_32(&code.device_code));
+    assert!(crate::response_assertions::is_device_user_code(&code.user_code));
 
     let pending = svc.poll_device_token(&code.device_code).await.unwrap_err();
     assert_eq!(pending.status, StatusCode::PRECONDITION_REQUIRED);
@@ -976,5 +976,5 @@ fn login_token_matches_golden_with_real_minted_key() {
         must_change_password: false,
     };
     let actual = serde_json::to_value(&out).unwrap();
-    agistack_parity::assert_parity(&golden, &actual);
+    crate::response_assertions::assert_parity(&golden, &actual);
 }
