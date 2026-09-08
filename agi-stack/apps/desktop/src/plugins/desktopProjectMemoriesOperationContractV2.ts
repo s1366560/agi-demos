@@ -1,4 +1,5 @@
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
+import { validCloudMemoryCapabilitySnapshot } from '../features/project-knowledge/cloudMemoryCapabilities';
 
 import {
   PROJECT_MEMORIES_DEGRADED_REASON,
@@ -65,6 +66,7 @@ const SNAPSHOT_KEYS_V2 = new Set([
   'pageSize',
 ]);
 const LOCAL_SNAPSHOT_KEYS_V2 = new Set([...SNAPSHOT_KEYS_V2, 'hasMore']);
+const CLOUD_CAPABILITY_SNAPSHOT_KEYS_V2 = new Set([...SNAPSHOT_KEYS_V2, 'commandCapabilities']);
 const MEMORY_KEYS_V2 = new Set([
   'id',
   'projectId',
@@ -183,7 +185,11 @@ export function requireDesktopProjectMemoriesSnapshotV2(
     !isPlainRecordV2(value) ||
     !hasExactKeysV2(
       value,
-      scope.authority === 'local' ? LOCAL_SNAPSHOT_KEYS_V2 : SNAPSHOT_KEYS_V2,
+      scope.authority === 'local'
+        ? LOCAL_SNAPSHOT_KEYS_V2
+        : Object.hasOwn(value, 'commandCapabilities')
+          ? CLOUD_CAPABILITY_SNAPSHOT_KEYS_V2
+          : SNAPSHOT_KEYS_V2,
     ) ||
     value.authority !== scope.authority ||
     value.availability !== 'degraded' ||
@@ -204,6 +210,16 @@ export function requireDesktopProjectMemoriesSnapshotV2(
       value.memories,
       scope.authority === 'local' ? value.memories.length : value.total,
       scope.projectId,
+    )
+  ) {
+    throw invalidServiceContractV2();
+  }
+  if (
+    Object.hasOwn(value, 'commandCapabilities') &&
+    !validCloudMemoryCapabilitySnapshot(
+      value.commandCapabilities,
+      scope,
+      value.memories as ProjectMemory[],
     )
   ) {
     throw invalidServiceContractV2();

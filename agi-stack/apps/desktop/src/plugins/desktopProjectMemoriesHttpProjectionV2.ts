@@ -18,6 +18,8 @@ import {
   type ProjectKnowledgeScope,
 } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
+import { DesktopApiError } from '../api/client';
+import { parseCloudMemoryCapabilities } from '../features/project-knowledge/cloudMemoryCapabilities';
 import { createDesktopProjectMemoriesLocalAuthorityV2 } from './desktopProjectMemoriesLocalProjectionV2';
 import type { NativeKnowledgeSyncAuthority } from '../features/project-knowledge/nativeKnowledgeContracts';
 import { createDesktopNativeKnowledgeSyncHttpV2 } from './desktopNativeKnowledgeSyncHttpV2';
@@ -67,6 +69,28 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
       );
       signal?.throwIfAborted();
       const page = parseMemoryPageV2(payload, currentScope, pagination);
+      let commandCapabilities = null;
+      if (isRecord(payload) && isRecord(payload.command_capabilities)) {
+        const identity = await requestProjectKnowledgeJson(runtimeConfig, '/api/v1/auth/me', {
+          signal,
+        }).catch((error: unknown) => {
+          signal?.throwIfAborted();
+          if (error instanceof DesktopApiError && (error.status === 404 || error.status >= 500))
+            return null;
+          throw error;
+        });
+        signal?.throwIfAborted();
+        if (identity !== null) {
+          if (!isRecord(identity)) throw projectKnowledgeError('project_memory_identity_invalid');
+          const actorId = requireIdentifier(identity.user_id, 'project_memory_identity_invalid');
+          commandCapabilities = parseCloudMemoryCapabilities(
+            payload.command_capabilities,
+            currentScope,
+            page.memories,
+            actorId,
+          );
+        }
+      }
       return Object.freeze({
         scope: currentScope,
         scopeRevision,
@@ -75,6 +99,7 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
         reasonCode: PROJECT_MEMORIES_DEGRADED_REASON,
         allowedActions: ACTIONS_V2,
         ...page,
+        ...(commandCapabilities === null ? {} : { commandCapabilities }),
       });
     },
   });
@@ -95,7 +120,12 @@ function parseMemoryPageV2(
   payload: unknown,
   scope: ProjectKnowledgeScope,
   pagination: Readonly<{ page: number; pageSize: number }>,
-): Readonly<{ memories: readonly ProjectMemory[]; total: number; page: number; pageSize: number }> {
+): Readonly<{
+  memories: readonly ProjectMemory[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
   if (
     !isRecord(payload) ||
     !Array.isArray(payload.memories) ||
