@@ -24,9 +24,12 @@ const { createDesktopProjectMemoriesHttpAuthorityV2 } = require(
 );
 function fixture(bind = createDesktopProjectMemoriesHttpAuthorityV2, cap = () => capability) {
   const events = [];
+  const leases = [];
   const actions = {
     async acquireServiceOperationLease(input) {
       events.push('acquire');
+      const lease = { id: leases.length + 1, uses: 0, releases: 0 };
+      leases.push(lease);
       assert.deepEqual(input.scope, {
         kind: 'project',
         tenant_id: projectScope.tenantId,
@@ -34,9 +37,14 @@ function fixture(bind = createDesktopProjectMemoriesHttpAuthorityV2, cap = () =>
       });
       return {
         status: 'admitted',
-        useService: (fn) => fn({ bindOperation: bind }),
+        useService: (fn) => {
+          lease.uses += 1;
+          return fn({ bindOperation: bind });
+        },
         async release() {
           events.push('release');
+          lease.releases += 1;
+          assert.equal(lease.releases, 1, `lease ${lease.id} released more than once`);
         },
       };
     },
@@ -44,12 +52,13 @@ function fixture(bind = createDesktopProjectMemoriesHttpAuthorityV2, cap = () =>
   const ops = createDesktopProjectMemoriesOperationsV2(() => actions, cap);
   return {
     events,
+    leases,
     actions,
     query: createDesktopNativeKnowledgeProcessingClientV2(ops, config),
     command: createDesktopNativeKnowledgeProcessingCommandClientV2(ops, config),
   };
 }
-test('all eleven native processing commands traverse scoped generation lease and real transport', async () => {
+test('every native processing fixture uses and releases its own scoped generation lease once', async () => {
   const old = globalThis.fetch;
   let current;
   globalThis.fetch = async (url) =>
@@ -59,13 +68,20 @@ test('all eleven native processing commands traverse scoped generation lease and
   try {
     const f = fixture();
     for (current of wireCases) {
+      const previousLeases = f.leases.length;
+      const previousEvents = f.events.length;
       const options = { expectedScope: nativeScope };
       const got = current.request.command
         ? await f.command.execute(projectScope, operation(current.name), options)
         : await f.query.query(projectScope, operation(current.name), options);
       assert.deepEqual(got, response(current.name));
+      assert.equal(f.leases.length, previousLeases + 1, current.name);
+      assert.deepEqual(f.events.slice(previousEvents), ['acquire', 'release'], current.name);
+      assert.deepEqual(f.leases.at(-1), {
+        id: previousLeases + 1, uses: 1, releases: 1,
+      }, current.name);
     }
-    assert.equal(f.events.length, 22);
+    assert.equal(f.leases.length, wireCases.length);
   } finally {
     globalThis.fetch = old;
   }
@@ -132,4 +148,38 @@ test('malformed provider response never bypasses transport-independent validatio
     /scope_conflict/,
   );
   assert.deepEqual(f.events, ['acquire', 'release']);
+});
+
+
+test('overlapping successful and failed operations each release only their own lease', async () => {
+  const pending = [];
+  const f = fixture(() => ({
+    load: async () => {},
+    executeSync: async () => {},
+    queryProcessing: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+  }));
+  const options = { expectedScope: nativeScope };
+  const first = f.query.query(projectScope, operation('configuration'), options);
+  const second = f.query.query(projectScope, operation('configuration'), options);
+  const firstFailure = assert.rejects(first, /first operation failed/);
+  await Promise.resolve();
+  assert.equal(pending.length, 2);
+  assert.deepEqual(f.leases, [
+    { id: 1, uses: 1, releases: 0 },
+    { id: 2, uses: 1, releases: 0 },
+  ]);
+
+  pending[1].resolve(response('configuration'));
+  await second;
+  assert.deepEqual(f.leases, [
+    { id: 1, uses: 1, releases: 0 },
+    { id: 2, uses: 1, releases: 1 },
+  ]);
+
+  pending[0].reject(new Error('first operation failed'));
+  await firstFailure;
+  assert.deepEqual(f.leases, [
+    { id: 1, uses: 1, releases: 1 },
+    { id: 2, uses: 1, releases: 1 },
+  ]);
 });
