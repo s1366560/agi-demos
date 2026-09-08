@@ -4,7 +4,7 @@
   max-width: 64rem;
   min-width: 0;
   padding: 1.25rem;
-  color: var(--gray-12, #1b2430);
+  color: var(--gray-12);
   overflow-wrap: anywhere;
 }
 .native-memories-page header,
@@ -28,7 +28,7 @@
 }
 .native-memories-page li,
 .native-memory-editor:not(:empty) {
-  border: 1px solid var(--gray-6, #d1d5db);
+  border: 1px solid var(--gray-6);
   border-radius: 0.5rem;
   padding: 1rem;
 }
@@ -44,8 +44,8 @@
 .native-memory-editor textarea {
   font: inherit;
   color: inherit;
-  background: var(--color-background, #fff);
-  border: 1px solid var(--gray-7, #b9c0c9);
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-7);
   border-radius: 0.35rem;
   padding: 0.5rem 0.75rem;
 }
@@ -55,7 +55,7 @@
 .native-memories-page button:focus-visible,
 .native-memory-editor input:focus-visible,
 .native-memory-editor textarea:focus-visible {
-  outline: 2px solid var(--accent-9, #047aa4);
+  outline: 2px solid var(--accent-9);
   outline-offset: 2px;
 }
 .native-memory-editor fieldset,
