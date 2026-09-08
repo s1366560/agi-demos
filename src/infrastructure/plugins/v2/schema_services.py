@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 from uuid import uuid4
 
 from sqlalchemy import and_, select
@@ -17,6 +17,9 @@ from src.application.schemas.schema import (
     EntityTypeCreate,
     EntityTypeUpdate,
 )
+from src.domain.model.project_schema.commands import ProjectSchemaAction, ProjectSchemaScope
+from src.domain.model.project_schema.validation import ProjectSchemaError
+from src.domain.ports.services.project_schema_authorization import ProjectSchemaAuthorization
 from src.infrastructure.adapters.secondary.common.base_repository import (
     refresh_select_statement,
 )
@@ -26,6 +29,12 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     EntityType,
     UserProject,
 )
+from src.infrastructure.adapters.secondary.schema.active_schema_reads import (
+    ActiveSchemaSnapshot,
+    active_schema_snapshot,
+    require_legacy_schema,
+)
+from src.infrastructure.plugins.v2.schema_authorization import SqlProjectSchemaAuthorizationV2
 
 from .runtime import (
     ContextV2,
@@ -80,6 +89,12 @@ class SchemaEdgeMapNotFoundV2(SchemaServiceErrorV2):
 class SchemaPersistenceProtocolV2(Protocol):
     """Persistence operations hidden behind the exact schema Provider contract."""
 
+    async def active_snapshot(
+        self, *, project_id: str, tenant_id: str
+    ) -> ActiveSchemaSnapshot | None: ...
+
+    async def require_legacy(self, *, project_id: str) -> None: ...
+
     async def find_membership(self, *, user_id: str, project_id: str) -> UserProject | None: ...
 
     async def list_entity_types(self, *, project_id: str) -> Sequence[EntityType]: ...
@@ -116,6 +131,14 @@ class SqlSchemaPersistenceV2:
     """SQL implementation bound to one operation-owned session."""
 
     _session: AsyncSession
+
+    async def active_snapshot(
+        self, *, project_id: str, tenant_id: str
+    ) -> ActiveSchemaSnapshot | None:
+        return await active_schema_snapshot(self._session, project_id, tenant_id=tenant_id)
+
+    async def require_legacy(self, *, project_id: str) -> None:
+        await require_legacy_schema(self._session, project_id)
 
     async def find_membership(self, *, user_id: str, project_id: str) -> UserProject | None:
         result = await self._session.execute(
@@ -276,18 +299,44 @@ class SchemaApplicationServicesV2:
     """Project-schema operations with structural membership and role enforcement."""
 
     persistence: SchemaPersistenceProtocolV2
+    authorization: ProjectSchemaAuthorization
+    scope: ProjectSchemaScope
 
     async def _authorize(self, *, user_id: str, project_id: str, write: bool) -> None:
-        membership = await self.persistence.find_membership(
-            user_id=user_id,
-            project_id=project_id,
-        )
-        if membership is None or (write and membership.role not in SCHEMA_WRITE_ROLES_V2):
+        if (user_id, project_id) != (self.scope.actor_id, self.scope.project_id):
             raise SchemaAccessDeniedV2
+        try:
+            await self.authorization.authorize(
+                self.scope, ProjectSchemaAction.REPLACE if write else ProjectSchemaAction.READ
+            )
+        except ProjectSchemaError as error:
+            if error.code != "project_schema_access_denied":
+                raise
+            raise SchemaAccessDeniedV2 from error
+        if write:
+            await self.persistence.require_legacy(project_id=project_id)
+            await self.authorization.authorize(self.scope, ProjectSchemaAction.REPLACE)
+
+    async def _read(self, *, user_id: str, project_id: str, kind: str) -> Sequence[Any]:
+        await self._authorize(user_id=user_id, project_id=project_id, write=False)
+        snapshot = await self.persistence.active_snapshot(
+            project_id=project_id, tenant_id=self.scope.tenant_id
+        )
+        await self._authorize(user_id=user_id, project_id=project_id, write=False)
+        if snapshot is not None:
+            return snapshot.mappings() if kind == "mappings" else snapshot.types(kind)
+        result: Sequence[Any]
+        if kind == "entity_types":
+            result = await self.persistence.list_entity_types(project_id=project_id)
+        elif kind == "edge_types":
+            result = await self.persistence.list_edge_types(project_id=project_id)
+        else:
+            result = await self.persistence.list_edge_maps(project_id=project_id)
+        await self._authorize(user_id=user_id, project_id=project_id, write=False)
+        return result
 
     async def list_entity_types(self, *, user_id: str, project_id: str) -> Sequence[EntityType]:
-        await self._authorize(user_id=user_id, project_id=project_id, write=False)
-        return await self.persistence.list_entity_types(project_id=project_id)
+        return await self._read(user_id=user_id, project_id=project_id, kind="entity_types")
 
     async def create_entity_type(
         self, *, user_id: str, project_id: str, data: EntityTypeCreate
@@ -315,8 +364,7 @@ class SchemaApplicationServicesV2:
         await self.persistence.delete_entity_type(project_id=project_id, entity_id=entity_id)
 
     async def list_edge_types(self, *, user_id: str, project_id: str) -> Sequence[EdgeType]:
-        await self._authorize(user_id=user_id, project_id=project_id, write=False)
-        return await self.persistence.list_edge_types(project_id=project_id)
+        return await self._read(user_id=user_id, project_id=project_id, kind="edge_types")
 
     async def create_edge_type(
         self, *, user_id: str, project_id: str, data: EdgeTypeCreate
@@ -344,8 +392,7 @@ class SchemaApplicationServicesV2:
         await self.persistence.delete_edge_type(project_id=project_id, edge_id=edge_id)
 
     async def list_edge_maps(self, *, user_id: str, project_id: str) -> Sequence[EdgeTypeMap]:
-        await self._authorize(user_id=user_id, project_id=project_id, write=False)
-        return await self.persistence.list_edge_maps(project_id=project_id)
+        return await self._read(user_id=user_id, project_id=project_id, kind="mappings")
 
     async def create_edge_map(
         self, *, user_id: str, project_id: str, data: EdgeTypeMapCreate
@@ -364,6 +411,8 @@ class SchemaServiceFactoryProtocolV2(Protocol):
 
     def build(self, operation: OperationContextV2) -> SchemaPersistenceProtocolV2: ...
 
+    def authorization(self, operation: OperationContextV2) -> SqlProjectSchemaAuthorizationV2: ...
+
 
 @runtime_checkable
 class SchemaApplicationResolverProtocolV2(Protocol):
@@ -371,12 +420,28 @@ class SchemaApplicationResolverProtocolV2(Protocol):
 
     def resolve(self, operation: OperationContextV2) -> SchemaApplicationServicesV2: ...
 
+    async def discover_scope(
+        self, operation: OperationContextV2, project_id: str
+    ) -> ProjectSchemaScope: ...
+
 
 @dataclass(frozen=True, kw_only=True)
 class SqlSchemaServiceFactoryV2:
     """Build schema persistence from the operation's exact AsyncSession."""
 
     strategy: str
+
+    def authorization(self, operation: OperationContextV2) -> SqlProjectSchemaAuthorizationV2:
+        identity = operation.require("service:operation.identity")
+        db = operation.require(_OPERATION_DB_SESSION_SERVICE_V2)
+        if not isinstance(db, AsyncSession) or not isinstance(identity, Mapping):
+            raise SchemaAccessDeniedV2
+        actor_id = cast(Mapping[str, object], identity).get("user_id")
+        if not isinstance(actor_id, str) or not actor_id:
+            raise SchemaAccessDeniedV2
+        return SqlProjectSchemaAuthorizationV2(
+            operation=operation, session=db, actor_id=actor_id, scope=operation.context.scope
+        )
 
     def build(self, operation: OperationContextV2) -> SchemaPersistenceProtocolV2:
         db = operation.require(_OPERATION_DB_SESSION_SERVICE_V2)
@@ -395,7 +460,24 @@ class SchemaApplicationResolverV2:
     provider: SchemaServiceFactoryProtocolV2
 
     def resolve(self, operation: OperationContextV2) -> SchemaApplicationServicesV2:
-        return SchemaApplicationServicesV2(persistence=self.provider.build(operation))
+        authorization = self.provider.authorization(operation)
+        scope = authorization.scope
+        if scope.tenant_id is None or scope.project_id is None:
+            raise SchemaAccessDeniedV2
+        return SchemaApplicationServicesV2(
+            persistence=self.provider.build(operation),
+            authorization=authorization,
+            scope=ProjectSchemaScope(
+                tenant_id=scope.tenant_id,
+                project_id=scope.project_id,
+                actor_id=authorization.actor_id,
+            ),
+        )
+
+    async def discover_scope(
+        self, operation: OperationContextV2, project_id: str
+    ) -> ProjectSchemaScope:
+        return await self.provider.authorization(operation).discover_scope(project_id)
 
 
 def _apply_schema_provider_v2(context: ContextV2, config: Mapping[str, Any]) -> None:

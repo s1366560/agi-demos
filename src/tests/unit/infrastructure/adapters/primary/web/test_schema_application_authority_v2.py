@@ -53,7 +53,7 @@ def _request() -> Request:
     )
 
 
-async def test_authority_uses_pinned_generation_and_operation_session() -> None:
+async def test_authority_uses_pinned_generation_and_operation_session(monkeypatch) -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await host.bootstrap(
         profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
@@ -62,6 +62,11 @@ async def test_authority_uses_pinned_generation_and_operation_session() -> None:
         version=23,
     )
     db = AsyncSession()
+    monkeypatch.setattr(
+        db,
+        "execute",
+        AsyncMock(return_value=SimpleNamespace(one_or_none=lambda: ("tenant-a", "member"))),
+    )
     user = cast(User, SimpleNamespace(id="user-a"))
     dependency = None
     authority = None
@@ -83,6 +88,7 @@ async def test_authority_uses_pinned_generation_and_operation_session() -> None:
             assert authority.operation.require(OPERATION_DB_SESSION_SERVICE_V2) is db
             assert authority.operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
                 "tenant_id": "tenant-a",
+                "project_id": "project-a",
                 "user_id": "user-a",
             }
             assert authority.operation.require(OPERATION_METADATA_SERVICE_V2) == {

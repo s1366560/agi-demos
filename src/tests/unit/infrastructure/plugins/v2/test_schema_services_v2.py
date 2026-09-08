@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.schema import EntityTypeCreate
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.project_schema.commands import ProjectSchemaScope
+from src.domain.model.project_schema.validation import ProjectSchemaError
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
@@ -59,6 +61,14 @@ async def test_schema_application_resolver_builds_operation_owned_services() -> 
             ) as operation,
         ):
             _ = operation.provide(OPERATION_DB_SESSION_SERVICE_V2, db)
+            _ = operation.provide(
+                "service:operation.identity",
+                {
+                    "user_id": "user-a",
+                    "tenant_id": "tenant-a",
+                    "project_id": "project-a",
+                },
+            )
             resolver = operation.require(SCHEMA_APPLICATION_SERVICE_V2)
             assert isinstance(resolver, SchemaApplicationResolverV2)
 
@@ -107,7 +117,13 @@ async def test_viewer_write_is_rejected_before_schema_persistence_mutation() -> 
         find_membership=AsyncMock(return_value=SimpleNamespace(role="viewer")),
         create_entity_type=AsyncMock(),
     )
-    services = SchemaApplicationServicesV2(persistence=persistence)
+    services = SchemaApplicationServicesV2(
+        persistence=persistence,
+        authorization=SimpleNamespace(
+            authorize=AsyncMock(side_effect=ProjectSchemaError("project_schema_access_denied"))
+        ),
+        scope=ProjectSchemaScope(tenant_id="tenant-a", project_id="project-a", actor_id="user-a"),
+    )
 
     with pytest.raises(SchemaAccessDeniedV2):
         await services.create_entity_type(

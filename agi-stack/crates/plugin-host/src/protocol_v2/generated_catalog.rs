@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:bd474840814c538b6c0fc2a317cc8ad40920356da672ecbda0efd46be92ffa",
-    "c3\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:feaecd4578897916bcfcb46fdf53580ac238dd4c980b1caafa17fcae22ec73",
+    "ca\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1348,7 +1348,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "1e95\",\"entrypoint\":\"src.infrastructure.plugins.v2.sandbox_runtime:sandbox_application_de",
     "finition_v2\",\"module_ref\":\"builtin://memstack/application/sandbox-services\",\"plugin_id\":",
     "\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_dige",
-    "st\":\"sha256:acf91292322c0b5ee01d77ebceae9994d621d5329bda38b3a8e2b1e6a4226b68\",\"artifact_",
+    "st\":\"sha256:52861a5bd8f2e043a3364272028f3040a4f7f2a9ae9cd1912a4f894c13bb573f\",\"artifact_",
     "source\":\"repo+python://src/infrastructure/plugins/v2/schema_services.py\",\"contract\":{\"co",
     "nfig_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProper",
     "ties\":false,\"properties\":{\"strategy\":{\"const\":\"operation-scoped-provider\",\"type\":\"string",
@@ -3982,7 +3982,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "6b7a4a4f1cd2b\",\"entrypoint\":\"src.infrastructure.plugins.v2.reflection_services:_apply_re",
     "flection_provider_v2\",\"module_ref\":\"builtin://memstack/persistence/reflection-provider\",",
     "\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"a",
-    "rtifact_digest\":\"sha256:acf91292322c0b5ee01d77ebceae9994d621d5329bda38b3a8e2b1e6a4226b68",
+    "rtifact_digest\":\"sha256:52861a5bd8f2e043a3364272028f3040a4f7f2a9ae9cd1912a4f894c13bb573f",
     "\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/schema_services.py\",\"co",
     "ntract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"addi",
     "tionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"request-async-session\",\"type\"",
@@ -4573,4 +4573,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "chema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:bd474840814c538b6c0fc2a317cc8ad40920356da672ecbda0efd46be92ffac3";
+    "sha256:feaecd4578897916bcfcb46fdf53580ac238dd4c980b1caafa17fcae22ec73ca";

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:bd474840814c538b6c0fc2a317cc8ad40920356da672ecbda0efd46be9',
-  '2ffac3","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:feaecd4578897916bcfcb46fdf53580ac238dd4c980b1caafa17fcae22',
+  'ec73ca","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1432,7 +1432,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ntrypoint":"src.infrastructure.plugins.v2.sandbox_runtime:sandbox_application_defini',
   'tion_v2","module_ref":"builtin://memstack/application/sandbox-services","plugin_id":',
   '"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_',
-  'digest":"sha256:acf91292322c0b5ee01d77ebceae9994d621d5329bda38b3a8e2b1e6a4226b68","a',
+  'digest":"sha256:52861a5bd8f2e043a3364272028f3040a4f7f2a9ae9cd1912a4f894c13bb573f","a',
   'rtifact_source":"repo+python://src/infrastructure/plugins/v2/schema_services.py","co',
   'ntract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","',
   'additionalProperties":false,"properties":{"strategy":{"const":"operation-scoped-prov',
@@ -4191,8 +4191,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '93b75d0165f5f91ed2f5379bb3056b7a4a4f1cd2b","entrypoint":"src.infrastructure.plugins.',
   'v2.reflection_services:_apply_reflection_provider_v2","module_ref":"builtin://memsta',
   'ck/persistence/reflection-provider","plugin_id":"memstack-runtime-kernel","plugin_ve',
-  'rsion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:acf91292322c0b5ee01d',
-  '77ebceae9994d621d5329bda38b3a8e2b1e6a4226b68","artifact_source":"repo+python://src/i',
+  'rsion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:52861a5bd8f2e043a336',
+  '4272028f3040a4f7f2a9ae9cd1912a4f894c13bb573f","artifact_source":"repo+python://src/i',
   'nfrastructure/plugins/v2/schema_services.py","contract":{"config_schema":{"$schema":',
   '"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"propert',
   'ies":{"strategy":{"const":"request-async-session","type":"string"}},"required":["str',
@@ -4815,4 +4815,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:bd474840814c538b6c0fc2a317cc8ad40920356da672ecbda0efd46be92ffac3' as const;
+  'sha256:feaecd4578897916bcfcb46fdf53580ac238dd4c980b1caafa17fcae22ec73ca' as const;

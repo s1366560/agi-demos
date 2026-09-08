@@ -24,6 +24,7 @@ from src.infrastructure.adapters.primary.web.schema_application_authority_v2 imp
     schema_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.schema.active_schema_reads import SchemaCommandRequiredV2
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.schema_services import (
     SchemaAccessDeniedV2,
@@ -41,6 +42,14 @@ router = APIRouter(prefix="/api/v1/projects/{project_id}/schema", tags=["schema"
 async def _schema_call[ResultT](operation: Awaitable[ResultT]) -> ResultT:
     try:
         return await operation
+    except SchemaCommandRequiredV2 as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": error.code,
+                "message": _("Active project schemas require an explicit schema command"),
+            },
+        ) from error
     except SchemaAccessDeniedV2 as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -19,6 +19,14 @@ from src.infrastructure.adapters.secondary.schema.dynamic_schema import (
 )
 
 
+@pytest.fixture(autouse=True)
+def legacy_schema_mode(monkeypatch):
+    """These fixtures describe legacy rows; active mode has isolated PostgreSQL coverage."""
+    prefix = "src.infrastructure.adapters.secondary.schema.dynamic_schema"
+    monkeypatch.setattr(prefix + ".active_schema_snapshot", AsyncMock(return_value=None))
+    monkeypatch.setattr(prefix + ".require_legacy_schema", AsyncMock())
+
+
 @pytest.mark.unit
 class TestDefaultEntityTypes:
     """Tests for default entity types (Graphiti-compatible)."""

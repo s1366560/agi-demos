@@ -7,7 +7,7 @@ based on project-specific entity and edge type definitions stored in the databas
 
 import logging
 from datetime import datetime
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, Field, create_model
 from sqlalchemy import select
@@ -19,6 +19,12 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     EdgeType,
     EdgeTypeMap,
     EntityType,
+)
+from src.infrastructure.adapters.secondary.schema.active_schema_reads import (
+    ActiveSchemaSnapshot,
+    SchemaCommandRequiredV2,
+    active_schema_snapshot,
+    require_legacy_schema,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,6 +50,7 @@ class SchemaContext(TypedDict):
     edge_type_map: dict[tuple[str, str], list[str]]
     entity_type_id_to_name: dict[int, str]
     entity_type_name_to_id: dict[str, int]
+    project_schema_document: NotRequired[dict[str, Any]]
 
 
 # =============================================================================
@@ -206,11 +213,18 @@ async def get_project_schema(
         return entity_types, {}, {}
 
     async with async_session_factory() as session:
+        active = await active_schema_snapshot(session, project_id)
+        if active is not None:
+            return _active_models(active)
         entity_types.update(await _fetch_entity_types(session, project_id))
         edge_types = await _fetch_edge_types(session, project_id)
         edge_type_map = await _fetch_edge_maps(session, project_id)
 
-    return entity_types, edge_types, edge_type_map
+    async with async_session_factory() as session:
+        active = await active_schema_snapshot(session, project_id)
+    return (
+        _active_models(active) if active is not None else (entity_types, edge_types, edge_type_map)
+    )
 
 
 # =============================================================================
@@ -295,10 +309,10 @@ async def _ensure_default_types_initialized(project_id: str) -> None:
     import uuid as uuid_module
 
     # Skip if already initialized in this process
-    if project_id in _initialized_projects:
-        return
-
     async with async_session_factory() as session:
+        await require_legacy_schema(session, project_id)
+        if project_id in _initialized_projects:
+            return
         # Check if any default types exist for this project
         result = await session.execute(
             refresh_select_statement(
@@ -391,14 +405,26 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
     if not project_id:
         return get_default_schema_context()
 
-    # Check cache first
+    async with async_session_factory() as session:
+        active = await active_schema_snapshot(session, project_id)
+    if active is not None:
+        return _active_context(active)
+
+    # Check the legacy cache only after checking active mode.
     cached = _get_cached_schema_context(project_id)
     if cached is not None:
         logger.debug(f"Using cached schema context for project {project_id}")
-        return cached
+        return await _prefer_active_context(project_id, cached)
 
     # Initialize default types in database (first time only)
-    await _ensure_default_types_initialized(project_id)
+    try:
+        await _ensure_default_types_initialized(project_id)
+    except SchemaCommandRequiredV2:
+        async with async_session_factory() as session:
+            active = await active_schema_snapshot(session, project_id)
+        if active is None:
+            raise
+        return _active_context(active)
 
     # Start with empty context - will load all from database
     entity_types_context: list[EntityTypeContext] = []
@@ -460,8 +486,10 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
         entity_type_name_to_id=entity_type_name_to_id,
     )
 
-    # Cache the result
-    _set_cached_schema_context(project_id, context)
+    context = await _prefer_active_context(project_id, context)
+    # Active snapshots must never enter the legacy TTL cache.
+    if "project_schema_document" not in context:
+        _set_cached_schema_context(project_id, context)
     logger.debug(
         f"Loaded schema context for project {project_id}: "
         f"{len(entity_types_context)} entity types, "
@@ -524,6 +552,7 @@ async def initialize_default_types_for_project(project_id: str) -> dict[str, int
     existing_count = 0
 
     async with async_session_factory() as session:
+        await require_legacy_schema(session, project_id)
         # Check existing types for this project
         result = await session.execute(
             refresh_select_statement(
@@ -599,6 +628,7 @@ async def save_discovered_entity_type(
     import uuid
 
     async with async_session_factory() as session:
+        await require_legacy_schema(session, project_id)
         # Check if type already exists
         result = await session.execute(
             refresh_select_statement(
@@ -661,6 +691,7 @@ async def save_discovered_edge_type(
     import uuid
 
     async with async_session_factory() as session:
+        await require_legacy_schema(session, project_id)
         # Check if type already exists
         result = await session.execute(
             refresh_select_statement(
@@ -723,6 +754,7 @@ async def save_discovered_edge_type_map(
     import uuid
 
     async with async_session_factory() as session:
+        await require_legacy_schema(session, project_id)
         # Check if mapping already exists
         result = await session.execute(
             refresh_select_statement(
@@ -800,6 +832,7 @@ async def save_discovered_types_batch(
     edge_type_maps_created = 0
 
     async with async_session_factory() as session:
+        await require_legacy_schema(session, project_id)
         # Get existing entity types
         result = await session.execute(
             refresh_select_statement(
@@ -913,3 +946,51 @@ async def save_discovered_types_batch(
         "edge_types_created": edge_types_created,
         "edge_type_maps_created": edge_type_maps_created,
     }
+
+
+def _active_context(snapshot: ActiveSchemaSnapshot) -> SchemaContext:
+    value = snapshot.document.to_dict()
+    entities = sorted(value["entity_types"], key=lambda item: item["id"])
+    contexts = [
+        EntityTypeContext(
+            entity_type_id=index,
+            entity_type_name=item["name"],
+            entity_type_description=item["description"],
+        )
+        for index, item in enumerate(entities)
+    ]
+    edge_map: dict[tuple[str, str], list[str]] = {}
+    for mapping in snapshot.mappings():
+        edge_map.setdefault((mapping.source_type, mapping.target_type), []).append(
+            mapping.edge_type
+        )
+    return SchemaContext(
+        entity_types_context=contexts,
+        edge_type_map=edge_map,
+        entity_type_id_to_name={index: item["name"] for index, item in enumerate(entities)},
+        entity_type_name_to_id={item["name"]: index for index, item in enumerate(entities)},
+        project_schema_document=value,
+    )
+
+
+def _active_models(
+    snapshot: ActiveSchemaSnapshot,
+) -> tuple[dict[str, Any], dict[str, Any], dict[tuple[str, str], list[str]]]:
+    groups: list[dict[str, Any]] = []
+    for kind in ("entity_types", "edge_types"):
+        models = {}
+        for item in snapshot.document.to_dict()[kind]:
+            model = create_model(
+                item["name"], **_build_typed_fields(item["schema"]), __base__=BaseModel
+            )
+            model.__doc__ = item["description"]
+            models[item["name"]] = model
+        groups.append(models)
+    return groups[0], groups[1], _active_context(snapshot)["edge_type_map"]
+
+
+async def _prefer_active_context(project_id: str, legacy: SchemaContext) -> SchemaContext:
+    """Recheck mode after legacy reads so concurrent enrollment cannot mix snapshots."""
+    async with async_session_factory() as session:
+        active = await active_schema_snapshot(session, project_id)
+    return _active_context(active) if active is not None else legacy
