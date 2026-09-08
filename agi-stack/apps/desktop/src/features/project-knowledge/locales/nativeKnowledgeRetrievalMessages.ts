@@ -29,7 +29,7 @@ export const nativeKnowledgeRetrievalEnUS = {
   'nativeRetrieval.noCoverage': 'Index coverage is not available.',
   'nativeRetrieval.noDenominator': 'No extracted sources to measure.',
   'nativeRetrieval.failureDetailsUnavailable':
-    'This view provides failure counts only. Per-job failure details and retry actions are not available yet.',
+    'This summary provides failure counts only. Historical task failures cannot be listed or retried here.',
   'nativeRetrieval.retrieval': 'Retrieve knowledge',
   'nativeRetrieval.mode': 'Retrieval mode',
   'nativeRetrieval.text': 'Literal text match',
@@ -109,7 +109,7 @@ export const nativeKnowledgeRetrievalZhCN: Record<
   'nativeRetrieval.noCoverage': '索引覆盖率暂不可用。',
   'nativeRetrieval.noDenominator': '暂无可计算覆盖率的已提取来源。',
   'nativeRetrieval.failureDetailsUnavailable':
-    '此视图仅提供失败计数，单任务失败详情和重试操作暂不可用。',
+    '此摘要仅提供失败计数，无法在此列出或重试历史失败任务。',
   'nativeRetrieval.retrieval': '检索知识',
   'nativeRetrieval.mode': '检索方式',
   'nativeRetrieval.text': '字面文本匹配',

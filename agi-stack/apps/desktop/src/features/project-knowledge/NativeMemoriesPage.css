@@ -1,4 +1,5 @@
 @import './NativeKnowledgeRetrieval.css';
+@import './NativeKnowledgeProcessing.css';
 
 .native-memories-page {
   display: grid;

@@ -14,6 +14,8 @@ import { NativeKnowledgeSyncPanel } from './NativeKnowledgeSyncPanel';
 import { NativeKnowledgeConflictEditor } from './NativeKnowledgeConflictEditor';
 import { createNativeKnowledgeRetrievalController } from './nativeKnowledgeRetrievalController';
 import { NativeKnowledgeConfigurationPanel } from './NativeKnowledgeConfigurationPanel';
+import { createNativeKnowledgeProcessingController } from './nativeKnowledgeProcessingController';
+import { NativeKnowledgeProcessingPanel } from './NativeKnowledgeProcessingPanel';
 import {
   NativeKnowledgeRetrievalPanel,
   NativeKnowledgeRetrievalUnavailable,
@@ -66,7 +68,13 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
       sourceClient: binding.client,
       authority: binding.authority,
     });
-    return { list, editor, sync, conflicts, retrieval };
+    const processing = createNativeKnowledgeProcessingController({
+      queryClient: binding.processingClient,
+      commandClient: binding.processingCommandClient,
+      authority: binding.authority,
+      onAccepted: () => retrieval.refreshConfiguration(),
+    });
+    return { list, editor, sync, conflicts, retrieval, processing };
   }, [binding]);
   const list = useSyncExternalStore(
     controllers.list.subscribe,
@@ -93,11 +101,17 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
     controllers.retrieval.getSnapshot,
     controllers.retrieval.getSnapshot,
   );
+  const processing = useSyncExternalStore(
+    controllers.processing.subscribe,
+    controllers.processing.getSnapshot,
+    controllers.processing.getSnapshot,
+  );
   useLayoutEffect(() => {
     controllers.editor.activate();
     controllers.sync.activate();
     controllers.conflicts.activate();
     controllers.retrieval.activate();
+    controllers.processing.activate();
     void controllers.retrieval.refreshConfiguration();
     void controllers.sync.refresh();
     if (controllers.editor.getSnapshot().allowedActions.includes('list'))
@@ -108,14 +122,19 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
       controllers.sync.stop();
       controllers.conflicts.stop();
       controllers.retrieval.stop();
+      controllers.processing.stop();
     };
   }, [binding, controllers]);
   const editorLocked = editor.phase === 'saving' || editor.phase === 'uncertain';
+  const processingLocked = processing.phase === 'executing' || processing.recoveryRequired;
   const syncLocked = sync.phase === 'syncing' || sync.recoveryRequired;
   const conflictLocked = ['checking', 'saving', 'uncertain'].includes(conflict.phase);
   return (
     <>
-      <fieldset className="native-knowledge-route-boundary" disabled={syncLocked || conflictLocked}>
+      <fieldset
+        className="native-knowledge-route-boundary"
+        disabled={syncLocked || conflictLocked || processingLocked}
+      >
         <NativeMemoriesPage
           list={list}
           editor={editor}
@@ -134,12 +153,12 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
         model={sync}
         controller={controllers.sync}
         conflicts={controllers.conflicts}
-        disabled={editorLocked || conflictLocked}
+        disabled={editorLocked || conflictLocked || processingLocked}
       />
       <NativeKnowledgeConflictEditor
         model={conflict}
         controller={controllers.conflicts}
-        disabled={editorLocked || syncLocked}
+        disabled={editorLocked || syncLocked || processingLocked}
       />
       {!binding.processingClient &&
       ['configuration', 'text', 'semantic', 'entities', 'relationships'].some((operation) =>
@@ -151,15 +170,20 @@ function BoundNativeMemoriesRoute({ binding }: Readonly<{ binding: NativeMemorie
           <NativeKnowledgeConfigurationPanel
             model={retrieval}
             controller={controllers.retrieval}
-            disabled={editorLocked || syncLocked || conflictLocked}
+            disabled={editorLocked || syncLocked || conflictLocked || processingLocked}
           />
           <NativeKnowledgeRetrievalPanel
             model={retrieval}
             controller={controllers.retrieval}
-            disabled={editorLocked || syncLocked || conflictLocked}
+            disabled={editorLocked || syncLocked || conflictLocked || processingLocked}
           />
         </>
       )}
+      <NativeKnowledgeProcessingPanel
+        model={processing}
+        controller={controllers.processing}
+        disabled={editorLocked || syncLocked || conflictLocked}
+      />
     </>
   );
 }

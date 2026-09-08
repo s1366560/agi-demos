@@ -67,7 +67,7 @@ test('configuration separates desired from active build and extraction failures 
   assert.match(html, /Failed index jobs<\/th><td>0/);
   assert.match(html, /2 \/ 2 \(100\.0%\)/);
   assert.match(html, /Pending or failed extraction is shown separately/);
-  assert.match(html, /Per-job failure details and retry actions are not available yet/);
+  assert.match(html, /Historical task failures cannot be listed or retried here/);
   assert.doesNotMatch(html, /Ready|Healthy|Retry<|Rebuild<|Promote</);
 });
 
