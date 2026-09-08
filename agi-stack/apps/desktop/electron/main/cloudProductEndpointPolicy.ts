@@ -1,4 +1,5 @@
 import { authorizeWorkspaceCollaborationMutation } from './cloudWorkspaceCollaborationMutationPolicy';
+import { authorizeCloudMemoryEndpoint } from './cloudMemoryEndpointPolicy';
 
 export type CloudProductRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -146,6 +147,8 @@ export function authorizeCloudProductEndpoint(
 ): CloudProductEndpoint | null {
   const segments = target.pathname.split('/');
   if (segments[1] !== 'api' || segments[2] !== 'v1') return null;
+  const memory = authorizeCloudMemoryEndpoint(request, target);
+  if (memory) return memory;
 
   const privilegedTransfer = authorizePrivilegedTransfer(request, target, segments);
   if (privilegedTransfer) return privilegedTransfer;

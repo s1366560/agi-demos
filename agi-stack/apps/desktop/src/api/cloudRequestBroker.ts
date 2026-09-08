@@ -3,9 +3,14 @@ import {
   requireCloudSandboxFileAuthority,
 } from './cloudSandboxDownloadAuthority';
 import { DesktopApiError } from './client';
+import {
+  cloudMemoryMutationFromHeaders,
+  type CloudMemoryMutation,
+} from './cloudMemoryCommandContract';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type VaultBoundCloudMutation =
+  | CloudMemoryMutation
   | Readonly<{
       expected_revision: number;
       idempotency_key: string;
@@ -373,6 +378,8 @@ function hasControl(value: string): boolean {
 
 function mutationAuthority(headersInit: HeadersInit | undefined): VaultBoundCloudMutation | null {
   const headers = new Headers(headersInit);
+  const memoryMutation = cloudMemoryMutationFromHeaders(headers);
+  if (memoryMutation) return memoryMutation;
   const revision = headers.get('X-Expected-Revision');
   const idempotencyKey = headers.get('Idempotency-Key');
   if (revision === null && idempotencyKey === null) return null;

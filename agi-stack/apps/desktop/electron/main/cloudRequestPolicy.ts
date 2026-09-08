@@ -4,6 +4,12 @@ import {
 } from '../../src/api/cloudSandboxDownloadAuthority';
 import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
+import { authorizeCloudMemoryEndpoint } from './cloudMemoryEndpointPolicy';
+import {
+  CLOUD_MEMORY_REVISION_HEADER,
+  requireCloudMemoryMutation,
+  type CloudMemoryMutation,
+} from '../../src/api/cloudMemoryCommandContract';
 import {
   cloudRunReviewTarget,
   requireCloudRunSummaryScope,
@@ -20,6 +26,7 @@ export type VaultBoundCloudRequestInput = Readonly<{
 }>;
 
 type VaultBoundCloudMutation =
+  | CloudMemoryMutation
   | Readonly<{
       expected_revision: number;
       idempotency_key: string;
@@ -698,6 +705,12 @@ function parseMutation(
   method: string,
 ): VaultBoundCloudRequestInput['mutation'] | null {
   if (input === undefined) return null;
+  if (isRecord(input) && input.kind === 'memory-command') {
+    if (!['POST', 'PATCH', 'DELETE'].includes(method)) {
+      throw new Error('cloud request mutation is invalid');
+    }
+    return requireCloudMemoryMutation(input);
+  }
   if (isRecord(input) && input.kind === 'idempotency-only') {
     const mutation = exactRecord(
       input,
@@ -740,6 +753,11 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
     target.hash
   ) {
     throw new Error('cloud request endpoint is not allowed');
+  }
+  if (request.mutation && 'kind' in request.mutation && request.mutation.kind === 'memory-command') {
+    const memory = authorizeCloudMemoryEndpoint(request, target);
+    if (memory) return memory;
+    throw new Error('cloud request memory endpoint is not allowed');
   }
   if (request.form !== undefined || request.response !== undefined) {
     const specializedEndpoint = authorizeCloudProductEndpoint(request, target);
@@ -920,7 +938,8 @@ async function authorizedFetch(
   if (request.body !== undefined) headers.set('Content-Type', 'application/json');
   if (request.mutation) {
     if ('expected_revision' in request.mutation) {
-      headers.set('X-Expected-Revision', String(request.mutation.expected_revision));
+      headers.set('kind' in request.mutation && request.mutation.kind === 'memory-command'
+        ? CLOUD_MEMORY_REVISION_HEADER : 'X-Expected-Revision', String(request.mutation.expected_revision));
     }
     headers.set('Idempotency-Key', request.mutation.idempotency_key);
   }
