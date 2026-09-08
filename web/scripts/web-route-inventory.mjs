@@ -5,6 +5,8 @@ import { isAbsolute, posix, relative, resolve, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
+import { isolatedGitEnvironment } from './isolated-git-environment.mjs';
+
 import {
   addProductionRouteKeys,
   extractCanonicalNavigationTargets,
@@ -113,6 +115,7 @@ function readRepositorySource(repositoryRoot, sourceEntry) {
 function resolveGitRevision(repositoryRoot, revision = 'HEAD') {
   const resolvedRevision = execFileSync('git', ['rev-parse', '--verify', `${revision}^{commit}`], {
     cwd: repositoryRoot,
+    env: isolatedGitEnvironment(),
     encoding: 'utf8',
   }).trim();
   if (!REVISION_PATTERN.test(resolvedRevision)) {
@@ -128,6 +131,7 @@ function readGitBlob(repositoryRoot, revision, sourceEntry) {
   }
   return execFileSync('git', ['show', `${revision}:${canonicalSourceEntry}`], {
     cwd: repositoryRoot,
+    env: isolatedGitEnvironment(),
     maxBuffer: 16 * 1024 * 1024,
   });
 }
@@ -136,6 +140,7 @@ function assertRevisionIsAncestor(repositoryRoot, sourceRevision, headRevision) 
   try {
     execFileSync('git', ['merge-base', '--is-ancestor', sourceRevision, headRevision], {
       cwd: repositoryRoot,
+      env: isolatedGitEnvironment(),
       stdio: 'pipe',
     });
   } catch {

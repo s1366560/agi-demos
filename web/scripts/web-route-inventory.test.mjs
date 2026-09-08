@@ -1249,3 +1249,4 @@ export const jsxRoutes = createRoutesFromElements(
 });
 
 await import('./web-route-inventory-revision-cases.mjs');
+await import('./web-route-inventory-git-isolation.test.mjs');

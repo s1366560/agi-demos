@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 
+import { isolatedGitEnvironment } from './isolated-git-environment.mjs';
+
 import { checkWebRouteInventory, serializeWebRouteInventory } from './web-route-inventory.mjs';
 
 const navigationSource = `
@@ -57,6 +59,7 @@ export function App() {
 `;
 
 test('inventory binds audited source hashes to its declared revision and current HEAD blobs', () => {
+  const env = isolatedGitEnvironment();
   const sandbox = mkdtempSync(resolve(tmpdir(), 'memstack-route-revision-binding-'));
   const isolatedRepository = resolve(sandbox, 'repository');
   const contractPath = resolve(
@@ -71,10 +74,7 @@ test('inventory binds audited source hashes to its declared revision and current
       'web/src/pages/tenant/TenantOverview.tsx',
       'export function TenantOverview() { return <main>Overview</main>; }\n',
     ],
-    [
-      'web/src/pages/DefaultPage.tsx',
-      "export { default } from './DefaultPageImpl';\n",
-    ],
+    ['web/src/pages/DefaultPage.tsx', "export { default } from './DefaultPageImpl';\n"],
     [
       'web/src/pages/DefaultPageImpl.tsx',
       'export default function DefaultPage() { return <main>Default</main>; }\n',
@@ -85,18 +85,22 @@ test('inventory binds audited source hashes to its declared revision and current
     mkdirSync(resolve(absolutePath, '..'), { recursive: true });
     writeFileSync(absolutePath, source);
   }
-  execFileSync('git', ['init', '-q'], { cwd: isolatedRepository });
+  execFileSync('git', ['init', '-q'], { env, cwd: isolatedRepository });
   execFileSync('git', ['config', 'user.email', 'route-inventory@example.invalid'], {
+    env,
     cwd: isolatedRepository,
   });
   execFileSync('git', ['config', 'user.name', 'Route Inventory Test'], {
+    env,
     cwd: isolatedRepository,
   });
-  execFileSync('git', ['add', '.'], { cwd: isolatedRepository });
+  execFileSync('git', ['add', '.'], { env, cwd: isolatedRepository });
   execFileSync('git', ['commit', '-qm', 'test: add route sources'], {
+    env,
     cwd: isolatedRepository,
   });
   const sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], {
+    env,
     cwd: isolatedRepository,
     encoding: 'utf8',
   }).trim();
@@ -110,16 +114,14 @@ test('inventory binds audited source hashes to its declared revision and current
         sourceRevision,
       })
     );
-    execFileSync('git', ['add', '.'], { cwd: isolatedRepository });
+    execFileSync('git', ['add', '.'], { env, cwd: isolatedRepository });
     execFileSync('git', ['commit', '-qm', 'test: add route inventory'], {
+      env,
       cwd: isolatedRepository,
     });
     assert.deepEqual(checkWebRouteInventory({ repositoryRoot: isolatedRepository }).errors, []);
 
-    const dependencyPath = resolve(
-      isolatedRepository,
-      'web/src/pages/DefaultPageImpl.tsx'
-    );
+    const dependencyPath = resolve(isolatedRepository, 'web/src/pages/DefaultPageImpl.tsx');
     const dependencySource = sources.get('web/src/pages/DefaultPageImpl.tsx');
     const changedDependency = dependencySource.replace('>Default<', '>Changed dependency<');
     writeFileSync(dependencyPath, changedDependency);
@@ -139,9 +141,11 @@ test('inventory binds audited source hashes to its declared revision and current
 
     writeFileSync(dependencyPath, changedDependency);
     execFileSync('git', ['add', 'web/src/pages/DefaultPageImpl.tsx'], {
+      env,
       cwd: isolatedRepository,
     });
     execFileSync('git', ['commit', '-qm', 'test: change routed production dependency'], {
+      env,
       cwd: isolatedRepository,
     });
     const committedDependencyErrors = checkWebRouteInventory({
@@ -157,9 +161,11 @@ test('inventory binds audited source hashes to its declared revision and current
     );
     writeFileSync(dependencyPath, dependencySource);
     execFileSync('git', ['add', 'web/src/pages/DefaultPageImpl.tsx'], {
+      env,
       cwd: isolatedRepository,
     });
     execFileSync('git', ['commit', '-qm', 'test: restore routed production dependency'], {
+      env,
       cwd: isolatedRepository,
     });
     assert.deepEqual(checkWebRouteInventory({ repositoryRoot: isolatedRepository }).errors, []);
@@ -174,8 +180,9 @@ test('inventory binds audited source hashes to its declared revision and current
       true
     );
 
-    execFileSync('git', ['add', 'web/src/App.tsx'], { cwd: isolatedRepository });
+    execFileSync('git', ['add', 'web/src/App.tsx'], { env, cwd: isolatedRepository });
     execFileSync('git', ['commit', '-qm', 'test: change production route'], {
+      env,
       cwd: isolatedRepository,
     });
     const committedErrors = checkWebRouteInventory({ repositoryRoot: isolatedRepository }).errors;
