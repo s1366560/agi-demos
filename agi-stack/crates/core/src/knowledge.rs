@@ -8,6 +8,7 @@ pub mod document;
 pub use document::KnowledgeMemory;
 use document::KnowledgeMemory as Memory;
 
+pub mod community;
 pub mod diagnostics;
 pub mod index;
 pub mod processing;
