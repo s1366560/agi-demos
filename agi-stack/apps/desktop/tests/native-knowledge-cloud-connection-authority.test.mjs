@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { pullContext } from './nativeKnowledgeFixtures.mjs';
 import { readFileSync, readdirSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const root = '/tmp/agistack-desktop-test-dist/src';
@@ -20,7 +21,11 @@ const scope = {
   generation: 4,
   digest: 'a'.repeat(64),
 };
-const projectScope = { authority: 'local', tenantId: scope.tenant_id, projectId: scope.project_id };
+const projectScope = {
+  authority: 'local',
+  tenantId: scope.tenant_id,
+  projectId: scope.project_id,
+};
 const config = {
   apiBaseUrl: 'http://127.0.0.1:43117',
   deviceAuthorizationBaseUrl: 'https://cloud.test',
@@ -39,7 +44,11 @@ const connection = {
 };
 const generation = {
   contract_version: '1.0.0',
-  descriptor: { profile_id: 'cloud-profile', generation: 81, digest: 'c'.repeat(64) },
+  descriptor: {
+    profile_id: 'cloud-profile',
+    generation: 81,
+    digest: 'c'.repeat(64),
+  },
 };
 const enrollment = {
   contract_version: '1.0.0',
@@ -72,7 +81,10 @@ const status = {
 const cases = [
   [{ operation: 'connection' }, { connection }],
   [
-    { operation: 'tenants', expected_connection_revision: connection.connection_revision },
+    {
+      operation: 'tenants',
+      expected_connection_revision: connection.connection_revision,
+    },
     { connection, items: [{ id: 'remote-tenant', name: 'Team' }] },
   ],
   [
@@ -149,7 +161,9 @@ test('all six connection RPCs use the local authority and exact observed fields'
         );
       };
       const client = createDesktopNativeKnowledgeConnectionHttpV2(config, projectScope);
-      const response = await client.executeConnection(command, { expectedScope: scope });
+      const response = await client.executeConnection(command, {
+        expectedScope: scope,
+      });
       assert.deepEqual(response, envelope(result));
       assert.equal(requests.length, 2);
       assert.equal(new URL(requests[1].url).origin, config.apiBaseUrl);
@@ -179,7 +193,9 @@ test('connection commands retain the project service lease and immutable inputs'
       ),
       config,
     );
-    const response = await client.execute(projectScope, command, { expectedScope: scope });
+    const response = await client.execute(projectScope, command, {
+      expectedScope: scope,
+    });
     assert(Object.isFrozen(response));
     assert(Object.isFrozen(response.result));
     assert.deepEqual(
@@ -228,12 +244,18 @@ test('scope, connection, cloud generation and selected actor mismatches are reje
       ...validResult,
       connection: { ...connection, connection_revision: 'd'.repeat(64) },
     }),
-    envelope({ ...validResult, enrollment: { ...enrollment, actor_id: 'wrong' } }),
+    envelope({
+      ...validResult,
+      enrollment: { ...enrollment, actor_id: 'wrong' },
+    }),
     envelope({
       ...validResult,
       enrollment: {
         ...enrollment,
-        generation: { ...generation, descriptor: { ...generation.descriptor, generation: 82 } },
+        generation: {
+          ...generation,
+          descriptor: { ...generation.descriptor, generation: 82 },
+        },
       },
     }),
     envelope({
@@ -288,7 +310,7 @@ test('a retired generation and retained connection authority cannot execute', as
   assert.equal(calls, 0);
 });
 
-test('the published native QA snapshot keeps its digest through the real renderer Loader and connection lease', async () => {
+test('the published native QA snapshot binds initial sync and conflict reads through the real renderer Loader', async () => {
   const { LoaderV2, createDesktopRendererDefinitionsV2 } = require('@agistack/plugin-runtime');
   const { createDesktopNativeKnowledgeClientV2 } = require(
     root + '/plugins/desktopProjectMemoriesAuthorityModuleV2.js',
@@ -331,13 +353,39 @@ test('the published native QA snapshot keeps its digest through the real rendere
       })),
   }));
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
+  let actorId = 'local-actor';
+  let actorReads = 0;
+  let returnedScope = native;
+  const queries = [];
+  globalThis.fetch = async (url, init) => {
     const path = new URL(url).pathname;
-    if (path === '/api/v1/auth/me') return json({ user_id: 'local-actor', is_active: true });
+    if (path === '/api/v1/auth/me') {
+      actorReads += 1;
+      return json({ user_id: actorId, is_active: true });
+    }
     if (path === '/api/v1/knowledge/context')
-      return json({ contract_version: '1.0.0', scope: native });
+      return json({ contract_version: '1.0.0', scope: returnedScope });
+    if (path === '/api/v1/knowledge/query') {
+      const body = JSON.parse(init.body);
+      assert.deepEqual(body.scope, native);
+      queries.push(body.query.operation);
+      const result =
+        body.query.operation === 'sync_status'
+          ? { status: { ...status, link: null } }
+          : {
+              context: {
+                ...pullContext,
+                local: { ...pullContext.local, project_id: native.project_id },
+              },
+            };
+      return json({ contract_version: '1.0.0', scope: native, result });
+    }
     assert.equal(path, '/api/v1/knowledge/sync-connection');
-    return json({ contract_version: '1.0.0', scope: native, result: { connection: null } });
+    return json({
+      contract_version: '1.0.0',
+      scope: native,
+      result: { connection: null },
+    });
   };
   try {
     const observed = await createDesktopNativeKnowledgeClientV2(operations, config).observeScope(
@@ -351,6 +399,81 @@ test('the published native QA snapshot keeps its digest through the real rendere
     );
     assert.equal(result.scope.digest, snapshot.digest);
     assert.equal(result.result.connection, null);
+    actorReads = 0;
+    const { createNativeKnowledgeSyncController } = require(
+      root + '/features/project-knowledge/nativeKnowledgeSyncController.js',
+    );
+    const controller = createNativeKnowledgeSyncController({
+      client: createDesktopNativeKnowledgeClientV2(operations, config),
+      authority: {
+        scope: projectScope,
+        userId: 'local-actor',
+        sessionId: 'session',
+        contextRevision: native.context_revision,
+        generationDigest: native.digest,
+        available: true,
+        allowedActions: ['sync_status', 'sync_pull', 'sync_push'],
+      },
+    });
+    await controller.refresh();
+    assert.equal(
+      actorReads,
+      2,
+      'initial sync must verify the local actor before and after scope discovery',
+    );
+    assert.equal(controller.getSnapshot().error, null);
+    assert.equal(controller.getSnapshot().phase, 'ready');
+    assert.equal(controller.getSnapshot().status.link, null);
+    await controller.sync('sync_pull');
+    await controller.sync('sync_push');
+    assert.equal(controller.getSnapshot().phase, 'ready');
+    assert.deepEqual(queries, ['sync_status']);
+    const { createNativeKnowledgeConflictController } = require(
+      root + '/features/project-knowledge/nativeKnowledgeConflictController.js',
+    );
+    const conflicts = createNativeKnowledgeConflictController({
+      client: createDesktopNativeKnowledgeClientV2(operations, config),
+      authority: {
+        scope: projectScope,
+        userId: 'local-actor',
+        sessionId: 'session',
+        contextRevision: native.context_revision,
+        generationDigest: native.digest,
+        available: true,
+        allowedActions: ['pull_conflict_context'],
+      },
+    });
+    await conflicts.open({ kind: 'pull', id: pullContext.local.id });
+    assert.equal(conflicts.getSnapshot().error, null);
+    assert.equal(conflicts.getSnapshot().phase, 'reviewing');
+    assert.deepEqual(queries, ['sync_status', 'pull_conflict_context']);
+    for (const drift of [
+      { actor: 'other-actor' },
+      { scope: { ...native, tenant_id: 'other-tenant' } },
+      { scope: { ...native, project_id: 'other-project' } },
+      { scope: { ...native, context_revision: native.context_revision + 1 } },
+      { scope: { ...native, digest: 'e'.repeat(64) } },
+      { scope: { ...native, generation: native.generation + 1 } },
+    ]) {
+      actorId = drift.actor ?? 'local-actor';
+      returnedScope = drift.scope ?? native;
+      const invalid = createNativeKnowledgeSyncController({
+        client: createDesktopNativeKnowledgeClientV2(operations, config),
+        authority: {
+          scope: projectScope,
+          userId: 'local-actor',
+          sessionId: 'session',
+          contextRevision: native.context_revision,
+          generationDigest: native.digest,
+          available: true,
+          allowedActions: ['sync_status'],
+        },
+      });
+      await invalid.refresh();
+      assert.equal(invalid.getSnapshot().status, null);
+      assert.notEqual(invalid.getSnapshot().error, null);
+      assert.deepEqual(queries, ['sync_status', 'pull_conflict_context']);
+    }
   } finally {
     globalThis.fetch = originalFetch;
     await generation.dispose();

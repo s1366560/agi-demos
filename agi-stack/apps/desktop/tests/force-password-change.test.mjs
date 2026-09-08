@@ -8,12 +8,8 @@ const {
   completeForcedPasswordChangeOutcome,
   passwordChangeGateAuthState,
   validateForcedPasswordChange,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/auth/forcePasswordChangeModel.js',
-);
-const { DesktopApiClient } = require(
-  '/tmp/agistack-desktop-test-dist/src/api/client.js',
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/auth/forcePasswordChangeModel.js');
+const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
@@ -115,7 +111,10 @@ test('desktop password change uses the authenticated endpoint without URL creden
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), init });
     return new Response(
-      JSON.stringify({ success: true, message: 'Password changed successfully' }),
+      JSON.stringify({
+        success: true,
+        message: 'Password changed successfully',
+      }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
   };
@@ -127,25 +126,16 @@ test('desktop password change uses the authenticated endpoint without URL creden
       apiBaseUrl: 'https://api.memstack.test',
       apiKey: 'transient-token',
     });
-    const outcome = await client.forceChangePassword(
-      'current-password',
-      'new-password',
-    );
+    const outcome = await client.forceChangePassword('current-password', 'new-password');
 
     assert.deepEqual(outcome, {
       success: true,
       message: 'Password changed successfully',
     });
     assert.equal(calls.length, 1);
-    assert.equal(
-      calls[0].input,
-      'https://api.memstack.test/api/v1/auth/force-change-password',
-    );
+    assert.equal(calls[0].input, 'https://api.memstack.test/api/v1/auth/force-change-password');
     assert.equal(calls[0].init.method, 'POST');
-    assert.equal(
-      new Headers(calls[0].init.headers).get('Authorization'),
-      'Bearer transient-token',
-    );
+    assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer transient-token');
     assert.deepEqual(JSON.parse(String(calls[0].init.body)), {
       old_password: 'current-password',
       new_password: 'new-password',
@@ -204,17 +194,11 @@ test('App retains fallback tokens only for the guarded flow and keeps native tok
   const projectedSession = flowSource.indexOf('hydrateProjectedCloudSession(');
   assert.ok(passwordChange >= 0);
   assert.ok(projectedSession > passwordChange);
-  assert.doesNotMatch(
-    flowSource,
-    /localStorage|sessionStorage|saveNativeTrustedSession/,
-  );
+  assert.doesNotMatch(flowSource, /localStorage|sessionStorage|saveNativeTrustedSession/);
 
-  assert.match(
-    nativeCloudAuthSource,
-    /invoke\('cloud_auth_force_password_change', input\)/,
-  );
+  assert.match(nativeCloudAuthSource, /invoke\('cloud_auth_force_password_change', input\)/);
   const tokenAdoption = cloudAuthenticationAuthoritySource.indexOf(
-    'await this.#adoptToken(apiBaseUrl, token, input.trustedDevice)',
+    'await this.#adoptToken(apiBaseUrl, token, input.trustedDevice, revision)',
   );
   const passwordChangeStart = cloudAuthenticationAuthoritySource.indexOf(
     'async forceChangePassword(',
@@ -223,7 +207,14 @@ test('App retains fallback tokens only for the guarded flow and keeps native tok
     'const session = await this.#trustedSession()',
     passwordChangeStart,
   );
-  assert.ok(tokenAdoption >= 0);
+  const loginStart = cloudAuthenticationAuthoritySource.indexOf('async loginWithPassword(');
+  const attemptRevision = cloudAuthenticationAuthoritySource.indexOf(
+    'const revision = this.#retireAttempt()',
+    loginStart,
+  );
+  assert.ok(loginStart >= 0);
+  assert.ok(attemptRevision > loginStart);
+  assert.ok(tokenAdoption > attemptRevision);
   assert.ok(passwordChangeStart > tokenAdoption);
   assert.ok(trustedSessionRead > passwordChangeStart);
 });

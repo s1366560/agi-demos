@@ -11,7 +11,10 @@ export function createNativeKnowledgeUiSession(
   client: NativeKnowledgeClient,
   input: NativeMemoriesAuthority,
 ) {
-  const authority = Object.freeze({ ...input, scope: Object.freeze({ ...input.scope }) });
+  const authority = Object.freeze({
+    ...input,
+    scope: Object.freeze({ ...input.scope }),
+  });
   const allowedActions: readonly string[] = Object.freeze(
     authority.available &&
       authority.scope.authority === 'local' &&
@@ -59,23 +62,43 @@ export function createNativeKnowledgeUiSession(
         'reconcile_resolution',
       ].includes(command.operation)
     ) {
-      throw Object.assign(new Error('project_knowledge_scope_conflict'), { status: 409 });
+      throw Object.assign(new Error('project_knowledge_scope_conflict'), {
+        status: 409,
+      });
+    }
+    const boundScope =
+      expectedScope ??
+      (await client.observeScope(authority.scope, {
+        expectedActorId: authority.userId!,
+        signal: request.signal,
+      }));
+    if (!current(request)) throw new Error('request_cancelled');
+    if (
+      boundScope.tenant_id !== authority.scope.tenantId ||
+      boundScope.project_id !== authority.scope.projectId ||
+      boundScope.context_revision !== authority.contextRevision ||
+      boundScope.digest !== authority.generationDigest
+    ) {
+      throw Object.assign(new Error('project_knowledge_scope_conflict'), {
+        status: 409,
+      });
     }
     const response = await client.execute(authority.scope, command, {
       signal: request.signal,
-      expectedScope: expectedScope as NativeKnowledgeScope,
+      expectedScope: boundScope,
     });
     if (!current(request)) throw new Error('request_cancelled');
     if (
       response.scope.tenant_id !== authority.scope.tenantId ||
       response.scope.project_id !== authority.scope.projectId ||
       response.scope.context_revision !== authority.contextRevision ||
-      (expectedScope &&
-        (response.scope.profile_id !== expectedScope.profile_id ||
-          response.scope.generation !== expectedScope.generation ||
-          response.scope.digest !== expectedScope.digest))
+      response.scope.profile_id !== boundScope.profile_id ||
+      response.scope.generation !== boundScope.generation ||
+      response.scope.digest !== boundScope.digest
     ) {
-      throw Object.assign(new Error('project_knowledge_scope_conflict'), { status: 409 });
+      throw Object.assign(new Error('project_knowledge_scope_conflict'), {
+        status: 409,
+      });
     }
     return response;
   };

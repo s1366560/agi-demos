@@ -21,13 +21,18 @@ const authority = {
   userId: 'local-actor',
   sessionId: 'session-1',
   contextRevision: nativeScope.context_revision,
-  generationDigest: 'renderer-1',
+  generationDigest: nativeScope.digest,
   available: true,
   allowedActions: all,
 };
 function fixture(options = {}) {
   const calls = [];
   const client = {
+    observeScope: async (scope, request) => {
+      assert.deepEqual(scope, projectScope);
+      assert.equal(request.expectedActorId, 'local-actor');
+      return options.observeScope ? options.observeScope(request) : nativeScope;
+    },
     execute: async (scope, command, request) => {
       calls.push({ scope, command, request });
       const result = options.execute ? await options.execute(command, request, calls) : undefined;
@@ -63,7 +68,9 @@ test('sync never infers operation permissions from CRUD and invalid bindings per
     await controller.sync('sync_pull');
     assert.equal(calls.length, 0);
   }
-  const { controller, calls } = fixture({ authority: { allowedActions: ['sync_status'] } });
+  const { controller, calls } = fixture({
+    authority: { allowedActions: ['sync_status'] },
+  });
   await controller.refresh();
   await controller.sync('sync_pull');
   assert.deepEqual(
@@ -87,7 +94,7 @@ test('sync refresh fetches only declared collections and forwards the observed s
       'resolutions',
     ],
   );
-  for (const call of calls.slice(1)) assert.deepEqual(call.request.expectedScope, nativeScope);
+  for (const call of calls) assert.deepEqual(call.request.expectedScope, nativeScope);
   await controller.sync('sync_pull');
   assert.equal(calls.filter((item) => item.command.operation === 'sync_pull').length, 1);
   assert.equal(controller.getSnapshot().result.applied, 1);
@@ -151,6 +158,7 @@ test('sync scope drift clears data, no configured link forbids sync, and stop di
       }),
   });
   const work = late.controller.refresh();
+  await new Promise(setImmediate);
   late.controller.stop();
   release();
   await work;
@@ -185,7 +193,12 @@ test('explicit pages use returned cursors and suppress duplicate simultaneous sy
         return new Promise((resolve) => {
           release = () =>
             resolve(
-              envelope(command, { next_cursor: 1, applied: 1, conflicts: 0, has_more: false }),
+              envelope(command, {
+                next_cursor: 1,
+                applied: 1,
+                conflicts: 0,
+                has_more: false,
+              }),
             );
         });
     },
@@ -229,4 +242,20 @@ test('scope changes while loading a subsequent page clear previous sensitive sta
   assert.equal(controller.getSnapshot().error, 'contextChanged');
   assert.equal(controller.getSnapshot().status, null);
   assert.equal(controller.getSnapshot().outbox, null);
+});
+
+test('a stopped scope observation cannot start a status RPC or publish stale state', async () => {
+  let release;
+  const { controller, calls } = fixture({
+    observeScope: () =>
+      new Promise((resolve) => {
+        release = () => resolve(nativeScope);
+      }),
+  });
+  const pending = controller.refresh();
+  controller.stop();
+  release();
+  await pending;
+  assert.deepEqual(calls, []);
+  assert.equal(controller.getSnapshot().status, null);
 });

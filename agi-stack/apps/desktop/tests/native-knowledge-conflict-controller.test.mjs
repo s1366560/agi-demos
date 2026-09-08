@@ -30,7 +30,7 @@ const authority = {
   userId: 'local-actor',
   sessionId: 'session-1',
   contextRevision: nativeScope.context_revision,
-  generationDigest: 'renderer-1',
+  generationDigest: nativeScope.digest,
   available: true,
   allowedActions: all,
 };
@@ -38,6 +38,11 @@ function fixture(options = {}) {
   const calls = [];
   let serial = 0;
   const client = {
+    observeScope: async (scope, request) => {
+      assert.deepEqual(scope, projectScope);
+      assert.equal(request.expectedActorId, 'local-actor');
+      return options.observeScope ? options.observeScope(request) : nativeScope;
+    },
     execute: async (scope, command, request) => {
       calls.push({ scope, command, request });
       const result = options.execute ? await options.execute(command, request, calls) : undefined;
@@ -216,11 +221,18 @@ test('resume rechecks persisted record; completed or rejected records cannot res
     execute: async (command) =>
       command.operation === 'resolution'
         ? envelope(command, {
-            record: { ...record, receipt: null, rejection: { error: 'rejected' } },
+            record: {
+              ...record,
+              receipt: null,
+              rejection: { error: 'rejected' },
+            },
           })
         : undefined,
   });
-  await rejected.controller.open({ kind: 'resolution', id: record.resolution_id });
+  await rejected.controller.open({
+    kind: 'resolution',
+    id: record.resolution_id,
+  });
   await rejected.controller.submit();
   assert.equal(
     rejected.calls.some((item) => item.command.operation === 'resume_resolution'),
@@ -260,12 +272,14 @@ test('late context and accepted writes cannot repopulate a stopped or replaced b
       }),
   });
   const work = controller.open({ kind: 'pull', id: 'memory-1' });
+  await new Promise(setImmediate);
   controller.stop();
   release();
   await work;
   assert.equal(controller.getSnapshot().context, null);
   controller.activate();
   const next = controller.open({ kind: 'pull', id: 'memory-1' });
+  await new Promise(setImmediate);
   release();
   await next;
   assert.equal(controller.getSnapshot().phase, 'reviewing');
