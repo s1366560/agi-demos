@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memstack.local/schemas/native-knowledge-definitions-8.v1.schema.json",
+  "title": "Native knowledge stored and mutation memory views",
+  "$defs": {
+    "NativeKnowledgeStoredMemory": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "author_id": {
+          "type": "string"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEntity"
+          }
+        },
+        "version": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string"
+        },
+        "created_at_ms": {
+          "type": "number"
+        },
+        "embedding": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "title",
+        "content",
+        "author_id",
+        "content_type",
+        "tags",
+        "entities",
+        "version",
+        "status",
+        "created_at_ms",
+        "embedding"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeMutationMemory": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "author_id": {
+          "type": "string"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEntity"
+          }
+        },
+        "version": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string"
+        },
+        "created_at_ms": {
+          "type": "number"
+        },
+        "embedding": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "title",
+        "content",
+        "author_id",
+        "content_type",
+        "tags",
+        "entities",
+        "version",
+        "status",
+        "created_at_ms"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

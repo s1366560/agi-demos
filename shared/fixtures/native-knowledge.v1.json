@@ -1,0 +1,540 @@
+{
+  "contract_version": "1.0.0",
+  "requests": [
+    {
+      "name": "get",
+      "path": "/api/v1/knowledge/query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "get",
+          "id": "memory"
+        }
+      }
+    },
+    {
+      "name": "list",
+      "path": "/api/v1/knowledge/query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "list",
+          "limit": 20,
+          "offset": 0
+        }
+      }
+    },
+    {
+      "name": "create",
+      "path": "/api/v1/knowledge/mutations",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "mutation": {
+          "operation": "create",
+          "memory": {
+            "id": "memory",
+            "project_id": "project",
+            "title": "Title",
+            "content": "Content",
+            "author_id": "actor",
+            "content_type": "text",
+            "tags": [],
+            "entities": [
+              {
+                "name": "Example",
+                "kind": "Concept"
+              }
+            ],
+            "version": 1,
+            "status": "ENABLED",
+            "created_at_ms": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "update",
+      "path": "/api/v1/knowledge/mutations",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "mutation": {
+          "operation": "update",
+          "memory": {
+            "id": "memory",
+            "project_id": "project",
+            "title": "Title",
+            "content": "Content",
+            "author_id": "actor",
+            "content_type": "text",
+            "tags": [],
+            "entities": [
+              {
+                "name": "Example",
+                "kind": "Concept"
+              }
+            ],
+            "version": 1,
+            "status": "ENABLED",
+            "created_at_ms": 1
+          },
+          "expected_revision": 1
+        }
+      }
+    },
+    {
+      "name": "delete",
+      "path": "/api/v1/knowledge/mutations",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "mutation": {
+          "operation": "delete",
+          "id": "memory",
+          "expected_revision": 1
+        }
+      }
+    },
+    {
+      "name": "link",
+      "path": "/api/v1/knowledge/sync-link",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "link": {
+          "remote_tenant_id": "remote-tenant",
+          "remote_project_id": "remote-project",
+          "remote_actor_id": "remote-actor"
+        }
+      }
+    },
+    {
+      "name": "push",
+      "path": "/api/v1/knowledge/sync-push",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        }
+      }
+    },
+    {
+      "name": "pull",
+      "path": "/api/v1/knowledge/sync-pull",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        }
+      }
+    },
+    {
+      "name": "resolve-pull",
+      "path": "/api/v1/knowledge/sync-resolve-pull",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "resolution": {
+          "memory_id": "memory",
+          "expected_local_revision": 1,
+          "expected_remote_revision": 1,
+          "expected_baseline_revision": 0,
+          "conflict_sequences": [
+            1
+          ],
+          "choice": {
+            "decision": "merged",
+            "content": {
+              "title": "Title",
+              "content": "Content",
+              "content_type": "text",
+              "tags": [],
+              "metadata": {},
+              "status": "ENABLED"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "resolve-push",
+      "path": "/api/v1/knowledge/sync-resolve-push",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "resolution": {
+          "local_sequence": 1,
+          "memory_id": "memory",
+          "conflict_id": "conflict",
+          "guard": {
+            "expected_local_revision": 1,
+            "expected_remote_revision": 1,
+            "expected_baseline_revision": 0,
+            "conflict_sequences": [
+              1
+            ]
+          },
+          "choice": {
+            "decision": "merged",
+            "content": {
+              "title": "Title",
+              "content": "Content",
+              "content_type": "text",
+              "tags": [],
+              "metadata": {},
+              "status": "ENABLED"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "resume",
+      "path": "/api/v1/knowledge/sync-resume-resolution",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "resolution_id": "resolution"
+      }
+    },
+    {
+      "name": "reconcile",
+      "path": "/api/v1/knowledge/sync-reconcile-resolution",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "resolution_id": "resolution",
+        "reconciliation": {
+          "guard": {
+            "expected_local_revision": 1,
+            "expected_remote_revision": 1,
+            "expected_baseline_revision": 0,
+            "conflict_sequences": [
+              1
+            ]
+          },
+          "choice": {
+            "decision": "keep_both"
+          }
+        }
+      }
+    },
+    {
+      "name": "cloud-query",
+      "path": "/api/v1/knowledge/sync-cloud-query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "pending_resolutions",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "configuration",
+      "path": "/api/v1/knowledge/processing-query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "configuration"
+        }
+      }
+    },
+    {
+      "name": "entities",
+      "path": "/api/v1/knowledge/processing-query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "entities",
+          "request": {
+            "limit": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "relationships",
+      "path": "/api/v1/knowledge/processing-query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "relationships",
+          "request": {
+            "limit": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "text",
+      "path": "/api/v1/knowledge/processing-query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "text",
+          "request": {
+            "limit": 1
+          },
+          "literal": "Content"
+        }
+      }
+    },
+    {
+      "name": "semantic",
+      "path": "/api/v1/knowledge/processing-query",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "query": {
+          "operation": "semantic",
+          "build_id": "build",
+          "config_revision": 1,
+          "query": "Content",
+          "limit": 10
+        }
+      }
+    },
+    {
+      "name": "configure_embedding",
+      "path": "/api/v1/knowledge/processing-command",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "command": {
+          "operation": "configure_embedding",
+          "build_id": "build",
+          "provider_id": "provider",
+          "provider_revision": 0,
+          "model_id": "explicit-model",
+          "expected_config_revision": null
+        }
+      }
+    },
+    {
+      "name": "select_embedding",
+      "path": "/api/v1/knowledge/processing-command",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "command": {
+          "operation": "select_embedding",
+          "build_id": "build",
+          "expected_config_revision": 1
+        }
+      }
+    },
+    {
+      "name": "index_one",
+      "path": "/api/v1/knowledge/processing-command",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "command": {
+          "operation": "index_one",
+          "build_id": "build",
+          "config_revision": 1
+        }
+      }
+    },
+    {
+      "name": "promote_index",
+      "path": "/api/v1/knowledge/processing-command",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "command": {
+          "operation": "promote_index",
+          "build_id": "build",
+          "config_revision": 1,
+          "expected_active_build_id": null
+        }
+      }
+    },
+    {
+      "name": "retry_index",
+      "path": "/api/v1/knowledge/processing-command",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "command": {
+          "operation": "retry_index",
+          "build_id": "build",
+          "config_revision": 1,
+          "input": {
+            "source": {
+              "tenant_id": "tenant",
+              "project_id": "project",
+              "memory_id": "memory",
+              "revision": 1,
+              "change_sequence": 1
+            },
+            "audit_attempt": 1,
+            "input_digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          "expected_attempt": 1
+        }
+      }
+    },
+    {
+      "name": "process_one",
+      "path": "/api/v1/knowledge/processing-command",
+      "request": {
+        "scope": {
+          "tenant_id": "tenant",
+          "project_id": "project",
+          "context_revision": 1,
+          "profile_id": "profile",
+          "generation": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "command": {
+          "operation": "process_one",
+          "workspace_id": "explicit-workspace"
+        }
+      }
+    }
+  ]
+}

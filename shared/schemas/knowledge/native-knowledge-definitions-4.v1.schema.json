@@ -1,0 +1,647 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memstack.local/schemas/native-knowledge-definitions-4.v1.schema.json",
+  "title": "Native knowledge definitions 4",
+  "$defs": {
+    "NativeKnowledgeRetrievalCursor": {
+      "type": "object",
+      "properties": {
+        "tenant_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "entities",
+            "relationships",
+            "text"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "upper_change_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "after": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievalPosition"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "project_id",
+        "kind",
+        "source",
+        "literal",
+        "upper_change_sequence",
+        "after"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeRetrievalRequest": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievalCursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "x-rust-type": "usize"
+        }
+      },
+      "required": [
+        "limit"
+      ],
+      "additionalProperties": false,
+      "x-rust-type": "agistack_core::knowledge::retrieval::RetrievalRequest"
+    },
+    "NativeKnowledgeEntity": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeEntityReference": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+        },
+        "entity_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "source",
+        "entity_index"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeRetrievedEntity": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEntityReference"
+        },
+        "audit_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "entity": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEntity"
+        }
+      },
+      "required": [
+        "reference",
+        "audit_attempt",
+        "entity"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeRelationship": {
+      "type": "object",
+      "properties": {
+        "source_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "target_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "relation_type": {
+          "type": "string"
+        },
+        "fact": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "source_index",
+        "target_index",
+        "relation_type",
+        "fact",
+        "score"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeRetrievedRelationship": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+        },
+        "relationship_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "audit_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "source_entity": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEntityReference"
+        },
+        "target_entity": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEntityReference"
+        },
+        "relationship": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRelationship"
+        }
+      },
+      "required": [
+        "source",
+        "relationship_index",
+        "audit_attempt",
+        "source_entity",
+        "target_entity",
+        "relationship"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeTextHit": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+        },
+        "audit_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "audit_attempt",
+        "title",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeProcessingCoverage": {
+      "type": "object",
+      "properties": {
+        "current_sources": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "applied_sources": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pending_sources": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failed_sources": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "current_sources",
+        "applied_sources",
+        "pending_sources",
+        "failed_sources"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeIndexCoverage": {
+      "type": "object",
+      "properties": {
+        "current_sources": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "completed_sources": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failed_sources": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "current_sources",
+        "completed_sources",
+        "failed_sources"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeEmbeddingConfiguration": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "build_id": {
+          "type": "string"
+        },
+        "provider_id": {
+          "type": "string"
+        },
+        "provider_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "dimensions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "input_contract_version": {
+          "const": 1
+        },
+        "normalization_version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "revision",
+        "build_id",
+        "provider_id",
+        "provider_revision",
+        "model_id",
+        "dimensions",
+        "input_contract_version",
+        "normalization_version"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeIndexSource": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+        },
+        "audit_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "input_digest": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "audit_attempt",
+        "input_digest"
+      ],
+      "additionalProperties": false,
+      "x-rust-type": "agistack_core::knowledge::index::IndexSource"
+    },
+    "NativeKnowledgeSemanticHit": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeIndexSource"
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "input",
+        "score"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeProcessingQueryMap": {
+      "type": "object",
+      "properties": {
+        "configuration": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "entities": {
+          "type": "object",
+          "properties": {
+            "request": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievalRequest"
+            }
+          },
+          "required": [
+            "request"
+          ],
+          "additionalProperties": false
+        },
+        "relationships": {
+          "type": "object",
+          "properties": {
+            "request": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievalRequest"
+            }
+          },
+          "required": [
+            "request"
+          ],
+          "additionalProperties": false
+        },
+        "text": {
+          "type": "object",
+          "properties": {
+            "literal": {
+              "type": "string"
+            },
+            "request": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievalRequest"
+            }
+          },
+          "required": [
+            "literal",
+            "request"
+          ],
+          "additionalProperties": false
+        },
+        "semantic": {
+          "type": "object",
+          "properties": {
+            "build_id": {
+              "type": "string"
+            },
+            "config_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "query": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "x-rust-type": "usize"
+            }
+          },
+          "required": [
+            "build_id",
+            "config_revision",
+            "query",
+            "limit"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "configuration",
+        "entities",
+        "relationships",
+        "text",
+        "semantic"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeProcessingResultMap": {
+      "type": "object",
+      "properties": {
+        "configuration": {
+          "type": "object",
+          "properties": {
+            "configuration": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEmbeddingConfiguration"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "active_build_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "processing": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingCoverage"
+            },
+            "index": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeIndexCoverage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "configuration",
+            "active_build_id",
+            "processing",
+            "index"
+          ],
+          "additionalProperties": false
+        },
+        "entities": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievedEntity"
+              }
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievalCursor"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "items",
+            "next_cursor"
+          ],
+          "additionalProperties": false
+        },
+        "relationships": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievedRelationship"
+              }
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievalCursor"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "items",
+            "next_cursor"
+          ],
+          "additionalProperties": false
+        },
+        "text": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeTextHit"
+              }
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRetrievalCursor"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "items",
+            "next_cursor"
+          ],
+          "additionalProperties": false
+        },
+        "semantic": {
+          "type": "object",
+          "properties": {
+            "configuration": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEmbeddingConfiguration"
+            },
+            "processing": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingCoverage"
+            },
+            "index": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeIndexCoverage"
+            },
+            "hits": {
+              "type": "array",
+              "items": {
+                "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSemanticHit"
+              }
+            }
+          },
+          "required": [
+            "configuration",
+            "processing",
+            "index",
+            "hits"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "configuration",
+        "entities",
+        "relationships",
+        "text",
+        "semantic"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

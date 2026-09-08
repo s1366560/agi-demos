@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memstack.local/schemas/native-knowledge-definitions-2.v1.schema.json",
+  "title": "Native knowledge definitions 2",
+  "$defs": {
+    "NativeKnowledgeCloudContext": {
+      "type": "object",
+      "properties": {
+        "local_sequence": {
+          "type": "number"
+        },
+        "memory_id": {
+          "type": "string"
+        },
+        "conflict_id": {
+          "type": "string"
+        },
+        "original_request": {
+          "type": "object",
+          "properties": {
+            "memory_id": {
+              "type": "string"
+            },
+            "operation": {
+              "anyOf": [
+                {
+                  "const": "create"
+                },
+                {
+                  "const": "update"
+                },
+                {
+                  "const": "delete"
+                }
+              ]
+            },
+            "expected_revision": {
+              "type": "number"
+            },
+            "content": {
+              "anyOf": [
+                {
+                  "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeContent"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "change_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "memory_id",
+            "operation",
+            "expected_revision",
+            "content",
+            "change_id"
+          ],
+          "additionalProperties": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeJson"
+          }
+        },
+        "cloud_conflict": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgePushConflict"
+        },
+        "local": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeMemory"
+        },
+        "local_deleted": {
+          "type": "boolean"
+        },
+        "local_metadata": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeObject"
+        },
+        "baseline": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRemote"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "remote": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRemote"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "conflict_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "pending_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "observed_cursor": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "local_sequence",
+        "memory_id",
+        "conflict_id",
+        "original_request",
+        "cloud_conflict",
+        "local",
+        "local_deleted",
+        "local_metadata",
+        "baseline",
+        "remote",
+        "conflict_sequences",
+        "pending_sequences",
+        "observed_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeLocalReceipt": {
+      "type": "object",
+      "properties": {
+        "resolution_id": {
+          "type": "string"
+        },
+        "memory_id": {
+          "type": "string"
+        },
+        "local_revision": {
+          "type": "number"
+        },
+        "remote_baseline_revision": {
+          "type": "number"
+        },
+        "copy_memory_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processing_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "pending_push_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "superseded_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "conflict_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "resolution_id",
+        "memory_id",
+        "local_revision",
+        "remote_baseline_revision",
+        "copy_memory_id",
+        "processing_sequences",
+        "pending_push_sequences",
+        "superseded_sequences",
+        "conflict_sequences"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeReconciliationReceipt": {
+      "type": "object",
+      "properties": {
+        "local_revision": {
+          "type": "number"
+        },
+        "copy_memory_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processing_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "pending_push_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "superseded_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "conflict_sequences": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "local_revision",
+        "copy_memory_id",
+        "processing_sequences",
+        "pending_push_sequences",
+        "superseded_sequences",
+        "conflict_sequences"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeAppliedReceipt": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "applied"
+        },
+        "change_id": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "number"
+        },
+        "version": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRemote"
+        }
+      },
+      "required": [
+        "status",
+        "change_id",
+        "sequence",
+        "version"
+      ],
+      "additionalProperties": {
+        "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeJson"
+      }
+    },
+    "NativeKnowledgeResolvedReceipt": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "resolved"
+        },
+        "change_id": {
+          "type": "string"
+        },
+        "conflict_id": {
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRemote"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "change_id",
+        "conflict_id",
+        "version"
+      ],
+      "additionalProperties": {
+        "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeJson"
+      }
+    },
+    "NativeKnowledgeCloudReceipt": {
+      "anyOf": [
+        {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeAppliedReceipt"
+        },
+        {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeResolvedReceipt"
+        }
+      ]
+    },
+    "NativeKnowledgeCloudOutcome": {
+      "type": "object",
+      "properties": {
+        "resolution_id": {
+          "type": "string"
+        },
+        "receipt": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCloudReceipt"
+        },
+        "pending_reconciliation": {
+          "type": "boolean"
+        },
+        "replayed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "resolution_id",
+        "receipt",
+        "pending_reconciliation",
+        "replayed"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeResolutionRecord": {
+      "type": "object",
+      "properties": {
+        "resolution_id": {
+          "type": "string"
+        },
+        "local_sequence": {
+          "type": "number"
+        },
+        "request_json": {
+          "type": "string"
+        },
+        "command": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCloudResolution"
+        },
+        "archive": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCloudContext"
+        },
+        "receipt": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCloudReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rejection": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeObject"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reconciliation": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeReconciliationReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reconciliation_command": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeReconciliation"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "const": "cloud_receipt"
+                }
+              },
+              "required": [
+                "source"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reconciliation_archive": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCloudContext"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "resolution_id",
+        "local_sequence",
+        "request_json",
+        "command",
+        "archive",
+        "receipt",
+        "rejection",
+        "reconciliation",
+        "reconciliation_command",
+        "reconciliation_archive"
+      ],
+      "additionalProperties": false
+    },
+    "Page": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "x-rust-type": "usize"
+        }
+      },
+      "required": [
+        "limit"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "ResolutionId": {
+      "type": "object",
+      "properties": {
+        "resolution_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "resolution_id"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
