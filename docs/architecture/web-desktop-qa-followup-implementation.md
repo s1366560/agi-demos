@@ -955,3 +955,29 @@ not weakened. Sidecar suite 716/716 with the contract test ignored by
 design; renderer TypeScript passed. Rollback: revert the three cherry-picks
 and the token fix together; persisted memories and receipts are untouched
 because the closed gate never reached storage.
+
+### I0 evidence repair (2026-09-08)
+
+The completed pre-integration Backend unit run reported 16121 passed and 10
+failed (235 warnings, 5561.17 seconds), not a clean release run. Eight failures
+came from the stale Workspace schema declaration, and two from the target
+catalog expectation predating the registered, disabled knowledge authority.
+The focused reproduction confirmed all ten failures. The catalog test now
+requires the knowledge authority to remain disabled and checks 437 entries.
+
+Rebinding the evidence declaration exposed missing platform prerequisites in
+the disposable migration fixtures: projects/tenants, memories, and the legacy
+scheduler owner table. Both rehearsal fixtures now include those prerequisites.
+No application database or production migration was changed. The six evidence
+suites ran successfully after source freeze, including paired SQLite/PostgreSQL
+state, upgrade/downgrade, Rust route contracts, Redis crash replay, event parity,
+and the retired-runtime guard. The generated ledger check passed for 95/95
+routes; no hash or passing attestation was manually assigned. Focused Python
+regression: 35 passed. Changed verifier Ruff checks passed; Pyright reported no
+errors (existing unused-result warnings remain in the migration verifier).
+
+GitNexus impact and detect-changes were attempted but returned Transport closed;
+source/diff review and executable checks establish this batch's scope instead.
+Rollback this batch's tests, disposable fixtures, and generated evidence together.
+This does not close I0: exact-commit full Backend/Web/Desktop/Rust release gates
+and formal Desktop parity regeneration remain outstanding.

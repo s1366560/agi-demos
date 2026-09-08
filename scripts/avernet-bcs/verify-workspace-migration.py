@@ -38,6 +38,7 @@ from scripts.workspace_core_legacy_sentinel import (  # noqa: E402
     install_write_sentinel,
     workspace_stats,
 )
+from src.infrastructure.adapters.secondary.persistence.models import Base  # noqa: E402
 from src.infrastructure.workspace_core.migration.contracts import (  # noqa: E402
     SOURCE_COLUMN_CONTRACTS,
 )
@@ -164,6 +165,13 @@ async def _create_legacy_schema(test_url: URL) -> None:
                     sync_connection,
                     tables=tables,
                 )
+            )
+            # Later knowledge migrations require the existing platform memory table.
+            await connection.run_sync(
+                lambda sync_connection: Base.metadata.tables["memories"].create(sync_connection)
+            )
+            _ = await connection.exec_driver_sql(
+                "CREATE TABLE agistack_cron_scheduler_owners (scope_id varchar(100) PRIMARY KEY)"
             )
             await connection.exec_driver_sql(
                 "CREATE TABLE agent_bindings (id text PRIMARY KEY, agent_id text NOT NULL, "

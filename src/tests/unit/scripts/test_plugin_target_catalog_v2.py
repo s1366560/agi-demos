@@ -35,6 +35,7 @@ _EXPECTED_TARGET_MODULES = {
         {
             "builtin://memstack/desktop-sidecar/http-routes",
             "builtin://memstack/desktop-sidecar/local-capability",
+            "builtin://memstack/desktop-sidecar/knowledge-authority",
         }
     ),
     "web": frozenset(
@@ -174,7 +175,10 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for module_ref in module_refs:
             assert target in {item.value for item in modules[module_ref]}
             assert any(
-                entry.module_ref == module_ref and entry.enabled for entry in snapshot.entries
+                entry.module_ref == module_ref
+                and entry.enabled
+                is (module_ref != "builtin://memstack/desktop-sidecar/knowledge-authority")
+                for entry in snapshot.entries
             )
 
     entries = payload["entries"]
@@ -284,13 +288,15 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
     for worker in ("skill-evolution-worker", "channel-outbox-worker", "cron-scheduler-worker"):
-        entry = next(item for item in entries if item["entry_id"] == f"builtin-rust-server-{worker}")
+        entry = next(
+            item for item in entries if item["entry_id"] == f"builtin-rust-server-{worker}"
+        )
         assert entry["module_ref"] == f"builtin://memstack/rust-server/{worker}"
         assert entry["parent_entry_id"] == "builtin-rust-server-generation-host"
         assert entry["enabled"] is True
         assert entry["config"] == {"autostart": True}
         assert entry["scope"]["kind"] == "root"
-    assert len(entries) == 436
+    assert len(entries) == 437
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",

@@ -145,6 +145,15 @@ async def _create_legacy_workspace_link_fixtures(test_dsn: str) -> None:
     connection = await asyncpg.connect(test_dsn)
     try:
         await connection.execute(
+            "CREATE TABLE tenants (id varchar PRIMARY KEY);"
+            "CREATE TABLE projects (id varchar PRIMARY KEY, tenant_id varchar NOT NULL "
+            "REFERENCES tenants (id));"
+            "CREATE TABLE memories (id varchar PRIMARY KEY, project_id varchar NOT NULL "
+            "REFERENCES projects (id), author_id varchar NOT NULL, created_at timestamptz "
+            "NOT NULL DEFAULT now(), title varchar NOT NULL, content text NOT NULL, "
+            "content_type varchar NOT NULL, tags json, meta json, status varchar NOT NULL, "
+            "version integer NOT NULL DEFAULT 1);"
+            "CREATE TABLE agistack_cron_scheduler_owners (scope_id varchar(100) PRIMARY KEY);"
             "CREATE TABLE agent_definitions (id text PRIMARY KEY);"
             "CREATE TABLE agent_bindings (id text PRIMARY KEY, agent_id text NOT NULL, "
             "CONSTRAINT agent_bindings_agent_id_fkey "
