@@ -67,7 +67,7 @@ impl KnowledgeOperationV2 {
             .client()
             .embed_verified("Knowledge embedding dimension verification", None)
             .await
-            .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
+            .map_err(|_| KnowledgeAuthorityErrorV2::EmbeddingUnavailable)?;
         let dimensions = NonZeroU32::new(
             u32::try_from(observed.dimensions().get()).map_err(|_| KnowledgeError::InvalidInput)?,
         )

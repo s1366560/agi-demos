@@ -1,9 +1,6 @@
 use super::*;
 use crate::local_runtime::knowledge_authority_v2::sync::CloudResolutionDispatch;
 use crate::trusted_session::TrustedSessionBroker;
-use agistack_core::knowledge::sync::cloud_resolution::{
-    KnowledgeCloudReconciliationCommand, KnowledgeCloudResolutionCommand,
-};
 
 fn dispatch(
     result: CloudResolutionDispatch,
@@ -35,54 +32,9 @@ fn broker(state: &LocalRuntimeState) -> Result<TrustedSessionBroker, KnowledgeAu
         .trusted_sessions()
         .ok_or(KnowledgeAuthorityErrorV2::TransportUnavailable)
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ResolveRequest {
-    scope: KnowledgeOperationScopeV2,
-    resolution: KnowledgeCloudResolutionCommand,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ResumeRequest {
-    scope: KnowledgeOperationScopeV2,
-    resolution_id: String,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ReconcileRequest {
-    scope: KnowledgeOperationScopeV2,
-    resolution_id: String,
-    reconciliation: KnowledgeCloudReconciliationCommand,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct CloudQueryRequest {
-    scope: KnowledgeOperationScopeV2,
-    query: CloudQuery,
-}
-#[derive(Deserialize)]
-#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
-enum CloudQuery {
-    ConflictContext {
-        local_sequence: u64,
-    },
-    Resolution {
-        resolution_id: String,
-    },
-    ResolutionByKey {
-        idempotency_key: String,
-    },
-    PendingResolutions {
-        before_resolution_id: Option<String>,
-        limit: usize,
-    },
-    Resolutions {
-        limit: usize,
-    },
-    ReconciliationContext {
-        resolution_id: String,
-    },
-}
+use super::super::contracts::{
+    CloudQuery, CloudQueryRequest, ReconcileRequest, ResolveRequest, ResumeRequest,
+};
 
 pub(super) async fn resolve(
     State(state): State<Arc<LocalRuntimeState>>,

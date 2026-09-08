@@ -123,3 +123,13 @@ pub struct IndexRead {
     pub processing: ProcessingCoverage,
     pub vectors: Vec<IndexedVector>,
 }
+
+/// Discovery is available before selection or promotion, with extraction counts
+/// kept separate from coverage of the selected build.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexConfigurationStatus {
+    pub configuration: Option<DesiredEmbeddingConfig>,
+    pub active_build_id: Option<String>,
+    pub processing: ProcessingCoverage,
+    pub index: Option<IndexCoverage>,
+}

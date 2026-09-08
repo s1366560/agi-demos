@@ -5,6 +5,8 @@ import type {
   NativeKnowledgeResultMap,
   NativeKnowledgeProcessingQuery,
   NativeKnowledgeProcessingResultMap,
+  NativeKnowledgeProcessingCommand,
+  NativeKnowledgeProcessingCommandResultMap,
 } from './nativeKnowledgeGenerated';
 
 export type * from './nativeKnowledgeGenerated';
@@ -83,4 +85,20 @@ export interface NativeKnowledgeProcessingClient {
     query: Q,
     options?: NativeKnowledgeSyncOptions,
   ): Promise<NativeKnowledgeProcessingResponse<Q>>;
+}
+
+export type NativeKnowledgeProcessingCommandResponse<
+  C extends NativeKnowledgeProcessingCommand = NativeKnowledgeProcessingCommand,
+> = Readonly<{
+  contract_version: '1.0.0';
+  scope: NativeKnowledgeScope;
+  result: NativeKnowledgeProcessingCommandResultMap[C['operation']];
+}>;
+/** Explicit writes require the exact context observed by the caller. */
+export interface NativeKnowledgeProcessingCommandClient {
+  execute<C extends NativeKnowledgeProcessingCommand>(
+    scope: ProjectKnowledgeScope,
+    command: C,
+    options: NativeKnowledgeObservedOptions,
+  ): Promise<NativeKnowledgeProcessingCommandResponse<C>>;
 }

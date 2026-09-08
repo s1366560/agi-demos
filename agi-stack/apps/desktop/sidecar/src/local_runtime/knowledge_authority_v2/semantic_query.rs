@@ -79,7 +79,7 @@ impl KnowledgeOperationV2 {
                 ),
             )
             .await
-            .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
+            .map_err(|_| KnowledgeAuthorityErrorV2::EmbeddingUnavailable)?;
         super::embedding_provider::with_current(self, state, auth, &provider, false, |clock| {
             let read = self
                 .authority

@@ -10,6 +10,8 @@ use tokio::sync::Notify;
 
 #[path = "processing_lifecycle_tests.rs"]
 mod lifecycle;
+#[path = "processing_rpc_entry_tests.rs"]
+mod rpc;
 
 struct Fixture {
     directory: TestDirectory,

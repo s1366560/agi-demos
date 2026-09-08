@@ -193,12 +193,12 @@ fn vectors(
 
 fn processing_coverage(
     tx: &Transaction<'_>,
-    build: &IndexBuild,
+    scope: &KnowledgeScope,
     applied_sources: usize,
 ) -> KnowledgeResult<ProcessingCoverage> {
     let current_sources: usize = tx.query_row(
         "SELECT count(*) FROM knowledge_memories WHERE tenant_id=?1 AND project_id=?2 AND deleted=0",
-        params![build.scope.tenant_id,build.scope.project_id], |row|row.get(0),
+        params![scope.tenant_id,scope.project_id], |row|row.get(0),
     ).map_err(storage)?;
     let failed_sources: usize = tx.query_row(
         "SELECT count(*) FROM knowledge_memories m
@@ -207,7 +207,7 @@ fn processing_coverage(
          JOIN knowledge_processing_jobs j ON j.change_sequence=c.sequence AND j.tenant_id=m.tenant_id
            AND j.project_id=m.project_id AND j.memory_id=m.id AND j.revision=m.revision AND j.state='failed'
          WHERE m.tenant_id=?1 AND m.project_id=?2 AND m.deleted=0",
-        params![build.scope.tenant_id,build.scope.project_id], |row|row.get(0),
+        params![scope.tenant_id,scope.project_id], |row|row.get(0),
     ).map_err(storage)?;
     let pending_sources = current_sources
         .checked_sub(applied_sources)

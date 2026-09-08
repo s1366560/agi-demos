@@ -6,6 +6,8 @@ use agistack_core::knowledge::{
 
 #[path = "retrieval_lifecycle_tests.rs"]
 mod lifecycle;
+#[path = "retrieval_rpc_tests.rs"]
+mod rpc;
 
 struct Fixture {
     directory: TestDirectory,

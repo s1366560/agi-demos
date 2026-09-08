@@ -1,7 +1,6 @@
 //! Narrow storage RPCs. They share the normal native launch/session/scope/
 //! generation middleware; capability publication stays closed independently.
 
-use agistack_core::knowledge::sync::KnowledgeSyncLink;
 use axum::{
     extract::{Extension, State},
     http::{HeaderMap, StatusCode},
@@ -9,7 +8,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Deserialize;
 
 use super::*;
 use crate::local_runtime::LocalRuntimeState;
@@ -18,6 +16,8 @@ use crate::local_runtime::LocalRuntimeState;
 mod cloud_routes;
 #[path = "context_route.rs"]
 mod context_route;
+#[path = "processing_routes.rs"]
+mod processing_routes;
 #[path = "resolution_routes.rs"]
 mod resolution_routes;
 
@@ -25,6 +25,14 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .route("/api/v1/knowledge/context", get(context_route::context))
         .route("/api/v1/knowledge/query", post(query))
+        .route(
+            "/api/v1/knowledge/processing-query",
+            post(processing_routes::query),
+        )
+        .route(
+            "/api/v1/knowledge/processing-command",
+            post(processing_routes::command),
+        )
         .route("/api/v1/knowledge/mutations", post(mutate))
         .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
         .route("/api/v1/knowledge/sync-push", post(push_once))
@@ -51,35 +59,9 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         )
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct QueryRequest {
-    scope: KnowledgeOperationScopeV2,
-    query: KnowledgeQuery,
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
-enum KnowledgeQuery {
-    Get { id: String },
-    List { limit: usize, offset: usize },
-    Changes { after_sequence: u64, limit: usize },
-    Change { sequence: u64 },
-    SyncStatus,
-    RemoteBaseline { id: String },
-    PushConflicts { limit: usize },
-    PullConflicts { limit: usize },
-    PullConflictContext { id: String },
-    ResolutionHistory { id: String, limit: usize },
-    SyncOutbox { after_sequence: u64, limit: usize },
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct MutationRequest {
-    scope: KnowledgeOperationScopeV2,
-    mutation: MemoryMutation,
-}
+use super::contracts::{
+    KnowledgeQuery, MutationRequest, PullRequest, PushRequest, QueryRequest, SyncLinkRequest,
+};
 
 type RouteResult = Result<Json<Value>, Response>;
 
@@ -109,7 +91,7 @@ async fn query(
             validate_limit(limit).map_err(invalid_page)?;
             json!({"items":operation.push_conflicts(limit).await.map_err(IntoResponse::into_response)?})
         }
-        KnowledgeQuery::SyncStatus => {
+        KnowledgeQuery::SyncStatus {} => {
             json!({"status":operation.sync_status().await.map_err(IntoResponse::into_response)?})
         }
         KnowledgeQuery::SyncOutbox {
@@ -224,13 +206,6 @@ async fn mutate(
     ))
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SyncLinkRequest {
-    scope: KnowledgeOperationScopeV2,
-    link: KnowledgeSyncLink,
-}
-
 async fn configure_sync_link(
     Extension(lease): Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -247,12 +222,6 @@ async fn configure_sync_link(
             "status":status,"association_state":"configured","remote_authorization":"unverified"
         }}),
     ))
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PushRequest {
-    scope: KnowledgeOperationScopeV2,
 }
 
 async fn push_once(
@@ -274,12 +243,6 @@ async fn push_once(
     Ok(Json(
         json!({"contract_version":VERSION,"scope":request.scope,"result":result}),
     ))
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PullRequest {
-    scope: KnowledgeOperationScopeV2,
 }
 
 async fn pull_once(
@@ -333,6 +296,16 @@ fn rejection(status: StatusCode, code: &str, message: &str) -> Response {
 impl IntoResponse for KnowledgeAuthorityErrorV2 {
     fn into_response(self) -> Response {
         let (status, code, message) = match self {
+            Self::EmbeddingUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "knowledge_embedding_provider_unavailable",
+                "the selected embedding provider is unavailable",
+            ),
+            Self::ProcessingUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "knowledge_processing_provider_unavailable",
+                "the workspace extraction provider is unavailable",
+            ),
             Self::TransportUnavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "knowledge_sync_transport_unavailable",

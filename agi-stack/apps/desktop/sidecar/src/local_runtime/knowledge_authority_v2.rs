@@ -18,7 +18,6 @@ use agistack_plugin_host::{
     ContextV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeV2Error, ScopeKindV2, ScopeV2,
 };
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::{
@@ -169,6 +168,10 @@ impl KnowledgeAuthorityV2 {
 
 #[derive(Debug, thiserror::Error)]
 pub(super) enum KnowledgeAuthorityErrorV2 {
+    #[error("the selected embedding provider is unavailable")]
+    EmbeddingUnavailable,
+    #[error("the workspace extraction provider is unavailable")]
+    ProcessingUnavailable,
     #[error("trusted cloud synchronization transport is unavailable")]
     TransportUnavailable,
     #[error("cloud synchronization request failed")]
@@ -191,18 +194,8 @@ pub(super) enum KnowledgeAuthorityErrorV2 {
     Knowledge(#[from] KnowledgeError),
 }
 
-/// The wire-facing operation scope must match both the authenticated local
-/// context and the generation lease acquired by route admission.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct KnowledgeOperationScopeV2 {
-    pub(super) tenant_id: String,
-    pub(super) project_id: String,
-    pub(super) context_revision: u64,
-    pub(super) profile_id: String,
-    pub(super) generation: u64,
-    pub(super) digest: String,
-}
+mod contracts;
+pub(super) use contracts::KnowledgeOperationScopeV2;
 
 pub(super) struct KnowledgeOperationV2 {
     authority: Arc<KnowledgeAuthorityV2>,

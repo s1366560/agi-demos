@@ -66,7 +66,7 @@ pub(super) fn resolve(
         let runtime = state
             .provider_runtime
             .lock()
-            .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
+            .map_err(|_| KnowledgeAuthorityErrorV2::EmbeddingUnavailable)?;
         let connection = state
             .session_store
             .connection()
@@ -77,7 +77,7 @@ pub(super) fn resolve(
             binding.provider_type.as_str(),
             "openai" | "openai_compatible"
         ) {
-            return Err(KnowledgeAuthorityErrorV2::TransportUnavailable);
+            return Err(KnowledgeAuthorityErrorV2::EmbeddingUnavailable);
         }
         let key = ProviderRuntimeKey {
             tenant_id: operation.scope.tenant_id.clone(),
@@ -90,7 +90,7 @@ pub(super) fn resolve(
         if binding.auth_method != "none"
             && credential.as_ref().map_or(true, |v| v.trim().is_empty())
         {
-            return Err(KnowledgeAuthorityErrorV2::TransportUnavailable);
+            return Err(KnowledgeAuthorityErrorV2::EmbeddingUnavailable);
         }
         EmbeddingProvider {
             route: route.clone(),
@@ -154,7 +154,7 @@ pub(super) fn with_current<T>(
     let runtime = state
         .provider_runtime
         .lock()
-        .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
+        .map_err(|_| KnowledgeAuthorityErrorV2::EmbeddingUnavailable)?;
     let key = ProviderRuntimeKey {
         tenant_id: operation.scope.tenant_id.clone(),
         provider_id: provider.route.provider_id.clone(),

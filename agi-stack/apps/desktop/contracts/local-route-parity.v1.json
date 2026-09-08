@@ -2787,6 +2787,38 @@
         }
       },
       "idempotency_key": "closed-cloud-resolution"
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/processing-query",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/processing-query",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {
+        "query": {
+          "operation": "configuration"
+        }
+      }
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/processing-command",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/processing-command",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {
+        "command": {
+          "operation": "index_one",
+          "build_id": "closed-build",
+          "config_revision": 1
+        }
+      }
     }
   ]
 }

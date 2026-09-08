@@ -16,6 +16,8 @@ use tokio::sync::Notify;
 mod embedding_configuration_tests;
 #[path = "indexing_lifecycle_tests.rs"]
 mod lifecycle;
+#[path = "processing_rpc_tests.rs"]
+mod processing_rpc_tests;
 #[path = "embedding_profile_tests.rs"]
 mod profile;
 

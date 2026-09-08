@@ -74,6 +74,62 @@ fn read(
 }
 
 impl SqliteKnowledgeRepository {
+    pub fn index_build_durable(
+        &self,
+        scope: &KnowledgeScope,
+        build_id: &str,
+        clock: Clock<'_>,
+    ) -> KnowledgeResult<IndexBuild> {
+        validate(scope, build_id)?;
+        timed(self, clock, |tx, _| {
+            let profile: Option<String> = tx.query_row(
+                "SELECT profile_json FROM knowledge_index_builds WHERE tenant_id=?1 AND project_id=?2 AND build_id=?3",
+                params![scope.tenant_id,scope.project_id,build_id], |row| row.get(0),
+            ).optional().map_err(storage)?;
+            let build = IndexBuild {
+                scope: scope.clone(),
+                build_id: build_id.into(),
+                profile: serde_json::from_str(&profile.ok_or(KnowledgeError::NotFound)?)
+                    .map_err(storage)?,
+            };
+            validate_build(&build)?;
+            Ok((build, None))
+        })
+    }
+
+    pub fn index_configuration_status_durable(
+        &self,
+        scope: &KnowledgeScope,
+        clock: Clock<'_>,
+    ) -> KnowledgeResult<IndexConfigurationStatus> {
+        validate(scope, "index-status")?;
+        timed(self, clock, |tx, _| {
+            let configuration = read(tx, scope)?;
+            let active_build_id: Option<String> = tx.query_row(
+                "SELECT build_id FROM knowledge_index_active WHERE tenant_id=?1 AND project_id=?2",
+                params![scope.tenant_id,scope.project_id], |row| row.get(0),
+            ).optional().map_err(storage)?;
+            let applied = super::super::retrieval::audited_sources(tx, scope)?.len();
+            let processing = processing_coverage(tx, scope, applied)?;
+            let index = configuration
+                .as_ref()
+                .map(|config| {
+                    let current = current_inputs(tx, &config.build)?;
+                    vectors(tx, &config.build, &current).map(|(coverage, _)| coverage)
+                })
+                .transpose()?;
+            Ok((
+                IndexConfigurationStatus {
+                    configuration,
+                    active_build_id,
+                    processing,
+                    index,
+                },
+                None,
+            ))
+        })
+    }
+
     /// None creates the first selection. Every subsequent selection requires
     /// the exact current version, even when selecting the same immutable build.
     pub fn select_index_config_durable(

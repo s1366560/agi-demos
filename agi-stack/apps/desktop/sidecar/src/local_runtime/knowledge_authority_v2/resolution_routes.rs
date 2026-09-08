@@ -1,11 +1,5 @@
+use super::super::contracts::ResolutionRequest;
 use super::*;
-use agistack_core::knowledge::sync::resolution::KnowledgePullConflictResolution;
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ResolutionRequest {
-    scope: KnowledgeOperationScopeV2,
-    resolution: KnowledgePullConflictResolution,
-}
 pub(super) async fn resolve_pull(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(lease): Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>,
