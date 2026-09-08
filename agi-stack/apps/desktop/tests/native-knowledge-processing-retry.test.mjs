@@ -501,3 +501,41 @@ test('real route controller composition refreshes diagnostics and coverage after
   assert.deepEqual(writes, [command]);
   for (const controller of Object.values(controllers)) controller.stop();
 });
+
+test('malformed accepted acknowledgement and decoder errors preserve unknown recovery lock', async () => {
+  const { projectKnowledgeError } = require(
+    `${dist}/src/features/project-knowledge/projectKnowledgeClient.js`,
+  );
+  for (const result of [
+    { accepted: true, source, attempt: 3 },
+    { accepted: true, source: { ...source, revision: 99 }, attempt: 2 },
+    { accepted: false, source, attempt: 2 },
+    null,
+  ]) {
+    const f = fixture();
+    let writes = 0;
+    const controller = createNativeKnowledgeProcessingRetryController({
+      queryClient: f.queryClient,
+      authority,
+      commandClient: {
+        execute: async () => {
+          writes += 1;
+          if (result === null) throw projectKnowledgeError('native_knowledge_response_invalid');
+          return response('retry_processing', result);
+        },
+      },
+    });
+    await controller.select(selection);
+    await controller.review();
+    await controller.confirm();
+    assert.equal(controller.getSnapshot().phase, 'uncertain');
+    assert.equal(controller.getSnapshot().recoveryRequired, true);
+    await controller.confirm();
+    await controller.select(selection);
+    assert.equal(writes, 1);
+    await controller.recover();
+    assert.equal(controller.getSnapshot().recoveredUnknown, true);
+    assert.equal(controller.getSnapshot().phase, 'idle');
+    assert.equal(writes, 1);
+  }
+});
