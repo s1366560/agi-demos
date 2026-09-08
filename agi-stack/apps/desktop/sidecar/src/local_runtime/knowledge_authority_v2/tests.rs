@@ -17,10 +17,10 @@ mod http_tests;
 mod push_http_tests;
 #[path = "push_session_tests.rs"]
 mod push_session_tests;
-#[path = "storage_tests.rs"]
-mod storage_tests;
 #[path = "renderer_contract_tests.rs"]
 mod renderer_contract_tests;
+#[path = "storage_tests.rs"]
+mod storage_tests;
 
 const TOKEN: &str = "knowledge-generation-test-token";
 
@@ -440,3 +440,6 @@ mod retrieval_tests;
 
 #[path = "indexing_tests.rs"]
 mod indexing_tests;
+
+#[path = "capability_tests.rs"]
+mod capability_tests;

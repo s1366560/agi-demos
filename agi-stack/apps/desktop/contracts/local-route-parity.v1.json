@@ -2697,6 +2697,16 @@
     {
       "area": "project_memories",
       "method": "GET",
+      "uri": "/api/v1/knowledge/capabilities",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/capabilities",
+      "authority": "native_session_required",
+      "expected_status": 401,
+      "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "GET",
       "uri": "/api/v1/knowledge/context",
       "source": "sidecar_knowledge",
       "source_marker": "/api/v1/knowledge/context",

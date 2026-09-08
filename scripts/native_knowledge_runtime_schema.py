@@ -8,6 +8,7 @@ from typing import Any
 Node = dict[str, Any]
 ROOT_NAMES = (
     "NativeKnowledgeScope",
+    "NativeKnowledgeCapabilitiesResponse",
     "NativeKnowledgeProcessingQuery",
     "NativeKnowledgeProcessingCommand",
     "NativeKnowledgeProcessingResultMap",

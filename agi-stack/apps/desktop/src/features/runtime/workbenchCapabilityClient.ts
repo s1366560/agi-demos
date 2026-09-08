@@ -939,7 +939,7 @@ export function createDesktopWorkbenchCapabilityClient(
             ? declared
             : observed)(projectKnowledgeCapabilities['project-project-team']),
           'project-project-memories': (config.mode === 'local'
-            ? declared
+            ? snapshotProjectedCapability
             : observed)(
             projectKnowledgeCapabilities['project-project-memories'],
           ),

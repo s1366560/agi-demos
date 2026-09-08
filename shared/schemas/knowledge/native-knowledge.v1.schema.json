@@ -243,6 +243,15 @@
     },
     "NativeKnowledgeMutationMemory": {
       "$ref": "native-knowledge-definitions-8.v1.schema.json#/$defs/NativeKnowledgeMutationMemory"
+    },
+    "NativeKnowledgeCapabilityScope": {
+      "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilityScope"
+    },
+    "NativeKnowledgeCapabilityEntry": {
+      "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilityEntry"
+    },
+    "NativeKnowledgeCapabilitiesResponse": {
+      "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilitiesResponse"
     }
   },
   "x-routes": {
@@ -391,7 +400,52 @@
       "response": {
         "$ref": "#/$defs/NativeKnowledgeContextResponse"
       }
+    },
+    "/api/v1/knowledge/capabilities": {
+      "method": "GET",
+      "response": {
+        "$ref": "#/$defs/NativeKnowledgeCapabilitiesResponse"
+      }
     }
   },
-  "$ref": "#/$defs/NativeKnowledgeEnvelope"
+  "$ref": "#/$defs/NativeKnowledgeEnvelope",
+  "x-capability-actions": {
+    "cloud_conflict_context": "read",
+    "configuration": "read",
+    "configure_embedding": "write",
+    "create": "write",
+    "delete": "write",
+    "entities": "read",
+    "get": "read",
+    "index_one": "write",
+    "list": "read",
+    "pending_resolutions": "read",
+    "process_one": "write",
+    "promote_index": "write",
+    "pull_conflict_context": "read",
+    "pull_conflicts": "read",
+    "push_conflicts": "read",
+    "reconcile_resolution": "write",
+    "reconciliation_context": "read",
+    "relationships": "read",
+    "remote_baseline": "read",
+    "resolution": "read",
+    "resolution_by_key": "read",
+    "resolution_history": "read",
+    "resolutions": "read",
+    "resolve_pull": "write",
+    "resolve_push": "write",
+    "resume_resolution": "write",
+    "retry_index": "write",
+    "select_embedding": "write",
+    "semantic": "read",
+    "sync_link": "write",
+    "sync_outbox": "read",
+    "sync_pull": "write",
+    "sync_push": "write",
+    "sync_status": "read",
+    "text": "read",
+    "update": "write",
+    "view": "read"
+  }
 }

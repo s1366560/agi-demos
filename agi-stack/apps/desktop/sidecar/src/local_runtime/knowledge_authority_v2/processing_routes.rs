@@ -18,6 +18,9 @@ pub(super) async fn query(
 ) -> RouteResult {
     let operation = KnowledgeOperationV2::admit(lease, &auth, &body.scope)
         .map_err(IntoResponse::into_response)?;
+    let operation = operation
+        .admit_capability(&state, &auth, body.query.capability_action())
+        .map_err(IntoResponse::into_response)?;
     let result = match body.query {
         ProcessingQuery::Configuration {} => {
             let status =

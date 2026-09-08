@@ -25,6 +25,8 @@ use super::{
     platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
 };
 
+mod capabilities;
+mod capabilities_generated;
 mod embedding_provider;
 mod indexing;
 mod processing;
@@ -110,6 +112,8 @@ impl PluginModuleRuntimeV2 for KnowledgeModuleV2 {
             repository: None,
             disposed: false,
             admitted_for_validation: validation,
+            #[cfg(test)]
+            validation_actions: None,
         }));
         let service = KnowledgeAuthorityV2 {
             inner: Arc::clone(&inner),
@@ -136,6 +140,8 @@ struct KnowledgeState {
     repository: Option<Arc<SqliteKnowledgeRepository>>,
     disposed: bool,
     admitted_for_validation: bool,
+    #[cfg(test)]
+    validation_actions: Option<std::collections::BTreeSet<String>>,
 }
 
 pub(super) struct KnowledgeAuthorityV2 {
@@ -202,6 +208,7 @@ pub(super) struct KnowledgeOperationV2 {
     scope: KnowledgeScope,
     actor_id: String,
     writable: bool,
+    capability_action: Option<&'static str>,
     admitted_session_id: String,
     admitted_context_revision: u64,
     admitted_context_updated_at: String,
@@ -252,6 +259,7 @@ impl KnowledgeOperationV2 {
                 "owner" | "admin" | "member" | "contributor"
             ),
             _lease: lease,
+            capability_action: None,
         })
     }
 

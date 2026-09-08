@@ -117,27 +117,13 @@ fn with_access<T>(
         .session_store
         .connection()
         .map_err(|_| KnowledgeAuthorityErrorV2::Forbidden)?;
-    let expected_updated =
-        chrono::DateTime::parse_from_rfc3339(&authenticated.workspace.updated_at)
-            .map_err(|_| KnowledgeAuthorityErrorV2::ScopeMismatch)?
-            .timestamp_millis();
-    let expires_at_ms: Option<i64> = connection.query_row(
-        "SELECT s.expires_at_ms FROM desktop_user_sessions s
-         JOIN desktop_users u ON u.id=s.user_id AND u.status='active'
-         JOIN desktop_workspace_contexts c ON c.user_id=u.id
-         JOIN desktop_tenants t ON t.id=c.tenant_id AND t.status='active'
-         JOIN desktop_projects p ON p.id=c.project_id AND p.tenant_id=t.id AND p.status='active'
-         JOIN desktop_tenant_memberships m ON m.user_id=u.id AND m.tenant_id=t.id AND m.status='active'
-         WHERE s.id=?1 AND s.user_id=?2 AND s.status='active' AND s.expires_at_ms>?3
-           AND c.tenant_id=?4 AND c.project_id=?5 AND c.revision=?6 AND c.updated_at_ms=?7
-           AND (m.role IN ('owner','admin','member','contributor') OR (?8=0 AND m.role='viewer'))",
-        params![authenticated.session_id,authenticated.user.user_id,chrono::Utc::now().timestamp_millis(),
-            operation.scope.tenant_id,operation.scope.project_id,authenticated.workspace.revision,expected_updated,write],
-        |row|row.get(0),
-    ).optional().map_err(|_|KnowledgeAuthorityErrorV2::Forbidden)?;
-    let Some(expires_at_ms) = expires_at_ms else {
-        return Err(KnowledgeAuthorityErrorV2::Forbidden);
-    };
+    let membership = live_membership(&connection, authenticated, write)?;
+    if let Some(action) = operation.capability_action {
+        operation
+            .authority
+            .require_action(&membership.role, action)?;
+    }
+    let expires_at_ms = membership.expires_at_ms;
     check(&connection)?;
     // Status, membership and context cannot change while this outer auth lock
     // is held. Time still advances while waiting on knowledge storage, so its
@@ -157,4 +143,39 @@ fn with_access<T>(
         return Err(KnowledgeAuthorityErrorV2::Forbidden);
     }
     Ok(result?)
+}
+
+pub(super) struct LiveMembership {
+    pub(super) expires_at_ms: i64,
+    pub(super) role: String,
+}
+
+/// Shared observed role/session/context facts, evaluated while the auth lock is held.
+pub(super) fn live_membership(
+    connection: &rusqlite::Connection,
+    authenticated: &AuthenticatedContext,
+    write: bool,
+) -> Result<LiveMembership, KnowledgeAuthorityErrorV2> {
+    let expected_updated =
+        chrono::DateTime::parse_from_rfc3339(&authenticated.workspace.updated_at)
+            .map_err(|_| KnowledgeAuthorityErrorV2::ScopeMismatch)?
+            .timestamp_millis();
+    let membership: Option<LiveMembership> = connection.query_row(
+        "SELECT s.expires_at_ms,m.role FROM desktop_user_sessions s
+         JOIN desktop_users u ON u.id=s.user_id AND u.status='active'
+         JOIN desktop_workspace_contexts c ON c.user_id=u.id
+         JOIN desktop_tenants t ON t.id=c.tenant_id AND t.status='active'
+         JOIN desktop_projects p ON p.id=c.project_id AND p.tenant_id=t.id AND p.status='active'
+         JOIN desktop_tenant_memberships m ON m.user_id=u.id AND m.tenant_id=t.id AND m.status='active'
+         WHERE s.id=?1 AND s.user_id=?2 AND s.status='active' AND s.expires_at_ms>?3
+           AND c.tenant_id=?4 AND c.project_id=?5 AND c.revision=?6 AND c.updated_at_ms=?7
+           AND (m.role IN ('owner','admin','member','contributor') OR (?8=0 AND m.role='viewer'))",
+        params![authenticated.session_id,authenticated.user.user_id,chrono::Utc::now().timestamp_millis(),
+            authenticated.workspace.tenant_id,authenticated.workspace.project_id,authenticated.workspace.revision,expected_updated,write],
+        |row| Ok(LiveMembership {expires_at_ms: row.get(0)?, role: row.get(1)?}),
+    ).optional().map_err(|_|KnowledgeAuthorityErrorV2::Forbidden)?;
+    let Some(membership) = membership else {
+        return Err(KnowledgeAuthorityErrorV2::Forbidden);
+    };
+    Ok(membership)
 }

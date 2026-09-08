@@ -12,6 +12,8 @@ use axum::{
 use super::*;
 use crate::local_runtime::LocalRuntimeState;
 
+#[path = "capability_routes.rs"]
+pub(super) mod capability_routes;
 #[path = "cloud_routes.rs"]
 mod cloud_routes;
 #[path = "context_route.rs"]
@@ -24,6 +26,10 @@ mod resolution_routes;
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .route("/api/v1/knowledge/context", get(context_route::context))
+        .route(
+            "/api/v1/knowledge/capabilities",
+            get(capability_routes::capabilities),
+        )
         .route("/api/v1/knowledge/query", post(query))
         .route(
             "/api/v1/knowledge/processing-query",

@@ -1,3 +1,4 @@
+import { loadNativeKnowledgeCapability } from './nativeKnowledgeCapabilityClient';
 import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
@@ -117,11 +118,14 @@ export async function loadProjectKnowledgeCapabilities(
     return unavailableProjection(config, 'project_knowledge_scope_unavailable');
   }
   if (config.mode === 'local') {
+    const memories = await loadNativeKnowledgeCapability(config, scope, signal);
     return Object.freeze(
       Object.fromEntries(
         PROJECT_KNOWLEDGE_CAPABILITY_IDS.map((capabilityId) => [
           capabilityId,
-          unavailable(LOCAL_REASONS[capabilityId], scope),
+          capabilityId === PROJECT_MEMORIES_ROUTE_ID
+            ? memories
+            : unavailable(LOCAL_REASONS[capabilityId], scope),
         ]),
       ) as Record<ProjectKnowledgeCapabilityId, DesktopCapabilityAvailability>,
     );

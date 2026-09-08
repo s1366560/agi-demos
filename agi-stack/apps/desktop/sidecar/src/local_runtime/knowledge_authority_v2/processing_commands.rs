@@ -15,6 +15,9 @@ pub(crate) async fn command(
 ) -> RouteResult {
     let operation = KnowledgeOperationV2::admit(lease, &auth, &body.scope)
         .map_err(IntoResponse::into_response)?;
+    let operation = operation
+        .admit_capability(&state, &auth, body.command.capability_action())
+        .map_err(IntoResponse::into_response)?;
     // Check live writer admission before any provider probe or worker dispatch.
     processing_context::with_current(&operation, &state, &auth, |_| Ok(()))
         .map_err(IntoResponse::into_response)?;

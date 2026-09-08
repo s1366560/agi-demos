@@ -446,3 +446,26 @@ export type NativeKnowledgeMutationMemory = {
   readonly created_at_ms: number;
   readonly embedding?: (readonly (number)[]) | (null);
 };
+
+// prettier-ignore
+export type NativeKnowledgeCapabilityScope = {
+  readonly tenant_id: (string) | (null);
+  readonly project_id: (string) | (null);
+  readonly workspace_id: (string) | (null);
+  readonly instance_id: (string) | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeCapabilityEntry = {
+  readonly availability: "available" | "degraded" | "unavailable" | "not_applicable";
+  readonly reason_code: (string) | (null);
+  readonly service_version: (string) | (null);
+  readonly contract_version: (string) | (null);
+  readonly allowed_actions: readonly ("cloud_conflict_context" | "configuration" | "configure_embedding" | "create" | "delete" | "entities" | "get" | "index_one" | "list" | "pending_resolutions" | "process_one" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_index" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "text" | "update" | "view")[];
+  readonly scope: NativeKnowledgeCapabilityScope;
+  readonly authority_revision: (number) | (null);
+  readonly retryable: boolean;
+  readonly authority_source: "cloud_service" | "sidecar" | "electron" | "native_runtime" | "renderer";
+  readonly supporting_authority_sources: readonly ("cloud_service" | "sidecar" | "electron" | "native_runtime" | "renderer")[];
+  readonly provenance: "observed" | "declared";
+};

@@ -241,6 +241,24 @@ test('Capability catalog contains every Project Knowledge ID exactly once per de
   }
 });
 
+test('native capability producer delivers observed closed state to the existing workbench entry', async () => {
+  const payload = JSON.parse(readFileSync(new URL('../../../../shared/fixtures/native-knowledge-capabilities.v1.json', import.meta.url), 'utf8'));
+  const config = {...cloudConfig, apiBaseUrl:'http://127.0.0.1:43117', mode:'local', localApiToken:'private-launch',
+    tenantId:payload.scope.tenant_id, projectId:payload.scope.project_id};
+  const snapshot = await loadSnapshot(config, projectTeamOperationsV2Fixture(), projectMemoriesOperationsV2Fixture(),
+    projectEntitiesOperationsV2Fixture(), projectCommunitiesOperationsV2Fixture(), projectGraphOperationsV2Fixture(),
+    async (url) => {
+      const path = new URL(String(url)).pathname;
+      const value = path === '/api/v1/auth/me' ? {user_id:payload.actor_id,is_active:true} :
+        path === '/api/v1/knowledge/context' ? {contract_version:'1.0.0',scope:payload.scope} :
+        path === '/api/v1/knowledge/capabilities' ? payload : {reason_code:'unrelated_authority_unavailable'};
+      return new Response(JSON.stringify(value), {status: path.startsWith('/api/v1/knowledge/') || path === '/api/v1/auth/me' ? 200 : 503,
+        headers:{'content-type':'application/json'}});
+    });
+  assert.deepEqual(snapshot.capabilities['project-project-memories'], payload.result);
+  assert.equal(snapshot.capabilities['project-project-team'].provenance, 'declared');
+});
+
 async function loadSnapshot(
   config,
   projectTeamOperationsV2,
@@ -248,13 +266,14 @@ async function loadSnapshot(
   projectEntitiesOperationsV2,
   projectCommunitiesOperationsV2,
   projectGraphOperationsV2,
+  nativeFetch,
 ) {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () =>
+  globalThis.fetch = nativeFetch ?? (async () =>
     new Response(JSON.stringify({ reason_code: 'unrelated_authority_unavailable' }), {
       status: 503,
       headers: { 'content-type': 'application/json' },
-    });
+    }));
   try {
     return await createDesktopWorkbenchCapabilityClient(
       {

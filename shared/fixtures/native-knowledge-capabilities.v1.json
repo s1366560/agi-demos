@@ -1,0 +1,30 @@
+{
+  "contract_version": "1.0.0",
+  "scope": {
+    "tenant_id": "tenant",
+    "project_id": "project",
+    "context_revision": 1,
+    "profile_id": "profile",
+    "generation": 1,
+    "digest": "sha256:abababababababababababababababababababababababababababababababab"
+  },
+  "actor_id": "actor",
+  "result": {
+    "availability": "unavailable",
+    "reason_code": "knowledge_release_closed",
+    "service_version": "0.1.0",
+    "contract_version": "1.0.0",
+    "allowed_actions": [],
+    "scope": {
+      "tenant_id": "tenant",
+      "project_id": "project",
+      "workspace_id": null,
+      "instance_id": null
+    },
+    "authority_revision": 1,
+    "retryable": false,
+    "authority_source": "sidecar",
+    "supporting_authority_sources": [],
+    "provenance": "observed"
+  }
+}

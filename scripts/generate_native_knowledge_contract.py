@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any, cast
 
 if __package__:
+    from .native_knowledge_capability_catalog import render_capability_catalog
     from .native_knowledge_runtime_schema import render_processing_schema
 else:
+    from native_knowledge_capability_catalog import render_capability_catalog
     from native_knowledge_runtime_schema import render_processing_schema
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -193,7 +195,12 @@ def main() -> int:
     imports = sorted(
         set[str]().union(*(referenced_names(node) for node in rpc.values())) & data.keys()
     )
+    capability_rust, capability_ts = render_capability_catalog(
+        json.loads(SCHEMA.read_text()), definitions
+    )
     outputs = {
+        RUST.with_name("capabilities_generated.rs"): capability_rust,
+        TYPESCRIPT.with_name("nativeKnowledgeCapabilityActionsGenerated.ts"): capability_ts,
         RUST: render_rust(definitions),
         TYPESCRIPT.with_name(
             "nativeKnowledgeProcessingSchemaGenerated.ts"

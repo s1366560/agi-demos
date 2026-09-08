@@ -181,7 +181,7 @@ test('project knowledge local clients fail closed with stable reason codes befor
   assert.equal(fetchCalls, 0);
 });
 
-test('project knowledge capability authority uses injected Cloud clients and never probes Local', async () => {
+test('project knowledge capability authority keeps Cloud injected and Local observed or unavailable', async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (url, init = {}) => {
@@ -278,7 +278,10 @@ test('project knowledge capability authority uses injected Cloud clients and nev
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assert.equal(requests.length, 0);
+  assert.deepEqual(
+    requests.map(({ url }) => new URL(url).pathname).sort(),
+    ['/api/v1/auth/me', '/api/v1/knowledge/context'],
+  );
 });
 
 test('project knowledge capability clients require and preserve injected V2 authorities', () => {

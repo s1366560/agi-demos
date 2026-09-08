@@ -239,3 +239,6 @@ fn generated_requests_consume_all_shared_crud_sync_and_processing_fixtures() {
         }
     }
 }
+
+#[path = "capability_rpc_tests.rs"]
+mod capability_rpc_tests;
