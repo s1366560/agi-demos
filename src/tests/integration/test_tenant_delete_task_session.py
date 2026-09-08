@@ -1,5 +1,7 @@
 """Tenant deletion coverage for project-backed task sessions."""
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -32,11 +34,23 @@ async def _tenants_v2_runtime(test_app):
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("cleanup_succeeds", [True, False])
 async def test_delete_tenant_removes_project_task_session_roots(
     authenticated_async_client: AsyncClient,
     db: AsyncSession,
     test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_succeeds: bool,
 ) -> None:
+    from src.infrastructure.plugins.v2 import sandbox_projection
+
+    # Keep this database deletion test independent of a running Docker adapter.
+    purge = AsyncMock(side_effect=None if cleanup_succeeds else RuntimeError("cleanup failed"))
+    monkeypatch.setattr(
+        sandbox_projection,
+        "current_sandbox_application_services_v2",
+        lambda: SimpleNamespace(adapter=SimpleNamespace(purge_project_resources=purge)),
+    )
     tenant_id = str(uuid4())
     project_id = str(uuid4())
     receipt_id = str(uuid4())
@@ -93,11 +107,12 @@ async def test_delete_tenant_removes_project_task_session_roots(
 
     response = await authenticated_async_client.delete(f"/api/v1/tenants/{tenant_id}")
 
-    assert response.status_code == 204
+    assert response.status_code == (204 if cleanup_succeeds else 503)
+    purge.assert_awaited_once_with(tenant_id, project_id)
     for model, item_id in [
         (Tenant, tenant_id),
         (Project, project_id),
         (TaskSessionCreationReceiptModel, receipt_id),
     ]:
         result = await db.execute(select(model).where(model.id == item_id))
-        assert result.scalar_one_or_none() is None
+        assert (result.scalar_one_or_none() is None) is cleanup_succeeds
