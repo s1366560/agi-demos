@@ -11,6 +11,7 @@ pub(super) const READ_ACTIONS: &[&str] = &[
     "failed_index",
     "failed_processing",
     "get",
+    "graph_source",
     "list",
     "pending_resolutions",
     "processing_audits",
@@ -70,6 +71,7 @@ pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &[
     "failed_index",
     "failed_processing",
     "get",
+    "graph_source",
     "index_one",
     "list",
     "process_community_one",
@@ -104,6 +106,7 @@ impl ProcessingQuery {
             Self::CommunityBuild { .. } => "community_build",
             Self::CommunityAudit { .. } => "community_audit",
             Self::CommunityBuilds { .. } => "community_builds",
+            Self::GraphSource { .. } => "graph_source",
         }
     }
 }

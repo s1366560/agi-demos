@@ -9,6 +9,9 @@ use crate::model::Entity;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+mod graph;
+pub use graph::RetrievedSourceGraph;
+
 pub const MAX_RETRIEVAL_PAGE_SIZE: usize = 100;
 pub const MAX_LITERAL_QUERY_BYTES: usize = 4096;
 

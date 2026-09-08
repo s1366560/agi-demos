@@ -13,6 +13,8 @@ use rusqlite::Connection;
 mod pagination;
 #[path = "knowledge_retrieval/visibility.rs"]
 mod visibility;
+#[path = "knowledge_retrieval/graph_source.rs"]
+mod graph_source;
 
 struct Database(std::path::PathBuf);
 impl Database {

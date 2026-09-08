@@ -1,4 +1,5 @@
 import { loadNativeKnowledgeCapability } from './nativeKnowledgeCapabilityClient';
+import { NATIVE_KNOWLEDGE_ROUTE_READ_ACTIONS } from './nativeKnowledgeCapabilityVersion';
 import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
@@ -125,7 +126,10 @@ export async function loadProjectKnowledgeCapabilities(
           capabilityId,
           capabilityId === PROJECT_MEMORIES_ROUTE_ID
             ? memories
-            : unavailable(LOCAL_REASONS[capabilityId], scope),
+            : capabilityId === PROJECT_COMMUNITIES_ROUTE_ID ||
+                capabilityId === PROJECT_GRAPH_ROUTE_ID
+              ? nativeRouteCapability(capabilityId, memories, scope)
+              : unavailable(LOCAL_REASONS[capabilityId], scope),
         ]),
       ) as Record<ProjectKnowledgeCapabilityId, DesktopCapabilityAvailability>,
     );
@@ -148,6 +152,30 @@ export async function loadProjectKnowledgeCapabilities(
       DesktopCapabilityAvailability
     >,
   );
+}
+
+function nativeRouteCapability(
+  capabilityId: typeof PROJECT_COMMUNITIES_ROUTE_ID | typeof PROJECT_GRAPH_ROUTE_ID,
+  native: DesktopCapabilityAvailability,
+  scope: ProjectKnowledgeScope,
+): DesktopCapabilityAvailability {
+  if (native.provenance !== 'observed') {
+    return unavailable(LOCAL_REASONS[capabilityId], scope);
+  }
+  if (
+    (native.availability === 'available' || native.availability === 'degraded') &&
+    !NATIVE_KNOWLEDGE_ROUTE_READ_ACTIONS[capabilityId].every((action) =>
+      native.allowed_actions.includes(action),
+    )
+  ) {
+    return Object.freeze({
+      ...native,
+      availability: 'unavailable',
+      reason_code: `${REASON_PREFIXES[capabilityId]}_native_actions_unavailable`,
+      allowed_actions: Object.freeze([]),
+    });
+  }
+  return native;
 }
 
 async function loadCapability(

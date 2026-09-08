@@ -39,7 +39,7 @@ export function prepareNativeKnowledgeProcessingQuery<Q extends NativeKnowledgeP
     return s.frozenClone(value);
   } else if (value.operation === 'community_build' || value.operation === 'community_audit') {
     if (!s.identifier(value.build_id)) throw invalid();
-  } else if (value.operation === 'processing_task') {
+  } else if (value.operation === 'processing_task' || value.operation === 'graph_source') {
     if (!validProcessingSource(value.source, scope)) throw invalid();
   } else if (value.operation === 'semantic') {
     if (
@@ -124,6 +124,7 @@ export function prepareNativeKnowledgeProcessingOptions(
   const options = prepareNativeKnowledgeOptions(input);
   if (
     (operation.operation === 'semantic' ||
+      operation.operation === 'graph_source' ||
       Object.hasOwn(processingCommandResults, operation.operation)) &&
     options.expectedScope === undefined
   ) {
@@ -173,6 +174,11 @@ function requireResponse(
   ) {
     throw projectKnowledgeError('native_knowledge_response_invalid');
   }
+  if (
+    operation.operation === 'graph_source' &&
+    new TextEncoder().encode(JSON.stringify(value)).byteLength > 2 * 1024 * 1024
+  )
+    throw projectKnowledgeError('knowledge_graph_source_too_large', 413);
   const payload = value as {
     contract_version: '1.0.0';
     scope: NativeKnowledgeScope;

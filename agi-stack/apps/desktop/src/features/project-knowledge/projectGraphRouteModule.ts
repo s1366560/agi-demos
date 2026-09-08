@@ -1,5 +1,8 @@
+import { createElement } from 'react';
+import { useNativeMemoriesRouteBinding } from './NativeMemoriesRouteContext';
 import type {
   DesktopRouteModuleLoader,
+  DesktopRouteSurfaceProps,
   DesktopImplementedRouteModule,
 } from '../navigation/desktopRouteModule';
 import type { ProjectKnowledgeRouteContext } from './projectKnowledgeRouteModule';
@@ -21,6 +24,17 @@ export function createProjectGraphRouteModuleLoader(
     throw new Error('project_graph_route_binding_factory_invalid');
   return async () => {
     const { createProjectGraphRouteSurface } = await import('./ProjectGraphRouteSurface');
+    const { NativeKnowledgeGraphRouteSurface } = await import('./NativeKnowledgeGraphRouteSurface');
+    const CloudSurface = createProjectGraphRouteSurface(options.createBinding);
+    function GraphRouteSurface(props: DesktopRouteSurfaceProps) {
+      const binding = useNativeMemoriesRouteBinding();
+      return createElement(
+        binding?.authority.scope.authority === 'local'
+          ? NativeKnowledgeGraphRouteSurface
+          : CloudSurface,
+        props,
+      );
+    }
     return Object.freeze({
       routeId: PROJECT_GRAPH_ROUTE_ID,
       capability: PROJECT_GRAPH_ROUTE_ID,
@@ -28,7 +42,7 @@ export function createProjectGraphRouteModuleLoader(
       disposition: 'implemented',
       availability: 'available',
       reasonCode: null,
-      Surface: createProjectGraphRouteSurface(options.createBinding),
+      Surface: GraphRouteSurface,
     }) satisfies DesktopImplementedRouteModule;
   };
 }

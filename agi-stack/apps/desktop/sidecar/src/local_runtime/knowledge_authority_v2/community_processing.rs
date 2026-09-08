@@ -202,25 +202,6 @@ fn rejected_digest(action: &agistack_core::agent::AgentAction) -> Option<String>
     Some(format!("{:x}", writer.hash.finalize()))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use agistack_core::agent::AgentAction;
-
-    #[test]
-    fn rejected_digest_is_exact_for_bounded_output_and_absent_for_oversized_output() {
-        let action = AgentAction::Finish {
-            answer: "rejected text".into(),
-        };
-        let expected = format!("{:x}", Sha256::digest(serde_json::to_vec(&action).unwrap()));
-        assert_eq!(rejected_digest(&action), Some(expected));
-        assert!(rejected_digest(&AgentAction::Finish {
-            answer: "x".repeat(2 * 1024 * 1024)
-        })
-        .is_none());
-    }
-}
-
 struct CommunityAttempt {
     repository: Arc<SqliteKnowledgeRepository>,
     scope: KnowledgeScope,
@@ -269,5 +250,24 @@ impl Drop for CommunityAttempt {
                 &|| Ok(chrono::Utc::now().timestamp_millis()),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agistack_core::agent::AgentAction;
+
+    #[test]
+    fn rejected_digest_is_exact_for_bounded_output_and_absent_for_oversized_output() {
+        let action = AgentAction::Finish {
+            answer: "rejected text".into(),
+        };
+        let expected = format!("{:x}", Sha256::digest(serde_json::to_vec(&action).unwrap()));
+        assert_eq!(rejected_digest(&action), Some(expected));
+        assert!(rejected_digest(&AgentAction::Finish {
+            answer: "x".repeat(2 * 1024 * 1024)
+        })
+        .is_none());
     }
 }

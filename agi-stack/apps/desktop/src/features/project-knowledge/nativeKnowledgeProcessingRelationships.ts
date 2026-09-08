@@ -74,6 +74,28 @@ export function validProcessingResult(
   scope: ProjectKnowledgeScope,
 ): boolean {
   switch (operation.operation) {
+    case 'graph_source': {
+      const graph = value as Results['graph_source'];
+      return (
+        validProcessingSource(graph.source, scope) &&
+        sameJson(graph.source, operation.source) &&
+        graph.audit_attempt === operation.expected_audit_attempt &&
+        graph.entities.every(
+          (entity) => entity.name.trim().length > 0 && entity.kind.trim().length > 0,
+        ) &&
+        graph.relationships.every(
+          (edge) =>
+            s.integer(0, 4_294_967_295)(edge.source_index) &&
+            edge.source_index < graph.entities.length &&
+            s.integer(0, 4_294_967_295)(edge.target_index) &&
+            edge.target_index < graph.entities.length &&
+            edge.relation_type.trim().length > 0 &&
+            edge.fact.trim().length > 0 &&
+            edge.score >= 0 &&
+            edge.score <= 1,
+        )
+      );
+    }
     case 'community_active':
     case 'community_builds':
     case 'community_build':

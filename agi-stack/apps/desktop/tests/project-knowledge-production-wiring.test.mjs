@@ -259,6 +259,255 @@ test('native capability producer delivers observed closed state to the existing 
   assert.equal(snapshot.capabilities['project-project-team'].provenance, 'declared');
 });
 
+test('observed native graph and community reads reach production route admission', async () => {
+  const { snapshot, payload } = await nativeRouteSnapshot();
+  const {
+    evaluateDesktopRouteAccess,
+  } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js');
+  const registry = createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders(
+      Object.fromEntries(
+        ['project-project-graph', 'project-project-communities'].map((id) => [
+          id,
+          implementedLoader(id),
+        ]),
+      ),
+    ),
+  });
+  for (const id of ['project-project-graph', 'project-project-communities']) {
+    const capability = snapshot.capabilities[id];
+    assert.equal(capability.provenance, 'observed', id);
+    assert.equal(capability.authority_source, 'sidecar', id);
+    assert.equal(capability.contract_version, '1.0.0', id);
+    const match = {
+      definition: registry.byId.get(id),
+      context: {
+        tenantId: payload.scope.tenant_id,
+        projectId: payload.scope.project_id,
+      },
+    };
+    assert.equal(
+      evaluateDesktopRouteAccess({
+        match,
+        mode: 'local_offline',
+        permissions: new Set(['authenticated', 'project_member']),
+        capability,
+      }).status,
+      'allowed',
+      id,
+    );
+    assert.equal(
+      evaluateDesktopRouteAccess({
+        match: { ...match, context: { ...match.context, projectId: 'foreign' } },
+        mode: 'local_offline',
+        permissions: new Set(['authenticated', 'project_member']),
+        capability,
+      }).status,
+      'unavailable',
+    );
+    assert.equal(
+      evaluateDesktopRouteAccess({
+        match,
+        mode: 'local_offline',
+        permissions: new Set(['authenticated']),
+        capability,
+      }).status,
+      'forbidden',
+    );
+  }
+});
+
+test('missing native route read actions fail closed without disabling other knowledge routes', async () => {
+  for (const [id, required] of [
+    ['project-project-graph', ['entities', 'graph_source']],
+    [
+      'project-project-communities',
+      ['community_active', 'community_build', 'community_builds', 'community_audit'],
+    ],
+  ])
+    for (const missing of required) {
+      const { snapshot } = await nativeRouteSnapshot((payload) => {
+        payload.result.allowed_actions = payload.result.allowed_actions.filter(
+          (action) => action !== missing,
+        );
+      });
+      assert.equal(snapshot.capabilities[id].availability, 'unavailable', missing);
+      assert.deepEqual(snapshot.capabilities[id].allowed_actions, [], missing);
+      assert.equal(
+        snapshot.capabilities['project-project-memories'].availability,
+        'available',
+        missing,
+      );
+      const other =
+        id === 'project-project-graph' ? 'project-project-communities' : 'project-project-graph';
+      assert.equal(snapshot.capabilities[other].availability, 'available', missing);
+    }
+});
+
+test('late native generation changes keep graph and communities closed', async () => {
+  const { snapshot } = await nativeRouteSnapshot(
+    () => {},
+    (scope, call) => (call === 1 ? scope : { ...scope, generation: scope.generation + 1 }),
+  );
+  for (const id of [
+    'project-project-memories',
+    'project-project-graph',
+    'project-project-communities',
+  ]) {
+    assert.equal(snapshot.capabilities[id].availability, 'unavailable');
+    assert.equal(snapshot.capabilities[id].provenance, 'declared');
+    assert.deepEqual(snapshot.capabilities[id].allowed_actions, []);
+  }
+});
+
+for (const [id, suffix, loaderExport, marker] of [
+  [
+    'project-project-communities',
+    'communities',
+    'createProjectCommunitiesRouteModuleLoader',
+    'Local communities',
+  ],
+  [
+    'project-project-graph',
+    'graph',
+    'createProjectGraphRouteModuleLoader',
+    'data-native-knowledge-graph="true"',
+  ],
+])
+  test(`production host opens ${suffix} surface after native snapshot admission`, async () => {
+    const { snapshot, payload } = await nativeRouteSnapshot();
+    const React = require('react');
+    const { renderToStaticMarkup } = require('react-dom/server');
+    const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
+    const {
+      NativeMemoriesRouteContextProvider,
+    } = require('/tmp/agistack-desktop-test-dist/src/features/project-knowledge/NativeMemoriesRouteContext.js');
+    const { [loaderExport]: createLoader } = require(
+      `/tmp/agistack-desktop-test-dist/src/features/project-knowledge/${suffix === 'graph' ? 'projectGraphRouteModule' : 'projectCommunitiesRouteModule'}.js`,
+    );
+    const {
+      createDesktopHashRouteHost,
+    } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopHashRouteHost.js');
+    const {
+      DesktopProductionRouterView,
+    } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/DesktopProductionRouter.js');
+    const registry = createDesktopProductionRouteRegistry({
+      implementedLoaders: registerDesktopProductionRouteLoaders({
+        [id]: createLoader({
+          createBinding() {
+            throw Error('cloud_binding_called');
+          },
+        }),
+      }),
+    });
+    const path = `/tenant/${payload.scope.tenant_id}/project/${payload.scope.project_id}/${suffix}`;
+    const host = createDesktopHashRouteHost({
+      registry,
+      location: { readHash: () => `#${path}`, subscribe: () => () => {} },
+      mode: 'local',
+      permissions: new Set(['authenticated', 'project_member']),
+      resolveCapability: (route) => snapshot.capabilities[route],
+      switchScope: async () => {},
+    });
+    try {
+      await host.start();
+      assert.equal(host.getState().status, 'ready');
+      const markup = renderToStaticMarkup(
+        React.createElement(
+          I18nProvider,
+          null,
+          React.createElement(
+            NativeMemoriesRouteContextProvider,
+            {
+              value: {
+                authority: {
+                  available: true,
+                  scope: {
+                    authority: 'local',
+                    tenantId: payload.scope.tenant_id,
+                    projectId: payload.scope.project_id,
+                  },
+                  allowedActions: snapshot.capabilities[id].allowed_actions,
+                  userId: payload.actor_id,
+                  sessionId: 'session',
+                  contextRevision: payload.scope.context_revision,
+                  generationDigest: payload.scope.digest,
+                },
+                processingClient: {
+                  query() {
+                    throw Error('SSR must not fetch');
+                  },
+                },
+              },
+            },
+            React.createElement(DesktopProductionRouterView, {
+              state: host.getState(),
+              children: null,
+              navigation: { clearHash() {} },
+              retry: async () => {},
+            }),
+          ),
+        ),
+      );
+      assert.ok(markup.includes(marker), marker);
+      assert.doesNotMatch(markup, /cloud_binding_called/u);
+    } finally {
+      host.stop();
+    }
+  });
+
+async function nativeRouteSnapshot(change = () => {}, observedScope = (scope) => scope) {
+  const payload = JSON.parse(
+    readFileSync(
+      new URL('../../../../shared/fixtures/native-knowledge-capabilities.v1.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  const {
+    NATIVE_KNOWLEDGE_READ_ACTIONS,
+    NATIVE_KNOWLEDGE_WRITE_ACTIONS,
+  } = require('/tmp/agistack-desktop-test-dist/src/features/project-knowledge/nativeKnowledgeCapabilityActionsGenerated.js');
+  payload.result = {
+    ...payload.result,
+    availability: 'available',
+    reason_code: null,
+    allowed_actions: [...NATIVE_KNOWLEDGE_READ_ACTIONS, ...NATIVE_KNOWLEDGE_WRITE_ACTIONS].sort(),
+  };
+  change(payload);
+  let contextCalls = 0;
+  const snapshot = await loadSnapshot(
+    {
+      ...cloudConfig,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:43117',
+      localApiToken: 'private-launch',
+      tenantId: payload.scope.tenant_id,
+      projectId: payload.scope.project_id,
+    },
+    projectTeamOperationsV2Fixture(),
+    projectMemoriesOperationsV2Fixture(),
+    projectEntitiesOperationsV2Fixture(),
+    projectCommunitiesOperationsV2Fixture(),
+    projectGraphOperationsV2Fixture(),
+    async (url) => {
+      const path = new URL(String(url)).pathname;
+      const value =
+        path === '/api/v1/auth/me'
+          ? { user_id: payload.actor_id, is_active: true }
+          : path === '/api/v1/knowledge/context'
+            ? { contract_version: '1.0.0', scope: observedScope(payload.scope, ++contextCalls) }
+            : path === '/api/v1/knowledge/capabilities'
+              ? payload
+              : { reason_code: 'unrelated_authority_unavailable' };
+      return new Response(JSON.stringify(value), {
+        status: path.startsWith('/api/v1/knowledge/') || path === '/api/v1/auth/me' ? 200 : 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  );
+  return { snapshot, payload };
+}
+
 async function loadSnapshot(
   config,
   projectTeamOperationsV2,

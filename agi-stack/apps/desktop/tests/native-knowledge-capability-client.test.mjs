@@ -71,10 +71,10 @@ test('closed release is observed from authenticated scoped endpoint without pret
   }
 });
 test('both legacy and processing actions survive the existing memory capability producer', async () => {
-  assert.equal(new Set([...reads, ...writes]).size, 51);
+  assert.equal(new Set([...reads, ...writes]).size, 52);
   assert.ok(reads.includes('sync_status'));
   for (const action of ['failed_processing', 'failed_index', 'processing_audits',
-    'community_active', 'community_builds', 'community_build', 'community_audit'])
+    'community_active', 'community_builds', 'community_build', 'community_audit', 'graph_source'])
     assert.ok(reads.includes(action));
   assert.ok(writes.includes('sync_link'));
   for (const action of ['create_community_build', 'select_community_build',

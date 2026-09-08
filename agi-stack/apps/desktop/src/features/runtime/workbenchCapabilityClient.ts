@@ -949,12 +949,12 @@ export function createDesktopWorkbenchCapabilityClient(
             projectKnowledgeCapabilities['project-project-entities'],
           ),
           'project-project-communities': (config.mode === 'local'
-            ? declared
+            ? snapshotProjectedCapability
             : observed)(
             projectKnowledgeCapabilities['project-project-communities'],
           ),
           'project-project-graph': (config.mode === 'local'
-            ? declared
+            ? snapshotProjectedCapability
             : observed)(projectKnowledgeCapabilities['project-project-graph']),
           'project-agent-dashboard': (config.mode === 'local'
             ? declared

@@ -62,6 +62,10 @@ pub(crate) enum ProcessingQuery {
         offset: u32,
         limit: u32,
     },
+    GraphSource {
+        source: agistack_core::knowledge::processing::ProcessingSource,
+        expected_audit_attempt: u32,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

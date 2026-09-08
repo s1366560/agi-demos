@@ -2,6 +2,18 @@ import type { NativeKnowledgeCapabilitiesResponse } from './nativeKnowledgeContr
 import { definitions } from './nativeKnowledgeProcessingSchemaGenerated';
 import { identifier } from './nativeKnowledgeSchema';
 
+/** Structural read prerequisites of the native route implementations. */
+export const NATIVE_KNOWLEDGE_ROUTE_READ_ACTIONS = Object.freeze({
+  'project-project-memories': Object.freeze([]),
+  'project-project-communities': Object.freeze([
+    'community_active',
+    'community_build',
+    'community_builds',
+    'community_audit',
+  ]),
+  'project-project-graph': Object.freeze(['entities', 'graph_source']),
+});
+
 /** The knowledge service has its own V1 contract, independent of the snapshot envelope. */
 export function supportsNativeKnowledgeCapabilityV1(
   capabilityName: string,
@@ -9,7 +21,7 @@ export function supportsNativeKnowledgeCapabilityV1(
   input: unknown,
 ): boolean {
   if (
-    capabilityName !== 'project-project-memories' ||
+    !Object.hasOwn(NATIVE_KNOWLEDGE_ROUTE_READ_ACTIONS, capabilityName) ||
     (runtimeState !== 'local_online' && runtimeState !== 'local_offline') ||
     !definitions.NativeKnowledgeCapabilityEntry!(input)
   ) {

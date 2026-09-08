@@ -82,7 +82,7 @@ export type NativeKnowledgeProcessingResponse<
 }>;
 export type NativeKnowledgeProcessingDiscoveryQuery = Exclude<
   NativeKnowledgeProcessingQuery,
-  { operation: 'semantic' }
+  { operation: 'semantic' | 'graph_source' }
 >;
 /** Read-only processing wire surface, supplied only by the admitted native authority. */
 export interface NativeKnowledgeProcessingClient {

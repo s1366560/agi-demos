@@ -8,6 +8,8 @@ use super::*;
 mod commands;
 #[path = "community_routes.rs"]
 mod community;
+#[path = "graph_source_routes.rs"]
+mod graph_source;
 pub(super) use commands::command;
 
 const MAX_WIRE_INTEGER: u64 = 9_007_199_254_740_991;
@@ -24,6 +26,20 @@ pub(super) async fn query(
         .admit_capability(&state, &auth, body.query.capability_action())
         .map_err(IntoResponse::into_response)?;
     let result = match body.query {
+        ProcessingQuery::GraphSource {
+            source,
+            expected_audit_attempt,
+        } => {
+            return graph_source::query(
+                &operation,
+                &state,
+                &auth,
+                &body.scope,
+                &source,
+                expected_audit_attempt,
+            )
+            .await;
+        }
         query @ (ProcessingQuery::CommunityActive {}
         | ProcessingQuery::CommunityBuilds { .. }
         | ProcessingQuery::CommunityBuild { .. }

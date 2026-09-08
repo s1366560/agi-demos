@@ -149,7 +149,8 @@
               "view",
               "retry_processing",
               "processing_task",
-              "community_builds"
+              "community_builds",
+              "graph_source"
             ]
           }
         },

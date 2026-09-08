@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "native-knowledge-definitions-15.v1.schema.json",
+  "$defs": {
+    "NativeKnowledgeSourceGraph": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+        },
+        "audit_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEntity"
+          }
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeRelationship"
+          }
+        }
+      },
+      "required": [
+        "source",
+        "audit_attempt",
+        "title",
+        "content",
+        "entities",
+        "relationships"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

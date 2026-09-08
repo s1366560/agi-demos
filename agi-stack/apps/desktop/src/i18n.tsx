@@ -1,3 +1,4 @@
+import { nativeKnowledgeGraphEnUS, nativeKnowledgeGraphZhCN } from './features/project-knowledge/locales/nativeKnowledgeGraphMessages';
 import {
   nativeKnowledgeCommunityEnUS,
   nativeKnowledgeCommunityZhCN,
@@ -118,6 +119,7 @@ const STORAGE_KEY = 'agistack.desktop.locale';
 const enUS: Record<string, string> = {
   ...nativeMemoriesEnUS,
   ...nativeKnowledgeCommunityEnUS,
+  ...nativeKnowledgeGraphEnUS,
   ...nativeKnowledgeCloudConnectionEnUS,
   ...cloudMemoriesEnUS,
   ...projectGraphEnUS,
@@ -4191,6 +4193,7 @@ const enUS: Record<string, string> = {
 const zhCN: Record<string, string> = {
   ...nativeMemoriesZhCN,
   ...nativeKnowledgeCommunityZhCN,
+  ...nativeKnowledgeGraphZhCN,
   ...nativeKnowledgeCloudConnectionZhCN,
   ...cloudMemoriesZhCN,
   ...projectGraphZhCN,

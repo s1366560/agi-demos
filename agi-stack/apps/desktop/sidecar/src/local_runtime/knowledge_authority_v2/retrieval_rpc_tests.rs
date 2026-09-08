@@ -5,6 +5,9 @@ use axum::{
 };
 use tower::ServiceExt;
 
+#[path = "graph_source_rpc_tests.rs"]
+mod graph_source;
+
 async fn query(f: &Fixture, query: Value) -> (StatusCode, Value) {
     let scope = operation_scope(&f.auth, &f.operation._lease);
     let response = crate::local_runtime::local_router_with_generation_required(f.state.clone())
