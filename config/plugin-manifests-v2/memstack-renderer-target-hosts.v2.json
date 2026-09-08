@@ -2358,7 +2358,7 @@
       "module_ref": "builtin://memstack/desktop/project-memories-authority",
       "entrypoint": "applyDesktopProjectMemoriesAuthorityV2",
       "artifact": {
-        "digest": "sha256:e488fce8b10cd99f94819955dd7f2773ecfd27acf2f4d311fff83c333bd7e397",
+        "digest": "sha256:2e9a22e95a3c857330bf7a82905b49c2f8d92cd7ce5c2fa41b60af926e09e2ab",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV2.ts"
       },
       "targets": [
