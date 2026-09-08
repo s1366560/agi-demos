@@ -50,7 +50,11 @@ the frozen input. Reopening a database does not reset ownership or attempts.
 An expired worker cannot mutate a reclaimed job even if it retains its original
 token. Device methods check the trusted clock/admission callback under the
 write lock and again before commit; expiry or changed admission rolls back the
-whole transition.
+whole transition. The trait adapter advances the trusted host timestamp with
+monotonic elapsed time measured from invocation, including repository mutex and
+SQLite write-lock waits. Hosts must supply a fresh timestamp at invocation.
+Deterministic clock tests use the device callback methods directly; the adapter
+never mixes that supplied clock epoch with the system wall-clock epoch.
 
 A lease grants ownership of historical fixed input. It does not establish that
 the graph is still current, and cannot authorize publication. Source changes

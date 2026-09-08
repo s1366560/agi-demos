@@ -252,3 +252,5 @@ fn prepared_snapshot_cas_rejects_edits_and_same_revision_late_completion() {
         assert_eq!(count, 0);
     });
 }
+
+mod trait_clock;

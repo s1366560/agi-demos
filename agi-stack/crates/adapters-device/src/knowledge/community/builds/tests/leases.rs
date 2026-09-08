@@ -62,8 +62,7 @@ fn restart_reclaim_and_failed_attempt_retry_fence_old_tokens() {
             .await
             .is_err());
         let renewed = repo
-            .renew_community_job(&s, &third, 550, 100)
-            .await
+            .renew_community_job_durable(&s, &third, 100, &|| Ok(550))
             .unwrap();
         assert_eq!(renewed.expires_at_ms, 650);
         assert_eq!(renewed.token, third.token);
