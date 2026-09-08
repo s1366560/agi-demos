@@ -433,7 +433,9 @@
         "agi-stack/apps/desktop/src/api/cloudRequestBroker.ts",
         "agi-stack/apps/desktop/electron/main/cloudMemoryEndpointPolicy.ts",
         "agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts",
-        "agi-stack/apps/desktop/electron/main/cloudRequestPolicy.ts"
+        "agi-stack/apps/desktop/electron/main/cloudRequestPolicy.ts",
+        "agi-stack/apps/desktop/src/api/cloudMemoryScopeContract.ts",
+        "agi-stack/apps/desktop/src/api/cloudMemoryCommandContract.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -565,7 +567,21 @@
         "agi-stack/crates/adapters-device/src/knowledge/index/leases.rs",
         "agi-stack/crates/adapters-device/src/knowledge/index/configuration.rs",
         "agi-stack/crates/adapters-device/src/knowledge/index/builds.rs",
-        "agi-stack/apps/desktop/src/plugins/desktopTenantProvidersResponseContractV2.ts"
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProvidersResponseContractV2.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_management.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_probe.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/workspace_core_bridge.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/auth_context.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/platform_plugin_authority_v2.rs",
+        "agi-stack/apps/desktop/src/api/client.ts",
+        "agi-stack/apps/desktop/src/types.ts",
+        "agi-stack/apps/desktop/src/features/auth/authContextModel.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRendererGenerationContextV2.tsx",
+        "agi-stack/crates/adapters-http-llm/src/embedding.rs",
+        "agi-stack/crates/adapters-http-llm/src/embedding/verified.rs",
+        "config/plugin-manifests-v2/memstack-local-knowledge.v2.json"
       ],
       "judgment_rationale": "The visible copy-link control uses navigator.clipboard to copy window.location.href. Memory list, creation, detail, client-side JSON export, copy-link and reprocessing remain one canonical project knowledge capability. Web viewer reads and contributor writes, absence of an import control, and lack of routed server-sharing UI remain unchanged. Desktop cloud memory pagination and the existing project generation lease preserve scope, cancellation, exact response and released-capability boundaries; its UI remains view/list only. Native storage, conflict journals, verified sync transport and the typed client are implemented foundations. Mapping and selected conflict/recovery commands require the previously observed six-field native scope; they do not accept renderer-supplied cloud snapshots or receipts. Production knowledge-and-sync publication remains explicitly closed, so local availability and actions remain unavailable/empty despite those foundations. These source facts do not establish native Electron acceptance, populated user-facing sync journeys, cloud authorization readiness, or feature release."
     },
