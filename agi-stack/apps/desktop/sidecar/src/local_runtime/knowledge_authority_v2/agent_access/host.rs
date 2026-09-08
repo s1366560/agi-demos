@@ -239,7 +239,7 @@ impl KnowledgeToolHost {
             Some(self.authorization.message_id.clone()), None, None,
             json!({"agent_id":self.agent_id,"actor_id":self.authorization.auth.user.user_id,"tool_name":tool,
                 "input":input,"input_reference":input_reference,"output_references":refs,"rationale":rationale,
-                "status":output.get("status").and_then(Value::as_str).unwrap_or("returned"),
+                "status":output.get("status").and_then(Value::as_str).unwrap_or("read_validated"),
                 "scope":{"tenant_id":self.authorization.auth.workspace.tenant_id,"project_id":self.authorization.auth.workspace.project_id,
                     "context_revision":self.authorization.auth.workspace.revision,"generation":descriptor.generation,"digest":descriptor.digest},
                 "latency_ms":started.elapsed().as_millis(),"run_id":self.authorization.run_id}));
@@ -315,18 +315,32 @@ impl ToolHost for KnowledgeToolHost {
             Ok((v, _)) => v.clone(),
             Err(_) => json!({"status":"rejected"}),
         };
+        let audit_input = serde_json::from_str::<Value>(input_json).map_err(parse)?;
+        // Durable read evidence precedes final delivery admission. It must not
+        // claim that the model received a result that can still be rejected.
         self.audit(
             tool,
             &rationale,
             input_reference.as_deref(),
-            &serde_json::from_str::<Value>(input_json).map_err(parse)?,
+            &audit_input,
             &audit_result,
             started,
         );
         let (value, references) = result.map_err(|e| CoreError::Tool(e.to_string()))?;
         let output = serde_json::to_string(&value).map_err(parse)?;
-        self.admit(action)
-            .map_err(|e| CoreError::Tool(e.to_string()))?;
+        #[cfg(test)]
+        super::before_delivery_test_hook();
+        if let Err(error) = self.admit(action) {
+            self.audit(
+                tool,
+                &rationale,
+                input_reference.as_deref(),
+                &audit_input,
+                &json!({"status":"delivery_rejected"}),
+                started,
+            );
+            return Err(CoreError::Tool(error.to_string()));
+        }
         self.returned
             .lock()
             .map_err(|_| CoreError::Tool("knowledge reference store unavailable".into()))?

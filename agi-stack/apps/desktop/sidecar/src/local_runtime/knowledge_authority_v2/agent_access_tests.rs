@@ -262,3 +262,75 @@ async fn agent_access_capability_denial_and_closed_release_never_expose_or_read_
     })
     .await;
 }
+
+#[tokio::test]
+async fn agent_access_audits_late_delivery_rejection_without_registering_source_reference() {
+    let f = Fixture::new("viewer").await;
+    let c = conversation(&f);
+    agent_access::scope(Some(authorization(&f, &c)), async {
+        let host = agent_access::tool_host(&f.state, &c, None, "agent").unwrap();
+        let state = f.state.clone();
+        let conversation_id = c.id.clone();
+        let session_id = f.auth.session_id.clone();
+        let result = agent_access::with_before_delivery_test_hook(
+            move || {
+                let audit = state.session_store.timeline(&conversation_id, 100).unwrap();
+                assert_eq!(
+                    audit
+                        .iter()
+                        .filter(|item| item["type"] == "knowledge_tool_audit")
+                        .count(),
+                    1
+                );
+                state
+                    .session_store
+                    .connection()
+                    .unwrap()
+                    .execute(
+                        "UPDATE desktop_user_sessions SET status='revoked' WHERE id=?1",
+                        [session_id],
+                    )
+                    .unwrap();
+            },
+            host.call("knowledge_search", SEARCH),
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "final admission must still reject a revoked session"
+        );
+        let timeline = f.state.session_store.timeline(&c.id, 100).unwrap();
+        let audits: Vec<_> = timeline
+            .iter()
+            .filter(|item| item["type"] == "knowledge_tool_audit")
+            .collect();
+        assert_eq!(
+            audits
+                .iter()
+                .map(|item| item["payload"]["status"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["read_validated", "delivery_rejected"]
+        );
+        assert_eq!(audits[1]["payload"]["output_references"], json!([]));
+        let undelivered = audits[0]["payload"]["output_references"][0]["reference"].clone();
+        assert!(undelivered.is_string());
+        // Restore only this isolated fixture row to distinguish an absent ledger
+        // entry from the earlier session rejection. No production session is touched.
+        f.state
+            .session_store
+            .connection()
+            .unwrap()
+            .execute(
+                "UPDATE desktop_user_sessions SET status='active' WHERE id=?1",
+                [&f.auth.session_id],
+            )
+            .unwrap();
+        assert!(host.call("knowledge_search", SEARCH).await.is_ok());
+        let source = json!({"reference":undelivered,"rationale":"Check undelivered reference"});
+        assert!(host
+            .call("knowledge_source", &source.to_string())
+            .await
+            .is_err());
+    })
+    .await;
+}

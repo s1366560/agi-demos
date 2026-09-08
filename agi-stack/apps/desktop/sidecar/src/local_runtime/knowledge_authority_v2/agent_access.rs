@@ -19,6 +19,32 @@ tokio::task_local! {
     static CURRENT: Option<Arc<RunAuthorization>>;
 }
 
+#[cfg(test)]
+tokio::task_local! {
+    static BEFORE_DELIVERY_TEST_HOOK: std::cell::RefCell<Option<Box<dyn FnOnce() + Send>>>;
+}
+
+#[cfg(test)]
+pub(in crate::local_runtime) async fn with_before_delivery_test_hook<F: Future>(
+    hook: impl FnOnce() + Send + 'static,
+    future: F,
+) -> F::Output {
+    BEFORE_DELIVERY_TEST_HOOK
+        .scope(std::cell::RefCell::new(Some(Box::new(hook))), future)
+        .await
+}
+
+#[cfg(test)]
+fn before_delivery_test_hook() {
+    let hook = BEFORE_DELIVERY_TEST_HOOK
+        .try_with(|value| value.borrow_mut().take())
+        .ok()
+        .flatten();
+    if let Some(hook) = hook {
+        hook();
+    }
+}
+
 impl RunAuthorization {
     pub(in crate::local_runtime) fn capture(
         auth: AuthenticatedContext,
