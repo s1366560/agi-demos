@@ -12,6 +12,7 @@ import { requireNativeKnowledgeScope } from '../features/project-knowledge/nativ
 import { sameJson } from '../features/project-knowledge/nativeKnowledgeRelationships';
 import type { DesktopTenantProvidersClientV2 } from './desktopTenantProvidersAuthorityModuleV2';
 import type { DesktopWorkspaceCatalogOperationsV2 } from './desktopWorkspaceCatalogAuthorityModuleV2';
+import { DesktopWorkspaceCatalogAuthorityUnavailableErrorV2 } from './desktopWorkspaceCatalogAuthorityModuleV2';
 import {
   cloneDesktopProjectMemoriesRuntimeConfigV2,
   cloneDesktopProjectMemoriesScopeV2,
@@ -177,7 +178,10 @@ async function modelChoices(
     : unavailable;
 }
 function directoryUnavailable(error: unknown): boolean {
-  return error instanceof DesktopApiError && [403, 404, 501, 502, 503].includes(error.status);
+  return (
+    error instanceof DesktopWorkspaceCatalogAuthorityUnavailableErrorV2 ||
+    (error instanceof DesktopApiError && [403, 404, 501, 502, 503].includes(error.status))
+  );
 }
 function identifier(value: unknown): string {
   if (

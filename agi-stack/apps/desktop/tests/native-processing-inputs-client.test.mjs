@@ -60,6 +60,26 @@ function fixture({
   return { client, calls };
 }
 const opts = (operation) => ({ operation, expectedScope: nativeScope });
+test('workspace generation admission rejection yields an unavailable directory', async () => {
+  const { createDesktopWorkspaceCatalogOperationsV2 } = require(
+    `${root}/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js`,
+  );
+  let observations = 0;
+  const client = create(config, {
+    processing: {
+      query: async () => {
+        observations += 1;
+        return { scope: nativeScope };
+      },
+    },
+    providers: {},
+    workspaces: createDesktopWorkspaceCatalogOperationsV2(() => null),
+    isCurrent: () => true,
+  });
+  const result = await client.load(projectScope, opts('process_one'));
+  assert.deepEqual(result.workspaces, { availability: 'unavailable', items: [] });
+  assert.equal(observations, 2);
+});
 test('embedding choices use exact provider revision and structured capability only', async () => {
   const f = fixture();
   const got = await f.client.load(projectScope, opts('configure_embedding'));
