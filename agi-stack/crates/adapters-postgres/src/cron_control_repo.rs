@@ -5,13 +5,17 @@ use std::fmt;
 use agistack_core::ports::CoreError;
 use sqlx::types::chrono::{DateTime, Utc};
 
+use crate::cron_cutover_fence::verified_cutover_sql;
 use crate::{CronSchedulerLease, PgPool};
 
-const LIST_WORK_SCOPES_SQL: &str = "WITH scheduler_authority AS MATERIALIZED ( \
+const LIST_WORK_SCOPES_SQL: &str = concat!(
+    "WITH scheduler_authority AS MATERIALIZED ( \
     SELECT scope_id FROM agistack_cron_scheduler_owners \
     WHERE scope_id = $1 AND owner_kind = 'rust' AND owner_id = $2 \
       AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at = $5 \
-      AND lease_expires_at > $6 \
+      AND lease_expires_at > $6 ",
+    verified_cutover_sql!(""),
+    " \
     FOR SHARE \
 ), scopes AS ( \
     SELECT tenant_id, project_id FROM cron_jobs \
@@ -29,13 +33,17 @@ FROM scopes CROSS JOIN scheduler_authority \
 WHERE $7::text IS NULL \
    OR (scopes.tenant_id, scopes.project_id) > ($7::text, $8::text) \
 ORDER BY scopes.tenant_id, scopes.project_id \
-LIMIT $9";
+LIMIT $9"
+);
 
-const ADMIT_RECONCILE_SQL: &str = "WITH scheduler_authority AS MATERIALIZED ( \
+const ADMIT_RECONCILE_SQL: &str = concat!(
+    "WITH scheduler_authority AS MATERIALIZED ( \
     SELECT scope_id FROM agistack_cron_scheduler_owners \
     WHERE scope_id = $1 AND owner_kind = 'rust' AND owner_id = $2 \
       AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at = $5 \
-      AND lease_expires_at > $6 \
+      AND lease_expires_at > $6 ",
+    verified_cutover_sql!(""),
+    " \
     FOR UPDATE \
 ), candidates AS ( \
     SELECT job.id AS job_id, job.tenant_id, job.project_id, \
@@ -62,7 +70,8 @@ SELECT concat('cron-reconcile:', candidate.job_id, ':', candidate.schedule_revis
 FROM candidates AS candidate \
 ON CONFLICT (job_id, operation_kind, schedule_revision) \
     WHERE operation_kind = 'reconcile_schedule' DO NOTHING \
-RETURNING id AS operation_id, tenant_id, project_id, job_id, schedule_revision";
+RETURNING id AS operation_id, tenant_id, project_id, job_id, schedule_revision"
+);
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct CronControlScope {

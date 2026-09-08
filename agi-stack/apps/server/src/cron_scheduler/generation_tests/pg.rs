@@ -22,8 +22,33 @@ async fn postgres_cron_generations_preserve_owner_fencing_and_private_resource_l
     // Only this connection's temporary owner row is changed. Production ownership is untouched.
     sqlx::query("CREATE TEMP TABLE agistack_cron_scheduler_owners (LIKE public.agistack_cron_scheduler_owners INCLUDING ALL)")
         .execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO pg_temp.agistack_cron_scheduler_owners (scope_id, owner_kind) VALUES ('global', 'rust')")
-        .execute(&pool).await.unwrap();
+    sqlx::query(
+        "ALTER TABLE pg_temp.agistack_cron_scheduler_owners
+        ADD COLUMN IF NOT EXISTS cutover_phase text NOT NULL DEFAULT 'unverified',
+        ADD COLUMN IF NOT EXISTS cutover_revision bigint NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cutover_evidence json NOT NULL DEFAULT '{}'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let fixture = serde_json::json!({
+        "protocol": "cron-cutover-evidence.v1",
+        "manifest": {"deployment_id": "fixture-deployment"},
+        "verification": {
+            "protocol": "cron-deployment-verification.v1", "deployment_id": "fixture-deployment",
+            "cutover_revision": 1, "receipt_id": "fixture-only", "verifier_id": "fixture-only",
+            "inventory_sha256": "a".repeat(64), "evidence_sha256": "b".repeat(64)
+        }
+    });
+    sqlx::query(
+        "INSERT INTO pg_temp.agistack_cron_scheduler_owners
+        (scope_id, owner_kind, cutover_phase, cutover_revision, cutover_evidence)
+        VALUES ('global', 'rust', 'verified', 1, $1)",
+    )
+    .bind(fixture)
+    .execute(&pool)
+    .await
+    .unwrap();
     sqlx::query("CREATE TEMP TABLE agistack_legacy_cron_admissions (scope_id text, status text)")
         .execute(&pool)
         .await

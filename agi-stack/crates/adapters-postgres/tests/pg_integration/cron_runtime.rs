@@ -373,6 +373,7 @@ async fn acquire_runtime_scheduler_authority(
     .execute(pool)
     .await
     .expect("delegate runtime scheduler ownership to Rust");
+    verify_cutover_fixture(pool).await;
     PgCronSchedulerOwnerRepository::new(pool.clone())
         .try_acquire_global("cron-runtime-operation-worker", 300, now)
         .await

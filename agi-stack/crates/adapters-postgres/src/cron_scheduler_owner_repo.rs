@@ -6,32 +6,45 @@ use sqlx::types::chrono::{DateTime, Utc};
 
 use agistack_core::ports::CoreError;
 
+use crate::cron_cutover_fence::verified_cutover_sql;
 use crate::PgPool;
 
 pub const GLOBAL_CRON_SCHEDULER_SCOPE: &str = "global";
 
-const ACQUIRE_SQL: &str = "UPDATE agistack_cron_scheduler_owners \
+const ACQUIRE_SQL: &str = concat!(
+    "UPDATE agistack_cron_scheduler_owners \
 SET owner_id = $2, owner_epoch = owner_epoch + 1, \
     lease_token = concat(scope_id, ':', owner_epoch + 1, ':', txid_current()), \
     lease_expires_at = $3 + ($4 * interval '1 second'), acquired_at = $3, updated_at = $3 \
-WHERE scope_id = $1 AND owner_kind = 'rust' \
+WHERE scope_id = $1 AND owner_kind = 'rust' ",
+    verified_cutover_sql!(""),
+    " \
   AND (lease_token IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= $3) \
   AND NOT EXISTS (SELECT 1 FROM agistack_legacy_cron_admissions \
                   WHERE scope_id = $1 AND status = 'active') \
-RETURNING scope_id, owner_id, owner_epoch, lease_token, lease_expires_at, acquired_at";
+RETURNING scope_id, owner_id, owner_epoch, lease_token, lease_expires_at, acquired_at"
+);
 
-const RENEW_SQL: &str = "UPDATE agistack_cron_scheduler_owners \
+const RENEW_SQL: &str = concat!(
+    "UPDATE agistack_cron_scheduler_owners \
 SET lease_expires_at = $6 + ($7 * interval '1 second'), updated_at = $6 \
 WHERE scope_id = $1 AND owner_kind = 'rust' AND owner_id = $2 \
   AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at = $5 \
-  AND lease_expires_at > $6 \
-RETURNING scope_id, owner_id, owner_epoch, lease_token, lease_expires_at, acquired_at";
+  AND lease_expires_at > $6 ",
+    verified_cutover_sql!(""),
+    " \
+RETURNING scope_id, owner_id, owner_epoch, lease_token, lease_expires_at, acquired_at"
+);
 
-const IS_CURRENT_SQL: &str = "SELECT EXISTS( \
+const IS_CURRENT_SQL: &str = concat!(
+    "SELECT EXISTS( \
     SELECT 1 FROM agistack_cron_scheduler_owners \
     WHERE scope_id = $1 AND owner_kind = 'rust' AND owner_id = $2 \
       AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at = $5 \
-      AND lease_expires_at > $6)";
+      AND lease_expires_at > $6 ",
+    verified_cutover_sql!(""),
+    ")"
+);
 
 const RELEASE_SQL: &str = "UPDATE agistack_cron_scheduler_owners \
 SET owner_id = NULL, lease_token = NULL, lease_expires_at = NULL, updated_at = $6 \

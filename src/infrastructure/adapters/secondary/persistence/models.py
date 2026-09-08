@@ -2821,6 +2821,23 @@ class CronSchedulerOwnerModel(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+    cutover_phase: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unverified", server_default="unverified"
+    )
+    cutover_revision: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    cutover_evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "cutover_phase IN ('unverified', 'prepared', 'blocked', 'verified')",
+            name="ck_cron_scheduler_cutover_phase",
+        ),
+        CheckConstraint("cutover_revision >= 0", name="ck_cron_scheduler_cutover_revision"),
+    )
 
 
 class AgentDefinitionModel(Base):

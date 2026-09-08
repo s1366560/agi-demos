@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:memstack:cron-deployment-verification:v1",
+  "title": "Trusted scheduler deployment verification receipt",
+  "description": "Written only by a deployment verifier after checking the complete producer inventory, queue boundary and execution/HITL closure. Schema validation alone is not verification. This release supplies no verifier or activation command.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol", "deployment_id", "cutover_revision", "receipt_id", "verifier_id",
+    "inventory_sha256", "evidence_sha256"
+  ],
+  "properties": {
+    "protocol": {"const": "cron-deployment-verification.v1"},
+    "deployment_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "cutover_revision": {"type": "integer", "minimum": 1},
+    "receipt_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "verifier_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "inventory_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

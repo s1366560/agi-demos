@@ -129,6 +129,7 @@ async fn acquire_authority(
     .execute(pool)
     .await
     .expect("delegate cron control ownership to Rust");
+    verify_cutover_fixture(pool).await;
     PgCronSchedulerOwnerRepository::new(pool.clone())
         .try_acquire_global("cron-control-test", 60, now)
         .await

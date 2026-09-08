@@ -430,6 +430,7 @@ async fn acquire_scheduler_authority(
     .execute(pool)
     .await
     .expect("delegate scheduler ownership to Rust");
+    verify_cutover_fixture(pool).await;
     PgCronSchedulerOwnerRepository::new(pool.clone())
         .try_acquire_global(owner_id, lease_seconds, now)
         .await

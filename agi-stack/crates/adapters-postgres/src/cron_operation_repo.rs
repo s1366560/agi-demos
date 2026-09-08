@@ -11,6 +11,7 @@ use sqlx::FromRow;
 
 use agistack_core::ports::{CoreError, CoreResult};
 
+use crate::cron_cutover_fence::verified_cutover_sql;
 use crate::{CronSchedulerLease, PgPool};
 
 const OPERATION_COLUMNS: &str = "id, tenant_id, project_id, job_id, job_revision, \
@@ -19,11 +20,14 @@ const OPERATION_COLUMNS: &str = "id, tenant_id, project_id, job_id, job_revision
     lease_expires_at, actor_user_id, actor_api_key_id, request_receipt_id, last_error_code, \
     last_error_redacted, result_json, created_at, updated_at, started_at, completed_at";
 
-const CLAIM_DUE_SQL: &str = "WITH scheduler_authority AS MATERIALIZED ( \
+const CLAIM_DUE_SQL: &str = concat!(
+    "WITH scheduler_authority AS MATERIALIZED ( \
     SELECT scope_id FROM agistack_cron_scheduler_owners \
     WHERE scope_id = $7 AND owner_kind = 'rust' AND owner_id = $8 \
       AND owner_epoch = $9 AND lease_token = $10 AND lease_expires_at = $11 \
-      AND lease_expires_at > $3 \
+      AND lease_expires_at > $3 ",
+    verified_cutover_sql!(""),
+    " \
     FOR UPDATE \
 ), expired_exhausted AS ( \
     UPDATE agistack_cron_operations AS operation \
@@ -82,7 +86,8 @@ RETURNING operation.id, operation.tenant_id, operation.project_id, operation.job
     operation.lease_expires_at, operation.actor_user_id, operation.actor_api_key_id, \
     operation.request_receipt_id, operation.last_error_code, operation.last_error_redacted, \
     operation.result_json, operation.created_at, operation.updated_at, operation.started_at, \
-    operation.completed_at";
+    operation.completed_at"
+);
 
 const RENEW_SQL: &str = "UPDATE agistack_cron_operations \
 SET lease_expires_at = $6 + ($7 * interval '1 second'), updated_at = $6 \
@@ -709,7 +714,8 @@ mod tests {
             "scope_id = $7 AND owner_kind = 'rust' AND owner_id = $8 AND owner_epoch = $9"
         ));
         assert!(sql.contains("lease_token = $10 AND lease_expires_at = $11"));
-        assert!(sql.contains("lease_expires_at > $3 FOR UPDATE"));
+        assert!(sql.contains("lease_expires_at > $3 AND cutover_phase = 'verified'"));
+        assert!(sql.contains("FOR UPDATE"));
         assert!(sql.contains("FROM scheduler_authority"));
         assert!(sql.contains("CROSS JOIN scheduler_authority"));
         assert!(sql.contains("operation.tenant_id = $1 AND operation.project_id = $2"));

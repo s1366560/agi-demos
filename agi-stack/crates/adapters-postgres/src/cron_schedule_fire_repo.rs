@@ -7,6 +7,7 @@ use sqlx::types::chrono::{DateTime, Utc};
 
 use agistack_core::ports::CoreError;
 
+use crate::cron_cutover_fence::verified_cutover_sql;
 use crate::{
     CronOperationScope, CronScheduleProjection, CronScheduleSnapshot, CronScheduleStatus,
     CronSchedulerLease, PgPool, GLOBAL_CRON_SCHEDULER_SCOPE,
@@ -27,7 +28,8 @@ WHERE state.tenant_id = $1 AND state.project_id = $2 \
   AND job.schedule_revision = state.schedule_revision AND job.enabled IS TRUE \
 ORDER BY state.next_fire_at, state.job_id LIMIT $4";
 
-const LOCK_CURSOR_SQL: &str = "SELECT job.id \
+const LOCK_CURSOR_SQL: &str = concat!(
+    "SELECT job.id \
 FROM agistack_cron_schedule_state AS state \
 JOIN cron_jobs AS job ON job.id = state.job_id \
 JOIN agistack_cron_scheduler_owners AS scheduler_owner ON scheduler_owner.scope_id = $8 \
@@ -39,8 +41,11 @@ WHERE state.job_id = $1 AND state.tenant_id = $2 AND state.project_id = $3 \
   AND job.enabled IS TRUE \
   AND scheduler_owner.owner_kind = 'rust' AND scheduler_owner.owner_id = $9 \
   AND scheduler_owner.owner_epoch = $10 AND scheduler_owner.lease_token = $11 \
-  AND scheduler_owner.lease_expires_at = $12 AND scheduler_owner.lease_expires_at > $13 \
-FOR UPDATE OF state, job, scheduler_owner";
+  AND scheduler_owner.lease_expires_at = $12 AND scheduler_owner.lease_expires_at > $13 ",
+    verified_cutover_sql!("scheduler_owner."),
+    " \
+FOR UPDATE OF state, job, scheduler_owner"
+);
 
 /// Exact materialized cursor plus the immutable run policy needed to fire it.
 #[derive(Debug, Clone, PartialEq)]

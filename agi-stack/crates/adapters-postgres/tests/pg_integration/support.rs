@@ -1,4 +1,6 @@
 pub(super) use agistack_adapters_postgres::PgPool;
+#[path = "../support/cron_cutover_fixture.rs"]
+mod cron_cutover_fixture;
 pub(super) use agistack_adapters_postgres::{
     connect, ensure_aux_schema, AgentExecutionEventListQuery, AgentExecutionTimelineQuery,
     ArtifactListQuery, AuditLogListQuery, BlackboardFileRecord, BlackboardOutboxRecord,
@@ -37,6 +39,7 @@ pub(super) use agistack_adapters_postgres::{
 pub(super) use agistack_core::agent::types::{SessionState, SessionStatus};
 pub(super) use agistack_core::model::{Entity, Memory};
 pub(super) use agistack_core::ports::{CheckpointStore, MemoryRepository, VectorIndexPort};
+pub(super) use cron_cutover_fixture::{install_cutover_fixture, verify_cutover_fixture};
 pub(super) use serde_json::json;
 pub(super) use sqlx::types::chrono::{DateTime, TimeZone, Utc};
 

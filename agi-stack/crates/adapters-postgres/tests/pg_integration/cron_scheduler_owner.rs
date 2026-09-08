@@ -47,6 +47,7 @@ async fn scheduler_owner_requires_rust_cutover_and_fences_every_lease_snapshot()
     .execute(&pool)
     .await
     .expect("delegate to Rust");
+    verify_cutover_fixture(&pool).await;
 
     let first = repo
         .try_acquire_global("scheduler-1", 30, now)
@@ -101,6 +102,7 @@ async fn ensure_owner_table(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("ensure scheduler owner table");
+    install_cutover_fixture(pool).await;
 }
 
 async fn clean_rows(pool: &PgPool) {

@@ -184,6 +184,7 @@ async fn due_schedule_fire_atomically_creates_run_operation_and_advances_cursor(
     .execute(&pool)
     .await
     .expect("delegate scheduler ownership to Rust");
+    verify_cutover_fixture(&pool).await;
     let authority = PgCronSchedulerOwnerRepository::new(pool.clone())
         .try_acquire_global("cron-schedule-test", 60, now)
         .await

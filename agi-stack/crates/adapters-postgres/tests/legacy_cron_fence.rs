@@ -4,6 +4,9 @@ use agistack_adapters_postgres::PgCronSchedulerOwnerRepository;
 use chrono::Utc;
 use sqlx::postgres::PgPoolOptions;
 
+#[path = "support/cron_cutover_fixture.rs"]
+mod cron_cutover_fixture;
+
 #[tokio::test]
 async fn rust_owner_fails_closed_for_missing_schema_and_active_legacy_execution() {
     let Ok(url) = std::env::var("DATABASE_URL") else {
@@ -69,6 +72,7 @@ async fn rust_owner_fails_closed_for_missing_schema_and_active_legacy_execution(
         .execute(&pool)
         .await
         .unwrap();
+    cron_cutover_fixture::verify_cutover_fixture(&pool).await;
     let active = repository
         .try_acquire_global("rust", 60, Utc::now())
         .await

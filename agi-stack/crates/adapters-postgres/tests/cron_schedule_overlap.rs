@@ -1,11 +1,15 @@
 //! Scheduled overlap admission against real PostgreSQL in a private schema.
 
 use agistack_adapters_postgres::{
-    CronOperationScope, CronScheduleProjection, CronScheduleStatus, NewCronScheduledFire,
+    CronControlScope, CronOperationScope, CronScheduleProjection, CronScheduleStatus,
+    NewCronScheduledFire, PgCronControlRepository, PgCronOperationRepository,
     PgCronScheduleFireRepository, PgCronSchedulerOwnerRepository,
 };
 use chrono::{Duration, TimeZone, Utc};
 use sqlx::postgres::PgPoolOptions;
+
+#[path = "support/cron_cutover_fixture.rs"]
+mod cron_cutover_fixture;
 
 #[tokio::test]
 async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() {
@@ -58,7 +62,11 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
             input_json jsonb NOT NULL, status text NOT NULL, attempt_count integer NOT NULL,
             max_attempts integer NOT NULL, next_attempt_at timestamptz, actor_user_id text,
             actor_api_key_id text, request_receipt_id text, result_json jsonb,
-            created_at timestamptz, updated_at timestamptz)",
+            created_at timestamptz, updated_at timestamptz, lease_owner text, lease_token text,
+            lease_expires_at timestamptz, last_error_code text, last_error_redacted text,
+            started_at timestamptz, completed_at timestamptz)",
+        "CREATE UNIQUE INDEX reconcile_revision ON agistack_cron_operations
+            (job_id, operation_kind, schedule_revision) WHERE operation_kind='reconcile_schedule'",
         "CREATE TABLE agistack_cron_schedule_state (
             job_id text PRIMARY KEY REFERENCES cron_jobs(id), tenant_id text NOT NULL,
             project_id text NOT NULL, schedule_revision bigint NOT NULL, status text NOT NULL,
@@ -105,6 +113,7 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
     .execute(&pool)
     .await
     .unwrap();
+    cron_cutover_fixture::verify_cutover_fixture(&pool).await;
     let authority = PgCronSchedulerOwnerRepository::new(pool.clone())
         .try_acquire_global("scheduler", 600, now)
         .await
@@ -142,6 +151,22 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
             operation_id: format!("operation-{index}"),
             idempotency_key: format!("scheduled:1:{observed}"),
         };
+        sqlx::query("UPDATE agistack_cron_scheduler_owners SET cutover_phase='blocked'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(
+            repository
+                .commit_fire(scope, &candidate, &next, &fire, &authority, observed)
+                .await
+                .unwrap()
+                .is_none(),
+            "revoked cutover cannot advance the schedule cursor"
+        );
+        sqlx::query("UPDATE agistack_cron_scheduler_owners SET cutover_phase='verified'")
+            .execute(&pool)
+            .await
+            .unwrap();
         repository
             .commit_fire(scope, &candidate, &next, &fire, &authority, observed)
             .await
@@ -174,6 +199,64 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
             "cursor replay never duplicates history"
         );
     }
+    let control = PgCronControlRepository::new(pool.clone());
+    let operations = PgCronOperationRepository::new(pool.clone());
+    let control_scope = CronControlScope {
+        tenant_id: "tenant".into(),
+        project_id: "project".into(),
+    };
+    let observed = now + Duration::seconds(240);
+    sqlx::query("UPDATE cron_jobs SET schedule_revision=2 WHERE id='job'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agistack_cron_scheduler_owners SET cutover_phase='blocked'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(control
+        .list_work_scopes(&authority, None, 10, now)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(control
+        .admit_reconcile_operations(&authority, &control_scope, 10, now)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(operations
+        .claim_due(scope, &authority, 10, "worker", 60, observed)
+        .await
+        .unwrap()
+        .is_empty());
+    sqlx::query("UPDATE agistack_cron_scheduler_owners SET cutover_phase='verified'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        control
+            .list_work_scopes(&authority, None, 10, observed)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        control
+            .admit_reconcile_operations(&authority, &control_scope, 10, observed)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        operations
+            .claim_due(scope, &authority, 10, "worker", 60, observed)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
     pool.close().await;
     sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
         .execute(&admin)

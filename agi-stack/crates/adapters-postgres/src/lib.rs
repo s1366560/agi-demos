@@ -40,6 +40,7 @@ mod checkpoint;
 mod conversation_events_repo;
 mod conversation_repo;
 mod cron_control_repo;
+mod cron_cutover_fence;
 mod cron_hitl_admission;
 mod cron_operation_repo;
 mod cron_repo;
