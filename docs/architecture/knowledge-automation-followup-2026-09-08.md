@@ -434,3 +434,45 @@ failed one macOS PTY cleanup test and ignored one optional renderer integration
 (`/tmp/qa-integrated-sidecar-full.log`). The PTY permission error was reproduced
 under stress; an isolated 17-test pass does not resolve it. Real process checks
 and the remaining native acceptance journeys are still required.
+
+## Full-document schema transport and macOS cleanup follow-up
+
+Cloud schema reads, full-document replacements, actor-scoped receipt recovery and
+bounded contiguous history now use a closed transport contract. Mutations retain
+body-only revision conditions; conditional HTTP headers are rejected. The native
+schema RPC boundary retains exact receipts, response-size preflight inside the
+write transaction and dedicated action admission. These commands remain closed
+in production while schema synchronization is being implemented. Cloud bootstrap
+preview and race-safe initialization are the next batch.
+
+The native write implementation now has a private transaction-scoped operation.
+Existing public methods retain their authorization/deadline callbacks and own the
+commit. A composed operation can roll back both journal and head if a subsequent
+step fails. No synchronization cursor or additional project association is created
+by this refactoring. All 23 schema storage integration tests, the new transaction
+rollback test and strict device Clippy passed.
+
+The macOS PTY investigation proved a snapshot race: a member can move to a new
+process group within the retained session before cleanup inspects it. Cleanup now
+follows that verified group, including children forked after the snapshot. A real
+process barrier verifies both generations are terminated. The libproc adapter also
+distinguishes an empty successful result from zero-return failures, captures errno
+immediately and rejects partial process-info structures. Permission errors remain
+visible. Test fallback cleanup rechecks indirect process identities before signalling.
+
+Integrated validation: schema Python tests passed 329 with one optional probe
+skipped; the explicit Python/Rust probe run passed all 92 contract tests. Desktop
+passed 4,575 with three optional tests skipped. Sidecar passed 842 with one optional
+renderer integration ignored; that Rust-to-Node real transport integration then
+passed explicitly. Both real sidecar/workspace-core process tests passed without
+skips. The final PTY production code passed 24 focused tests and 100 migration
+barrier repeats. A separate 100-round, 16-thread stress run recorded 2,397 passing
+cases and three `openpty -6` initialization failures. It did not reproduce raw
+`EPERM`, but the original raw permission failure remains unassigned; this is not a
+claim that the stress suite is fully passing.
+
+Rollback may remove the new transport entry points or revert the private transaction
+refactoring without deleting schema histories. Preserve the versioned knowledge
+database and accepted receipts. The complete Backend rerun, live native community
+and graph acceptance, schema synchronization, and the remaining I0–I6 work are
+still outstanding.
