@@ -236,3 +236,35 @@ capture showed inconsistent screenshot/accessibility state and no verified resul
 from its attempted settings actions. No Provider endpoint was changed. GitNexus
 change detection remains unavailable; this documentation records the observed
 UI and completed tests without claiming graph-analysis or release-gate success.
+
+## Native populated extraction failure and explicit recovery
+
+The canonical Electron restart at `fcc0f16df` restored consistent Computer Use
+interaction. In the isolated native QA profile, memory
+`5f74c60e-e948-4bf1-b552-1c764805ac84` retained revision 1 and its original content
+when its configured model endpoint became unavailable. The real native flow
+selected a workspace, reviewed one extraction, and confirmed it. Attempt 1
+failed with a connection error and remained visible in extraction diagnostics.
+
+The test used a temporary loopback model-list endpoint so the native Provider
+connection probe could complete, then stopped that owned server before extraction.
+After observing the failure, the original Kimi endpoint and `kimi-for-coding`
+default route were restored through the UI; the temporary model was disabled.
+No API key was read or changed. An earlier invented model identifier had been
+accepted by the real provider and produced a successful extraction, so it is
+explicitly not evidence of a failed-model path.
+
+Selecting the failed task and confirming recovery changed it to pending without
+running the model. A separate workspace selection, single-task review and explicit
+confirmation executed attempt 2 through the restored provider. The native receipt
+showed the same memory and revision, attempt 2, and applied status. Coverage then
+showed two applied sources, zero pending and zero failed. Vector coverage remained
+zero of two and is not part of this recovery pass. Electron exited normally after
+the task completed.
+
+Local evidence: `/tmp/native-knowledge-failure-fcc0f16df.txt`,
+`/tmp/native-knowledge-retry-pending-fcc0f16df.txt`, and
+`/tmp/native-knowledge-retry-applied-fcc0f16df.txt`. This completes the populated
+extraction failure/retry journey previously pending above. Native graph acceptance,
+Agent citation, portable schema/entity/relationship records, and the shared release
+gate remain separate outstanding work.
