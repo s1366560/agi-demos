@@ -74,6 +74,8 @@ QA_HTTP_ROUTES = frozenset(
         ("GET", "/api/v1/projects/"),
         ("POST", "/api/v1/projects/"),
         ("GET", "/api/v1/projects/{project_id}"),
+        ("GET", "/api/v1/graph/memory/graph"),
+        ("POST", "/api/v1/graph/memory/graph/subgraph"),
         ("GET", "/api/v1/memories/"),
         ("POST", "/api/v1/memories/"),
         ("GET", "/api/v1/memories/{memory_id}"),
