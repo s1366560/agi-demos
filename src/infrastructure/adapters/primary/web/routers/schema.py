@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import Response
 
 from src.application.schemas.schema import (
@@ -18,6 +18,8 @@ from src.application.schemas.schema import (
     EntityTypeResponse,
     EntityTypeUpdate,
 )
+from src.domain.model.project_schema.http_mutations import SchemaHttpReceipt
+from src.domain.model.project_schema.validation import ProjectSchemaError
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.schema_application_authority_v2 import (
     SchemaApplicationAuthorityV2,
@@ -87,6 +89,46 @@ async def _schema_call[ResultT](operation: Awaitable[ResultT]) -> ResultT:
         ) from error
 
 
+async def _schema_mutation_call(operation: Awaitable[Any]) -> Any:
+    try:
+        result = await _schema_call(operation)
+    except ProjectSchemaError as error:
+        status_by_code = {
+            "project_schema_active_required": 409,
+            "project_schema_precondition_invalid": 422,
+            "project_schema_mutation_invalid": 422,
+            "project_schema_revision_conflict": 409,
+            "project_schema_change_id_reused": 409,
+            "project_schema_deleted": 409,
+            "project_schema_type_referenced": 409,
+            "project_schema_entity_type_conflict": 400,
+            "project_schema_edge_type_conflict": 400,
+            "project_schema_mapping_conflict": 400,
+            "project_schema_entity_type_not_found": 404,
+            "project_schema_edge_type_not_found": 404,
+            "project_schema_mapping_not_found": 404,
+            "project_schema_mapping_reference_not_found": 404,
+        }
+        if error.code not in status_by_code:
+            raise
+        raise HTTPException(
+            status_code=status_by_code[error.code],
+            detail={
+                "code": error.code,
+                "message": _("Project schema mutation was rejected"),
+            },
+        ) from error
+    if isinstance(result, SchemaHttpReceipt):
+        value = result.to_dict()
+        return Response(
+            content=value["body"],
+            status_code=value["status"],
+            headers=value["headers"],
+            media_type="application/json" if value["status"] != 204 else None,
+        )
+    return result
+
+
 @router.get("/entities", response_model=list[EntityTypeResponse])
 async def list_entity_types(
     project_id: str,
@@ -111,11 +153,17 @@ async def create_entity_type(
     schema_application: SchemaApplicationAuthorityV2 = Depends(
         schema_application_authority_dependency_v2
     ),
+    expected_revision: Annotated[
+        str | None, Header(alias="X-Project-Schema-Expected-Revision")
+    ] = None,
+    change_id: Annotated[str | None, Header(alias="X-Project-Schema-Change-Id")] = None,
 ) -> Any:
-    return await _schema_call(
+    return await _schema_mutation_call(
         schema_application.services.create_entity_type(
             user_id=current_user.id,
             project_id=project_id,
+            expected_revision=expected_revision,
+            change_id=change_id,
             data=entity_data,
         )
     )
@@ -130,11 +178,17 @@ async def update_entity_type(
     schema_application: SchemaApplicationAuthorityV2 = Depends(
         schema_application_authority_dependency_v2
     ),
+    expected_revision: Annotated[
+        str | None, Header(alias="X-Project-Schema-Expected-Revision")
+    ] = None,
+    change_id: Annotated[str | None, Header(alias="X-Project-Schema-Change-Id")] = None,
 ) -> Any:
-    return await _schema_call(
+    return await _schema_mutation_call(
         schema_application.services.update_entity_type(
             user_id=current_user.id,
             project_id=project_id,
+            expected_revision=expected_revision,
+            change_id=change_id,
             entity_id=entity_id,
             data=entity_data,
         )
@@ -149,14 +203,22 @@ async def delete_entity_type(
     schema_application: SchemaApplicationAuthorityV2 = Depends(
         schema_application_authority_dependency_v2
     ),
+    expected_revision: Annotated[
+        str | None, Header(alias="X-Project-Schema-Expected-Revision")
+    ] = None,
+    change_id: Annotated[str | None, Header(alias="X-Project-Schema-Change-Id")] = None,
 ) -> Response:
-    await _schema_call(
+    result = await _schema_mutation_call(
         schema_application.services.delete_entity_type(
             user_id=current_user.id,
             project_id=project_id,
+            expected_revision=expected_revision,
+            change_id=change_id,
             entity_id=entity_id,
         )
     )
+    if isinstance(result, Response):
+        return result
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -184,11 +246,17 @@ async def create_edge_type(
     schema_application: SchemaApplicationAuthorityV2 = Depends(
         schema_application_authority_dependency_v2
     ),
+    expected_revision: Annotated[
+        str | None, Header(alias="X-Project-Schema-Expected-Revision")
+    ] = None,
+    change_id: Annotated[str | None, Header(alias="X-Project-Schema-Change-Id")] = None,
 ) -> Any:
-    return await _schema_call(
+    return await _schema_mutation_call(
         schema_application.services.create_edge_type(
             user_id=current_user.id,
             project_id=project_id,
+            expected_revision=expected_revision,
+            change_id=change_id,
             data=edge_data,
         )
     )
@@ -203,11 +271,17 @@ async def update_edge_type(
     schema_application: SchemaApplicationAuthorityV2 = Depends(
         schema_application_authority_dependency_v2
     ),
+    expected_revision: Annotated[
+        str | None, Header(alias="X-Project-Schema-Expected-Revision")
+    ] = None,
+    change_id: Annotated[str | None, Header(alias="X-Project-Schema-Change-Id")] = None,
 ) -> Any:
-    return await _schema_call(
+    return await _schema_mutation_call(
         schema_application.services.update_edge_type(
             user_id=current_user.id,
             project_id=project_id,
+            expected_revision=expected_revision,
+            change_id=change_id,
             edge_id=edge_id,
             data=edge_data,
         )
@@ -222,14 +296,22 @@ async def delete_edge_type(
     schema_application: SchemaApplicationAuthorityV2 = Depends(
         schema_application_authority_dependency_v2
     ),
+    expected_revision: Annotated[
+        str | None, Header(alias="X-Project-Schema-Expected-Revision")
+    ] = None,
+    change_id: Annotated[str | None, Header(alias="X-Project-Schema-Change-Id")] = None,
 ) -> Response:
-    await _schema_call(
+    result = await _schema_mutation_call(
         schema_application.services.delete_edge_type(
             user_id=current_user.id,
             project_id=project_id,
+            expected_revision=expected_revision,
+            change_id=change_id,
             edge_id=edge_id,
         )
     )
+    if isinstance(result, Response):
+        return result
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -257,11 +339,17 @@ async def create_edge_map(
     schema_application: SchemaApplicationAuthorityV2 = Depends(
         schema_application_authority_dependency_v2
     ),
+    expected_revision: Annotated[
+        str | None, Header(alias="X-Project-Schema-Expected-Revision")
+    ] = None,
+    change_id: Annotated[str | None, Header(alias="X-Project-Schema-Change-Id")] = None,
 ) -> Any:
-    return await _schema_call(
+    return await _schema_mutation_call(
         schema_application.services.create_edge_map(
             user_id=current_user.id,
             project_id=project_id,
+            expected_revision=expected_revision,
+            change_id=change_id,
             data=map_data,
         )
     )
@@ -275,12 +363,20 @@ async def delete_edge_map(
     schema_application: SchemaApplicationAuthorityV2 = Depends(
         schema_application_authority_dependency_v2
     ),
+    expected_revision: Annotated[
+        str | None, Header(alias="X-Project-Schema-Expected-Revision")
+    ] = None,
+    change_id: Annotated[str | None, Header(alias="X-Project-Schema-Change-Id")] = None,
 ) -> Response:
-    await _schema_call(
+    result = await _schema_mutation_call(
         schema_application.services.delete_edge_map(
             user_id=current_user.id,
             project_id=project_id,
+            expected_revision=expected_revision,
+            change_id=change_id,
             map_id=map_id,
         )
     )
+    if isinstance(result, Response):
+        return result
     return Response(status_code=status.HTTP_204_NO_CONTENT)

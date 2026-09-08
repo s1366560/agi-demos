@@ -160,6 +160,39 @@ class ProjectSchemaReceiptModel(Base):
     )
 
 
+class ProjectSchemaHttpReceiptModel(Base):
+    """Original HTTP mutation intent and exact response, never reconstructed on replay."""
+
+    __tablename__ = "project_schema_http_receipts"
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(String, primary_key=True)
+    schema_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String, primary_key=True)
+    change_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    original_request_json: Mapped[str] = mapped_column(Text, nullable=False)
+    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "project_id", "schema_id", "actor_id", "change_id"],
+            [
+                "project_schema_receipts.tenant_id",
+                "project_schema_receipts.project_id",
+                "project_schema_receipts.schema_id",
+                "project_schema_receipts.actor_id",
+                "project_schema_receipts.change_id",
+            ],
+            name="fk_project_schema_http_receipt_command",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "project_id",
+            "actor_id",
+            "change_id",
+            name="uq_project_schema_http_request",
+        ),
+    )
+
+
 class ProjectSchemaMigrationFindingModel(Base):
     """Storage reserved for structural findings; this batch has no persistence command."""
 

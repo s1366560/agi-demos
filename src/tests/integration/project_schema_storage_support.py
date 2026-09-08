@@ -19,7 +19,12 @@ from src.infrastructure.adapters.secondary.persistence import project_schema_mod
 from src.infrastructure.adapters.secondary.persistence.models import Base
 
 LEGACY_TABLES = ("users", "tenants", "projects", "entity_types", "edge_types", "edge_type_maps")
-NEW_TABLES = tuple(name for name in Base.metadata.tables if name.startswith("project_schema_"))
+# These historical fixtures describe the closed foundation, not later HTTP receipts.
+NEW_TABLES = tuple(
+    name
+    for name in Base.metadata.tables
+    if name.startswith("project_schema_") and name != "project_schema_http_receipts"
+)
 ENTITY_ID = "00000000-0000-4000-8000-000000000002"
 EDGE_ID = "00000000-0000-4000-8000-000000000003"
 MAPPING_ID = "00000000-0000-4000-8000-000000000004"

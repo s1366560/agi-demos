@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 from uuid import uuid4
 
 from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.application.schemas.schema import (
     EdgeTypeCreate,
@@ -18,6 +18,11 @@ from src.application.schemas.schema import (
     EntityTypeUpdate,
 )
 from src.domain.model.project_schema.commands import ProjectSchemaAction, ProjectSchemaScope
+from src.domain.model.project_schema.http_mutations import (
+    SchemaHttpMutation,
+    SchemaHttpOperation,
+    SchemaHttpReceipt,
+)
 from src.domain.model.project_schema.validation import ProjectSchemaError
 from src.domain.ports.services.project_schema_authorization import ProjectSchemaAuthorization
 from src.infrastructure.adapters.secondary.common.base_repository import (
@@ -28,6 +33,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     EdgeTypeMap,
     EntityType,
     UserProject,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_project_schema_http_commands import (
+    SqlProjectSchemaHttpCommands,
 )
 from src.infrastructure.adapters.secondary.schema.active_schema_reads import (
     ActiveSchemaSnapshot,
@@ -301,6 +309,7 @@ class SchemaApplicationServicesV2:
     persistence: SchemaPersistenceProtocolV2
     authorization: ProjectSchemaAuthorization
     scope: ProjectSchemaScope
+    mutations: SqlProjectSchemaHttpCommands
 
     async def _authorize(self, *, user_id: str, project_id: str, write: bool) -> None:
         if (user_id, project_id) != (self.scope.actor_id, self.scope.project_id):
@@ -313,9 +322,6 @@ class SchemaApplicationServicesV2:
             if error.code != "project_schema_access_denied":
                 raise
             raise SchemaAccessDeniedV2 from error
-        if write:
-            await self.persistence.require_legacy(project_id=project_id)
-            await self.authorization.authorize(self.scope, ProjectSchemaAction.REPLACE)
 
     async def _read(self, *, user_id: str, project_id: str, kind: str) -> Sequence[Any]:
         await self._authorize(user_id=user_id, project_id=project_id, write=False)
@@ -338,11 +344,56 @@ class SchemaApplicationServicesV2:
     async def list_entity_types(self, *, user_id: str, project_id: str) -> Sequence[EntityType]:
         return await self._read(user_id=user_id, project_id=project_id, kind="entity_types")
 
+    async def _mutate[MutationResultT](
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        operation: SchemaHttpOperation,
+        target_id: str | None,
+        fields: dict[str, Any],
+        expected_revision: str | None,
+        change_id: str | None,
+        legacy: Callable[[AsyncSession], Awaitable[MutationResultT]],
+    ) -> MutationResultT | SchemaHttpReceipt:
+        if (user_id, project_id) != (self.scope.actor_id, self.scope.project_id):
+            raise SchemaAccessDeniedV2
+        command = SchemaHttpMutation.from_fields(
+            scope=self.scope,
+            operation=operation,
+            target_id=target_id,
+            fields=fields,
+            expected_revision=expected_revision,
+            change_id=change_id,
+        )
+        try:
+            return await self.mutations.execute(command, legacy=legacy)
+        except ProjectSchemaError as error:
+            if error.code == "project_schema_access_denied":
+                raise SchemaAccessDeniedV2 from error
+            raise
+
     async def create_entity_type(
-        self, *, user_id: str, project_id: str, data: EntityTypeCreate
-    ) -> EntityType:
-        await self._authorize(user_id=user_id, project_id=project_id, write=True)
-        return await self.persistence.create_entity_type(project_id=project_id, data=data)
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        data: EntityTypeCreate,
+        expected_revision: str | None = None,
+        change_id: str | None = None,
+    ) -> EntityType | SchemaHttpReceipt:
+        return await self._mutate(
+            user_id=user_id,
+            project_id=project_id,
+            operation=SchemaHttpOperation.CREATE_ENTITY,
+            target_id=None,
+            fields=data.model_dump(mode="python", by_alias=True, exclude_unset=True),
+            expected_revision=expected_revision,
+            change_id=change_id,
+            legacy=lambda db: SqlSchemaPersistenceV2(_session=db).create_entity_type(
+                project_id=project_id, data=data
+            ),
+        )
 
     async def update_entity_type(
         self,
@@ -351,26 +402,68 @@ class SchemaApplicationServicesV2:
         project_id: str,
         entity_id: str,
         data: EntityTypeUpdate,
-    ) -> EntityType:
-        await self._authorize(user_id=user_id, project_id=project_id, write=True)
-        return await self.persistence.update_entity_type(
+        expected_revision: str | None = None,
+        change_id: str | None = None,
+    ) -> EntityType | SchemaHttpReceipt:
+        return await self._mutate(
+            user_id=user_id,
             project_id=project_id,
-            entity_id=entity_id,
-            data=data,
+            operation=SchemaHttpOperation.UPDATE_ENTITY,
+            target_id=entity_id,
+            fields=data.model_dump(mode="python", by_alias=True, exclude_unset=True),
+            expected_revision=expected_revision,
+            change_id=change_id,
+            legacy=lambda db: SqlSchemaPersistenceV2(_session=db).update_entity_type(
+                project_id=project_id, entity_id=entity_id, data=data
+            ),
         )
 
-    async def delete_entity_type(self, *, user_id: str, project_id: str, entity_id: str) -> None:
-        await self._authorize(user_id=user_id, project_id=project_id, write=True)
-        await self.persistence.delete_entity_type(project_id=project_id, entity_id=entity_id)
+    async def delete_entity_type(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        entity_id: str,
+        expected_revision: str | None = None,
+        change_id: str | None = None,
+    ) -> SchemaHttpReceipt | None:
+        return await self._mutate(
+            user_id=user_id,
+            project_id=project_id,
+            operation=SchemaHttpOperation.DELETE_ENTITY,
+            target_id=entity_id,
+            fields={},
+            expected_revision=expected_revision,
+            change_id=change_id,
+            legacy=lambda db: SqlSchemaPersistenceV2(_session=db).delete_entity_type(
+                project_id=project_id, entity_id=entity_id
+            ),
+        )
 
     async def list_edge_types(self, *, user_id: str, project_id: str) -> Sequence[EdgeType]:
         return await self._read(user_id=user_id, project_id=project_id, kind="edge_types")
 
     async def create_edge_type(
-        self, *, user_id: str, project_id: str, data: EdgeTypeCreate
-    ) -> EdgeType:
-        await self._authorize(user_id=user_id, project_id=project_id, write=True)
-        return await self.persistence.create_edge_type(project_id=project_id, data=data)
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        data: EdgeTypeCreate,
+        expected_revision: str | None = None,
+        change_id: str | None = None,
+    ) -> EdgeType | SchemaHttpReceipt:
+        return await self._mutate(
+            user_id=user_id,
+            project_id=project_id,
+            operation=SchemaHttpOperation.CREATE_EDGE,
+            target_id=None,
+            fields=data.model_dump(mode="python", by_alias=True, exclude_unset=True),
+            expected_revision=expected_revision,
+            change_id=change_id,
+            legacy=lambda db: SqlSchemaPersistenceV2(_session=db).create_edge_type(
+                project_id=project_id, data=data
+            ),
+        )
 
     async def update_edge_type(
         self,
@@ -379,30 +472,90 @@ class SchemaApplicationServicesV2:
         project_id: str,
         edge_id: str,
         data: EdgeTypeUpdate,
-    ) -> EdgeType:
-        await self._authorize(user_id=user_id, project_id=project_id, write=True)
-        return await self.persistence.update_edge_type(
+        expected_revision: str | None = None,
+        change_id: str | None = None,
+    ) -> EdgeType | SchemaHttpReceipt:
+        return await self._mutate(
+            user_id=user_id,
             project_id=project_id,
-            edge_id=edge_id,
-            data=data,
+            operation=SchemaHttpOperation.UPDATE_EDGE,
+            target_id=edge_id,
+            fields=data.model_dump(mode="python", by_alias=True, exclude_unset=True),
+            expected_revision=expected_revision,
+            change_id=change_id,
+            legacy=lambda db: SqlSchemaPersistenceV2(_session=db).update_edge_type(
+                project_id=project_id, edge_id=edge_id, data=data
+            ),
         )
 
-    async def delete_edge_type(self, *, user_id: str, project_id: str, edge_id: str) -> None:
-        await self._authorize(user_id=user_id, project_id=project_id, write=True)
-        await self.persistence.delete_edge_type(project_id=project_id, edge_id=edge_id)
+    async def delete_edge_type(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        edge_id: str,
+        expected_revision: str | None = None,
+        change_id: str | None = None,
+    ) -> SchemaHttpReceipt | None:
+        return await self._mutate(
+            user_id=user_id,
+            project_id=project_id,
+            operation=SchemaHttpOperation.DELETE_EDGE,
+            target_id=edge_id,
+            fields={},
+            expected_revision=expected_revision,
+            change_id=change_id,
+            legacy=lambda db: SqlSchemaPersistenceV2(_session=db).delete_edge_type(
+                project_id=project_id, edge_id=edge_id
+            ),
+        )
 
     async def list_edge_maps(self, *, user_id: str, project_id: str) -> Sequence[EdgeTypeMap]:
         return await self._read(user_id=user_id, project_id=project_id, kind="mappings")
 
     async def create_edge_map(
-        self, *, user_id: str, project_id: str, data: EdgeTypeMapCreate
-    ) -> EdgeTypeMap:
-        await self._authorize(user_id=user_id, project_id=project_id, write=True)
-        return await self.persistence.create_edge_map(project_id=project_id, data=data)
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        data: EdgeTypeMapCreate,
+        expected_revision: str | None = None,
+        change_id: str | None = None,
+    ) -> EdgeTypeMap | SchemaHttpReceipt:
+        return await self._mutate(
+            user_id=user_id,
+            project_id=project_id,
+            operation=SchemaHttpOperation.CREATE_MAP,
+            target_id=None,
+            fields=data.model_dump(mode="python", by_alias=True, exclude_unset=True),
+            expected_revision=expected_revision,
+            change_id=change_id,
+            legacy=lambda db: SqlSchemaPersistenceV2(_session=db).create_edge_map(
+                project_id=project_id, data=data
+            ),
+        )
 
-    async def delete_edge_map(self, *, user_id: str, project_id: str, map_id: str) -> None:
-        await self._authorize(user_id=user_id, project_id=project_id, write=True)
-        await self.persistence.delete_edge_map(project_id=project_id, map_id=map_id)
+    async def delete_edge_map(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        map_id: str,
+        expected_revision: str | None = None,
+        change_id: str | None = None,
+    ) -> SchemaHttpReceipt | None:
+        return await self._mutate(
+            user_id=user_id,
+            project_id=project_id,
+            operation=SchemaHttpOperation.DELETE_MAP,
+            target_id=map_id,
+            fields={},
+            expected_revision=expected_revision,
+            change_id=change_id,
+            legacy=lambda db: SqlSchemaPersistenceV2(_session=db).delete_edge_map(
+                project_id=project_id, map_id=map_id
+            ),
+        )
 
 
 @runtime_checkable
@@ -412,6 +565,10 @@ class SchemaServiceFactoryProtocolV2(Protocol):
     def build(self, operation: OperationContextV2) -> SchemaPersistenceProtocolV2: ...
 
     def authorization(self, operation: OperationContextV2) -> SqlProjectSchemaAuthorizationV2: ...
+
+    def mutations(
+        self, operation: OperationContextV2, authorization: ProjectSchemaAuthorization
+    ) -> SqlProjectSchemaHttpCommands: ...
 
 
 @runtime_checkable
@@ -430,6 +587,20 @@ class SqlSchemaServiceFactoryV2:
     """Build schema persistence from the operation's exact AsyncSession."""
 
     strategy: str
+
+    def mutations(
+        self, operation: OperationContextV2, authorization: ProjectSchemaAuthorization
+    ) -> SqlProjectSchemaHttpCommands:
+        db = operation.require(_OPERATION_DB_SESSION_SERVICE_V2)
+        if not isinstance(db, AsyncSession) or not isinstance(db.bind, AsyncEngine):
+            raise RuntimeV2Error(
+                "invalid_operation_db_engine",
+                "schema mutations require the operation's AsyncEngine",
+            )
+        return SqlProjectSchemaHttpCommands(
+            sessions=async_sessionmaker(db.bind, expire_on_commit=False),
+            authorization=authorization,
+        )
 
     def authorization(self, operation: OperationContextV2) -> SqlProjectSchemaAuthorizationV2:
         identity = operation.require("service:operation.identity")
@@ -467,6 +638,7 @@ class SchemaApplicationResolverV2:
         return SchemaApplicationServicesV2(
             persistence=self.provider.build(operation),
             authorization=authorization,
+            mutations=self.provider.mutations(operation, authorization),
             scope=ProjectSchemaScope(
                 tenant_id=scope.tenant_id,
                 project_id=scope.project_id,

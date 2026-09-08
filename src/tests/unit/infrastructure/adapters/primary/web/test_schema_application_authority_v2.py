@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from starlette.requests import Request
 
 from src.application.schemas.schema import EntityTypeCreate
@@ -61,7 +61,8 @@ async def test_authority_uses_pinned_generation_and_operation_session(monkeypatc
         generation=23,
         version=23,
     )
-    db = AsyncSession()
+    engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1/unused")
+    db = AsyncSession(engine)
     monkeypatch.setattr(
         db,
         "execute",
@@ -104,6 +105,7 @@ async def test_authority_uses_pinned_generation_and_operation_session(monkeypatc
         if dependency is not None:
             await dependency.aclose()
         await db.close()
+        await engine.dispose()
         await host.close()
 
 

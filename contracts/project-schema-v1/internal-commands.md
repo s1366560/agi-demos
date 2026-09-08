@@ -5,7 +5,8 @@ introduces an internal PostgreSQL command executor and complete transaction
 fences. It creates no heads, initializes no types and activates no project.
 The M0 integration below binds existing HTTP reads to live operation-owned
 authorization and makes active reads pure. It adds no public bootstrap route,
-schema enrollment, patch command adapter or sync transport. Existing projects
+schema enrollment or sync transport. M1 adds the bounded HTTP patch adapter
+described below. Existing projects
 remain legacy until an explicitly authorized internal bootstrap command is invoked.
 
 ## Internal boundary
@@ -22,8 +23,8 @@ authorization stub.
 Each command owns an isolated session and transaction, acquires the project
 row lock, and returns only after commit succeeds. This does not flush an
 unrelated caller's ORM session. The M0 schema plugin supplies a live operation-owned authorization adapter.
-Public mutation commands remain unbound; no global-container or unversioned
-writer fallback is supplied for active schemas.
+M1 binds the existing public mutation routes through its isolated command
+adapter; no global-container or unversioned writer fallback is supplied for active schemas.
 
 - `read(scope)` returns a validated relational snapshot for an active head,
   or `None` for a legacy project. It creates neither a head nor defaults.
@@ -211,3 +212,60 @@ writer rejection and corrupt-document propagation through actual HTTP routes.
 Run it with the same isolated PostgreSQL URL as above and normal repository
 pytest fixtures (omit `--noconftest`) so unrelated runtime background workers
 remain isolated during generation-host tests.
+
+## M1: existing HTTP mutations with locked CAS and exact replay
+
+Migration `bfa08f458c13` adds only immutable HTTP response receipts and new
+frozen SQL guards. It does not activate projects. For an active project, all
+eight existing entity/edge/mapping mutators now accept these two headers:
+
+- `X-Project-Schema-Expected-Revision`: canonical positive decimal revision.
+- `X-Project-Schema-Change-Id`: canonical nonzero UUID identifying the original request.
+
+Both are required for active schemas (missing: 409 `project_schema_command_required`;
+malformed: 422 `project_schema_precondition_invalid`). Legacy projects without
+headers retain their existing writers. Any CAS header on a legacy project
+returns 409 `project_schema_active_required`; preconditions are never ignored.
+The executor locks the project before selecting mode, so a request waiting for
+bootstrap observes the committed active head. Initialization and discovery writers
+remain unsupported for active schemas.
+
+The application copies only explicitly supplied DTO fields into immutable JSON
+before its first await. Explicit null and omitted fields remain different request
+identities, although null update fields preserve legacy no-op behavior. Nonfinite
+numbers, invalid Unicode, invalid target UUIDs and candidate contract violations
+are controlled 422 `project_schema_mutation_invalid` failures. Errors validating
+stored authority are not reclassified as client mistakes. Create identities are
+allocated only after an exact replay miss and successful locked revision check.
+Mapping names resolve by exact unique equality inside that accepted document.
+Referenced entity/edge deletion returns 409 `project_schema_type_referenced`;
+callers must explicitly delete mappings first. There is no cascade or retry rebase.
+
+`SqlProjectSchemaHttpCommands` owns an isolated transaction using the request's
+actual bound async engine. The same captured operation, generation, actor and
+scope authorize before SQL, after project-lock/head reads, and before active
+commit or replay return. Legacy callbacks retain their internal commit behavior;
+the post-lock authorization check runs before invoking them. This boundary does
+not claim to fence revocations during a legacy callback's own commit.
+
+A new SQL head guard independently materializes original HTTP intent and compares
+it with the proposed full document. Current rows, adjacent head, base journal,
+base receipt and HTTP receipt commit together. The database renders the response
+from actual rows after materialization, including persisted timestamps, and
+stores its exact body text, status (200 or empty 204), and schema ID/revision/change
+headers. A five-part tenant/project/schema/actor/change key scopes replay. Reusing
+a change ID for different intent returns 409 `project_schema_change_id_reused`.
+An exact replay returns the original bytes and revision even after later updates
+or deletion; it never rereads the current member to reconstruct that response.
+
+HTTP receipts cannot be updated, deleted or truncated. Deferred commit guards
+recheck receipt equality against final rows; later timestamp writes cannot leave
+a stale receipt, including after constraints are made immediate. Downgrade refuses
+accepted HTTP history. The older frozen migrations remain unchanged.
+
+`test_project_schema_http_{api,commands,guards}.py` covers all eight actual routes,
+concurrent identical creates, stale CAS, live authorization revocation, pending
+unrelated ORM work, bootstrap races, malformed raw JSON, independent SQL
+materialization, receipt immutability, commit-time drift and migration roundtrip.
+This is cloud HTTP command support only: schema enrollment, native commands,
+Memory synchronization and remote transport remain outside M1.

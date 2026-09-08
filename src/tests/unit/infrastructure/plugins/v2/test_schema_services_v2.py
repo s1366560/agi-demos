@@ -9,12 +9,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from src.application.schemas.schema import EntityTypeCreate
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.project_schema.commands import ProjectSchemaScope
 from src.domain.model.project_schema.validation import ProjectSchemaError
+from src.infrastructure.adapters.secondary.persistence.sql_project_schema_http_commands import (
+    SqlProjectSchemaHttpCommands,
+)
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
@@ -46,7 +49,8 @@ async def test_schema_application_resolver_builds_operation_owned_services() -> 
         version=21,
     )
     assert publication.accepted is True
-    db = AsyncSession()
+    engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1/unused")
+    db = AsyncSession(engine)
     try:
         async with (
             await host.acquire() as generation,
@@ -77,6 +81,7 @@ async def test_schema_application_resolver_builds_operation_owned_services() -> 
             assert getattr(services.persistence, "_session", None) is db
     finally:
         await db.close()
+        await engine.dispose()
         await host.close()
 
 
@@ -117,7 +122,11 @@ async def test_viewer_write_is_rejected_before_schema_persistence_mutation() -> 
         find_membership=AsyncMock(return_value=SimpleNamespace(role="viewer")),
         create_entity_type=AsyncMock(),
     )
+    authorization = SimpleNamespace(
+        authorize=AsyncMock(side_effect=ProjectSchemaError("project_schema_access_denied"))
+    )
     services = SchemaApplicationServicesV2(
+        mutations=SqlProjectSchemaHttpCommands(sessions=AsyncMock(), authorization=authorization),
         persistence=persistence,
         authorization=SimpleNamespace(
             authorize=AsyncMock(side_effect=ProjectSchemaError("project_schema_access_denied"))

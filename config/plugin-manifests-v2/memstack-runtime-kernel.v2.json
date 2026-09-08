@@ -5110,7 +5110,7 @@
       },
       "contract_digest": "sha256:57a8834f3c6bef34526e5235ab8955c0f4739e842dfd1a6481b98c1ed7aa2e72",
       "artifact": {
-        "digest": "sha256:52861a5bd8f2e043a3364272028f3040a4f7f2a9ae9cd1912a4f894c13bb573f",
+        "digest": "sha256:750f66c46fba4ecdd75a2d0355b10a19189f2896dde629d72fdf886188a144c8",
         "source": "repo+python://src/infrastructure/plugins/v2/schema_services.py"
       }
     },
@@ -5157,7 +5157,7 @@
       },
       "contract_digest": "sha256:e813e5233929336e1ce6b5d24b2ab676d4a9cb9caa359a0f9a545c16a8d3678d",
       "artifact": {
-        "digest": "sha256:52861a5bd8f2e043a3364272028f3040a4f7f2a9ae9cd1912a4f894c13bb573f",
+        "digest": "sha256:750f66c46fba4ecdd75a2d0355b10a19189f2896dde629d72fdf886188a144c8",
         "source": "repo+python://src/infrastructure/plugins/v2/schema_services.py"
       }
     },
