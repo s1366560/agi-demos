@@ -92,3 +92,19 @@ GitNexus impact and change detection were attempted but returned Transport close
 no graph validation is claimed. Source review, focused tests and normal commit
 checks provide the available evidence. Revert UI and transport commits independently
 while preserving stored content, receipts, index builds and synchronization state.
+
+## Native source navigation
+
+Entity results can open relationships from the same exact source revision, and
+relationship endpoints can open the source's entities with the selected reference
+marked. These views retain all records from that source and use the existing bounded
+pagination; they do not claim to be a complete graph or an entity-filtered query.
+Only references in the current result can initiate navigation. Source revisions,
+tenant/project identity and generation remain bound through every page, and a changed
+or deleted source cannot silently redirect to replacement content. Clearing the source
+filter returns to project browsing on the next explicit retrieval.
+
+Four new controller regressions failed before implementation. The final retrieval
+controller/render suites passed 23 tests, and renderer plus both test TypeScript
+configurations compiled. Native click-through acceptance is pending the next canonical
+Electron restart. No storage, protocol or default release gate changed.

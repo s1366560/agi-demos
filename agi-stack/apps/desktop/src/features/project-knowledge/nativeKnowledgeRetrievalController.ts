@@ -1,6 +1,7 @@
 import type {
   NativeKnowledgeClient,
   NativeKnowledgeEmbeddingConfiguration,
+  NativeKnowledgeEntityReference,
   NativeKnowledgeProcessingClient,
   NativeKnowledgeProcessingQuery,
   NativeKnowledgeProcessingResultMap,
@@ -30,6 +31,7 @@ export type NativeKnowledgeRetrievalModel = Readonly<{
   draft: string;
   configuration: NativeKnowledgeConfigurationSnapshot | null;
   result: NativeKnowledgeRetrievalResult | null;
+  navigation: NativeKnowledgeEntityReference | null;
   source: NativeKnowledgeStoredMemory | null;
   sourceState: 'idle' | 'loading' | 'ready' | 'changed' | 'unavailable';
   error:
@@ -78,7 +80,10 @@ export function createNativeKnowledgeRetrievalController({
   sourceClient: NativeKnowledgeClient;
   authority: NativeMemoriesAuthority;
 }>) {
-  const authority = Object.freeze({ ...input, scope: Object.freeze({ ...input.scope }) });
+  const authority = Object.freeze({
+    ...input,
+    scope: Object.freeze({ ...input.scope }),
+  });
   const allowedActions: readonly string[] = Object.freeze(
     client &&
       input.available &&
@@ -112,6 +117,7 @@ export function createNativeKnowledgeRetrievalController({
       draft: '',
       configuration: null,
       result: null,
+      navigation: null,
       source: null,
       sourceState: 'idle',
       error: null,
@@ -194,7 +200,14 @@ export function createNativeKnowledgeRetrievalController({
     if (!permitted('configuration')) return;
     const request = begin();
     submitted = null;
-    emit({ phase: 'loading', error: null, result: null, source: null, sourceState: 'idle' });
+    emit({
+      phase: 'loading',
+      error: null,
+      result: null,
+      navigation: null,
+      source: null,
+      sourceState: 'idle',
+    });
     try {
       const response = await query({ operation: 'configuration' }, request);
       if (current(request)) emit({ phase: 'idle', configuration: response.result });
@@ -207,7 +220,10 @@ export function createNativeKnowledgeRetrievalController({
     result: NativeKnowledgeProcessingResultMap[NativeKnowledgeRetrievalMode],
     previous: NativeKnowledgeRetrievalResult | null,
   ) => {
-    let snapshot = { operation: command.operation, result } as NativeKnowledgeRetrievalResult;
+    let snapshot = {
+      operation: command.operation,
+      result,
+    } as NativeKnowledgeRetrievalResult;
     if (previous && previous.operation === snapshot.operation) {
       if (previous.operation === 'text' && snapshot.operation === 'text')
         snapshot = {
@@ -256,7 +272,13 @@ export function createNativeKnowledgeRetrievalController({
     }
     const request = begin();
     submitted = null;
-    emit({ phase: 'loading', result: null, source: null, sourceState: 'idle', error: null });
+    emit({
+      phase: 'loading',
+      result: null,
+      source: null,
+      sourceState: 'idle',
+      error: null,
+    });
     try {
       let command: RetrievalQuery;
       if (mode === 'semantic') {
@@ -278,7 +300,13 @@ export function createNativeKnowledgeRetrievalController({
         command =
           mode === 'text'
             ? { operation: 'text', literal: draft, request: { limit: 25 } }
-            : { operation: mode, request: { limit: 25 } };
+            : {
+                operation: mode,
+                request: {
+                  limit: 25,
+                  ...(model.navigation ? { source: model.navigation.source } : {}),
+                },
+              };
       const response = await query(command, request);
       if (!current(request)) return;
       if (
@@ -361,6 +389,59 @@ export function createNativeKnowledgeRetrievalController({
       else emit({ source: null, sourceState: 'unavailable' });
     }
   };
+  const navigateReference = async (
+    mode: 'entities' | 'relationships',
+    reference: NativeKnowledgeEntityReference,
+  ) => {
+    if (
+      (mode !== 'entities' && mode !== 'relationships') ||
+      !permitted(mode) ||
+      !model.result ||
+      !observed ||
+      model.phase === 'loading'
+    )
+      return;
+    const result = model.result;
+    const references =
+      result.operation === 'entities'
+        ? result.result.items.map((item) => item.reference)
+        : result.operation === 'relationships'
+          ? result.result.items.flatMap((item) => [item.source_entity, item.target_entity])
+          : [];
+    if (
+      !references.some(
+        (item) =>
+          item.entity_index === reference.entity_index && sameSource(item.source, reference.source),
+      )
+    )
+      return;
+    const navigation = Object.freeze({
+      source: Object.freeze({ ...reference.source }),
+      entity_index: reference.entity_index,
+    });
+    const request = begin();
+    submitted = null;
+    emit({
+      mode,
+      draft: '',
+      navigation,
+      phase: 'loading',
+      result: null,
+      source: null,
+      sourceState: 'idle',
+      error: null,
+    });
+    const command: RetrievalQuery = {
+      operation: mode,
+      request: { limit: 25, source: navigation.source },
+    };
+    try {
+      const response = await query(command, request);
+      if (current(request)) show(command, response.result, null);
+    } catch (error) {
+      if (current(request)) fail(error);
+    }
+  };
   return Object.freeze({
     getSnapshot: () => model,
     subscribe: (listener: () => void) => {
@@ -373,6 +454,20 @@ export function createNativeKnowledgeRetrievalController({
     submit,
     nextPage,
     viewSource,
+    navigateReference,
+    clearNavigation: () => {
+      if (stopped) return;
+      cancel();
+      submitted = null;
+      emit({
+        navigation: null,
+        phase: 'idle',
+        result: null,
+        source: null,
+        sourceState: 'idle',
+        error: null,
+      });
+    },
     setMode: (mode: NativeKnowledgeRetrievalMode) => {
       if (!permitted(mode) || !MODES.includes(mode)) return;
       cancel();
@@ -382,6 +477,7 @@ export function createNativeKnowledgeRetrievalController({
         phase: 'idle',
         draft: '',
         result: null,
+        navigation: null,
         source: null,
         sourceState: 'idle',
         error: null,
@@ -391,7 +487,15 @@ export function createNativeKnowledgeRetrievalController({
       if (!model.mode || !permitted(model.mode)) return;
       cancel();
       submitted = null;
-      emit({ draft, phase: 'idle', result: null, source: null, sourceState: 'idle', error: null });
+      emit({
+        draft,
+        phase: 'idle',
+        result: null,
+        navigation: null,
+        source: null,
+        sourceState: 'idle',
+        error: null,
+      });
     },
     stop: () => {
       stopped = true;

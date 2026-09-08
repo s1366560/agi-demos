@@ -40,6 +40,20 @@ export function NativeKnowledgeRetrievalPanel({
   return (
     <fieldset className="native-knowledge-retrieval" disabled={disabled}>
       <legend>{t('nativeRetrieval.retrieval')}</legend>
+      {model.navigation ? (
+        <aside>
+          <p>{t('nativeRetrieval.navigationHelp')}</p>
+          <p>
+            {t('nativeRetrieval.source')}: {model.navigation.source.memory_id}
+          </p>
+          <p>
+            {t('nativeRetrieval.sourceRevision')}: {model.navigation.source.revision}
+          </p>
+          <button type="button" onClick={() => controller.clearNavigation()}>
+            {t('nativeRetrieval.clearNavigation')}
+          </button>
+        </aside>
+      ) : null}
       <form
         onSubmit={(event) => {
           event.preventDefault();

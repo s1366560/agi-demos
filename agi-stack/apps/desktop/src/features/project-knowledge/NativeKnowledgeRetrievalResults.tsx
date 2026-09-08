@@ -1,5 +1,8 @@
 import { useI18n } from '../../i18n';
-import type { NativeKnowledgeProcessingSource } from './nativeKnowledgeContracts';
+import type {
+  NativeKnowledgeEntityReference,
+  NativeKnowledgeProcessingSource,
+} from './nativeKnowledgeContracts';
 import type {
   NativeKnowledgeRetrievalController,
   NativeKnowledgeRetrievalModel,
@@ -40,6 +43,27 @@ export function NativeKnowledgeRetrievalResults({
   );
   const identity = (source: NativeKnowledgeProcessingSource) =>
     JSON.stringify([source.memory_id, source.revision, source.change_sequence]);
+  const selected = (reference: NativeKnowledgeEntityReference) =>
+    model.navigation &&
+    reference.entity_index === model.navigation.entity_index &&
+    identity(reference.source) === identity(model.navigation.source);
+  const navigation = (
+    mode: 'entities' | 'relationships',
+    reference: NativeKnowledgeEntityReference,
+  ) =>
+    model.allowedActions.includes(mode) ? (
+      <button
+        type="button"
+        disabled={model.phase === 'loading'}
+        onClick={() => void controller.navigateReference(mode, reference)}
+      >
+        {t(
+          mode === 'entities'
+            ? 'nativeRetrieval.viewEntity'
+            : 'nativeRetrieval.viewSourceRelationships',
+        )}
+      </button>
+    ) : null;
   const empty =
     snapshot.operation === 'semantic'
       ? snapshot.result.hits.length === 0
@@ -71,10 +95,12 @@ export function NativeKnowledgeRetrievalResults({
           ? snapshot.result.items.map((item) => (
               <li key={`${identity(item.reference.source)}:${item.reference.entity_index}`}>
                 <h3>{item.entity.name}</h3>
+                {selected(item.reference) ? <p>{t('nativeRetrieval.selectedEntity')}</p> : null}
                 <p>
                   {t('nativeRetrieval.entityKind')}: {item.entity.kind}
                 </p>
                 {reference(item.reference.source, item.audit_attempt)}
+                {navigation('relationships', item.reference)}
               </li>
             ))
           : null}
@@ -83,14 +109,19 @@ export function NativeKnowledgeRetrievalResults({
               <li key={`${identity(item.source)}:${item.relationship_index}`}>
                 <h3>{item.relationship.relation_type}</h3>
                 <p>{item.relationship.fact}</p>
+                {selected(item.source_entity) || selected(item.target_entity) ? (
+                  <p>{t('nativeRetrieval.referencesSelectedEntity')}</p>
+                ) : null}
                 <dl>
                   <dt>{t('nativeRetrieval.sourceReference')}</dt>
                   <dd>
                     {item.source_entity.source.memory_id} / {item.source_entity.entity_index}
+                    {navigation('entities', item.source_entity)}
                   </dd>
                   <dt>{t('nativeRetrieval.targetReference')}</dt>
                   <dd>
                     {item.target_entity.source.memory_id} / {item.target_entity.entity_index}
+                    {navigation('entities', item.target_entity)}
                   </dd>
                 </dl>
                 {reference(item.source, item.audit_attempt)}

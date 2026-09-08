@@ -1,4 +1,11 @@
 export const nativeKnowledgeRetrievalEnUS = {
+  'nativeRetrieval.viewEntity': 'Browse referenced entity',
+  'nativeRetrieval.viewSourceRelationships': 'Browse relationships from this source',
+  'nativeRetrieval.selectedEntity': 'Selected entity reference',
+  'nativeRetrieval.referencesSelectedEntity': 'References the selected entity',
+  'nativeRetrieval.navigationHelp':
+    'Browsing this exact source revision. The selected entity is marked where present; load later pages to see additional records. A changed or deleted source returns no current records.',
+  'nativeRetrieval.clearNavigation': 'Clear source filter',
   'nativeRetrieval.configurationUnavailable':
     'The selected index is not active, or its configuration revision changed. Refresh the configuration before submitting again.',
   'nativeRetrieval.embeddingUnavailable':
@@ -82,6 +89,13 @@ export const nativeKnowledgeRetrievalZhCN: Record<
   keyof typeof nativeKnowledgeRetrievalEnUS,
   string
 > = {
+  'nativeRetrieval.viewEntity': '浏览引用的实体',
+  'nativeRetrieval.viewSourceRelationships': '浏览此来源的关系',
+  'nativeRetrieval.selectedEntity': '所选实体引用',
+  'nativeRetrieval.referencesSelectedEntity': '引用所选实体',
+  'nativeRetrieval.navigationHelp':
+    '正在浏览此来源的准确版本。所选实体出现时会被标记，可加载后续页查看更多记录。来源变更或删除后不会返回当前记录。',
+  'nativeRetrieval.clearNavigation': '清除来源筛选',
   'nativeRetrieval.configurationUnavailable':
     '选定索引尚未激活，或其配置版本已变化，请刷新配置后重新提交。',
   'nativeRetrieval.embeddingUnavailable': '向量提供方当前不可用，无法完成语义检索。',

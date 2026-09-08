@@ -26,7 +26,12 @@ const configuration = {
 const snapshot = {
   configuration,
   active_build_id: 'build-A',
-  processing: { current_sources: 5, applied_sources: 2, pending_sources: 2, failed_sources: 1 },
+  processing: {
+    current_sources: 5,
+    applied_sources: 2,
+    pending_sources: 2,
+    failed_sources: 1,
+  },
   index: { current_sources: 2, completed_sources: 1, failed_sources: 1 },
 };
 const authority = {
@@ -42,12 +47,24 @@ const semantic = {
   configuration,
   processing: snapshot.processing,
   index: snapshot.index,
-  hits: [{ input: { source, audit_attempt: 1, input_digest: 'digest-1' }, score: -0.25 }],
+  hits: [
+    {
+      input: { source, audit_attempt: 1, input_digest: 'digest-1' },
+      score: -0.25,
+    },
+  ],
 };
 const results = {
   configuration: snapshot,
   text: {
-    items: [{ source, audit_attempt: 1, title: 'Title', content: 'Exact literal source' }],
+    items: [
+      {
+        source,
+        audit_attempt: 1,
+        title: 'Title',
+        content: 'Exact literal source',
+      },
+    ],
     next_cursor: null,
   },
   entities: {
@@ -164,7 +181,10 @@ test('literal preserves exact text and opaque query-bound cursors; changing quer
       command.operation === 'text'
         ? {
             scope: nativeScope,
-            result: { ...results.text, next_cursor: command.request.cursor ? null : cursor },
+            result: {
+              ...results.text,
+              next_cursor: command.request.cursor ? null : cursor,
+            },
           }
         : undefined,
   });
@@ -245,7 +265,9 @@ test('an unavailable active build does not fall back to literal search or the ol
   const { controller, queries } = fixture({
     query: async (command) => {
       if (command.operation === 'semantic')
-        throw Object.assign(new Error('knowledge_revision_conflict'), { status: 409 });
+        throw Object.assign(new Error('knowledge_revision_conflict'), {
+          status: 409,
+        });
     },
   });
   await controller.refreshConfiguration();
@@ -269,9 +291,117 @@ test('entities and relationships are explicit browsing operations with no inferr
   for (const mode of ['entities', 'relationships']) {
     controller.setMode(mode);
     await controller.submit();
-    assert.deepEqual(queries.at(-1).command, { operation: mode, request: { limit: 25 } });
+    assert.deepEqual(queries.at(-1).command, {
+      operation: mode,
+      request: { limit: 25 },
+    });
     assert.equal(controller.getSnapshot().result.operation, mode);
   }
+});
+
+test('entity navigation pins the exact source, keeps it through pagination and can return to all sources', async () => {
+  const cursor = { after: { change_sequence: 1, item_index: 0 } };
+  const { controller, queries } = fixture({
+    query: async (command) =>
+      command.operation === 'relationships'
+        ? {
+            scope: nativeScope,
+            result: {
+              ...results.relationships,
+              next_cursor: command.request.cursor ? null : cursor,
+            },
+          }
+        : undefined,
+  });
+  controller.setMode('entities');
+  await controller.submit();
+  const reference = structuredClone(results.entities.items[0].reference);
+  await controller.navigateReference('relationships', reference);
+  reference.source.revision = 99;
+  assert.deepEqual(queries.at(-1).command, {
+    operation: 'relationships',
+    request: { limit: 25, source },
+  });
+  assert.deepEqual(controller.getSnapshot().navigation.source, source);
+  await controller.nextPage();
+  assert.deepEqual(queries.at(-1).command.request, {
+    limit: 25,
+    source,
+    cursor,
+  });
+  await controller.navigateReference('entities', results.relationships.items[0].target_entity);
+  assert.equal(controller.getSnapshot().navigation.entity_index, 1);
+  assert.equal(controller.getSnapshot().mode, 'entities');
+  controller.clearNavigation();
+  assert.equal(controller.getSnapshot().navigation, null);
+  await controller.submit();
+  assert.deepEqual(queries.at(-1).command, {
+    operation: 'entities',
+    request: { limit: 25 },
+  });
+});
+
+test('navigation only accepts visible exact entity references and admitted target operations', async () => {
+  const { controller, queries } = fixture();
+  controller.setMode('entities');
+  await controller.submit();
+  for (const reference of [
+    { source: { ...source, tenant_id: 'other' }, entity_index: 0 },
+    { source: { ...source, revision: 2 }, entity_index: 0 },
+    { source, entity_index: 99 },
+  ])
+    await controller.navigateReference('relationships', reference);
+  await controller.navigateReference('semantic', results.entities.items[0].reference);
+  assert.equal(queries.length, 1);
+  const restricted = fixture({ authority: { allowedActions: ['entities'] } });
+  restricted.controller.setMode('entities');
+  await restricted.controller.submit();
+  await restricted.controller.navigateReference(
+    'relationships',
+    results.entities.items[0].reference,
+  );
+  assert.equal(restricted.queries.length, 1);
+});
+
+test('navigation cannot restore results after stop or a newer mode selection', async () => {
+  for (const change of ['stop', 'mode']) {
+    let release;
+    const { controller } = fixture({
+      query: async (command) =>
+        command.operation === 'relationships'
+          ? new Promise((resolve) => {
+              release = () => resolve({ scope: nativeScope, result: results.relationships });
+            })
+          : undefined,
+    });
+    controller.setMode('entities');
+    await controller.submit();
+    const pending = controller.navigateReference(
+      'relationships',
+      results.entities.items[0].reference,
+    );
+    if (change === 'stop') controller.stop();
+    else controller.setMode('text');
+    release();
+    await pending;
+    assert.equal(controller.getSnapshot().navigation, null);
+    assert.equal(controller.getSnapshot().result, null);
+  }
+});
+
+test('a stale source returns no navigation results without fetching a replacement revision', async () => {
+  const { controller, queries, gets } = fixture({
+    query: async (command) =>
+      command.operation === 'relationships'
+        ? { scope: nativeScope, result: { items: [], next_cursor: null } }
+        : undefined,
+  });
+  controller.setMode('entities');
+  await controller.submit();
+  await controller.navigateReference('relationships', results.entities.items[0].reference);
+  assert.equal(controller.getSnapshot().result.result.items.length, 0);
+  assert.deepEqual(queries.at(-1).command.request.source, source);
+  assert.equal(gets.length, 0);
 });
 
 test('empty and oversized byte queries fail locally while whitespace is preserved literally', async () => {
@@ -291,7 +421,9 @@ test('semantic source content is shown only after matching the exact returned so
   const changed = fixture({
     get: async () => ({
       scope: nativeScope,
-      result: { memory: { ...memory, version: 2, content: 'different revision' } },
+      result: {
+        memory: { ...memory, version: 2, content: 'different revision' },
+      },
     }),
   });
   await changed.controller.refreshConfiguration();

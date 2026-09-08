@@ -42,7 +42,12 @@ const configuration = {
     normalization_version: 1,
   },
   active_build_id: 'active-A',
-  processing: { current_sources: 5, applied_sources: 2, pending_sources: 2, failed_sources: 1 },
+  processing: {
+    current_sources: 5,
+    applied_sources: 2,
+    pending_sources: 2,
+    failed_sources: 1,
+  },
   index: { current_sources: 2, completed_sources: 2, failed_sources: 0 },
 };
 const model = {
@@ -83,7 +88,12 @@ test('zero eligible sources never becomes a fabricated 100 percent ready verdict
   assert.doesNotMatch(html, /100|NaN|Infinity/);
   const absent = config({
     ...model,
-    configuration: { ...configuration, configuration: null, active_build_id: null, index: null },
+    configuration: {
+      ...configuration,
+      configuration: null,
+      active_build_id: null,
+      index: null,
+    },
   });
   assert.match(absent, /No desired embedding configuration/);
   assert.match(absent, /No active index build/);
@@ -113,7 +123,10 @@ test('semantic scores are numeric and unfiltered with exact source revisions; no
         processing: configuration.processing,
         index: configuration.index,
         hits: [
-          { input: { source, audit_attempt: 2, input_digest: 'private-digest' }, score: -0.25 },
+          {
+            input: { source, audit_attempt: 2, input_digest: 'private-digest' },
+            score: -0.25,
+          },
         ],
       },
     },
@@ -151,7 +164,11 @@ test('source revision changes show an explicit stale result notice without showi
 });
 
 test('entity and relationship browsing labels do not describe semantic matching', () => {
-  const entities = retrieval({ ...model, mode: 'entities', allowedActions: ['entities'] });
+  const entities = retrieval({
+    ...model,
+    mode: 'entities',
+    allowedActions: ['entities'],
+  });
   assert.match(entities, /Browse current extracted entities/);
   assert.doesNotMatch(entities, /Query text|Cosine similarity/);
   const relationships = retrieval({
@@ -177,4 +194,81 @@ test('literal help and an empty result explain manual extraction of the current 
   assert.match(html, /New or edited memories must be extracted manually/);
   assert.match(html, /No matching records were returned/);
   assert.match(html, /Check extraction status/);
+});
+
+test('source navigation identifies its exact revision and marks referenced entities without hiding other records', () => {
+  const reference = { source, entity_index: 1 };
+  const html = retrieval({
+    ...model,
+    mode: 'entities',
+    phase: 'results',
+    navigation: reference,
+    result: {
+      operation: 'entities',
+      result: {
+        items: [0, 1].map((index) => ({
+          reference: { source, entity_index: index },
+          audit_attempt: 1,
+          entity: { name: `Entity ${index}`, kind: 'topic' },
+        })),
+        next_cursor: null,
+      },
+    },
+  });
+  assert.match(html, /Browsing this exact source revision/);
+  assert.match(html, /Clear source filter/);
+  assert.match(html, /Entity 0/);
+  assert.match(html, /Entity 1/);
+  assert.equal((html.match(/Selected entity reference/g) ?? []).length, 1);
+  assert.equal((html.match(/Browse relationships from this source/g) ?? []).length, 2);
+  const restricted = retrieval({
+    ...model,
+    mode: 'entities',
+    allowedActions: ['entities'],
+    result: {
+      operation: 'entities',
+      result: {
+        items: [
+          {
+            reference,
+            audit_attempt: 1,
+            entity: { name: 'Entity', kind: 'topic' },
+          },
+        ],
+        next_cursor: null,
+      },
+    },
+  });
+  assert.doesNotMatch(
+    restricted,
+    /Browse relationships from this source|View matching source revision/,
+  );
+});
+
+test('relationship endpoints offer entity navigation and preserve visible reference identities', () => {
+  const html = retrieval({
+    ...model,
+    mode: 'relationships',
+    navigation: { source, entity_index: 1 },
+    result: {
+      operation: 'relationships',
+      result: {
+        next_cursor: null,
+        items: [
+          {
+            source,
+            audit_attempt: 1,
+            relationship_index: 0,
+            source_entity: { source, entity_index: 0 },
+            target_entity: { source, entity_index: 1 },
+            relationship: { relation_type: 'related', fact: 'A declared fact' },
+          },
+        ],
+      },
+    },
+  });
+  assert.equal((html.match(/Browse referenced entity/g) ?? []).length, 2);
+  assert.match(html, /References the selected entity/);
+  assert.match(html, /memory-1 \/ 0/);
+  assert.match(html, /memory-1 \/ 1/);
 });
