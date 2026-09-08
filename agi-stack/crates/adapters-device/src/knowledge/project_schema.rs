@@ -8,12 +8,12 @@
 //! Callbacks must not reenter this repository while its connection lock is held.
 
 use agistack_core::project_schema::{ProjectSchemaDocument, ProjectSchemaError, MAX_REVISION};
-use rusqlite::{params, TransactionBehavior};
-use serde_json::json;
+use rusqlite::TransactionBehavior;
 
 use super::{KnowledgeScope, SqliteKnowledgeRepository};
 
 mod bounded;
+mod mutation;
 mod read;
 mod schema;
 mod types;
@@ -175,54 +175,13 @@ impl SqliteKnowledgeRepository {
         current: Current<'_>,
         receipt_check: Option<ReceiptCheck<'_>>,
     ) -> ProjectSchemaStorageResult<ProjectSchemaReceipt> {
-        scope_valid(scope)?;
-        identifier(actor_id)?;
-        change_id_valid(&command.change_id)?;
-        scoped_document(scope, &command.document)?;
-        // Original array order belongs to the submitted command and its replay
-        // identity; only the accepted/current snapshot is sorted by member ID.
-        let request = json!({
-            "command": operation, "tenant_id": scope.tenant_id, "project_id": scope.project_id,
-            "actor_id": actor_id, "change_id": command.change_id,
-            "expected_revision": command.expected_revision, "document": command.document.to_value(),
-        })
-        .to_string();
+        let mutation = mutation::ValidatedMutation::new(scope, actor_id, command, operation)?;
         let mut conn = self.conn.lock().map_err(storage)?;
         let tx = conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(storage)?;
         current()?;
-        if let Some((original, receipt)) = read::receipt(&tx, scope, actor_id, &command.change_id)?
-        {
-            if original != request {
-                return Err(ProjectSchemaStorageError::ChangeIdReused);
-            }
-            if let Some(check) = receipt_check {
-                check(&receipt)?;
-            }
-            current()?;
-            tx.commit().map_err(storage)?;
-            return Ok(receipt);
-        }
-        let previous = read::head(&tx, scope)?;
-        let document = canonical_document(&command.document)?;
-        document.validate_successor(previous.as_ref(), command.expected_revision)?;
-        let receipt = read::new_receipt(actor_id, &command.change_id, document)?;
-        tx.execute(
-            "INSERT INTO knowledge_project_schema_changes
-             (tenant_id,project_id,schema_id,revision,actor_id,change_id,expected_revision,request_json,receipt_json)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-            params![scope.tenant_id,scope.project_id,receipt.document().schema_id(),
-                receipt.sequence(),actor_id,command.change_id,command.expected_revision,
-                request,receipt.as_json()],
-        ).map_err(storage)?;
-        // The journal insert advances the head in the same SQLite statement.
-        if read::head(&tx, scope)?.as_ref() != Some(receipt.document()) {
-            return Err(ProjectSchemaStorageError::CorruptStorage);
-        }
-        if let Some(check) = receipt_check {
-            check(&receipt)?;
-        }
+        let receipt = mutation.apply_in_tx(&tx, receipt_check)?;
         current()?;
         tx.commit().map_err(storage)?;
         Ok(receipt)
