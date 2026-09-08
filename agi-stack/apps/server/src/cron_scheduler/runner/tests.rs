@@ -9,6 +9,8 @@ use chrono::{DateTime, TimeZone, Utc};
 
 use super::*;
 
+mod lifecycle;
+
 #[derive(Debug)]
 struct FixedClock(DateTime<Utc>);
 
@@ -184,7 +186,7 @@ async fn closed_gate_never_acquires_scheduler_ownership() {
 }
 
 #[tokio::test]
-async fn full_page_renews_exact_lease_and_release_precedes_agent_runtime() {
+async fn one_shot_counts_control_pages_and_releases_after_runtime_settles() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let scheduler = CronScheduler::new(
         Arc::new(FakeOwnership {
@@ -210,45 +212,16 @@ async fn full_page_renews_exact_lease_and_release_precedes_agent_runtime() {
     assert_eq!(report.operations_claimed, 6);
     assert_eq!(report.scheduled_runs_committed, 3);
     assert_eq!(report.runtime_scopes, 3);
-    assert!(events.contains(&"renew:1".to_string()));
-    assert!(events.contains(&"list:2:1".to_string()));
+    assert!(events.contains(&"list:1:1".to_string()));
     let release = events
         .iter()
-        .position(|event| event == "release:2")
-        .expect("renewed lease released");
+        .position(|event| event == "release:1")
+        .expect("same generation released");
     let first_runtime = events
         .iter()
         .position(|event| event.starts_with("runtime:"))
         .expect("runtime driven");
-    assert!(release < first_runtime);
-}
-
-#[tokio::test]
-async fn lost_renewal_stops_paging_and_reports_authority_loss() {
-    let events = Arc::new(Mutex::new(Vec::new()));
-    let scheduler = CronScheduler::new(
-        Arc::new(FakeOwnership {
-            events: Arc::clone(&events),
-            acquire: Some(lease(1)),
-            renewed: None,
-            released: false,
-        }),
-        Arc::new(FakeDriver {
-            events: Arc::clone(&events),
-            pages: vec![vec![scope("a"), scope("b")], vec![scope("c")]],
-        }),
-        Arc::new(FixedClock(observed_at())),
-        enabled_config(),
-    );
-
-    let report = scheduler.run_once().await.expect("scheduler run");
-    let events = events.lock().expect("events lock").clone();
-
-    assert!(report.authority_lost);
-    assert_eq!(report.pages, 1);
-    assert_eq!(report.scopes, 2);
-    assert!(!events.iter().any(|event| event == "list:2:1"));
-    assert!(events.iter().any(|event| event == "release:1"));
+    assert!(release > first_runtime);
 }
 
 #[tokio::test]

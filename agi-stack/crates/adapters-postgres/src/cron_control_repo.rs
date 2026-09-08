@@ -12,8 +12,8 @@ const LIST_WORK_SCOPES_SQL: &str = concat!(
     "WITH scheduler_authority AS MATERIALIZED ( \
     SELECT scope_id FROM agistack_cron_scheduler_owners \
     WHERE scope_id = $1 AND owner_kind = 'rust' AND owner_id = $2 \
-      AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at = $5 \
-      AND lease_expires_at > $6 ",
+      AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at >= $5 \
+      AND lease_expires_at > $6 AND lease_expires_at > clock_timestamp() ",
     verified_cutover_sql!(""),
     " \
     FOR SHARE \
@@ -40,8 +40,8 @@ const ADMIT_RECONCILE_SQL: &str = concat!(
     "WITH scheduler_authority AS MATERIALIZED ( \
     SELECT scope_id FROM agistack_cron_scheduler_owners \
     WHERE scope_id = $1 AND owner_kind = 'rust' AND owner_id = $2 \
-      AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at = $5 \
-      AND lease_expires_at > $6 ",
+      AND owner_epoch = $3 AND lease_token = $4 AND lease_expires_at >= $5 \
+      AND lease_expires_at > $6 AND lease_expires_at > clock_timestamp() ",
     verified_cutover_sql!(""),
     " \
     FOR UPDATE \
@@ -220,7 +220,7 @@ mod tests {
             let sql = compact(sql);
             assert!(sql.contains("scope_id = $1 AND owner_kind = 'rust' AND owner_id = $2"));
             assert!(sql.contains("owner_epoch = $3 AND lease_token = $4"));
-            assert!(sql.contains("lease_expires_at = $5"));
+            assert!(sql.contains("lease_expires_at >= $5"));
             assert!(sql.contains("lease_expires_at > $6"));
         }
     }

@@ -24,8 +24,8 @@ const CLAIM_DUE_SQL: &str = concat!(
     "WITH scheduler_authority AS MATERIALIZED ( \
     SELECT scope_id FROM agistack_cron_scheduler_owners \
     WHERE scope_id = $7 AND owner_kind = 'rust' AND owner_id = $8 \
-      AND owner_epoch = $9 AND lease_token = $10 AND lease_expires_at = $11 \
-      AND lease_expires_at > $3 ",
+      AND owner_epoch = $9 AND lease_token = $10 AND lease_expires_at >= $11 \
+      AND lease_expires_at > $3 AND lease_expires_at > clock_timestamp() ",
     verified_cutover_sql!(""),
     " \
     FOR UPDATE \
@@ -713,8 +713,9 @@ mod tests {
         assert!(sql.contains(
             "scope_id = $7 AND owner_kind = 'rust' AND owner_id = $8 AND owner_epoch = $9"
         ));
-        assert!(sql.contains("lease_token = $10 AND lease_expires_at = $11"));
-        assert!(sql.contains("lease_expires_at > $3 AND cutover_phase = 'verified'"));
+        assert!(sql.contains("lease_token = $10 AND lease_expires_at >= $11"));
+        assert!(sql.contains("lease_expires_at > $3 AND lease_expires_at > clock_timestamp()"));
+        assert!(sql.contains("cutover_phase = 'verified'"));
         assert!(sql.contains("FOR UPDATE"));
         assert!(sql.contains("FROM scheduler_authority"));
         assert!(sql.contains("CROSS JOIN scheduler_authority"));

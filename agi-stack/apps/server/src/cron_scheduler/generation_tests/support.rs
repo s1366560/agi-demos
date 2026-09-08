@@ -207,7 +207,7 @@ impl Probe {
                     autostart: true,
                     production_ready: true,
                     max_scope_pages: 1,
-                    poll_interval: Duration::from_secs(60),
+                    poll_interval: Duration::from_millis(10),
                     ..CronSchedulerConfig::default()
                 },
             ));

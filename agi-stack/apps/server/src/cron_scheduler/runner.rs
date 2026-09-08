@@ -14,6 +14,9 @@ use crate::cron_readiness_v2::{
 use crate::cron_scheduler_ownership::CronSchedulerLeaseStore;
 use crate::cron_worker::CronWorkerClock;
 
+mod owner_lifecycle;
+use owner_lifecycle::{stopped, OwnerLifecycle};
+
 pub(crate) type SharedCronScheduler = Arc<CronScheduler>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,62 +166,68 @@ impl CronScheduler {
                 ..Default::default()
             });
         }
-        let (mut report, scopes) = self.run_control_once().await?;
+        let (_stop, shutdown) = watch::channel(false);
+        let Some(owner) = OwnerLifecycle::acquire(self, shutdown.clone()).await? else {
+            return Ok(CronSchedulerRunReport::default());
+        };
+        let result = self.run_control_once(&owner, &shutdown).await;
+        let (mut report, scopes) = match result {
+            Ok(result) => result,
+            Err(error) => {
+                owner.stop().await;
+                return Err(error);
+            }
+        };
         for scope in &scopes {
-            self.driver.drive_runtime_scope(scope).await?;
+            if owner.current().is_none() {
+                report.authority_lost = true;
+                break;
+            }
+            if let Err(error) = self.driver.drive_runtime_scope(scope).await {
+                owner.stop().await;
+                return Err(error);
+            }
             report.runtime_scopes += 1;
         }
+        owner.stop().await;
         Ok(report)
     }
 
     async fn run_control_once(
         &self,
+        owner: &OwnerLifecycle,
+        shutdown: &watch::Receiver<bool>,
     ) -> CoreResult<(CronSchedulerRunReport, Vec<CronControlScope>)> {
-        let now = self.clock.now();
-        let Some(mut authority) = self
-            .ownership
-            .try_acquire_global(&self.config.owner_id, self.config.owner_lease_seconds, now)
-            .await
-            .map_err(ownership_error)?
-        else {
-            return Ok((CronSchedulerRunReport::default(), Vec::new()));
-        };
-
         let mut report = CronSchedulerRunReport {
             authority_acquired: true,
             ..Default::default()
         };
         let mut scopes = Vec::new();
-        let control_result = self
-            .drive_control_pages(&mut authority, &mut report, &mut scopes)
-            .await;
-        let released = self
-            .ownership
-            .release(&authority, self.clock.now())
-            .await
-            .map_err(ownership_error);
-        if let Err(error) = control_result {
-            let _ = released;
-            return Err(error);
-        }
-        if !released? {
-            report.authority_lost = true;
-        }
+        self.drive_control_pages(owner, shutdown, &mut report, &mut scopes)
+            .await?;
         Ok((report, scopes))
     }
 
     async fn drive_control_pages(
         &self,
-        authority: &mut CronSchedulerLease,
+        owner: &OwnerLifecycle,
+        shutdown: &watch::Receiver<bool>,
         report: &mut CronSchedulerRunReport,
         all_scopes: &mut Vec<CronControlScope>,
     ) -> CoreResult<()> {
         let mut after = None;
-        for page_index in 0..self.config.max_scope_pages {
+        for _ in 0..self.config.max_scope_pages {
+            if stopped(shutdown) {
+                break;
+            }
+            let Some(authority) = owner.current() else {
+                report.authority_lost = true;
+                break;
+            };
             let page = self
                 .driver
                 .list_work_scopes(
-                    authority,
+                    &authority,
                     after.as_ref(),
                     self.config.scope_page_size,
                     self.clock.now(),
@@ -229,28 +238,25 @@ impl CronScheduler {
             }
             report.pages += 1;
             for scope in &page {
-                let scope_report = self.driver.drive_control_scope(authority, scope).await?;
+                if stopped(shutdown) {
+                    return Ok(());
+                }
+                let Some(authority) = owner.current() else {
+                    report.authority_lost = true;
+                    return Ok(());
+                };
+                let scope_report = self.driver.drive_control_scope(&authority, scope).await?;
                 report.scopes += 1;
                 report.reconcile_admitted += scope_report.reconcile_admitted;
                 report.operations_claimed += scope_report.operations_claimed;
                 report.scheduled_runs_committed += scope_report.scheduled_runs_committed;
+                all_scopes.push(scope.clone());
             }
             after = page.last().cloned();
-            all_scopes.extend(page.iter().cloned());
             let page_is_full = page.len() == self.config.scope_page_size as usize;
-            if !page_is_full || page_index + 1 >= self.config.max_scope_pages {
+            if !page_is_full {
                 break;
             }
-            let renewed = self
-                .ownership
-                .renew(authority, self.config.owner_lease_seconds, self.clock.now())
-                .await
-                .map_err(ownership_error)?;
-            let Some(renewed) = renewed else {
-                report.authority_lost = true;
-                break;
-            };
-            *authority = renewed;
         }
         Ok(())
     }
@@ -261,17 +267,36 @@ impl CronScheduler {
         if *shutdown.borrow() || !self.readiness.confirm_loop_started() {
             return;
         }
-        loop {
-            if *shutdown.borrow() {
-                return;
+        let mut owner: Option<OwnerLifecycle> = None;
+        while !stopped(&shutdown) {
+            if owner
+                .as_ref()
+                .is_some_and(|owner| owner.current().is_none())
+            {
+                if let Some(prior) = owner.take() {
+                    prior.stop().await;
+                }
             }
-            match self.run_control_once().await {
+            if owner.is_none() {
+                match OwnerLifecycle::acquire(&self, shutdown.clone()).await {
+                    Ok(acquired) => owner = acquired,
+                    Err(error) => eprintln!("[agistack] cron owner acquisition failed: {error:?}"),
+                }
+            }
+            let Some(current) = owner.as_ref() else {
+                tokio::select! {
+                    _ = shutdown.changed() => {},
+                    () = sleep(self.config.poll_interval) => {},
+                }
+                continue;
+            };
+            match self.run_control_once(current, &shutdown).await {
                 Ok((_, scopes)) => {
                     for scope in &scopes {
                         // A claimed runtime operation must settle before its generation retires.
                         // Stop admission between scopes, never by dropping the active driver future.
-                        if *shutdown.borrow() || shutdown.has_changed().is_err() {
-                            return;
+                        if stopped(&shutdown) || current.current().is_none() {
+                            break;
                         }
                         if let Err(error) = self.driver.drive_runtime_scope(scope).await {
                             eprintln!("[agistack] cron Agent runtime poll failed: {error:?}");
@@ -281,13 +306,13 @@ impl CronScheduler {
                 Err(error) => eprintln!("[agistack] cron scheduler control poll failed: {error:?}"),
             }
             tokio::select! {
-                changed = shutdown.changed() => {
-                    if changed.is_err() || *shutdown.borrow() {
-                        return;
-                    }
-                }
+                _ = shutdown.changed() => {}
+                () = current.lost() => {}
                 () = sleep(self.config.poll_interval) => {}
             }
+        }
+        if let Some(owner) = owner {
+            owner.stop().await;
         }
     }
 }

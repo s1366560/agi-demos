@@ -146,6 +146,13 @@ async fn cron_readiness_same_digest_resources_isolate_running_and_cancelled_drai
         BackgroundWorkerGenerationV2::start(manager.acquire().unwrap(), controllers(&second))
             .await
             .unwrap();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert_eq!(
+        probe.driver(1).starts(),
+        0,
+        "candidate cannot take a live owner's lease"
+    );
+    first_owner.request_stop();
     probe.wait_entered(1).await;
     assert!(second_controller.cron_readiness().unwrap().ready);
     assert!(

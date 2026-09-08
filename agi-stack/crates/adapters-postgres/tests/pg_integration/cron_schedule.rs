@@ -26,7 +26,7 @@ async fn cron_schedule_projection_is_scope_and_schedule_revision_fenced() {
     .expect("load project scope") else {
         return;
     };
-    let now = ts(2026, 7, 14, 10, 0, 0);
+    let now = ts(2099, 7, 14, 10, 0, 0);
     sqlx::query(
         "INSERT INTO cron_jobs ( \
             id, project_id, tenant_id, name, enabled, delete_after_run, revision, schedule_revision, \
@@ -141,7 +141,7 @@ async fn due_schedule_fire_atomically_creates_run_operation_and_advances_cursor(
     .expect("load project scope") else {
         return;
     };
-    let now = ts(2026, 7, 14, 11, 0, 0);
+    let now = ts(2099, 7, 14, 11, 0, 0);
     sqlx::query(
         "INSERT INTO cron_jobs ( \
             id, project_id, tenant_id, name, enabled, delete_after_run, revision, schedule_revision, \

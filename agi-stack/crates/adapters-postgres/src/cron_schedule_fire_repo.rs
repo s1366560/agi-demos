@@ -41,7 +41,8 @@ WHERE state.job_id = $1 AND state.tenant_id = $2 AND state.project_id = $3 \
   AND job.enabled IS TRUE \
   AND scheduler_owner.owner_kind = 'rust' AND scheduler_owner.owner_id = $9 \
   AND scheduler_owner.owner_epoch = $10 AND scheduler_owner.lease_token = $11 \
-  AND scheduler_owner.lease_expires_at = $12 AND scheduler_owner.lease_expires_at > $13 ",
+  AND scheduler_owner.lease_expires_at >= $12 AND scheduler_owner.lease_expires_at > $13 \
+  AND scheduler_owner.lease_expires_at > clock_timestamp() ",
     verified_cutover_sql!("scheduler_owner."),
     " \
 FOR UPDATE OF state, job, scheduler_owner"
@@ -324,7 +325,6 @@ fn validate_fire(
         || candidate.scheduled_for > observed_at
         || !authority.is_structurally_valid()
         || authority.scope_id != GLOBAL_CRON_SCHEDULER_SCOPE
-        || authority.lease_expires_at <= observed_at
         || !fingerprint_is_sha256
         || next.schedule_fingerprint != candidate.schedule_fingerprint
         || !next_is_valid
@@ -425,7 +425,7 @@ mod tests {
         assert!(sql.contains("scheduler_owner.scope_id = $8"));
         assert!(sql.contains("scheduler_owner.owner_epoch = $10"));
         assert!(sql.contains("scheduler_owner.lease_token = $11"));
-        assert!(sql.contains("scheduler_owner.lease_expires_at = $12"));
+        assert!(sql.contains("scheduler_owner.lease_expires_at >= $12"));
         assert!(sql.contains("FOR UPDATE OF state, job, scheduler_owner"));
     }
 }

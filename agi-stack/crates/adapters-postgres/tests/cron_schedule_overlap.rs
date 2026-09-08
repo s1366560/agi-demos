@@ -114,11 +114,44 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
     .await
     .unwrap();
     cron_cutover_fixture::verify_cutover_fixture(&pool).await;
-    let authority = PgCronSchedulerOwnerRepository::new(pool.clone())
-        .try_acquire_global("scheduler", 600, now)
+    let ownership = PgCronSchedulerOwnerRepository::new(pool.clone());
+    let authority = ownership
+        .try_acquire_global("scheduler", 60, now)
         .await
         .unwrap()
         .unwrap();
+    let renewed = ownership
+        .renew(&authority, 600, now + Duration::seconds(30))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(ownership
+        .is_current(&authority, now + Duration::seconds(61))
+        .await
+        .unwrap());
+    assert!(ownership
+        .renew(&authority, 600, now + Duration::seconds(31))
+        .await
+        .unwrap()
+        .is_none());
+    assert!(!ownership
+        .release(&authority, now + Duration::seconds(31))
+        .await
+        .unwrap());
+    let invalid_authorities = [
+        agistack_adapters_postgres::CronSchedulerLease {
+            lease_expires_at: renewed.lease_expires_at + Duration::seconds(1),
+            ..authority.clone()
+        },
+        agistack_adapters_postgres::CronSchedulerLease {
+            owner_epoch: authority.owner_epoch + 1,
+            ..authority.clone()
+        },
+        agistack_adapters_postgres::CronSchedulerLease {
+            lease_token: "different-nonce".into(),
+            ..authority.clone()
+        },
+    ];
     let repository = PgCronScheduleFireRepository::new(pool.clone());
     let scope = CronOperationScope {
         tenant_id: "tenant",
@@ -151,6 +184,14 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
             operation_id: format!("operation-{index}"),
             idempotency_key: format!("scheduled:1:{observed}"),
         };
+        for invalid in &invalid_authorities {
+            assert!(!ownership.is_current(invalid, observed).await.unwrap());
+            assert!(repository
+                .commit_fire(scope, &candidate, &next, &fire, invalid, observed)
+                .await
+                .unwrap()
+                .is_none());
+        }
         sqlx::query("UPDATE agistack_cron_scheduler_owners SET cutover_phase='blocked'")
             .execute(&pool)
             .await
@@ -233,6 +274,23 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
         .execute(&pool)
         .await
         .unwrap();
+    for invalid in &invalid_authorities {
+        assert!(control
+            .list_work_scopes(invalid, None, 10, observed)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(control
+            .admit_reconcile_operations(invalid, &control_scope, 10, observed)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(operations
+            .claim_due(scope, invalid, 10, "worker", 60, observed)
+            .await
+            .unwrap()
+            .is_empty());
+    }
     assert_eq!(
         control
             .list_work_scopes(&authority, None, 10, observed)
@@ -257,6 +315,77 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
             .len(),
         2
     );
+    // A stale application observation cannot revive an owner expired by the DB clock.
+    let database_now: chrono::DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let stale_observed = database_now - Duration::seconds(11);
+    let expired_snapshot = agistack_adapters_postgres::CronSchedulerLease {
+        acquired_at: database_now - Duration::seconds(20),
+        lease_expires_at: database_now - Duration::seconds(10),
+        ..authority.clone()
+    };
+    sqlx::query("UPDATE agistack_cron_scheduler_owners SET lease_expires_at=clock_timestamp()-interval '1 second'")
+        .execute(&pool).await.unwrap();
+    sqlx::query("UPDATE cron_jobs SET schedule_revision=3 WHERE id='job'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agistack_cron_operations SET status='pending',next_attempt_at=$1")
+        .bind(stale_observed)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(!ownership
+        .is_current(&expired_snapshot, stale_observed)
+        .await
+        .unwrap());
+    assert!(control
+        .list_work_scopes(&expired_snapshot, None, 10, stale_observed)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(control
+        .admit_reconcile_operations(&expired_snapshot, &control_scope, 10, stale_observed)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(operations
+        .claim_due(scope, &expired_snapshot, 10, "worker", 60, stale_observed)
+        .await
+        .unwrap()
+        .is_empty());
+    sqlx::query("UPDATE agistack_cron_schedule_state SET schedule_revision=3,next_fire_at=$1 WHERE job_id='job'")
+        .bind(stale_observed).execute(&pool).await.unwrap();
+    let candidate = repository
+        .list_due(scope, stale_observed, 1)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let next = CronScheduleProjection {
+        status: CronScheduleStatus::Active,
+        schedule_fingerprint: candidate.schedule_fingerprint.clone(),
+        next_fire_at: Some(stale_observed + Duration::seconds(60)),
+    };
+    let fire = NewCronScheduledFire {
+        run_id: "expired-owner-run".into(),
+        operation_id: "expired-owner-op".into(),
+        idempotency_key: "expired-owner".into(),
+    };
+    assert!(repository
+        .commit_fire(
+            scope,
+            &candidate,
+            &next,
+            &fire,
+            &expired_snapshot,
+            stale_observed
+        )
+        .await
+        .unwrap()
+        .is_none());
     pool.close().await;
     sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
         .execute(&admin)

@@ -27,7 +27,7 @@ async fn cron_runtime_claim_and_terminal_projection_are_fenced_and_atomic() {
         return;
     };
 
-    let now = ts(2026, 7, 14, 15, 0, 0);
+    let now = ts(2099, 7, 14, 15, 0, 0);
     let authority = acquire_runtime_scheduler_authority(&pool, now).await;
     let job_id = "cron_runtime_job_success";
     let run_id = "cron_runtime_run_success";
@@ -187,7 +187,7 @@ async fn cron_runtime_timeout_recovery_is_idempotent() {
     .expect("load runtime scope") else {
         return;
     };
-    let now = ts(2026, 7, 14, 16, 0, 0);
+    let now = ts(2099, 7, 14, 16, 0, 0);
     let job_id = "cron_runtime_job_timeout";
     let run_id = "cron_runtime_run_timeout";
     insert_job_and_run(

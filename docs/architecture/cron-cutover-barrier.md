@@ -127,9 +127,9 @@ semantic judgment or an activation decision.
 - Implement controlled APScheduler producer shutdown/removal and the authenticated
   verification writer. Define an audited abort/rollback protocol before using a
   prepared deployment in production; dropping barrier evidence is not rollback.
-- Change the Rust owner from per-control-poll acquisition/release to a continuously
-  renewed lifecycle lease. Keep per-run execution leases independent so losing
-  control ownership does not fabricate terminal execution or abort admitted work.
+- The [continuous Rust owner lifecycle](cron-owner-lifecycle.md) now renews control
+  ownership independently of admitted work and preserves separate run leases.
+  This local lifecycle does not supply the missing deployment drain evidence.
 - Gate backward delegation until Rust operations, ordinary Agent executions and
   HITL resumes have real terminal/closure evidence. A local worker's stopped state
   does not mean its durable waiting work has drained.

@@ -29,7 +29,7 @@ async fn cron_control_discovers_scope_and_admits_each_schedule_revision_once() {
         tenant_id: tenant_id.clone(),
         project_id: project_id.clone(),
     };
-    let now = ts(2026, 7, 14, 17, 0, 0);
+    let now = ts(2099, 7, 14, 17, 0, 0);
     insert_job(&pool, &scope, &user_id, now).await;
     let stale_authority = acquire_authority(&pool, now).await;
     let repo = PgCronControlRepository::new(pool.clone());

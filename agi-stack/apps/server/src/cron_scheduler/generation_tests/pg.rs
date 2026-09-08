@@ -97,8 +97,8 @@ async fn postgres_cron_generations_preserve_owner_fencing_and_private_resource_l
         "each active generation obtains a fresh fenced lease"
     );
     assert!(
-        token.is_none(),
-        "control lease released before draining admitted runtime work"
+        token.is_some(),
+        "successor retains control lease while its admitted runtime work runs"
     );
     assert!(
         !repository.release(&prior, Utc::now()).await.unwrap(),

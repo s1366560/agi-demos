@@ -19,7 +19,7 @@ async fn cron_operations_enforce_scope_and_fenced_lease_transitions() {
     clean_rows(&pool).await;
 
     let repo = PgCronOperationRepository::new(pool.clone());
-    let now = ts(2026, 7, 14, 12, 0, 0);
+    let now = ts(2099, 7, 14, 12, 0, 0);
     let stale_authority = acquire_scheduler_authority(&pool, "scheduler-1", 60, now).await;
     let authority = PgCronSchedulerOwnerRepository::new(pool.clone())
         .renew(&stale_authority, 300, now)
@@ -176,7 +176,7 @@ async fn cron_operation_dispatch_acceptance_waits_for_runtime_under_fenced_lease
     clean_rows(&pool).await;
 
     let repo = PgCronOperationRepository::new(pool.clone());
-    let now = ts(2026, 7, 14, 13, 0, 0);
+    let now = ts(2099, 7, 14, 13, 0, 0);
     let authority = acquire_scheduler_authority(&pool, "scheduler-1", 300, now).await;
     let scope = CronOperationScope {
         tenant_id: "cron_operation_tenant",
@@ -301,7 +301,7 @@ async fn cron_operation_dispatch_ack_reconciles_an_already_terminal_runtime() {
     .await
     .expect("insert cron job");
 
-    let now = ts(2026, 7, 14, 14, 0, 0);
+    let now = ts(2099, 7, 14, 14, 0, 0);
     let authority = acquire_scheduler_authority(&pool, "scheduler-1", 300, now).await;
     sqlx::query(
         "INSERT INTO cron_job_runs ( \

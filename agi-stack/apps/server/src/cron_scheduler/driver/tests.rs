@@ -216,6 +216,9 @@ mod release_tests;
 #[path = "ordinary_http_tests.rs"]
 mod ordinary_http_tests;
 
+#[path = "owner_lifecycle_tests.rs"]
+mod owner_lifecycle_tests;
+
 #[tokio::test]
 async fn released_driver_rejects_unsupported_hitl_before_durable_pending() {
     let Some(fixture) = Fixture::open().await else {

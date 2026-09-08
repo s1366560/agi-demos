@@ -213,7 +213,6 @@ impl CronOperationWorker {
 
         let observed_at = self.clock.now();
         let authority_is_current = authority.is_structurally_valid()
-            && authority.lease_expires_at > observed_at
             && self
                 .ownership
                 .is_current(authority, observed_at)
@@ -275,6 +274,8 @@ fn valid_claim_lease<'a>(operation: &'a CronOperationRecord, worker_id: &str) ->
 
 #[cfg(test)]
 mod tests {
+    mod owner_snapshots;
+
     use std::sync::Mutex;
 
     use agistack_adapters_postgres::CronSchedulerOwnerError;

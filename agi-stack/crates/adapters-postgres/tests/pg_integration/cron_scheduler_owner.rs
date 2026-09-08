@@ -11,7 +11,7 @@ async fn scheduler_owner_requires_rust_cutover_and_fences_every_lease_snapshot()
     };
     ensure_owner_table(&pool).await;
     clean_rows(&pool).await;
-    let now = ts(2026, 7, 14, 12, 0, 0);
+    let now = ts(2099, 7, 14, 12, 0, 0);
     sqlx::query(
         "INSERT INTO agistack_cron_scheduler_owners ( \
             scope_id, owner_kind, owner_epoch, updated_at \
@@ -65,10 +65,10 @@ async fn scheduler_owner_requires_rust_cutover_and_fences_every_lease_snapshot()
         .await
         .expect("renew current lease")
         .expect("exact lease renews");
-    assert!(!repo
+    assert!(repo
         .is_current(&first, now + std::time::Duration::from_secs(10))
         .await
-        .expect("old snapshot check"));
+        .expect("same generation remains current across renewal"));
     assert!(repo
         .is_current(&renewed, now + std::time::Duration::from_secs(10))
         .await
