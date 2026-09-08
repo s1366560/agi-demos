@@ -13,6 +13,8 @@ use crate::local_runtime::{tests::test_state, LocalRuntimeState};
 
 #[path = "http_tests.rs"]
 mod http_tests;
+#[path = "project_schema_operation_tests.rs"]
+mod project_schema_operation_tests;
 #[path = "project_schema_storage_tests.rs"]
 mod project_schema_storage_tests;
 #[path = "push_http_tests.rs"]

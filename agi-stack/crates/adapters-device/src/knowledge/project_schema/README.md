@@ -34,3 +34,12 @@ unjournaled head changes, identity changes, and nonadjacent append operations.
 There is no API or capability registration, default activation, sync association,
 transport outbox, scheduler, cloud dispatch, or automatic/semantic merge here.
 The local journal is durable history only and is not evidence of synchronization.
+
+The sidecar now has a dormant internal `ProjectSchemaOperationV2` wrapper. Its
+admission checks the live local session, workspace context and exact project
+generation before opening storage. Each operation repeats live read/write role
+checks and supplies the real session-deadline callback under the existing
+auth-to-generation-to-storage lock order. Actor and scope come from the admitted
+session; write replay still requires current write permission. Schema errors
+remain typed internally. No Memory command, public capability, route or RPC
+calls this wrapper; connecting that surface is a separate implementation step.

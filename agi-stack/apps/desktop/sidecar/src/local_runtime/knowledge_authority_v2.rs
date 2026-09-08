@@ -36,6 +36,7 @@ mod indexing;
 mod processing;
 mod processing_context;
 mod processing_provider;
+mod project_schema;
 mod retrieval;
 mod routes;
 mod semantic_query;
