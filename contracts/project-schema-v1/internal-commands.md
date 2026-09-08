@@ -325,7 +325,8 @@ missing bootstrap/history and tombstone lineage. Latest-snapshot copying and rev
 renumbering are not valid substitutes for that later protocol.
 
 M2 rejects `X-Expected-Revision`, `Idempotency-Key`,
-`X-Project-Schema-Expected-Revision`, and `X-Project-Schema-Change-Id`, including
+`X-Project-Schema-Expected-Revision`, `X-Project-Schema-Change-Id`, `If-Match`, and
+`If-None-Match`, including
 duplicate occurrences, with 422 transport-invalid. The closed body is the sole CAS and
 change-identity source. History cursors require nonnegative integer JSON tokens: `-0`,
 `0.0`, `0e0`, and booleans are invalid. This envelope rule does not change opaque numeric

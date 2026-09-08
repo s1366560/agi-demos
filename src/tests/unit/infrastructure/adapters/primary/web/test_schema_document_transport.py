@@ -32,6 +32,8 @@ async def test_history_requires_a_nonnegative_integer_token(token):
         "Idempotency-Key",
         "X-Project-Schema-Expected-Revision",
         "X-Project-Schema-Change-Id",
+        "If-Match",
+        "If-None-Match",
     ],
 )
 @pytest.mark.parametrize("duplicate", [False, True])

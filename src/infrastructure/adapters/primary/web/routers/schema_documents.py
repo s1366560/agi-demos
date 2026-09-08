@@ -89,6 +89,8 @@ async def _body(request: Request) -> dict[str, Any]:
             "Idempotency-Key",
             "X-Project-Schema-Expected-Revision",
             "X-Project-Schema-Change-Id",
+            "If-Match",
+            "If-None-Match",
         )
     ):
         raise _invalid(ValueError("alternate command headers are not supported"))
