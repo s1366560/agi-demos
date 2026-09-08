@@ -124,7 +124,10 @@
         "agi-stack/apps/desktop/tests/desktop-plugin-generation-v2-wiring.test.mjs",
         "agi-stack/apps/desktop/electron/main/rendererDeliveryAdmissionV2.ts",
         "web/src/test/plugins/desktopRendererDeliveryAdmissionV2.test.ts",
-        "agi-stack/apps/desktop/tests/sidecar-command-surface.test.mjs"
+        "agi-stack/apps/desktop/tests/sidecar-command-surface.test.mjs",
+        "agi-stack/apps/desktop/electron/main/qaProfilePolicy.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_knowledge_acceptance.rs",
+        "shared/profiles/memstack-local-knowledge-acceptance.v2.json"
       ],
       "api_method": "IPC",
       "api_path": "ipc:private-inherited-stdio-jsonl-control-v1",

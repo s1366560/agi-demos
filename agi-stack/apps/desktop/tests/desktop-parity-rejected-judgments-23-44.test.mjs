@@ -608,7 +608,7 @@ test("Project Team records the tenant invitation used by its production form", (
 
 test("Project Memories records copy-link as a client-side action", () => {
   const memories = readCapability(
-    "parity-capability-definitions.17-project-knowledge-core.v2.json",
+    "parity-capability-definitions.17-project-knowledge-records.v2.json",
     "project-project-memories",
   );
 
@@ -655,7 +655,7 @@ test("Project Memories records copy-link as a client-side action", () => {
 
 test("Project Entities does not claim its unused entity detail API", () => {
   const entities = readCapability(
-    "parity-capability-definitions.17-project-knowledge-core.v2.json",
+    "parity-capability-definitions.17-project-knowledge-records.v2.json",
     "project-project-entities",
   );
   const webContracts = contractKeys(entities, "web");
