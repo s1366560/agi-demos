@@ -1,10 +1,4 @@
-import {
-  chmodSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  realpathSync,
-} from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 
@@ -55,9 +49,7 @@ export function resolveQaProfileDirectory({
     isAbsolute(relativeProfile) ||
     dirname(resolvedProfile) !== resolvedRoot
   ) {
-    throw new Error(
-      'QA profile path must be a direct child of the temporary directory',
-    );
+    throw new Error('QA profile path must be a direct child of the temporary directory');
   }
   if (!basename(resolvedProfile).startsWith(QA_PROFILE_PREFIX)) {
     throw new Error(`QA profile directory must start with ${QA_PROFILE_PREFIX}`);
@@ -108,4 +100,60 @@ function prepareQaProfileDirectory(path: string, temporaryRoot: string): void {
     throw new Error('QA profile path must not traverse symbolic links');
   }
   if (process.platform !== 'win32') chmodSync(path, 0o700);
+}
+
+export type LocalKnowledgeAcceptanceRequest = Readonly<{
+  purpose: 'local-knowledge-acceptance-v1';
+  userDataDirectory: string;
+}>;
+
+/** Derive a fixed host qualification only after both QA roots are isolated. */
+export function qualifyLocalKnowledgeAcceptance({
+  isPackaged,
+  qaProfileDirectory,
+  dataDirectory,
+  workspaceRoot,
+  temporaryRoot = tmpdir(),
+}: Readonly<{
+  isPackaged: boolean;
+  qaProfileDirectory: string | null;
+  dataDirectory: string;
+  workspaceRoot: string;
+  temporaryRoot?: string;
+}>): LocalKnowledgeAcceptanceRequest | undefined {
+  if (qaProfileDirectory === null) return undefined;
+  const profile = resolveQaProfileDirectory({
+    isPackaged,
+    requestedPath: qaProfileDirectory,
+    temporaryRoot,
+  });
+  const workspace = resolveQaProfileDirectory({
+    isPackaged,
+    requestedPath: workspaceRoot,
+    temporaryRoot,
+  });
+  if (
+    profile === null ||
+    workspace === null ||
+    profile === workspace ||
+    resolve(dataDirectory) !== resolve(profile, 'runtime')
+  ) {
+    throw new Error('Local knowledge acceptance requires distinct bound QA roots');
+  }
+  prepareQaProfileDirectory(profile, temporaryRoot);
+  prepareQaProfileDirectory(workspace, temporaryRoot);
+  if (!existsSync(dataDirectory)) mkdirSync(dataDirectory, { mode: 0o700 });
+  const data = lstatSync(dataDirectory);
+  if (
+    !data.isDirectory() ||
+    data.isSymbolicLink() ||
+    realpathSync(dataDirectory) !== resolve(realpathSync(profile), 'runtime')
+  ) {
+    throw new Error('Local knowledge acceptance runtime directory must be private');
+  }
+  if (process.platform !== 'win32') chmodSync(dataDirectory, 0o700);
+  return Object.freeze({
+    purpose: 'local-knowledge-acceptance-v1',
+    userDataDirectory: profile,
+  });
 }

@@ -154,11 +154,12 @@ async fn stage(
     validation: bool,
 ) -> (ProfileSnapshotV2, Arc<RuntimeGenerationV2>) {
     let snapshot = fixture(number);
-    let mut knowledge = definition(Some(directory.0.clone())).unwrap();
+    let mut knowledge = definition(Some(directory.0.clone()), None).unwrap();
     if validation {
         knowledge.module = Arc::new(KnowledgeModuleV2 {
             app_data_dir: Some(directory.0.clone()),
             internal_validation: true,
+            local_acceptance: None,
         });
     }
     let generation = LoaderV2::for_target(
@@ -402,7 +403,7 @@ async fn contract_rejects_attempt_to_open_release_through_profile_config() {
         [
             desktop_sidecar_http_routes_definition_v2(),
             desktop_sidecar_host_definition_v2(),
-            definition(Some(directory.0.clone())).unwrap(),
+            definition(Some(directory.0.clone()), None).unwrap(),
         ],
     )
     .stage(snapshot)
@@ -443,3 +444,7 @@ mod indexing_tests;
 
 #[path = "capability_tests.rs"]
 mod capability_tests;
+
+#[cfg(unix)]
+#[path = "local_acceptance_tests.rs"]
+mod local_acceptance_tests;

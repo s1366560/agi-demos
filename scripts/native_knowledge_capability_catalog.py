@@ -20,6 +20,9 @@ def render_capability_catalog(
         required.update(definitions[name]["properties"])
     if required != actions.keys() or set(actions.values()) != {"read", "write"}:
         raise ValueError("capability actions must exactly cover the native operation contract")
+    local = schema["x-local-acceptance-actions"]
+    if len(set(local)) != len(local) or not set(local) <= actions.keys():
+        raise ValueError("local acceptance actions must be unique declared operations")
     reads = sorted(name for name, access in actions.items() if access == "read")
     writes = sorted(name for name, access in actions.items() if access == "write")
     rust = [
@@ -27,6 +30,7 @@ def render_capability_catalog(
         "use super::contracts::{ProcessingQuery, ProcessingCommand};",
         f"pub(super) const READ_ACTIONS: &[&str] = &{json.dumps(reads)};",
         f"pub(super) const WRITE_ACTIONS: &[&str] = &{json.dumps(writes)};",
+        f"pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &{json.dumps(sorted(local))};",
     ]
     for name, access in [
         ("NativeKnowledgeProcessingQuery", "read"),

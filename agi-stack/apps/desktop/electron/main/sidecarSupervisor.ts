@@ -10,6 +10,7 @@ import {
   PLUGIN_RENDERER_DATA_PLANE_API_BASE_URL_ENV_V2,
   PLUGIN_RENDERER_DATA_PLANE_ACK_PARTICIPATION_ENV_V2,
 } from './platformPluginDataPlaneCredentialPolicy';
+import type { LocalKnowledgeAcceptanceRequest } from './qaProfilePolicy';
 
 const SIDECAR_PROTOCOL_VERSION = 1;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
@@ -47,6 +48,7 @@ export type SidecarSupervisorOptions = {
   binaryPath: string;
   dataDirectory: string;
   workspaceRoot: string;
+  localKnowledgeAcceptance?: LocalKnowledgeAcceptanceRequest;
   workspaceCoreBinaryPath: string;
   legacyDataDirectories: readonly string[];
   environment?: Readonly<Record<string, string>>;
@@ -302,6 +304,7 @@ export class SidecarSupervisor {
           secret,
           dataDirectory: this.#options.dataDirectory,
           workspaceRoot: this.#options.workspaceRoot,
+          localKnowledgeAcceptance: this.#options.localKnowledgeAcceptance,
           workspaceCoreBinaryPath: this.#options.workspaceCoreBinaryPath,
           legacyDataDirectories: this.#options.legacyDataDirectories,
         })}\n`,

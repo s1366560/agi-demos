@@ -3,6 +3,7 @@
 mod application_vault;
 mod control;
 mod data_migration;
+mod local_knowledge_acceptance;
 mod local_runtime;
 mod native_host;
 mod oauth_pending_attempt;

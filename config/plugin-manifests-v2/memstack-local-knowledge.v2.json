@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/desktop-sidecar/knowledge-authority",
       "entrypoint": "KnowledgeModuleV2::apply",
       "artifact": {
-        "digest": "sha256:8f371949299bd460c92a7ffbecd51c9cf77f6cda4605a91c17769434e4473c6e",
+        "digest": "sha256:1c37a3cf321e5c833c88d8ac24a93b785133814fda402b8f3c97128a018529d6",
         "source": "repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/knowledge_authority_v2.rs"
       },
       "targets": [
@@ -31,25 +31,43 @@
         },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "release_contract": {
-              "type": "string",
-              "const": "knowledge-and-sync-v1"
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "release_contract": {
+                  "type": "string",
+                  "const": "knowledge-and-sync-v1"
+                },
+                "release_state": {
+                  "type": "string",
+                  "const": "closed"
+                }
+              },
+              "required": [
+                "release_contract",
+                "release_state"
+              ]
             },
-            "release_state": {
-              "type": "string",
-              "const": "closed"
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "acceptance_contract": {
+                  "type": "string",
+                  "const": "local-knowledge-acceptance-v1"
+                }
+              },
+              "required": [
+                "acceptance_contract"
+              ]
             }
-          },
-          "required": [
-            "release_contract",
-            "release_state"
-          ]
+          ],
+          "type": "object"
         }
       },
-      "contract_digest": "sha256:21ee561395bcaa76eb4c4e251d9cf6588fd9a9aadb6ecd4f28e7b177d12c6a0f"
+      "contract_digest": "sha256:ad8f3bd67a58726224ee5ae11c1c8d53f168f11b876ebf0e211231b52d218247"
     }
   ],
   "permissions": [],

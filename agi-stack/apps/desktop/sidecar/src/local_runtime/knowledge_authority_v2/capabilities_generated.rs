@@ -41,6 +41,25 @@ pub(super) const WRITE_ACTIONS: &[&str] = &[
     "sync_push",
     "update",
 ];
+pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &[
+    "configuration",
+    "configure_embedding",
+    "create",
+    "delete",
+    "entities",
+    "get",
+    "index_one",
+    "list",
+    "process_one",
+    "promote_index",
+    "relationships",
+    "retry_index",
+    "select_embedding",
+    "semantic",
+    "text",
+    "update",
+    "view",
+];
 impl ProcessingQuery {
     pub(super) fn capability_action(&self) -> &'static str {
         match self {

@@ -80,7 +80,11 @@ import {
 import {
   takePlatformPluginCredentialEnvironmentsV2,
 } from './platformPluginDataPlaneCredentialPolicy';
-import { configureQaProfile, resolveSidecarLegacyDataDirectories } from './qaProfilePolicy';
+import {
+  configureQaProfile,
+  resolveSidecarLegacyDataDirectories,
+  qualifyLocalKnowledgeAcceptance,
+} from './qaProfilePolicy';
 import { SidecarSupervisor, sidecarRendererEnvironment } from './sidecarSupervisor';
 import { startAutomaticUpdates } from './updater';
 import type { AutomaticUpdateController } from './automaticUpdateLoop';
@@ -951,11 +955,19 @@ function legacyTauriDataDirectories(destination: string): string[] {
 
 function createSidecarSupervisor(): SidecarSupervisor {
   const dataDirectory = join(app.getPath('userData'), 'runtime');
+  const workspaceRoot = defaultWorkspaceRoot();
+  const localKnowledgeAcceptance = qualifyLocalKnowledgeAcceptance({
+    isPackaged: app.isPackaged,
+    qaProfileDirectory,
+    dataDirectory,
+    workspaceRoot,
+  });
   return new SidecarSupervisor({
     binaryPath: sidecarBinaryPath(),
     workspaceCoreBinaryPath: workspaceCoreBinaryPath(),
     dataDirectory,
-    workspaceRoot: defaultWorkspaceRoot(),
+    workspaceRoot,
+    localKnowledgeAcceptance,
     handshakeTimeoutMs: SIDECAR_HANDSHAKE_TIMEOUT_MS,
     legacyDataDirectories: resolveSidecarLegacyDataDirectories({
       qaProfileDirectory,

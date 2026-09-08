@@ -1,0 +1,20 @@
+# Fixed contribution composed only for a qualified, isolated Electron host.
+# This does not replace the default product profile or release local/cloud sync.
+schema_version: 2
+profile:
+  id: memstack-local-knowledge-acceptance-v2
+  entries:
+    - entry_id: builtin-desktop-sidecar-knowledge-authority
+      parent_entry_id: builtin-desktop-sidecar-local-capability
+      plugin_ref: memstack-local-knowledge
+      module_ref: builtin://memstack/desktop-sidecar/knowledge-authority
+      enabled: true
+      config:
+        acceptance_contract: local-knowledge-acceptance-v1
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation

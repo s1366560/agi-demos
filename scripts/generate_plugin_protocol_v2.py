@@ -656,7 +656,9 @@ def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _bootstrap_profile(manifests: tuple[dict[str, Any], ...]) -> dict[str, Any]:
+def _bootstrap_profile(
+    manifests: tuple[dict[str, Any], ...], *, local_acceptance: bool = False
+) -> dict[str, Any]:
     from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
     from src.infrastructure.plugins.v2.protocol import (
         parse_plugin_manifest_v2,
@@ -668,8 +670,15 @@ def _bootstrap_profile(manifests: tuple[dict[str, Any], ...]) -> dict[str, Any]:
 
     parsed = tuple(parse_plugin_manifest_v2(manifest) for manifest in manifests)
     manifest_by_id = {manifest.plugin_id: manifest for manifest in parsed}
+    document = include_production_target_hosts_v2(load_profile_document_v2(DEFAULT_PROFILE_PATH))
+    if local_acceptance:
+        from scripts.local_knowledge_acceptance_profile import include_local_knowledge_acceptance
+
+        document = include_local_knowledge_acceptance(
+            document, ROOT / "config/plugin-profiles/memstack-local-knowledge-acceptance.v2.yaml"
+        )
     snapshot = compose_profile_v2(
-        include_production_target_hosts_v2(load_profile_document_v2(DEFAULT_PROFILE_PATH)),
+        document,
         manifest_by_id,
         generation=1,
     )
@@ -727,6 +736,9 @@ def main() -> int:
         SERVICE_GRAPH_PATH: _canonical_document(build_service_graph_v2(manifests)),
         EVENT_GRAPH_PATH: _canonical_document(build_event_graph_v2(manifests)),
         BOOTSTRAP_PROFILE_PATH: _canonical_document(_bootstrap_profile(manifests)),
+        ROOT / "shared/profiles/memstack-local-knowledge-acceptance.v2.json": _canonical_document(
+            _bootstrap_profile(manifests, local_acceptance=True)
+        ),
         SNAPSHOT_FIXTURE_PATH: _canonical_document(snapshot),
         CONFORMANCE_FIXTURE_PATH: _canonical_document(_conformance_fixture(snapshot)),
         CONTRACT_CONFORMANCE_FIXTURE_PATH: _canonical_document(

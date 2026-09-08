@@ -44,6 +44,11 @@ pub(in crate::local_runtime::knowledge_authority_v2) fn observe(
         project_id: Some(auth.workspace.project_id.clone()),
         session_id: None,
     })?;
+    authority.require_profile(
+        &descriptor.profile_id,
+        &descriptor.digest,
+        descriptor.publication_version,
+    )?;
     let connection = state
         .session_store
         .connection()
@@ -59,7 +64,7 @@ pub(in crate::local_runtime::knowledge_authority_v2) fn observe(
                 "context_revision":auth.workspace.revision,"profile_id":descriptor.profile_id,
                 "generation":descriptor.generation,"digest":descriptor.digest},
             "result": {"availability":if actions.is_empty(){"unavailable"}else{"degraded"},
-                "reason_code":if actions.is_empty(){"knowledge_release_closed"}else{"desktop_project_memories_actions_partial"},
+                "reason_code":if actions.is_empty(){"knowledge_release_closed"}else{authority.capability_reason()?},
                 "service_version":env!("CARGO_PKG_VERSION"),"contract_version":VERSION,
                 "allowed_actions":actions,"scope":{"tenant_id":auth.workspace.tenant_id,"project_id":auth.workspace.project_id,
                     "workspace_id":null,"instance_id":null},"authority_revision":auth.workspace.revision,

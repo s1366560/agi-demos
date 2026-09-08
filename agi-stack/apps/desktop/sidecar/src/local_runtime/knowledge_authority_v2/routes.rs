@@ -22,6 +22,8 @@ mod context_route;
 mod processing_routes;
 #[path = "resolution_routes.rs"]
 mod resolution_routes;
+#[path = "sync_admission.rs"]
+mod sync_admission;
 
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
@@ -40,28 +42,34 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
             post(processing_routes::command),
         )
         .route("/api/v1/knowledge/mutations", post(mutate))
-        .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
-        .route("/api/v1/knowledge/sync-push", post(push_once))
-        .route("/api/v1/knowledge/sync-pull", post(pull_once))
-        .route(
-            "/api/v1/knowledge/sync-resolve-push",
-            post(cloud_routes::resolve),
-        )
-        .route(
-            "/api/v1/knowledge/sync-resume-resolution",
-            post(cloud_routes::resume),
-        )
-        .route(
-            "/api/v1/knowledge/sync-reconcile-resolution",
-            post(cloud_routes::reconcile),
-        )
-        .route(
-            "/api/v1/knowledge/sync-cloud-query",
-            post(cloud_routes::query),
-        )
-        .route(
-            "/api/v1/knowledge/sync-resolve-pull",
-            post(resolution_routes::resolve_pull),
+        .merge(
+            Router::new()
+                .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
+                .route("/api/v1/knowledge/sync-push", post(push_once))
+                .route("/api/v1/knowledge/sync-pull", post(pull_once))
+                .route(
+                    "/api/v1/knowledge/sync-resolve-push",
+                    post(cloud_routes::resolve),
+                )
+                .route(
+                    "/api/v1/knowledge/sync-resume-resolution",
+                    post(cloud_routes::resume),
+                )
+                .route(
+                    "/api/v1/knowledge/sync-reconcile-resolution",
+                    post(cloud_routes::reconcile),
+                )
+                .route(
+                    "/api/v1/knowledge/sync-cloud-query",
+                    post(cloud_routes::query),
+                )
+                .route(
+                    "/api/v1/knowledge/sync-resolve-pull",
+                    post(resolution_routes::resolve_pull),
+                )
+                .route_layer(axum::middleware::from_fn(
+                    sync_admission::require_sync_release,
+                )),
         )
 }
 
@@ -78,6 +86,18 @@ async fn query(
 ) -> RouteResult {
     let operation = KnowledgeOperationV2::admit(lease, &authenticated, &request.scope)
         .map_err(IntoResponse::into_response)?;
+    if !matches!(
+        &request.query,
+        KnowledgeQuery::Get { .. }
+            | KnowledgeQuery::List { .. }
+            | KnowledgeQuery::Changes { .. }
+            | KnowledgeQuery::Change { .. }
+    ) {
+        operation
+            .authority
+            .require_sync_release()
+            .map_err(IntoResponse::into_response)?;
+    }
     let result = match request.query {
         KnowledgeQuery::RemoteBaseline { id } => {
             json!({"version":operation.remote_baseline(&id).await.map_err(IntoResponse::into_response)?})

@@ -14,9 +14,15 @@ impl KnowledgeAuthorityV2 {
         if state.disposed {
             return Err(KnowledgeAuthorityErrorV2::Disposed);
         }
-        if !state.admitted_for_validation {
+        if matches!(state.admission, KnowledgeAdmission::Closed) {
             return Ok(Vec::new());
         }
+        state.admission.require_storage(
+            state
+                .app_data_dir
+                .as_deref()
+                .ok_or(KnowledgeAuthorityErrorV2::ReleaseClosed)?,
+        )?;
         let writer = matches!(role, "owner" | "admin" | "member" | "contributor");
         if !writer && role != "viewer" {
             return Err(KnowledgeAuthorityErrorV2::Forbidden);
@@ -25,6 +31,7 @@ impl KnowledgeAuthorityV2 {
         if writer {
             actions.extend(WRITE_ACTIONS.iter().copied());
         }
+        actions.retain(|action| state.admission.permits_action(action));
         #[cfg(test)]
         if let Some(allowed) = &state.validation_actions {
             actions.retain(|action| allowed.contains(*action));

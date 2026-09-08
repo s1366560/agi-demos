@@ -193,7 +193,13 @@ impl LocalRuntimeService {
         app_data_dir: PathBuf,
         workspace_root: PathBuf,
         credential_vault: ApplicationCredentialVault,
+        local_knowledge_acceptance: Option<
+            crate::local_knowledge_acceptance::LocalKnowledgeAcceptance,
+        >,
     ) -> Result<Self, String> {
+        if let Some(qualification) = &local_knowledge_acceptance {
+            qualification.require_current(&app_data_dir, &workspace_root)?;
+        }
         std::fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
         std::fs::create_dir_all(&workspace_root).map_err(|error| error.to_string())?;
         let checkpoint_path = app_data_dir.join("agistack-local-agent-checkpoints.db");
@@ -225,6 +231,7 @@ impl LocalRuntimeService {
             provider_credentials,
         )?;
         state.app_data_dir = Some(app_data_dir.clone());
+        state.local_knowledge_acceptance = local_knowledge_acceptance;
         let state = Arc::new(state);
         if crate::workspace_core_cutover::load_cutover_marker(&app_data_dir.join("workspace-core"))
             .await?
@@ -448,6 +455,14 @@ impl LocalRuntimeState {
     fn configure(&self, mut config: LocalRuntimeConfig, api_base_url: &str) -> Result<(), String> {
         if !config.workspace_root.trim().is_empty() {
             let root = PathBuf::from(config.workspace_root.trim());
+            if let Some(qualification) = &self.local_knowledge_acceptance {
+                qualification.require_current(
+                    self.app_data_dir
+                        .as_deref()
+                        .ok_or("local acceptance data root missing")?,
+                    &root,
+                )?;
+            }
             std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
             let root = root.canonicalize().map_err(|error| error.to_string())?;
             let host = LocalToolHost::new(&root).map_err(|error| error.to_string())?;
@@ -825,6 +840,7 @@ struct LocalRuntimeState {
     /// Application data directory (set by `LocalRuntimeService::start`;
     /// `None` in tests). Backs browser screenshot artifact files.
     app_data_dir: Option<PathBuf>,
+    local_knowledge_acceptance: Option<crate::local_knowledge_acceptance::LocalKnowledgeAcceptance>,
     #[cfg(test)]
     agent_run_claim_attempts: AtomicU64,
     #[cfg(test)]
@@ -1115,6 +1131,7 @@ impl LocalRuntimeState {
             run_once_tool_permissions: Arc::new(Mutex::new(BTreeSet::new())),
             site_credentials,
             app_data_dir: None,
+            local_knowledge_acceptance: None,
             #[cfg(test)]
             agent_run_claim_attempts: AtomicU64::new(0),
             #[cfg(test)]

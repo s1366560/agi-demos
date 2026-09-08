@@ -25,6 +25,8 @@ use super::{
     platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
 };
 
+mod admission;
+use admission::KnowledgeAdmission;
 mod capabilities;
 mod capabilities_generated;
 mod embedding_provider;
@@ -56,12 +58,16 @@ pub(super) fn contract() -> Result<PluginContractV2, RuntimeV2Error> {
         "events": {"emits": [], "handles": []},
         "config_schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object", "additionalProperties": false,
-            "properties": {
-                "release_contract": {"type": "string", "const": RELEASE_CONTRACT},
-                "release_state": {"type": "string", "const": "closed"}
-            },
-            "required": ["release_contract", "release_state"]
+            "type": "object",
+            "oneOf": [
+                {"type":"object", "additionalProperties":false,
+                 "properties":{"release_contract":{"type":"string","const":RELEASE_CONTRACT},
+                               "release_state":{"type":"string","const":"closed"}},
+                 "required":["release_contract","release_state"]},
+                {"type":"object", "additionalProperties":false,
+                 "properties":{"acceptance_contract":{"type":"string","const":crate::local_knowledge_acceptance::PURPOSE}},
+                 "required":["acceptance_contract"]}
+            ]
         }
     }))
     .map_err(|error| RuntimeV2Error::Module(error.to_string()))
@@ -69,6 +75,7 @@ pub(super) fn contract() -> Result<PluginContractV2, RuntimeV2Error> {
 
 pub(super) fn definition(
     app_data_dir: Option<PathBuf>,
+    local_acceptance: Option<crate::local_knowledge_acceptance::LocalKnowledgeAcceptance>,
 ) -> Result<PluginDefinitionV2, RuntimeV2Error> {
     Ok(PluginDefinitionV2 {
         module_ref: MODULE_REF.into(),
@@ -76,6 +83,7 @@ pub(super) fn definition(
             .map_err(|error| RuntimeV2Error::Module(error.to_string()))?,
         module: Arc::new(KnowledgeModuleV2 {
             app_data_dir,
+            local_acceptance,
             #[cfg(test)]
             internal_validation: false,
         }),
@@ -84,6 +92,7 @@ pub(super) fn definition(
 
 struct KnowledgeModuleV2 {
     app_data_dir: Option<PathBuf>,
+    local_acceptance: Option<crate::local_knowledge_acceptance::LocalKnowledgeAcceptance>,
     #[cfg(test)]
     internal_validation: bool,
 }
@@ -95,23 +104,43 @@ impl PluginModuleRuntimeV2 for KnowledgeModuleV2 {
         context: &mut ContextV2,
         config: &BTreeMap<String, Value>,
     ) -> Result<(), RuntimeV2Error> {
-        if config.len() != 2
-            || config.get("release_contract") != Some(&json!(RELEASE_CONTRACT))
-            || config.get("release_state") != Some(&json!("closed"))
+        let admission = if config.len() == 1
+            && config.get("acceptance_contract")
+                == Some(&json!(crate::local_knowledge_acceptance::PURPOSE))
         {
+            let qualification = self.local_acceptance.clone().ok_or_else(|| {
+                RuntimeV2Error::Module(
+                    "local knowledge acceptance requires a qualified host".into(),
+                )
+            })?;
+            qualification
+                .require_storage(self.app_data_dir.as_deref().ok_or_else(|| {
+                    RuntimeV2Error::Module("local knowledge acceptance data root is missing".into())
+                })?)
+                .map_err(RuntimeV2Error::Module)?;
+            KnowledgeAdmission::LocalAcceptance(qualification)
+        } else if config.len() == 2
+            && config.get("release_contract") == Some(&json!(RELEASE_CONTRACT))
+            && config.get("release_state") == Some(&json!("closed"))
+        {
+            #[cfg(test)]
+            if self.internal_validation {
+                KnowledgeAdmission::InternalValidation
+            } else {
+                KnowledgeAdmission::Closed
+            }
+            #[cfg(not(test))]
+            KnowledgeAdmission::Closed
+        } else {
             return Err(RuntimeV2Error::Module(
-                "knowledge release contract must remain closed".into(),
+                "knowledge product release must remain closed".into(),
             ));
-        }
-        #[cfg(test)]
-        let validation = self.internal_validation;
-        #[cfg(not(test))]
-        let validation = false;
+        };
         let inner = Arc::new(Mutex::new(KnowledgeState {
             app_data_dir: self.app_data_dir.clone(),
             repository: None,
             disposed: false,
-            admitted_for_validation: validation,
+            admission,
             #[cfg(test)]
             validation_actions: None,
         }));
@@ -139,7 +168,7 @@ struct KnowledgeState {
     app_data_dir: Option<PathBuf>,
     repository: Option<Arc<SqliteKnowledgeRepository>>,
     disposed: bool,
-    admitted_for_validation: bool,
+    admission: KnowledgeAdmission,
     #[cfg(test)]
     validation_actions: Option<std::collections::BTreeSet<String>>,
 }
@@ -156,15 +185,16 @@ impl KnowledgeAuthorityV2 {
         if state.disposed {
             return Err(KnowledgeAuthorityErrorV2::Disposed);
         }
-        if !state.admitted_for_validation {
+        if matches!(state.admission, KnowledgeAdmission::Closed) {
             return Err(KnowledgeAuthorityErrorV2::ReleaseClosed);
-        }
-        if let Some(repository) = &state.repository {
-            return Ok(Arc::clone(repository));
         }
         let app_data_dir = state.app_data_dir.as_ref().ok_or_else(|| {
             KnowledgeAuthorityErrorV2::Storage("knowledge data directory is unavailable".into())
         })?;
+        state.admission.require_storage(app_data_dir)?;
+        if let Some(repository) = &state.repository {
+            return Ok(Arc::clone(repository));
+        }
         let repository =
             storage_lifecycle::open(app_data_dir).map_err(KnowledgeAuthorityErrorV2::Storage)?;
         state.repository = Some(Arc::clone(&repository));
@@ -245,6 +275,11 @@ impl KnowledgeOperationV2 {
             project_id: Some(scope.project_id.clone()),
             session_id: None,
         })?;
+        authority.require_profile(
+            &descriptor.profile_id,
+            &descriptor.digest,
+            descriptor.publication_version,
+        )?;
         // Closed releases never reach filesystem or durable storage.
         authority.repository()?;
         Ok(Self {

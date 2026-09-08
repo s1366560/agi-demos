@@ -447,5 +447,24 @@
     "text": "read",
     "update": "write",
     "view": "read"
-  }
+  },
+  "x-local-acceptance-actions": [
+    "view",
+    "list",
+    "get",
+    "create",
+    "update",
+    "delete",
+    "configuration",
+    "configure_embedding",
+    "select_embedding",
+    "process_one",
+    "index_one",
+    "promote_index",
+    "retry_index",
+    "text",
+    "semantic",
+    "entities",
+    "relationships"
+  ]
 }

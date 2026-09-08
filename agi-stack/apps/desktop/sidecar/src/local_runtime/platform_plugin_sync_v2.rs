@@ -329,18 +329,24 @@ fn log_reconcile_failure(error: &str) {
 
 fn desktop_reconciler(state: &LocalRuntimeState) -> PluginSnapshotReconcilerV2 {
     PluginSnapshotReconcilerV2::new_with_manager(
-        desktop_loader(state.app_data_dir.clone()),
+        desktop_loader(
+            state.app_data_dir.clone(),
+            state.local_knowledge_acceptance.clone(),
+        ),
         state.platform_plugin_authority_v2.manager(),
     )
 }
 
-fn desktop_loader(app_data_dir: Option<std::path::PathBuf>) -> LoaderV2 {
+fn desktop_loader(
+    app_data_dir: Option<std::path::PathBuf>,
+    local_acceptance: Option<crate::local_knowledge_acceptance::LocalKnowledgeAcceptance>,
+) -> LoaderV2 {
     LoaderV2::for_target(
         DataPlaneTargetV2::DesktopSidecar,
         [
             desktop_sidecar_http_routes_definition_v2(),
             desktop_sidecar_host_definition_v2(),
-            super::knowledge_authority_v2::definition(app_data_dir)
+            super::knowledge_authority_v2::definition(app_data_dir, local_acceptance)
                 .expect("the built-in knowledge contract is statically valid"),
         ],
     )
@@ -351,11 +357,24 @@ struct LocalBootstrapSnapshotV2 {
     snapshot_wire: Value,
 }
 
-fn local_bootstrap_snapshot() -> Result<LocalBootstrapSnapshotV2, String> {
-    let snapshot =
-        parse_profile_snapshot_v2(LOCAL_BOOTSTRAP_PROFILE_V2).map_err(|error| error.to_string())?;
-    let snapshot_wire =
-        serde_json::from_str(LOCAL_BOOTSTRAP_PROFILE_V2).map_err(|error| error.to_string())?;
+fn local_bootstrap_snapshot(state: &LocalRuntimeState) -> Result<LocalBootstrapSnapshotV2, String> {
+    let source = if let Some(qualification) = &state.local_knowledge_acceptance {
+        qualification.require_current(
+            state
+                .app_data_dir
+                .as_deref()
+                .ok_or("local acceptance data root missing")?,
+            &state
+                .workspace_root
+                .lock()
+                .map_err(|_| "local acceptance workspace unavailable")?,
+        )?;
+        crate::local_knowledge_acceptance::SNAPSHOT
+    } else {
+        LOCAL_BOOTSTRAP_PROFILE_V2
+    };
+    let snapshot = parse_profile_snapshot_v2(source).map_err(|error| error.to_string())?;
+    let snapshot_wire = serde_json::from_str(source).map_err(|error| error.to_string())?;
     Ok(LocalBootstrapSnapshotV2 {
         snapshot,
         snapshot_wire,
@@ -388,7 +407,7 @@ async fn activate_authority_source(
             );
         }
         DesktopAuthoritySourceV2::Local => {
-            let baseline = local_bootstrap_snapshot()?;
+            let baseline = local_bootstrap_snapshot(state)?;
             let generation = reconciler
                 .stage_snapshot(baseline.snapshot.clone())
                 .await
@@ -519,7 +538,7 @@ async fn activate_authority_source_for_selection(
             );
         }
         DesktopAuthoritySourceV2::Local => {
-            let baseline = local_bootstrap_snapshot()?;
+            let baseline = local_bootstrap_snapshot(state)?;
             let generation = reconciler
                 .stage_snapshot(baseline.snapshot.clone())
                 .await
@@ -1792,7 +1811,7 @@ mod tests {
         let fingerprint = data_plane_authority_fingerprint_v2(&base_url, &record.data_plane_id)
             .expect("authority fingerprint");
         let distribution = bootstrap_distribution(8, "cloud-session-appeared");
-        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader(None));
+        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader(None, None));
         let receipt = seed.apply(&distribution).await;
         assert_eq!(receipt.status, ApplyStatusV2::Ack);
         {
@@ -1938,7 +1957,7 @@ mod tests {
     async fn cloud_to_local_switch_is_atomic_and_keeps_the_old_lease_pinned() {
         let state = test_state();
         let cloud_distribution = bootstrap_distribution(7, "cloud-last-good");
-        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader(None));
+        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader(None, None));
         let receipt = seed.apply(&cloud_distribution).await;
         assert_eq!(receipt.status, ApplyStatusV2::Ack);
         {
@@ -2002,7 +2021,7 @@ mod tests {
 
     #[tokio::test]
     async fn desktop_reconciler_activates_the_generated_local_capability_module() {
-        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader(None));
+        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader(None, None));
         let requested = bootstrap_distribution(18, "nonce-18");
 
         assert_eq!(
@@ -2051,7 +2070,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejected_route_candidate_preserves_the_last_good_desktop_generation() {
-        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader(None));
+        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader(None, None));
         let accepted = bootstrap_distribution(18, "nonce-last-good");
         assert_eq!(reconciler.apply(&accepted).await.status, ApplyStatusV2::Ack);
         let accepted_digest = accepted.snapshot.digest.clone();

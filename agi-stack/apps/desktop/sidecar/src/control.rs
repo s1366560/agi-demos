@@ -58,6 +58,9 @@ struct InitializeRequest {
     workspace_root: PathBuf,
     legacy_data_directories: Vec<PathBuf>,
     workspace_core_binary_path: PathBuf,
+    #[serde(default)]
+    local_knowledge_acceptance:
+        Option<crate::local_knowledge_acceptance::LocalKnowledgeAcceptanceRequest>,
 }
 
 #[derive(Debug, Serialize)]
@@ -127,6 +130,18 @@ pub(crate) async fn run() -> Result<(), String> {
     initialize.secret.zeroize();
     let mut secret = secret_result?;
 
+    let local_knowledge_acceptance = initialize
+        .local_knowledge_acceptance
+        .as_ref()
+        .map(|request| {
+            request.verify(
+                &initialize.data_directory,
+                &initialize.workspace_root,
+                &initialize.legacy_data_directories,
+            )
+        })
+        .transpose()?;
+
     migrate_legacy_data(
         &initialize.data_directory,
         &initialize.legacy_data_directories,
@@ -137,6 +152,7 @@ pub(crate) async fn run() -> Result<(), String> {
         initialize.data_directory.clone(),
         initialize.workspace_root,
         credential_vault.clone(),
+        local_knowledge_acceptance,
     )
     .await?;
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
@@ -648,6 +664,7 @@ mod tests {
             data_directory: Path::new("relative-data").to_path_buf(),
             workspace_root: Path::new("/absolute/workspace").to_path_buf(),
             legacy_data_directories: Vec::new(),
+            local_knowledge_acceptance: None,
             workspace_core_binary_path: Path::new("/absolute/memstack-workspace-core")
                 .to_path_buf(),
         };
