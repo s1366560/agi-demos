@@ -184,7 +184,7 @@ fn v10_upgrade_requires_explicit_selection_and_corrupt_v11_schema_fails_closed()
     let a = build("t", "p", "a");
     repo.begin_index_build_durable(&a, &|| Ok(1)).unwrap();
     drop(repo);
-    db.sql().execute_batch("DROP TABLE knowledge_index_configuration; ALTER TABLE knowledge_index_jobs DROP COLUMN config_revision; UPDATE knowledge_schema SET version=10;").unwrap();
+    db.sql().execute_batch("DROP TABLE knowledge_index_configuration; ALTER TABLE knowledge_index_jobs DROP COLUMN config_revision; DROP TABLE IF EXISTS knowledge_community_results; DROP TABLE IF EXISTS knowledge_community_audits; DROP TABLE IF EXISTS knowledge_community_selection; UPDATE knowledge_schema SET version=10;").unwrap();
     let repo = db.open();
     assert!(repo
         .desired_index_config_durable(&a.scope, &|| Ok(2))
@@ -224,7 +224,7 @@ fn migrated_v10_lease_cannot_complete_under_first_selection_and_reclaims_after_e
             .execute_batch(
                 "DROP TABLE knowledge_index_configuration;
             ALTER TABLE knowledge_index_jobs DROP COLUMN config_revision;
-            UPDATE knowledge_schema SET version=10;",
+            DROP TABLE IF EXISTS knowledge_community_results; DROP TABLE IF EXISTS knowledge_community_audits; DROP TABLE IF EXISTS knowledge_community_selection; UPDATE knowledge_schema SET version=10;",
             )
             .unwrap();
         let repo = db.open();

@@ -25,7 +25,7 @@ mod retrieval;
 mod sync;
 mod sync_binding;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 13;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 14;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,

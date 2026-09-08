@@ -1,6 +1,8 @@
 # Local community build storage
 
-This batch persists community build inputs and work ownership. It does not
+The B1 batch persists community build inputs and work ownership. The later
+[B2a result contract](knowledge-community-results.md) adds audited completion and
+active-build storage; the boundaries below describe B1 alone. It does not
 register a runtime action, call a provider, produce names or summaries, or
 publish a community. Nonempty builds cannot be completed through this API.
 

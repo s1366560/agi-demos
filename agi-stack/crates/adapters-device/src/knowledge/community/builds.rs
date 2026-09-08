@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::*;
 
-mod read;
+pub(super) mod read;
 use read::read_build;
 
 /// Same lock/clock discipline as the existing processing boundary. No callback

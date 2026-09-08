@@ -3,6 +3,8 @@
 //! those require a later audited agent submission before publication.
 
 pub mod build;
+pub mod result;
+pub mod worker;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

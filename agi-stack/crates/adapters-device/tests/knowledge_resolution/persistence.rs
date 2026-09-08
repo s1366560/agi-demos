@@ -143,7 +143,7 @@ fn schema_five_upgrade_keeps_conflicts_and_replica_and_current_missing_table_is_
         .query_row("SELECT replica_id FROM knowledge_replica", [], |r| r.get(0))
         .unwrap();
     db.sql().execute_batch("DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;").unwrap();
-    db.sql().execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_processing_jobs; DROP TABLE knowledge_derived_projections; UPDATE knowledge_schema SET version=5;").unwrap();
+    db.sql().execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_processing_jobs; DROP TABLE knowledge_derived_projections; DROP TABLE IF EXISTS knowledge_community_results; DROP TABLE IF EXISTS knowledge_community_audits; DROP TABLE IF EXISTS knowledge_community_selection; UPDATE knowledge_schema SET version=5;").unwrap();
     let repo = db.open();
     assert_eq!(
         block_on(repo.pull_conflicts(&scope(), 20)).unwrap().len(),

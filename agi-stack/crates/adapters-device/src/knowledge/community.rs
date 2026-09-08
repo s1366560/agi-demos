@@ -4,6 +4,7 @@
 mod builds;
 mod jobs;
 mod repository;
+mod results;
 mod schema;
 pub(super) use schema::migrate;
 

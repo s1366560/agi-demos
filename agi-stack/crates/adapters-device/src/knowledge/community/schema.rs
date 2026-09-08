@@ -17,7 +17,7 @@ pub(in super::super) fn migrate(tx: &Transaction<'_>, previous: i64) -> Knowledg
                 "knowledge community schema is missing".into(),
             ));
         }
-        return Ok(());
+        return super::results::migrate(tx, previous);
     }
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS knowledge_community_builds (
@@ -84,5 +84,6 @@ pub(in super::super) fn migrate(tx: &Transaction<'_>, previous: i64) -> Knowledg
             BEGIN SELECT RAISE(ABORT,'community candidate input is immutable'); END;
          CREATE TRIGGER IF NOT EXISTS knowledge_community_member_immutable BEFORE UPDATE ON knowledge_community_members
             BEGIN SELECT RAISE(ABORT,'community member input is immutable'); END;",
-    ).map_err(storage)
+    ).map_err(storage)?;
+    super::results::migrate(tx, previous)
 }

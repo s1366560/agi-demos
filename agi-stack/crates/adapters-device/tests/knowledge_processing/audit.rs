@@ -211,7 +211,7 @@ fn v8_audit_migration_keeps_existing_lease_and_never_invents_invocations() {
         drop(repo);
         db.connection()
             .execute_batch(
-                "DROP TABLE knowledge_processing_audits; UPDATE knowledge_schema SET version=8;",
+                "DROP TABLE knowledge_processing_audits; DROP TABLE IF EXISTS knowledge_community_results; DROP TABLE IF EXISTS knowledge_community_audits; DROP TABLE IF EXISTS knowledge_community_selection; UPDATE knowledge_schema SET version=8;",
             )
             .unwrap();
         let repo = db.open();

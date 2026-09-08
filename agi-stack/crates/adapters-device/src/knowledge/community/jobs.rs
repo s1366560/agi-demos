@@ -12,7 +12,7 @@ fn deadline(now_ms: i64, lease_ms: u64) -> KnowledgeResult<i64> {
         .ok_or(KnowledgeError::InvalidInput)
 }
 
-fn active(
+pub(super) fn active(
     tx: &Transaction<'_>,
     scope: &KnowledgeScope,
     lease: &CommunityJobLease,

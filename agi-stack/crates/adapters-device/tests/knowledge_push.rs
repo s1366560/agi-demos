@@ -421,7 +421,7 @@ fn remote_metadata_and_signed_revision_boundary_stay_independent_of_local_revisi
         conn.execute("INSERT INTO knowledge_sync_remote_versions(tenant_id,project_id,memory_id,version_json) VALUES(?1,?2,'memory',?3)",rusqlite::params![scope().tenant_id,scope().project_id,serde_json::to_string(&remote).unwrap()]).unwrap();
         // Exercise an actual v11 payload: metadata existed only in the trusted
         // remote baseline before the document upgrade.
-        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
+        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); DROP TABLE IF EXISTS knowledge_community_results; DROP TABLE IF EXISTS knowledge_community_audits; DROP TABLE IF EXISTS knowledge_community_selection; UPDATE knowledge_schema SET version=11;").unwrap();
         drop(repo);
         let repo = db.open();
         assert_eq!(
@@ -599,7 +599,7 @@ fn metadata_upgrade_preserves_prepared_bytes_and_recovers_explicit_pending_inten
             ],
         )
         .unwrap();
-        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
+        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); DROP TABLE IF EXISTS knowledge_community_results; DROP TABLE IF EXISTS knowledge_community_audits; DROP TABLE IF EXISTS knowledge_community_selection; UPDATE knowledge_schema SET version=11;").unwrap();
         let before:(String,String)=conn.query_row("SELECT request_json,(SELECT request_json FROM knowledge_mutation_receipts LIMIT 1) FROM knowledge_sync_pushes",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
         let repo = db.open();
         assert_eq!(
@@ -681,7 +681,7 @@ fn metadata_upgrade_keeps_exact_current_revision_intent_after_acknowledgement() 
             [baseline.to_string()],
         )
         .unwrap();
-        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_schema SET version=11;").unwrap();
+        conn.execute_batch("UPDATE knowledge_memories SET payload=json_remove(payload,'$.metadata'); UPDATE knowledge_processing_changes SET payload=json_remove(payload,'$.metadata'); DROP TABLE IF EXISTS knowledge_community_results; DROP TABLE IF EXISTS knowledge_community_audits; DROP TABLE IF EXISTS knowledge_community_selection; UPDATE knowledge_schema SET version=11;").unwrap();
         let repo = db.open();
         assert_eq!(
             serde_json::to_value(

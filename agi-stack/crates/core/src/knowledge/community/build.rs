@@ -1,6 +1,6 @@
 //! Durable, immutable community build inputs and fenced work ownership.
-//! There is deliberately no completion API for nonempty builds: semantic
-//! output requires a separately reviewed structured submission/audit contract.
+//! This ownership module has no completion API: semantic output is handled
+//! by the separately validated worker/result submission and audit contract.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,7 @@ pub enum CommunityJobState {
     Pending,
     Leased,
     Failed,
+    Completed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

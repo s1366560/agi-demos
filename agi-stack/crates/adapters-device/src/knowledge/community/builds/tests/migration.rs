@@ -1,6 +1,8 @@
 use super::*;
 
-const DOWNGRADE_FIXTURE: &str = "DROP TABLE knowledge_community_jobs;
+const DOWNGRADE_FIXTURE: &str = "DROP TABLE knowledge_community_results;
+ DROP TABLE knowledge_community_audits; DROP TABLE knowledge_community_selection;
+ DROP TABLE knowledge_community_jobs;
  DROP TABLE knowledge_community_members; DROP TABLE knowledge_community_candidates;
  DROP TABLE knowledge_community_builds; UPDATE knowledge_schema SET version=12;";
 
@@ -35,7 +37,7 @@ fn schema_12_upgrade_preserves_metadata_sources_audits_and_sync_changes() {
             .sql()
             .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 13);
+        assert_eq!(version, crate::knowledge::KNOWLEDGE_SCHEMA_VERSION);
         let build = repo
             .create_community_build(&s, &request("after-upgrade"), 10)
             .await
@@ -70,7 +72,7 @@ fn missing_current_community_objects_and_future_schema_fail_closed() {
     for damage in [
         "DROP TABLE knowledge_community_jobs",
         "DROP TRIGGER knowledge_community_member_immutable",
-        "UPDATE knowledge_schema SET version=14",
+        "UPDATE knowledge_schema SET version=15",
     ] {
         let db = Database::new();
         drop(db.open());

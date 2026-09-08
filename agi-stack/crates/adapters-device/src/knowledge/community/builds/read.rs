@@ -2,7 +2,7 @@ use agistack_core::knowledge::retrieval::EntityReference;
 
 use super::*;
 
-pub(super) fn read_build(
+pub(in super::super) fn read_build(
     tx: &Transaction<'_>,
     scope: &KnowledgeScope,
     build_id: &str,

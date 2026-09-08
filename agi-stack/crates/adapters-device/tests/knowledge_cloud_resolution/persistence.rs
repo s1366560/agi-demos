@@ -249,7 +249,7 @@ fn version_six_migrates_without_losing_original_conflicts_and_missing_current_ob
     drop(repo);
     db.sql().execute_batch(DROP_CLOUD_SCHEMA).unwrap();
     db.sql()
-        .execute_batch("DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_processing_jobs; DROP TABLE knowledge_derived_projections; UPDATE knowledge_schema SET version=6;")
+        .execute_batch("DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_processing_jobs; DROP TABLE knowledge_derived_projections; DROP TABLE IF EXISTS knowledge_community_results; DROP TABLE IF EXISTS knowledge_community_audits; DROP TABLE IF EXISTS knowledge_community_selection; UPDATE knowledge_schema SET version=6;")
         .unwrap();
     let repo = db.open();
     assert_eq!(
