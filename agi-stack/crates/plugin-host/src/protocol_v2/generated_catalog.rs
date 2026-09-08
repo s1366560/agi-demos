@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:1a7bdcab0ed2863595d19a5f13492b0020299ef1a6616d2134887d97b5e53c",
-    "65\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:98fb952b168317a53b0c0cd14fb8e572621b92f0d70e489fdfcc959a62f0b1",
+    "9a\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1910,8 +1910,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "a390000fedbd5cce99492728eb309be604\",\"entrypoint\":\"applyDesktopProjectMcpServersAuthority",
     "V2\",\"module_ref\":\"builtin://memstack/desktop/project-mcp-servers-authority\",\"plugin_id\":",
     "\"memstack-renderer-target-hosts\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-renderer\"]",
-    "},{\"artifact_digest\":\"sha256:5e6aeb494b39c0a06e2709272a1cfa4565f0c63d45984222cc53abfe6f2",
-    "e9020\",\"artifact_source\":\"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopPr",
+    "},{\"artifact_digest\":\"sha256:e488fce8b10cd99f94819955dd7f2773ecfd27acf2f4d311fff83c333bd",
+    "7e397\",\"artifact_source\":\"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopPr",
     "ojectMemoriesAuthorityModuleV2.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-",
     "schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{",
     "\"const\":\"desktop-api-fetch\",\"type\":\"string\"}},\"required\":[\"strategy\"],\"type\":\"object\"},\"",
@@ -4539,4 +4539,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:1a7bdcab0ed2863595d19a5f13492b0020299ef1a6616d2134887d97b5e53c65";
+    "sha256:98fb952b168317a53b0c0cd14fb8e572621b92f0d70e489fdfcc959a62f0b19a";
