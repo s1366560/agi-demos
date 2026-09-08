@@ -894,3 +894,16 @@ unavailable this session and the index is stale (indexed at 88957e0); scope
 was verified with git diff/merge-tree instead. Rollback: revert the three
 cherry-picks; the admission table and its rows are retained, and the
 migration downgrade already refuses to drop unresolved admissions.
+
+I2.5 integrates `codex/cloud-memory-command-scope` (cherry-picked as
+`70b66c74b`; conflict-free). Cloud memory get/delete/update now accept an
+explicit `project_id` scope filter instead of operating by ID alone, and a
+shared command-precondition guard keeps versioned HTTP command headers
+binding: absent headers retain legacy compatibility, supplied headers on a
+disabled (unenrolled) project are refused with `memory_command_unavailable`
+instead of silently downgrading to legacy writes. Validation: 54 real
+PostgreSQL HTTP tests passed (`KNOWLEDGE_SYNC_POSTGRES_TESTS=1` against
+`memstack_qa_sync_20260907`, including 12 new command-scope cases plus the
+online create/mutation suites), 335 memory unit regressions passed, and
+Ruff, format, mypy and pyright are clean on the changed files. No migration
+and no enrollment exposure; rollback is the single cherry-pick revert.
