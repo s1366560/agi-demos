@@ -108,3 +108,55 @@ Four new controller regressions failed before implementation. The final retrieva
 controller/render suites passed 23 tests, and renderer plus both test TypeScript
 configurations compiled. Native click-through acceptance is pending the next canonical
 Electron restart. No storage, protocol or default release gate changed.
+
+## Isolated native and Cloud synchronization acceptance
+
+The canonical Electron launch at `82957ef41`, followed by renderer scope validation
+at `cff15e320` and a complete canonical restart at `45c2d3ea6`, used the same
+private QA profile and workspace. Real native extraction produced four entities
+and three relationships from the current source. Entity-to-relationship,
+relationship-to-entity and exact-revision original-content navigation passed in
+Electron. This supersedes the pending navigation observation above.
+
+The QA Cloud API uses real authentication and production memory/synchronization
+handlers in a dedicated PostgreSQL schema, plus a separate local Neo4j instance.
+It publishes the checked acceptance profile in a process-local V2 host. It does
+not publish ROOT state, start workers or activate the default knowledge release.
+Its three integration tests cover real membership rejection, CRUD, enrollment,
+pinned public Web projection and same-metadata restart. See
+[the QA entrypoint](../../scripts/qa_cloud_knowledge_sync_README.md).
+
+The following journeys passed against this isolated service:
+
+- Native account login, tenant/project selection, enrollment and association.
+- Five explicit native pushes: an earlier create/update/delete sequence and a
+  new memory's create/update. The queue reached zero; Cloud listed one live
+  memory with its original ID, complete Chinese content and revision 2.
+- Explicit paged pull replay produced no conflict for acknowledged local writes.
+  A production Cloud HTTP edit to revision 3 then appeared in the native list.
+- Concurrent local and Cloud edits produced a durable pull conflict. The review
+  displayed local revision 4, common baseline 3 and remote revision 4. Choosing
+  "keep both" preserved both bodies under separate IDs. An explicit push made
+  both records visible through Cloud HTTP and the real Web memory UI.
+- Normal native exit and canonical restart preserved both records, an empty
+  outbox, the project association and the application-vault Cloud account.
+  First-load status no longer reported an unexpected context change. The user
+  must select and verify the remote target again before network operations.
+- The Cloud API restarted with the same metadata and retained authentication,
+  enrollment, memory revisions and both conflict copies.
+
+Evidence files are `/tmp/native-knowledge-sync-pushed-cff15e320.txt`,
+`/tmp/native-knowledge-cloud-pull-8268728fc.txt`,
+`/tmp/native-knowledge-conflict-keep-both-8268728fc.txt`,
+`/tmp/native-knowledge-keep-both-cloud-8268728fc.json`,
+`/tmp/native-knowledge-restart-45c2d3ea6.txt` and
+`/tmp/web-knowledge-sync-detail-45c2d3ea6.txt`. They contain QA content and public
+identifiers, not credentials.
+
+This is not full release acceptance. Actual Web editing exposed missing enrolled
+mutation precondition headers; the UI retained its draft and displayed failure.
+Native editing/synchronization also left some adjacent counters stale until a
+manual refresh; backend source invalidation was verified correct. Those fixes,
+remaining conflict/recovery cases, diagnostics, Cloud graph navigation, current
+full-suite/parity regeneration and external scheduler deployment verification
+remain open. Cloud extraction/indexing is not exercised by this worker-free API.
