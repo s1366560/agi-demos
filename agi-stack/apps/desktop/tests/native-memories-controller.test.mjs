@@ -12,7 +12,7 @@ const authority = {
   userId: memory.author_id,
   sessionId: 'session-1',
   contextRevision: nativeScope.context_revision,
-  generationDigest: 'renderer-generation-1',
+  generationDigest: nativeScope.digest,
   available: true,
   allowedActions: ['view', 'list', 'create', 'update', 'delete'],
 };
@@ -23,26 +23,29 @@ function fixture(overrides = {}) {
   let accepted = 0;
   const stored = { ...memory, tags: ['preserve'], entities: [{ name: 'node', kind: 'topic' }] };
   const client = {
+    observeScope: async (scope, options) => {
+      calls.push({ scope, command: { operation: 'observe_scope' }, options });
+      assert.equal(options.expectedActorId, authority.userId);
+      return overrides.observeScope ? overrides.observeScope(scope, options) : nativeScope;
+    },
     execute: async (scope, command, options) => {
       calls.push({ scope, command, options });
       if (overrides.execute) return overrides.execute(scope, command, options, calls);
       const result =
-        command.operation === 'sync_status'
-          ? { status: {} }
-          : command.operation === 'get'
-            ? { memory: stored }
-            : {
-                receipt: {
-                  sequence: 1,
-                  deleted: command.operation === 'delete',
-                  memory: {
-                    ...(command.memory ?? stored),
-                    version: command.operation === 'create' ? 1 : command.expected_revision + 1,
-                  },
+        command.operation === 'get'
+          ? { memory: stored }
+          : {
+              receipt: {
+                sequence: 1,
+                deleted: command.operation === 'delete',
+                memory: {
+                  ...(command.memory ?? stored),
+                  version: command.operation === 'create' ? 1 : command.expected_revision + 1,
                 },
-                replayed: false,
-                processing_status: 'accepted',
-              };
+              },
+              replayed: false,
+              processing_status: 'accepted',
+            };
       return {
         contract_version: '1.0.0',
         scope: nativeScope,
@@ -88,7 +91,7 @@ test('native editor permissions come only from the declared current authority', 
   await controller.open(memory.id, 'view');
   assert.deepEqual(
     calls.map(({ command }) => command.operation),
-    ['sync_status', 'get'],
+    ['observe_scope', 'get'],
   );
   assert.equal(controller.getSnapshot().phase, 'viewing');
 });
@@ -116,7 +119,6 @@ test('double submit sends one write and unmount prevents a delayed acceptance re
   let finish;
   const { controller, calls, accepted } = fixture({
     execute: async (_scope, command) => {
-      if (command.operation === 'sync_status') return { scope: nativeScope };
       return new Promise((resolve) => {
         finish = resolve;
       });
@@ -141,7 +143,6 @@ test('a newer selection cancels an older read even if the transport ignores abor
   let finish;
   const { controller, calls } = fixture({
     execute: async (_scope, command) => {
-      if (command.operation === 'sync_status') return { scope: nativeScope };
       return new Promise((resolve) => {
         finish = resolve;
       });
@@ -185,7 +186,6 @@ test('unknown write outcome locks the draft and explicitly retries the same requ
   let writes = 0;
   const { controller, calls } = fixture({
     execute: async (_scope, command) => {
-      if (command.operation === 'sync_status') return { scope: nativeScope };
       if (++writes === 1) throw error(502);
       return {
         scope: nativeScope,
@@ -219,7 +219,6 @@ test('409 requires explicit reload, while generation conflicts clear sensitive s
   for (const message of ['knowledge_revision_conflict', 'knowledge_generation_mismatch']) {
     const { controller, calls } = fixture({
       execute: async (_scope, command) => {
-        if (command.operation === 'sync_status') return { scope: nativeScope };
         if (command.operation === 'get') return { scope: nativeScope, result: { memory } };
         throw error(409, message);
       },
@@ -244,8 +243,9 @@ test('409 requires explicit reload, while generation conflicts clear sensitive s
 
 test('scope revision drift during observation fails closed before creating a draft', async () => {
   const { controller, calls } = fixture({
-    execute: async () => ({
-      scope: { ...nativeScope, context_revision: nativeScope.context_revision + 1 },
+    observeScope: async () => ({
+      ...nativeScope,
+      context_revision: nativeScope.context_revision + 1,
     }),
   });
   await controller.create();
@@ -258,7 +258,6 @@ test('stop cancels in-flight operations, clears sensitive data and drops late re
   let finish;
   const { controller, calls, accepted } = fixture({
     execute: async (_scope, command) => {
-      if (command.operation === 'sync_status') return { scope: nativeScope };
       return new Promise((resolve) => {
         finish = resolve;
       });

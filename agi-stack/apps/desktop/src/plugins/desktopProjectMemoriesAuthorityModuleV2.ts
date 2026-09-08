@@ -50,12 +50,18 @@ import type {
   NativeKnowledgeResponse,
   NativeKnowledgeSyncAuthority,
   NativeKnowledgeSyncOptions,
+  NativeKnowledgeScope,
+  NativeKnowledgeScopeObservationOptions,
 } from '../features/project-knowledge/nativeKnowledgeContracts';
 import {
   prepareNativeKnowledgeCommand,
   requireNativeKnowledgeCommandOptions,
   requireNativeKnowledgeResponse,
+  requireNativeKnowledgeScope,
 } from '../features/project-knowledge/nativeKnowledgeValidation';
+import { prepareNativeKnowledgeScopeObservationOptions } from '../features/project-knowledge/nativeKnowledgeScopeObservation';
+import { projectKnowledgeError } from '../features/project-knowledge/projectKnowledgeClient';
+import type { DesktopProjectMemoriesObserveScopeInputV2 } from './desktopProjectMemoriesOperationContractV2';
 import { createDesktopProjectMemoriesHttpAuthorityV2 } from './desktopProjectMemoriesHttpProjectionV2';
 import {
   prepareDesktopProjectMemoriesAuthorityOperationV2,
@@ -104,6 +110,9 @@ export interface DesktopProjectMemoriesAuthorityServiceV2 {
 }
 
 export interface DesktopProjectMemoriesOperationsV2 {
+  readonly observeNativeKnowledgeScope: (
+    input: DesktopProjectMemoriesObserveScopeInputV2,
+  ) => Promise<NativeKnowledgeScope>;
   readonly queryKnowledgeProcessing: <Q extends NativeKnowledgeProcessingQuery>(
     input: DesktopProjectMemoriesProcessingQueryInputV2<Q>,
   ) => Promise<NativeKnowledgeProcessingResponse<Q>>;
@@ -132,6 +141,7 @@ type GenerationActionsUnavailableV2 = Readonly<{
 type AuthorityAdmissionRejectionV2 = ServiceAdmissionRejectionV2 | GenerationActionsUnavailableV2;
 
 const AUTHORITY_KEYS_V2 = new Set([
+  'observeScope',
   'load',
   'executeSync',
   'executeCloudMemory',
@@ -178,6 +188,24 @@ export function createDesktopProjectMemoriesOperationsV2(
   getCapability?: NativeKnowledgeProcessingCapabilityGetter,
 ): DesktopProjectMemoriesOperationsV2 {
   return Object.freeze({
+    observeNativeKnowledgeScope(input: DesktopProjectMemoriesObserveScopeInputV2) {
+      const prepared = prepareDesktopProjectMemoriesAuthorityOperationV2({
+        kind: 'observe-scope',
+        ...input,
+      });
+      return runDesktopProjectMemoriesAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) => {
+          if (!authority.observeScope)
+            throw projectKnowledgeError('native_knowledge_scope_observation_unavailable', 503);
+          return authority.observeScope({
+            expectedActorId: prepared.expectedActorId,
+            signal: prepared.signal,
+          });
+        },
+      );
+    },
     queryKnowledgeProcessing<Q extends NativeKnowledgeProcessingQuery>(
       input: DesktopProjectMemoriesProcessingQueryInputV2<Q>,
     ): Promise<NativeKnowledgeProcessingResponse<Q>> {
@@ -288,11 +316,21 @@ export function createDesktopCloudMemoryClientV2(
 }
 
 export function createDesktopNativeKnowledgeClientV2(
-  operations: Pick<DesktopProjectMemoriesOperationsV2, 'executeKnowledgeSync'>,
+  operations: Pick<
+    DesktopProjectMemoriesOperationsV2,
+    'executeKnowledgeSync' | 'observeNativeKnowledgeScope'
+  >,
   config: DesktopRuntimeConfig,
 ): NativeKnowledgeClient {
   const operationConfig = Object.freeze({ ...config });
   return Object.freeze({
+    observeScope(scope: ProjectKnowledgeScope, options: NativeKnowledgeScopeObservationOptions) {
+      return operations.observeNativeKnowledgeScope({
+        config: operationConfig,
+        scope,
+        ...prepareNativeKnowledgeScopeObservationOptions(options),
+      });
+    },
     execute<C extends NativeKnowledgeCommand>(
       scope: ProjectKnowledgeScope,
       command: C,
@@ -370,7 +408,12 @@ async function runDesktopProjectMemoriesAuthorityOperationV2<TResult>(
         service.bindOperation(prepared.config, prepared.scope, getCapability),
       );
       return operation(
-        createRevocableProjectMemoriesAuthorityV2(authority, prepared.scope, () => operationActive),
+        createRevocableProjectMemoriesAuthorityV2(
+          authority,
+          prepared.scope,
+          () => operationActive,
+          admission.digest,
+        ),
       );
     });
   } catch (error) {
@@ -390,8 +433,30 @@ function createRevocableProjectMemoriesAuthorityV2(
   authority: DesktopProjectMemoriesAuthorityV2,
   scope: ProjectKnowledgeScope,
   isOperationActive: () => boolean,
+  generationDigest: string,
 ): DesktopProjectMemoriesAuthorityV2 {
   return Object.freeze({
+    ...(authority.observeScope
+      ? {
+          async observeScope(input: NativeKnowledgeScopeObservationOptions) {
+            const options = prepareNativeKnowledgeScopeObservationOptions(input);
+            const current = () => {
+              requireOperationActiveV2(isOperationActive);
+              options.signal?.throwIfAborted();
+            };
+            current();
+            const result = await authority.observeScope!(options, current);
+            current();
+            const observed = requireNativeKnowledgeScope(
+              { contract_version: '1.0.0', scope: result },
+              scope,
+            );
+            if (observed.digest !== generationDigest)
+              throw projectKnowledgeError('knowledge_generation_mismatch', 409);
+            return observed;
+          },
+        }
+      : {}),
     ...createRevocableKnowledgeProcessingV2(authority, scope, () =>
       requireOperationActiveV2(isOperationActive),
     ),
@@ -452,6 +517,7 @@ function requireProjectMemoriesAuthorityV2(value: unknown): DesktopProjectMemori
   if (
     !isPlainRecordV2(value) ||
     Object.keys(value).some((key) => !AUTHORITY_KEYS_V2.has(key)) ||
+    (Object.hasOwn(value, 'observeScope') && typeof value.observeScope !== 'function') ||
     (Object.hasOwn(value, 'executeCloudMemory') &&
       typeof value.executeCloudMemory !== 'function') ||
     typeof value.load !== 'function' ||

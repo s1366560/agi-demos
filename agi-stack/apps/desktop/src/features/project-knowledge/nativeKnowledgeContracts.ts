@@ -23,6 +23,10 @@ export type NativeKnowledgeResponse<C extends NativeKnowledgeCommand = NativeKno
     result: NativeKnowledgeResultMap[C['operation']];
   }>;
 export interface NativeKnowledgeSyncAuthority {
+  observeScope?(
+    options: NativeKnowledgeScopeObservationOptions,
+    requireCurrent?: () => void,
+  ): Promise<NativeKnowledgeScope>;
   executeSync<C extends NativeKnowledgeCommand>(
     command: C,
     options?: NativeKnowledgeSyncOptions,
@@ -32,6 +36,10 @@ export type NativeKnowledgeSyncOptions = Readonly<{
   signal?: AbortSignal;
   /** A previously observed context; changes must not silently rebind a decision. */
   expectedScope?: NativeKnowledgeScope;
+}>;
+export type NativeKnowledgeScopeObservationOptions = Readonly<{
+  expectedActorId: string;
+  signal?: AbortSignal;
 }>;
 export type NativeKnowledgeSelectedOperation =
   | 'create'
@@ -49,6 +57,10 @@ export type NativeKnowledgeDiscoveryCommand = Exclude<
 export type NativeKnowledgeObservedOptions = NativeKnowledgeSyncOptions &
   Readonly<{ expectedScope: NativeKnowledgeScope }>;
 export interface NativeKnowledgeClient {
+  observeScope(
+    scope: ProjectKnowledgeScope,
+    options: NativeKnowledgeScopeObservationOptions,
+  ): Promise<NativeKnowledgeScope>;
   execute<C extends NativeKnowledgeCommand>(
     scope: ProjectKnowledgeScope,
     command: C,
@@ -60,7 +72,6 @@ export interface NativeKnowledgeClient {
     options?: NativeKnowledgeSyncOptions,
   ): Promise<NativeKnowledgeResponse<C>>;
 }
-
 
 export type NativeKnowledgeProcessingResponse<
   Q extends NativeKnowledgeProcessingQuery = NativeKnowledgeProcessingQuery,

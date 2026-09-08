@@ -108,19 +108,19 @@ export function createNativeMemoriesController({
     if (current(request)) active = null;
   };
   const observe = async (signal: AbortSignal) => {
-    const response = await client.execute(
-      authority.scope,
-      { operation: 'sync_status' },
-      { signal },
-    );
+    const scope = await client.observeScope(authority.scope, {
+      expectedActorId: authority.userId!,
+      signal,
+    });
     if (
-      response.scope.context_revision !== authority.contextRevision ||
-      response.scope.tenant_id !== authority.scope.tenantId ||
-      response.scope.project_id !== authority.scope.projectId
+      scope.context_revision !== authority.contextRevision ||
+      scope.tenant_id !== authority.scope.tenantId ||
+      scope.project_id !== authority.scope.projectId ||
+      scope.digest !== authority.generationDigest
     ) {
       throw Object.assign(new Error('project_knowledge_scope_conflict'), { status: 409 });
     }
-    return response.scope;
+    return scope;
   };
   const fail = (error: unknown, writing: boolean) => {
     const status =

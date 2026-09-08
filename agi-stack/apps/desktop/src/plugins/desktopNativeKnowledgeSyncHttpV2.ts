@@ -8,6 +8,7 @@ import type {
   NativeKnowledgeResponse,
   NativeKnowledgeSyncOptions,
   NativeKnowledgeSyncAuthority,
+  NativeKnowledgeScopeObservationOptions,
 } from '../features/project-knowledge/nativeKnowledgeContracts';
 import {
   prepareNativeKnowledgeCommand,
@@ -23,6 +24,7 @@ import {
   plain,
 } from '../features/project-knowledge/nativeKnowledgeSchema';
 import type { DesktopRuntimeConfig } from '../types';
+import { observeDesktopNativeKnowledgeScopeV2 } from './desktopNativeKnowledgeScopeHttpV2';
 
 export function requireNativeKnowledgeTransportV2(config: DesktopRuntimeConfig): void {
   if (config.mode !== 'local')
@@ -51,6 +53,10 @@ export function createDesktopNativeKnowledgeSyncHttpV2(
   scope: ProjectKnowledgeScope,
 ): NativeKnowledgeSyncAuthority {
   return Object.freeze({
+    observeScope(options: NativeKnowledgeScopeObservationOptions, requireCurrent?: () => void) {
+      requireNativeKnowledgeTransportV2(config);
+      return observeDesktopNativeKnowledgeScopeV2(config, scope, options, requireCurrent);
+    },
     async executeSync<C extends NativeKnowledgeCommand>(
       command: C,
       inputOptions?: NativeKnowledgeSyncOptions,
