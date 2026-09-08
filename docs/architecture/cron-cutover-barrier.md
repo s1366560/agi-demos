@@ -91,7 +91,8 @@ for the initialized APScheduler instance. The caller supplies the exact prepared
 deployment id, source generation, producer identity, current cutover revision, and
 an explicit tuple of schedule ids obtained from deployment discovery. The producer
 must be listed in the persisted manifest and match the scheduler's actual identity.
-There is no HTTP or CLI endpoint for invoking this adapter in another process.
+The administrator HTTP entry points below invoke it in the responding process.
+The standalone barrier CLI does not have a running scheduler and cannot invoke it.
 
 Registration and startup synchronization now acquire the same global owner row lock
 as `prepare`, holding the transaction through `add_schedule`. Both use the existing
@@ -118,6 +119,36 @@ resume. A `closed` observation covers the local schedule producer only. Older bi
 and external writers that bypass registration fencing still require deployment control
 and authenticated closure evidence; APScheduler's public remove API provides no
 cross-process compare-and-delete guarantee for a concurrent schedule rebinding.
+
+### Administrator HTTP access
+
+The V2 runtime provides the separate `service:runtime.cron-producer-control` service.
+Its HTTP operation resolves the generation already pinned to the request, after
+existing API-key authentication and a platform-superuser check. Ordinary project
+membership does not grant access. These calls do not start a scheduler.
+
+- `GET /api/v1/admin/cron-producer` reports the responding process identity, its local
+  registration seal, the current persisted barrier when available, and a scheduler
+  datastore view. `datastore_view.scope=shared_scheduler_datastore` means its schedule
+  ids can be visible to multiple workers; they are not a list of schedules owned by
+  the responding worker. `discovery_complete=false` and `verified=false` are explicit.
+- `POST /api/v1/admin/cron-producer/close` accepts `deployment_id`, `source_generation`,
+  `producer_id`, `expected_revision`, and an explicit `schedule_ids` array. It returns
+  the adapter's local observation without recording a deployment receipt. A mismatched
+  responding producer is rejected before barrier access or schedule removal. Unknown
+  request fields, including verification or force overrides, are rejected.
+
+When a connection is cancelled or a response is lost, the caller may receive no
+observation even if removal settled. Reconnect to the same producer and inspect its
+current seal, shared datastore view and barrier revision. Inspection is current state,
+not a historical acknowledgement that the earlier request completed. If the exact
+prepared revision remains current, replaying the same explicit close request is
+idempotent for already-absent schedules; a changed revision requires a fresh request.
+
+The HTTP entry points cover one responding worker. A load-balanced URL does not
+establish a complete worker roster or reliable targeting of `producer_id`; deployment
+integration must supply direct process addressing or a future targeted control
+transport. These endpoints do not implement such discovery, a mailbox, or a verifier.
 
 ## Required two-phase deployment integration
 

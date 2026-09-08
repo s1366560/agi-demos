@@ -4858,6 +4858,10 @@
             {
               "service": "service:runtime.cron-scheduler-gateway",
               "version": "1.0.0"
+            },
+            {
+              "service": "service:runtime.cron-producer-control",
+              "version": "1.0.0"
             }
           ],
           "requires": []
@@ -4881,9 +4885,9 @@
           }
         }
       },
-      "contract_digest": "sha256:335344753d72b9a5fdd98b7c3e2609549f58ae8ceaf8974664ee367b726db2bd",
+      "contract_digest": "sha256:ba9a9a2abecf57a64c7d66fe8e704afbb8c9b17b004513d136f67291d4cb9d39",
       "artifact": {
-        "digest": "sha256:43b5a0a42860c140c8c4b71a0188c0a71e568b77d2cb579554971d1970e9c015",
+        "digest": "sha256:75417a546d11607cf74412795b3aaea15d0749f0b71266fd16e69f0c9239c0fa",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -4924,7 +4928,7 @@
       },
       "contract_digest": "sha256:b9abcc3f544083376ebe560026e8ee49b93cad6a929d0047c4f4014925b23a34",
       "artifact": {
-        "digest": "sha256:43b5a0a42860c140c8c4b71a0188c0a71e568b77d2cb579554971d1970e9c015",
+        "digest": "sha256:75417a546d11607cf74412795b3aaea15d0749f0b71266fd16e69f0c9239c0fa",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -4981,7 +4985,7 @@
       },
       "contract_digest": "sha256:ea708193b2db19ae2d5780efdba3472323d18ab7dbe4305bbe0962df719d77a2",
       "artifact": {
-        "digest": "sha256:43b5a0a42860c140c8c4b71a0188c0a71e568b77d2cb579554971d1970e9c015",
+        "digest": "sha256:75417a546d11607cf74412795b3aaea15d0749f0b71266fd16e69f0c9239c0fa",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -8628,7 +8632,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:464b397a051a5cc6e6480215f39ff2b5197eb879f053dc54fa3c3e41f4bf00dd",
+        "digest": "sha256:67d1fdefcde8449ca0ca97d0798dce37cf32b426fb8c266192c00ca5949a526d",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_cron_http_routes.py"
       }
     },

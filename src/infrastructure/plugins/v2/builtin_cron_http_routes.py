@@ -26,6 +26,10 @@ from src.infrastructure.adapters.primary.web.routers.cron import (
     trigger_manual_run,
     update_cron_job,
 )
+from src.infrastructure.adapters.primary.web.routers.cron_producer import (
+    close_cron_producer,
+    inspect_cron_producer,
+)
 
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from .route_effects import ROUTE_TABLE_BUILDER_INJECT_V2
@@ -45,6 +49,26 @@ def cron_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
     """Return the complete, explicitly claimed ``cron`` inventory row."""
     prefix = "/api/v1/projects/{project_id}/cron-jobs"
     return (
+        RouteDefinitionV2(
+            owner_entry_id=CRON_HTTP_ROUTES_ENTRY_V2,
+            path="/api/v1/admin/cron-producer",
+            methods=("GET",),
+            endpoint=inspect_cron_producer,
+            name="inspect_cron_producer",
+            tags=("cron-producer",),
+            response_model=dict[str, object],
+            replaces_builtin_row_id=CRON_HTTP_ROUTES_ROW_V2,
+        ),
+        RouteDefinitionV2(
+            owner_entry_id=CRON_HTTP_ROUTES_ENTRY_V2,
+            path="/api/v1/admin/cron-producer/close",
+            methods=("POST",),
+            endpoint=close_cron_producer,
+            name="close_cron_producer",
+            tags=("cron-producer",),
+            response_model=dict[str, object],
+            replaces_builtin_row_id=CRON_HTTP_ROUTES_ROW_V2,
+        ),
         RouteDefinitionV2(
             owner_entry_id=CRON_HTTP_ROUTES_ENTRY_V2,
             path=prefix,

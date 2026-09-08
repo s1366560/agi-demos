@@ -27,6 +27,10 @@ from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository i
 )
 from src.infrastructure.scheduler import scheduler_service
 
+from .cron_producer_control import (
+    CRON_PRODUCER_CONTROL_SERVICE_V2,
+    BuiltinCronProducerControlV2,
+)
 from .project_tenant_services import (
     ProjectTenantApplicationResolverProtocolV2,
     ProjectTenantServicesV2,
@@ -301,6 +305,11 @@ def cron_scheduler_gateway_definition_v2() -> PluginDefinitionV2:
                 CRON_SCHEDULER_GATEWAY_SERVICE_V2,
                 BuiltinCronSchedulerGatewayV2(),
                 label="cron-scheduler-gateway",
+            )
+            _ = context.provide(
+                CRON_PRODUCER_CONTROL_SERVICE_V2,
+                BuiltinCronProducerControlV2(),
+                label="cron-producer-control",
             )
         except Exception:
             await runtime.release_generation()

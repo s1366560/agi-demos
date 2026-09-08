@@ -31,6 +31,8 @@ def test_cron_row_is_a_complete_explicit_v2_contribution() -> None:
     assert {
         (method, definition.path) for definition in definitions for method in definition.methods
     } == {
+        ("GET", "/api/v1/admin/cron-producer"),
+        ("POST", "/api/v1/admin/cron-producer/close"),
         ("GET", "/api/v1/projects/{project_id}/cron-jobs"),
         ("POST", "/api/v1/projects/{project_id}/cron-jobs"),
         ("GET", "/api/v1/projects/{project_id}/cron-jobs/capabilities"),
