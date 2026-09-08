@@ -5,6 +5,13 @@ const apiClient = httpClient;
 
 // Types
 export interface GraphNode {
+  /** Graph-store UUID; distinct from the Cytoscape element id. */
+  uuid?: string | null | undefined;
+  content?: string | null | undefined;
+  source?: string | null | undefined;
+  source_description?: string | null | undefined;
+  memory_id?: string | null | undefined;
+  valid_at?: string | null | undefined;
   id: string;
   label: string;
   type: 'Entity' | 'Episodic' | 'Community';
@@ -19,6 +26,15 @@ export interface GraphNode {
 }
 
 export interface GraphEdge {
+  uuid?: string | null | undefined;
+  relationship_type?: string | null | undefined;
+  fact?: string | null | undefined;
+  /** Supporting episode UUIDs emitted by relationship extraction. */
+  episodes?: readonly string[] | undefined;
+  created_at?: string | null | undefined;
+  valid_at?: string | null | undefined;
+  invalid_at?: string | null | undefined;
+  expired_at?: string | null | undefined;
   id: string;
   source: string;
   target: string;

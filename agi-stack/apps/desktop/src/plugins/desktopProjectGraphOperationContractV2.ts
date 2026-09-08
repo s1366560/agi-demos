@@ -1,3 +1,8 @@
+import {
+  GRAPH_NODE_PROVENANCE_KEYS,
+  GRAPH_EDGE_PROVENANCE_KEYS,
+  validGraphProvenance,
+} from '../features/project-knowledge/projectGraphProvenance';
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
 import {
@@ -33,13 +38,24 @@ const SNAPSHOT_KEYS_V2 = new Set([
   'nodes',
   'edges',
 ]);
-const NODE_KEYS_V2 = new Set(['id', 'label', 'type', 'name', 'summary']);
-const EDGE_KEYS_V2 = new Set(['id', 'source', 'target', 'label', 'weight']);
-const NODE_TYPES_V2 = new Set<ProjectGraphNode['type']>([
-  'Entity',
-  'Episodic',
-  'Community',
+const NODE_KEYS_V2 = new Set([
+  'id',
+  'label',
+  'type',
+  'name',
+  'summary',
+  ...GRAPH_NODE_PROVENANCE_KEYS,
 ]);
+const EDGE_KEYS_V2 = new Set([
+  'id',
+  'source',
+  'target',
+  'label',
+  'weight',
+  ...GRAPH_EDGE_PROVENANCE_KEYS,
+  'episodes',
+]);
+const NODE_TYPES_V2 = new Set<ProjectGraphNode['type']>(['Entity', 'Episodic', 'Community']);
 
 export function prepareDesktopProjectGraphOperationV2(
   input: DesktopProjectGraphOperationInputV2,
@@ -125,18 +141,28 @@ export function requireDesktopProjectGraphSnapshotV2(
     !Number.isSafeInteger(value.scopeRevision) ||
     Number(value.scopeRevision) < 0 ||
     !sameScopeV2(value.scope, scope) ||
-    !validGraphV2(value.nodes, value.edges)
+    !validGraphV2(value.nodes, value.edges, scope)
   ) {
     throw invalidServiceContractV2();
   }
   return deepFreezeV2(structuredClone(value)) as ProjectGraphSnapshot;
 }
 
-function validGraphV2(nodesValue: unknown, edgesValue: unknown): boolean {
+function validGraphV2(
+  nodesValue: unknown,
+  edgesValue: unknown,
+  scope: ProjectKnowledgeScope,
+): boolean {
   if (!Array.isArray(nodesValue) || !Array.isArray(edgesValue)) return false;
   const nodeIds = new Set<string>();
   for (const node of nodesValue) {
-    if (!validNodeV2(node) || nodeIds.has(node.id)) return false;
+    if (
+      !validNodeV2(node) ||
+      nodeIds.has(node.id) ||
+      (node.tenant_id != null && node.tenant_id !== scope.tenantId) ||
+      (node.project_id != null && node.project_id !== scope.projectId)
+    )
+      return false;
     nodeIds.add(node.id);
   }
   const edgeIds = new Set<string>();
@@ -157,7 +183,8 @@ function validGraphV2(nodesValue: unknown, edgesValue: unknown): boolean {
 function validNodeV2(value: unknown): value is ProjectGraphNode {
   return (
     isPlainRecordV2(value) &&
-    hasExactKeysV2(value, NODE_KEYS_V2) &&
+    hasAllowedKeysV2(value, NODE_KEYS_V2) &&
+    validGraphProvenance(value, GRAPH_NODE_PROVENANCE_KEYS) &&
     canonicalIdentifierV2(value.id) &&
     typeof value.label === 'string' &&
     typeof value.type === 'string' &&
@@ -170,13 +197,13 @@ function validNodeV2(value: unknown): value is ProjectGraphNode {
 function validEdgeV2(value: unknown): value is ProjectGraphEdge {
   return (
     isPlainRecordV2(value) &&
-    hasExactKeysV2(value, EDGE_KEYS_V2) &&
+    hasAllowedKeysV2(value, EDGE_KEYS_V2) &&
+    validGraphProvenance(value, GRAPH_EDGE_PROVENANCE_KEYS, true) &&
     canonicalIdentifierV2(value.id) &&
     canonicalIdentifierV2(value.source) &&
     canonicalIdentifierV2(value.target) &&
     typeof value.label === 'string' &&
-    (value.weight === null ||
-      (typeof value.weight === 'number' && Number.isFinite(value.weight)))
+    (value.weight === null || (typeof value.weight === 'number' && Number.isFinite(value.weight)))
   );
 }
 
@@ -208,17 +235,11 @@ function invalidServiceContractV2(): RuntimeV2Error {
   );
 }
 
-function hasAllowedKeysV2(
-  value: Record<string, unknown>,
-  allowed: ReadonlySet<string>,
-): boolean {
+function hasAllowedKeysV2(value: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
   return Object.keys(value).every((key) => allowed.has(key));
 }
 
-function hasExactKeysV2(
-  value: Record<string, unknown>,
-  expected: ReadonlySet<string>,
-): boolean {
+function hasExactKeysV2(value: Record<string, unknown>, expected: ReadonlySet<string>): boolean {
   const keys = Object.keys(value);
   return keys.length === expected.size && keys.every((key) => expected.has(key));
 }

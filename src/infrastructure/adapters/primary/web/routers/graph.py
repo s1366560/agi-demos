@@ -101,7 +101,7 @@ def _rows_to_elements(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ``get_subgraph``).
     """
     nodes_map: dict[str, dict[str, Any]] = {}
-    edges_list: list[dict[str, Any]] = []
+    edges_map: dict[str, dict[str, Any]] = {}
 
     for r in rows:
         s_id = r.get("source_id")
@@ -112,10 +112,10 @@ def _rows_to_elements(rows: list[dict[str, Any]]) -> dict[str, Any]:
             if s_id not in nodes_map:
                 nodes_map[s_id] = {
                     "data": {
+                        **s_props,
                         "id": s_id,
                         "label": _graph_node_label(s_props, r.get("source_labels") or []),
                         "name": s_props.get("name", "Unknown"),
-                        **s_props,
                         "type": _graph_node_type(r.get("source_labels") or []),
                     }
                 }
@@ -128,10 +128,10 @@ def _rows_to_elements(rows: list[dict[str, Any]]) -> dict[str, Any]:
             if t_id not in nodes_map:
                 nodes_map[t_id] = {
                     "data": {
+                        **t_props,
                         "id": t_id,
                         "label": _graph_node_label(t_props, r.get("target_labels") or []),
                         "name": t_props.get("name", "Unknown"),
-                        **t_props,
                         "type": _graph_node_type(r.get("target_labels") or []),
                     }
                 }
@@ -141,19 +141,20 @@ def _rows_to_elements(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 e_props = _sanitize_graph_properties(
                     r.get("edge_props") or {}, excluded_keys={"fact_embedding"}
                 )
-                edges_list.append(
+                edges_map.setdefault(
+                    e_id,
                     {
                         "data": {
+                            **e_props,
                             "id": e_id,
                             "source": s_id,
                             "target": t_id,
                             "label": r.get("edge_type"),
-                            **e_props,
                         }
-                    }
+                    },
                 )
 
-    return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
+    return {"elements": {"nodes": list(nodes_map.values()), "edges": list(edges_map.values())}}
 
 
 def _graph_node_type(labels: list[str]) -> str | None:

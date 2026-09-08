@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { httpClient } from '../../services/client/httpClient';
-import { graphService } from '../../services/graphService';
+import { graphService, type GraphData } from '../../services/graphService';
 
 vi.mock('../../services/client/httpClient', () => ({
   httpClient: {
@@ -66,5 +66,43 @@ describe('graphService', () => {
       tenant_id: 'tenant-1',
       project_id: 'project-1',
     });
+  });
+
+  it('reads source episodes by scoped UUID and retains captured content and edge evidence', async () => {
+    const response: GraphData = {
+      elements: {
+        nodes: [
+          {
+            data: {
+              id: 'element-episode',
+              uuid: 'episode-uuid',
+              label: 'Source',
+              type: 'Episodic',
+              name: 'Same name',
+              content: 'Captured content',
+              memory_id: 'memory-uuid',
+              source_description: 'document',
+              tenant_id: 'tenant-1',
+              project_id: 'project-1',
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+    mockHttpClient.post.mockResolvedValue(response);
+    const query = {
+      node_uuids: ['episode-uuid'],
+      include_neighbors: false,
+      limit: 1,
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+    };
+    const result = await graphService.getSubgraph(query);
+    expect(mockHttpClient.post).toHaveBeenCalledWith('/graph/memory/graph/subgraph', query);
+    expect(result.elements.nodes[0]?.data.uuid).toBe('episode-uuid');
+    expect(result.elements.nodes[0]?.data.content).toBe('Captured content');
+    expect(result.elements.nodes[0]?.data.memory_id).toBe('memory-uuid');
+    expect(mockHttpClient.get).not.toHaveBeenCalled();
   });
 });

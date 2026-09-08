@@ -2807,10 +2807,15 @@ class NativeGraphAdapter(GraphStorePort):
                         AND ($tenant_id IS NULL OR m.tenant_id = $tenant_id)) OR
                     ($project_id IS NULL AND NOT $is_superuser AND m.project_id IN $project_ids)
                 )
-                RETURN
-                    elementId(n) AS source_id, labels(n) AS source_labels, properties(n) AS source_props,
+                WITH r,
+                    CASE WHEN r IS NULL THEN n ELSE startNode(r) END AS source,
+                    CASE WHEN r IS NULL THEN null ELSE endNode(r) END AS target
+                RETURN DISTINCT
+                    elementId(source) AS source_id, labels(source) AS source_labels,
+                    properties(source) AS source_props,
                     elementId(r) AS edge_id, type(r) AS edge_type, properties(r) AS edge_props,
-                    elementId(m) AS target_id, labels(m) AS target_labels, properties(m) AS target_props
+                    elementId(target) AS target_id, labels(target) AS target_labels,
+                    properties(target) AS target_props
                 LIMIT $limit
             """
         else:
