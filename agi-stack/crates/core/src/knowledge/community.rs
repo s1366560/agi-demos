@@ -2,6 +2,8 @@
 //! capture, not a live retrieval page. Partitions carry no semantic name/summary;
 //! those require a later audited agent submission before publication.
 
+pub mod build;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

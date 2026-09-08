@@ -1,5 +1,11 @@
-//! Read-only community foundation. No migration, jobs, model invocation, or
+//! Community snapshot and durable build foundation. No model invocation or
 //! runtime entry point. Keep this query independent of live/keyset retrieval.
+
+mod builds;
+mod jobs;
+mod repository;
+mod schema;
+pub(super) use schema::migrate;
 
 use agistack_core::knowledge::{
     community::*,

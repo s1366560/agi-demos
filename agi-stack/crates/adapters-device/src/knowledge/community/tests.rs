@@ -160,36 +160,34 @@ fn failed_sources_and_algorithm_parameters_are_fingerprinted() {
 
 #[test]
 fn read_transaction_keeps_one_revision_while_another_connection_commits() {
-    block_on(async {
-        let path =
-            std::env::temp_dir().join(format!("community-snapshot-{}.db", uuid::Uuid::new_v4()));
-        let repo = SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap();
-        repo.conn
-            .lock()
-            .unwrap()
-            .execute_batch("PRAGMA journal_mode=WAL")
-            .unwrap();
-        let s = scope("a", "p");
-        let mut memory = create(&repo, &s, "one", "Title", "Original").await;
-        finish(&repo, &s, true).await;
-        let other = SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap();
+    let path = std::env::temp_dir().join(format!("community-snapshot-{}.db", uuid::Uuid::new_v4()));
+    let repo = SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap();
+    repo.conn
+        .lock()
+        .unwrap()
+        .execute_batch("PRAGMA journal_mode=WAL")
+        .unwrap();
+    let s = scope("a", "p");
+    let mut memory = block_on(create(&repo, &s, "one", "Title", "Original"));
+    block_on(finish(&repo, &s, true));
+    let other = SqliteKnowledgeRepository::open(path.to_str().unwrap()).unwrap();
+    {
         let mut conn = repo.conn.lock().unwrap();
         let tx = conn.transaction().unwrap();
         let before = capture(&tx, &s, 2).unwrap();
         memory.content = "Concurrent edit".into();
-        other.update(&s, memory, 1).await.unwrap();
-        // Same transaction observes complete old source + old audit, never a
-        // mix of new payload and earlier derived output.
+        // Drive only the independent writer connection while the read
+        // transaction remains open; no async task suspends with its mutex held.
+        block_on(other.update(&s, memory, 1)).unwrap();
         assert_eq!(before, capture(&tx, &s, 2).unwrap());
         tx.commit().unwrap();
-        drop(conn);
-        let after = repo.community_snapshot(&s, 2).await.unwrap();
-        assert_eq!(after.sources[0].source.revision, 2);
-        assert!(after.sources[0].audited_projection.is_none());
-        drop(other);
-        drop(repo);
-        std::fs::remove_file(path).unwrap();
-    });
+    }
+    let after = repo.community_snapshot_durable(&s, 2).unwrap();
+    assert_eq!(after.sources[0].source.revision, 2);
+    assert!(after.sources[0].audited_projection.is_none());
+    drop(other);
+    drop(repo);
+    std::fs::remove_file(path).unwrap();
 }
 
 #[test]
