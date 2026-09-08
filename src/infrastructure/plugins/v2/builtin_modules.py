@@ -86,6 +86,7 @@ from .channel_adapters import (
 )
 from .channel_runtime import ChannelRuntimeManagerV2, channel_runtime_definition_v2
 from .cicd_pipeline_repository_services import cicd_pipeline_repository_definition_v2
+from .cloud_knowledge_sync_modules import cloud_knowledge_sync_definitions_v2
 from .cluster_services import cluster_service_definitions_v2
 from .conversation_access_services import conversation_access_service_definitions_v2
 from .conversation_collection_repository import conversation_collection_repository_definition_v2
@@ -424,6 +425,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
         search_service_definition_v2(),
         *memory_service_definitions_v2(),
+        *cloud_knowledge_sync_definitions_v2(),
         builtin_channel_adapter_catalog_definition_v2(),
         builtin_feishu_channel_adapter_definition_v2(),
         channel_runtime_definition_v2(channel_runtime_manager),

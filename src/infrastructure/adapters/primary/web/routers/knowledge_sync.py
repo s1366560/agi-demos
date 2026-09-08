@@ -65,7 +65,9 @@ class SyncResolutionBody(BaseModel):
 
 
 def error_response(error: KnowledgeSyncError) -> JSONResponse:
-    if error.code == "knowledge_sync_forbidden":
+    if error.code in {"knowledge_sync_not_enrolled", "knowledge_sync_fence_missing"}:
+        status = 503
+    elif error.code == "knowledge_sync_forbidden":
         status = 403
     elif error.code == "knowledge_sync_conflict_not_found":
         status = 404

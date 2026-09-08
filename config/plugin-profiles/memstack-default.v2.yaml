@@ -1107,6 +1107,35 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-cloud-knowledge-sync-repository
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/cloud-knowledge-sync
+      enabled: false
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-cloud-knowledge-sync-application
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/cloud-knowledge-sync
+      enabled: false
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        repositories: service:persistence.cloud-knowledge-sync
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-search-services
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -2187,6 +2216,21 @@ profile:
       config: {}
       inject:
         route_table: service:http.route-table-builder
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-cloud-knowledge-sync-http-routes
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/http/cloud-knowledge-sync-routes
+      enabled: false
+      config: {}
+      inject:
+        route_table: service:http.route-table-builder
+        application: service:application.cloud-knowledge-sync
       isolate: {}
       scope:
         kind: root

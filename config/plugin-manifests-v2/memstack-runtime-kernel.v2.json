@@ -405,7 +405,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:19a6048ae1db34be3f16e324701660d658e4743f11123ed5dd178e08038e4d10",
+        "digest": "sha256:29c6f520a989bc58e31f5079a956b5ae3afeaf02daa8deb1cf7d38f384388e13",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -14526,6 +14526,133 @@
       "artifact": {
         "digest": "sha256:177b54d6167ca11881ed583e09f9a8afb8bc3e26e9453bb675c131d717611d60",
         "source": "repo+python://src/infrastructure/plugins/v2/workspace_wtp_publisher.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/cloud-knowledge-sync",
+      "entrypoint": "src.infrastructure.plugins.v2.cloud_knowledge_sync_services:_apply_cloud_knowledge_sync_repository_v2",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.cloud-knowledge-sync",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "strategy": {
+              "const": "request-async-session",
+              "type": "string"
+            }
+          },
+          "required": [
+            "strategy"
+          ]
+        }
+      },
+      "contract_digest": "sha256:7f8f02e9d69e6405776b0260347685201f6796d3a0658ff3272da4f2e3121a25",
+      "artifact": {
+        "digest": "sha256:c54fa3c232333bd2b460ca2b72a042dc5d7c76d4fd568c888c9314a5b7c5ea0b",
+        "source": "repo+python://src/infrastructure/plugins/v2/cloud_knowledge_sync_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/cloud-knowledge-sync",
+      "entrypoint": "src.infrastructure.plugins.v2.cloud_knowledge_sync_services:_apply_cloud_knowledge_sync_application_v2",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.cloud-knowledge-sync",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repositories",
+              "service": "service:persistence.cloud-knowledge-sync",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "strategy": {
+              "const": "operation-scoped-provider",
+              "type": "string"
+            }
+          },
+          "required": [
+            "strategy"
+          ]
+        }
+      },
+      "contract_digest": "sha256:65881e8372db7fb47142dda8cfc068896093a1d2985a16584d5a0cbc9664352e",
+      "artifact": {
+        "digest": "sha256:c54fa3c232333bd2b460ca2b72a042dc5d7c76d4fd568c888c9314a5b7c5ea0b",
+        "source": "repo+python://src/infrastructure/plugins/v2/cloud_knowledge_sync_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/cloud-knowledge-sync-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_cloud_knowledge_sync_http_routes:builtin_cloud_knowledge_sync_http_routes_definition_v2",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "application",
+              "service": "service:application.cloud-knowledge-sync",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:51254347daddb12131010db6459ce4cd68695054017cc50ea8868dcf85f2eb1c",
+      "artifact": {
+        "digest": "sha256:1a6ba87f15c323325130373d305e97dafe2025b7f7aa75f99206bfa7fc722557",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_cloud_knowledge_sync_http_routes.py"
       }
     }
   ],
