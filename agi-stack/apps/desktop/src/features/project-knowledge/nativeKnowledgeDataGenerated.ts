@@ -474,7 +474,7 @@ export type NativeKnowledgeCapabilityEntry = {
   readonly reason_code: (string) | (null);
   readonly service_version: (string) | (null);
   readonly contract_version: (string) | (null);
-  readonly allowed_actions: readonly ("activate_community_build" | "cloud_conflict_context" | "community_active" | "community_audit" | "community_build" | "community_builds" | "configuration" | "configure_embedding" | "create" | "create_community_build" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "graph_pull_conflict_context" | "graph_pull_conflicts" | "graph_push_conflicts" | "graph_resolution_history" | "graph_source" | "index_one" | "list" | "pending_resolutions" | "process_community_one" | "process_one" | "processing_audits" | "processing_task" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "remote_graph_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_graph_pull" | "resolve_graph_push" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_community" | "retry_index" | "retry_processing" | "select_community_build" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "sync_unbind" | "synced_graph_projection" | "synced_graph_projections" | "text" | "update" | "view")[];
+  readonly allowed_actions: readonly ("activate_community_build" | "cloud_conflict_context" | "community_active" | "community_audit" | "community_build" | "community_builds" | "configuration" | "configure_embedding" | "create" | "create_community_build" | "delete" | "diagnostics_export" | "entities" | "failed_index" | "failed_processing" | "get" | "graph_pull_conflict_context" | "graph_pull_conflicts" | "graph_push_conflicts" | "graph_resolution_history" | "graph_source" | "index_one" | "list" | "pending_resolutions" | "process_community_one" | "process_one" | "processing_audits" | "processing_task" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "remote_graph_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_graph_pull" | "resolve_graph_push" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_community" | "retry_index" | "retry_processing" | "select_community_build" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "sync_unbind" | "synced_graph_projection" | "synced_graph_projections" | "text" | "update" | "view")[];
   readonly scope: NativeKnowledgeCapabilityScope;
   readonly authority_revision: (number) | (null);
   readonly retryable: boolean;
@@ -769,4 +769,65 @@ export type NativeKnowledgeSyncedGraphProjection = {
   readonly content: NativeKnowledgeJson;
   readonly source_available: boolean;
   readonly source_current: boolean;
+};
+
+// prettier-ignore
+export type NativeKnowledgeDiagnosticsExportApplication = {
+  readonly module_ref: string;
+  readonly service: string;
+  readonly version: string;
+  readonly knowledge_schema_version: number;
+};
+
+// prettier-ignore
+export type NativeKnowledgeDiagnosticsExportScope = {
+  readonly tenant_id: string;
+  readonly project_id: string;
+  readonly context_revision: number;
+  readonly profile_id: string;
+  readonly generation: number;
+  readonly digest: string;
+};
+
+// prettier-ignore
+export type NativeKnowledgeDiagnosticsExportProcessing = {
+  readonly coverage: NativeKnowledgeProcessingCoverage;
+  readonly last_success_ms: (number) | (null);
+  readonly failed: readonly (NativeKnowledgeProcessingFailureDetail)[];
+  readonly truncated: boolean;
+};
+
+// prettier-ignore
+export type NativeKnowledgeDiagnosticsExportIndex = {
+  readonly configuration: (NativeKnowledgeEmbeddingConfiguration) | (null);
+  readonly active_build_id: (string) | (null);
+  readonly coverage: (NativeKnowledgeIndexCoverage) | (null);
+  readonly last_success_ms: (number) | (null);
+  readonly failed: readonly (NativeKnowledgeIndexFailureDetail)[];
+  readonly truncated: boolean;
+};
+
+// prettier-ignore
+export type NativeKnowledgeDiagnosticsExportSync = {
+  readonly linked: boolean;
+  readonly pending_changes: number;
+  readonly pending_graph_changes: number;
+  readonly pull_conflicts: number;
+  readonly push_conflicts: number;
+  readonly graph_pull_conflicts: number;
+  readonly graph_push_conflicts: number;
+  readonly pull_cursor: number;
+  readonly graph_pull_cursor: number;
+  readonly last_receipt_sequence: (number) | (null);
+};
+
+// prettier-ignore
+export type NativeKnowledgeDiagnosticsExport = {
+  readonly diagnostics_export_version: 1;
+  readonly generated_at_ms: number;
+  readonly application: NativeKnowledgeDiagnosticsExportApplication;
+  readonly scope: NativeKnowledgeDiagnosticsExportScope;
+  readonly processing: NativeKnowledgeDiagnosticsExportProcessing;
+  readonly index: NativeKnowledgeDiagnosticsExportIndex;
+  readonly sync: (NativeKnowledgeDiagnosticsExportSync) | (null);
 };

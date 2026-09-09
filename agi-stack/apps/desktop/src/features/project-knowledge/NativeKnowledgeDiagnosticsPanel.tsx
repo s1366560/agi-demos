@@ -1,10 +1,26 @@
 import { useI18n } from '../../i18n';
+import { saveBlobWithDesktopDialog } from '../runtime/nativeFileBridge';
 import type {
   DiagnosticIndexSelection,
   DiagnosticProcessingSelection,
   NativeKnowledgeDiagnosticsController,
   NativeKnowledgeDiagnosticsModel,
 } from './nativeKnowledgeDiagnosticsController';
+
+async function saveDiagnosticsExport(
+  controller: NativeKnowledgeDiagnosticsController,
+): Promise<void> {
+  const document = await controller.exportDiagnostics();
+  if (!document) return;
+  const blob = new Blob([JSON.stringify(document, null, 2)], {
+    type: 'application/json;charset=utf-8',
+  });
+  await saveBlobWithDesktopDialog({
+    suggestedName: `native-knowledge-diagnostics-${document.generated_at_ms}.json`,
+    mimeType: 'application/json;charset=utf-8',
+    blob,
+  });
+}
 
 export function NativeKnowledgeDiagnosticsPanel({
   model,
@@ -42,6 +58,14 @@ export function NativeKnowledgeDiagnosticsPanel({
       <button type="button" onClick={() => void controller.refresh()}>
         {t('nativeDiagnostics.refresh')}
       </button>
+      {model.allowedActions.includes('diagnostics_export') ? (
+        <span>
+          <button type="button" onClick={() => void saveDiagnosticsExport(controller)}>
+            {t('nativeDiagnostics.export')}
+          </button>
+          <small>{t('nativeDiagnostics.exportNotice')}</small>
+        </span>
+      ) : null}
       {busy ? <p role="status">{t('nativeDiagnostics.loading')}</p> : null}
       {model.error ? <p role="alert">{t(`nativeDiagnostics.${model.error}`)}</p> : null}
       {model.configuration && model.mode === 'failed_index' ? (

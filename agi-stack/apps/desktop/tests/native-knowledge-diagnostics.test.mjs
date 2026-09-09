@@ -348,3 +348,164 @@ test('diagnostic panel renders source revision, failure and audit metadata with 
     /Select for index retry review/,
   );
 });
+
+const exportDocument = {
+  diagnostics_export_version: 1,
+  generated_at_ms: 111,
+  application: {
+    module_ref: 'builtin://memstack/desktop-sidecar/knowledge-authority',
+    service: 'service:desktop-sidecar.knowledge-authority',
+    version: '1.0.0',
+    knowledge_schema_version: 19,
+  },
+  scope: {
+    tenant_id: 'tenant-1',
+    project_id: 'project-1',
+    context_revision: 7,
+    profile_id: 'native-profile',
+    generation: 4,
+    digest: 'native-digest',
+  },
+  processing: {
+    coverage: { current_sources: 1, applied_sources: 1, pending_sources: 0, failed_sources: 0 },
+    last_success_ms: 101,
+    failed: [],
+    truncated: false,
+  },
+  index: {
+    configuration,
+    active_build_id: 'build',
+    coverage: { current_sources: 1, completed_sources: 1, failed_sources: 0 },
+    last_success_ms: 110,
+    failed: [],
+    truncated: false,
+  },
+  sync: {
+    linked: false,
+    pending_changes: 0,
+    pending_graph_changes: 0,
+    pull_conflicts: 0,
+    push_conflicts: 0,
+    graph_pull_conflicts: 0,
+    graph_push_conflicts: 0,
+    pull_cursor: 0,
+    graph_pull_cursor: 0,
+    last_receipt_sequence: null,
+  },
+};
+
+test('diagnostics export is issued only with the capability and returns an immutable document', async () => {
+  const denied = fixture({ authority: { allowedActions: ['failed_processing'] } });
+  assert.equal(await denied.controller.exportDiagnostics(), null);
+  assert.equal(denied.queries.length, 0);
+  const f = fixture({
+    authority: { allowedActions: ['diagnostics_export', 'failed_processing'] },
+    query: (command) =>
+      command.operation === 'diagnostics_export'
+        ? {
+            contract_version: '1.0.0',
+            scope: nativeScope,
+            result: structuredClone(exportDocument),
+          }
+        : null,
+  });
+  const document = await f.controller.exportDiagnostics();
+  assert.deepEqual(document, exportDocument);
+  assert(Object.isFrozen(document.processing.coverage));
+  assert.equal(f.queries.length, 1);
+  assert.deepEqual(f.queries[0].command, { operation: 'diagnostics_export' });
+  assert.deepEqual(f.queries[0].request.expectedScope, undefined);
+  await f.controller.refresh('failed_processing');
+  const scoped = await f.controller.exportDiagnostics();
+  assert.deepEqual(scoped, exportDocument);
+  assert.deepEqual(f.queries[2].request.expectedScope, nativeScope);
+});
+
+test('diagnostics export scope mismatch clears state and returns no document', async () => {
+  let stale = false;
+  const f = fixture({
+    authority: { allowedActions: ['diagnostics_export'] },
+    query: (command) =>
+      command.operation === 'diagnostics_export'
+        ? {
+            contract_version: '1.0.0',
+            scope: stale ? { ...nativeScope, generation: 999 } : nativeScope,
+            result: structuredClone(exportDocument),
+          }
+        : null,
+  });
+  assert.deepEqual(await f.controller.exportDiagnostics(), exportDocument);
+  stale = true;
+  assert.equal(await f.controller.exportDiagnostics(), null);
+  assert.equal(f.controller.getSnapshot().error, 'contextChanged');
+});
+
+test('generated validation accepts the export query and rejects leaked export fields', () => {
+  const operation = { operation: 'diagnostics_export' };
+  assert.deepEqual(prepareNativeKnowledgeProcessingQuery(operation, projectScope), operation);
+  const envelope = (result) => ({
+    contract_version: '1.0.0',
+    scope: nativeScope,
+    result,
+  });
+  assert.deepEqual(
+    requireNativeKnowledgeProcessingQueryResponse(
+      envelope(exportDocument),
+      operation,
+      projectScope,
+      nativeScope,
+    ).result,
+    exportDocument,
+  );
+  for (const result of [
+    { ...exportDocument, memory_content: 'private' },
+    { ...exportDocument, diagnostics_export_version: 2 },
+    {
+      ...exportDocument,
+      processing: {
+        ...exportDocument.processing,
+        failed: [{ source: { ...source, tenant_id: 'foreign' }, attempt: 1, failure: 'cancelled' }],
+      },
+    },
+    {
+      ...exportDocument,
+      index: { ...exportDocument.index, configuration: { ...configuration, api_key: 'sk-x' } },
+    },
+  ]) {
+    assert.throws(() =>
+      requireNativeKnowledgeProcessingQueryResponse(
+        envelope(result),
+        operation,
+        projectScope,
+        nativeScope,
+      ),
+    );
+  }
+});
+
+test('diagnostic panel shows the export action only with the capability', async () => {
+  const React = require('react');
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const { I18nProvider } = require(`${dist}/src/i18n.js`);
+  const { NativeKnowledgeDiagnosticsPanel } = require(
+    `${dist}/src/features/project-knowledge/NativeKnowledgeDiagnosticsPanel.js`,
+  );
+  const f = fixture();
+  await f.controller.refresh('failed_index');
+  const render = (model) =>
+    renderToStaticMarkup(
+      React.createElement(
+        I18nProvider,
+        null,
+        React.createElement(NativeKnowledgeDiagnosticsPanel, {
+          model,
+          controller: f.controller,
+        }),
+      ),
+    );
+  const ready = f.controller.getSnapshot();
+  assert.doesNotMatch(render(ready), /Export diagnostics/);
+  const capable = render({ ...ready, allowedActions: [...ready.allowedActions, 'diagnostics_export'] });
+  assert.match(capable, /Export diagnostics/);
+  assert.match(capable, /never included/);
+});

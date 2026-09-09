@@ -60,7 +60,7 @@ export function prepareNativeKnowledgeProcessingQuery<Q extends NativeKnowledgeP
         (value.request.cursor.length === 0 || value.request.cursor.length > 8192))
     )
       throw invalid();
-  } else if (value.operation !== 'configuration') {
+  } else if (value.operation !== 'configuration' && value.operation !== 'diagnostics_export') {
     if (value.operation === 'text' && !boundedText(value.literal)) throw invalid();
     if (value.request.source && !validProcessingSource(value.request.source, scope))
       throw invalid();

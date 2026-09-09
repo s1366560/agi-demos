@@ -6,6 +6,7 @@ import type {
   NativeKnowledgeIndexFailureDetail,
   NativeKnowledgeProcessingFailureDetail,
   NativeKnowledgeEmbeddingConfiguration,
+  NativeKnowledgeDiagnosticsExport,
 } from './nativeKnowledgeContracts';
 import type { NativeMemoriesAuthority } from './nativeMemoriesController';
 
@@ -231,6 +232,23 @@ export function createNativeKnowledgeDiagnosticsController({
       if (current(r)) failed(error);
     }
   };
+  const exportDiagnostics = async (): Promise<NativeKnowledgeDiagnosticsExport | null> => {
+    if (stopped || !permitted('diagnostics_export')) return null;
+    const r = begin();
+    try {
+      const result = await client!.query(
+        scope,
+        { operation: 'diagnostics_export' },
+        { signal: r.signal, expectedScope: observed },
+      );
+      if (!current(r)) return null;
+      check(result.scope);
+      return result.result ? immutable(result.result) : null;
+    } catch (error) {
+      if (current(r)) failed(error);
+      return null;
+    }
+  };
   return Object.freeze({
     getSnapshot: () => model,
     subscribe: (listener: () => void) => {
@@ -241,6 +259,7 @@ export function createNativeKnowledgeDiagnosticsController({
     },
     refresh,
     inspect,
+    exportDiagnostics,
     next: () => refresh(model.mode, true),
     processingSelection: (position: number): DiagnosticProcessingSelection | null => {
       const failure = model.processing?.items[position];

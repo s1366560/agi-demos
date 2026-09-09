@@ -137,6 +137,8 @@ export function validProcessingResult(
     case 'failed_index':
     case 'processing_audits':
       return diagnosticPage(operation, value, scope);
+    case 'diagnostics_export':
+      return diagnosticsExport(value as Results['diagnostics_export'], scope);
     case 'entities':
     case 'relationships':
     case 'text':
@@ -201,6 +203,34 @@ export function validProcessingResult(
       );
     }
   }
+}
+
+function diagnosticsExport(
+  result: Results['diagnostics_export'],
+  scope: ProjectKnowledgeScope,
+): boolean {
+  if (!result) return false;
+  const source = (item: { source: NativeKnowledgeProcessingSource }) => item.source;
+  const processingSources = result.processing.failed.map(source);
+  const indexSources = result.index.failed.map((item) => item.input.source);
+  return (
+    result.scope.tenant_id === scope.tenantId &&
+    result.scope.project_id === scope.projectId &&
+    (result.index.configuration === null || configuration(result.index.configuration)) &&
+    (result.index.active_build_id === null || s.identifier(result.index.active_build_id)) &&
+    (result.index.configuration === null) === (result.index.coverage === null) &&
+    coverage(result.processing.coverage, result.index.coverage) &&
+    (result.processing.last_success_ms === null ||
+      s.integer(0, Number.MAX_SAFE_INTEGER)(result.processing.last_success_ms)) &&
+    (result.index.last_success_ms === null ||
+      s.integer(0, Number.MAX_SAFE_INTEGER)(result.index.last_success_ms)) &&
+    processingSources.every((item) => validProcessingSource(item, scope)) &&
+    indexSources.every((item) => validProcessingSource(item, scope)) &&
+    result.index.failed.every((item) => validProcessingIndexInput(item.input, scope)) &&
+    (result.sync === null ||
+      result.sync.last_receipt_sequence === null ||
+      s.integer(1, Number.MAX_SAFE_INTEGER)(result.sync.last_receipt_sequence))
+  );
 }
 
 function page(query: Query, value: unknown, scope: ProjectKnowledgeScope): boolean {

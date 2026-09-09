@@ -5,6 +5,9 @@ export const nativeKnowledgeDiagnosticsEnUS = {
   'nativeDiagnostics.failed_processing': 'Extraction failures',
   'nativeDiagnostics.failed_index': 'Selected build index failures',
   'nativeDiagnostics.refresh': 'Refresh diagnostics',
+  'nativeDiagnostics.export': 'Export diagnostics',
+  'nativeDiagnostics.exportNotice':
+    'The export contains failure stages, counts, cursors and configuration provenance only. Memory content and credentials are never included.',
   'nativeDiagnostics.loading': 'Loading diagnostics…',
   'nativeDiagnostics.failed': 'Diagnostics could not be loaded. Refresh to try again.',
   'nativeDiagnostics.contextChanged':
@@ -36,6 +39,9 @@ export const nativeKnowledgeDiagnosticsZhCN: Record<
   'nativeDiagnostics.failed_processing': '提取失败',
   'nativeDiagnostics.failed_index': '当前选中构建的索引失败',
   'nativeDiagnostics.refresh': '刷新诊断',
+  'nativeDiagnostics.export': '导出诊断',
+  'nativeDiagnostics.exportNotice':
+    '导出内容仅包含失败阶段、计数、游标与配置来源信息，绝不包含记忆内容与凭据。',
   'nativeDiagnostics.loading': '正在读取诊断…',
   'nativeDiagnostics.failed': '无法读取诊断，请刷新重试。',
   'nativeDiagnostics.contextChanged': '来源、配置、会话或权限已变化，请刷新诊断。',
