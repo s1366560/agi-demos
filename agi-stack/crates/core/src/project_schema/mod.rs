@@ -1,5 +1,6 @@
 //! Portable schema snapshots. No persistence, authorization, transport, or semantic policy.
 
+pub mod projection;
 mod strict_json;
 mod validation;
 
