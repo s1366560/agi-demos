@@ -31,6 +31,7 @@ from src.domain.model.knowledge_sync.contracts import (
     KnowledgeSyncPage,
     KnowledgeSyncScope,
     require_change_id,
+    require_identifier,
 )
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_access import (
     authorize_derived_write,
@@ -44,7 +45,7 @@ from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models imp
     KnowledgeGraphSyncReceiptModel as Receipt,
     KnowledgeGraphSyncTombstoneModel as Tombstone,
 )
-from src.infrastructure.adapters.secondary.persistence.models import UserProject
+from src.infrastructure.adapters.secondary.persistence.models import Memory, UserProject
 
 
 def canonical(value: dict[str, Any]) -> str:
@@ -425,4 +426,28 @@ class SqlKnowledgeGraphSyncRepository:
             "current": row.current,
             "observed_current": observed.to_dict() if observed else None,
             "resolved_change_id": row.resolved_change_id,
+        }
+
+    async def graph_object(self, scope: KnowledgeSyncScope, object_id: str) -> dict[str, Any]:
+        """Serve one synced derived record with live source availability.
+
+        The record is durable even when its source memory has not arrived (or
+        is gone): availability is computed per read, never stored, so a later
+        memory sync delivery or deletion flips it deterministically.
+        """
+        _ = await self._authorize(scope)
+        require_identifier(object_id)
+        current = await self._current(scope, object_id)
+        if current is None:
+            raise KnowledgeSyncError("knowledge_sync_object_not_found")
+        memory_version = await self.db.scalar(
+            select(Memory.version).where(
+                Memory.id == object_id, Memory.project_id == scope.project_id
+            )
+        )
+        return {
+            "version": current.to_dict(),
+            "source_available": memory_version is not None,
+            "source_current": memory_version is not None
+            and memory_version == current.content.source_revision,
         }

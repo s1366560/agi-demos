@@ -319,3 +319,64 @@ async def test_scope_and_cursor_fail_closed(
         )
     with pytest.raises(KnowledgeSyncError, match="knowledge_sync_conflict_not_found"):
         await repo.graph_conflict(sync_scope, str(uuid4()))
+
+
+async def test_dangling_record_reports_source_availability_until_memory_lifecycle(
+    db: AsyncSession, sync_scope: KnowledgeSyncScope
+) -> None:
+    from src.infrastructure.adapters.secondary.persistence.sql_knowledge_sync_repository import (
+        SqlKnowledgeSyncRepository,
+    )
+
+    repo = SqlKnowledgeGraphSyncRepository(db)
+    # The derived record arrives before its source memory: durable, unavailable.
+    await repo.mutate_graph(sync_scope, str(uuid4()), mutation())
+    await db.commit()
+    read = await repo.graph_object(sync_scope, "sync-memory-1")
+    assert read["source_available"] is False
+    assert read["source_current"] is False
+    # Memory sync delivers the source at the provenance revision.
+    memory_repo = SqlKnowledgeSyncRepository(db)
+    from src.domain.model.knowledge_sync.contracts import MemorySyncContent, MemorySyncMutation
+
+    await memory_repo.mutate(
+        sync_scope,
+        str(uuid4()),
+        MemorySyncMutation(
+            operation="create",
+            memory_id="sync-memory-1",
+            expected_revision=0,
+            content=MemorySyncContent(title="Source", content="Body"),
+        ),
+    )
+    await db.commit()
+    read = await repo.graph_object(sync_scope, "sync-memory-1")
+    assert read["source_available"] is True
+    assert read["source_current"] is True
+    # A later source edit makes the provenance revision stale, deterministically.
+    await memory_repo.mutate(
+        sync_scope,
+        str(uuid4()),
+        MemorySyncMutation(
+            operation="update",
+            memory_id="sync-memory-1",
+            expected_revision=1,
+            content=MemorySyncContent(title="Edited", content="Body"),
+        ),
+    )
+    await db.commit()
+    read = await repo.graph_object(sync_scope, "sync-memory-1")
+    assert read["source_available"] is True
+    assert read["source_current"] is False
+    # Source deletion keeps the record durable but unavailable.
+    await memory_repo.mutate(
+        sync_scope,
+        str(uuid4()),
+        MemorySyncMutation(operation="delete", memory_id="sync-memory-1", expected_revision=2),
+    )
+    await db.commit()
+    read = await repo.graph_object(sync_scope, "sync-memory-1")
+    assert read["source_available"] is False
+    assert read["source_current"] is False
+    with pytest.raises(KnowledgeSyncError, match="knowledge_sync_object_not_found"):
+        await repo.graph_object(sync_scope, "never-arrived")

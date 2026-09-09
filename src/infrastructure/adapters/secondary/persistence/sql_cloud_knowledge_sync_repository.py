@@ -164,3 +164,9 @@ class SqlCloudKnowledgeSyncRepository:
         result = await self.graph_foundation.graph_conflict(scope, conflict_id)
         self.current()
         return result
+
+    async def graph_object(self, scope: KnowledgeSyncScope, object_id: str) -> dict[str, Any]:
+        await self._admit(scope)
+        result = await self.graph_foundation.graph_object(scope, object_id)
+        self.current()
+        return result

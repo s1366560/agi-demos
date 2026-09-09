@@ -139,3 +139,21 @@ async def test_http_dangling_relationship_index_rejected(
     response = await sync_client.post(base + "/mutations", json=dangling)
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "knowledge_sync_input_invalid"
+
+
+async def test_http_object_read_serves_availability_and_404s_unknown(
+    sync_client: AsyncClient, test_project_db: Project
+) -> None:
+    base = f"/projects/{test_project_db.id}/knowledge-sync/graph"
+    missing = await sync_client.get(base + "/objects/never-arrived")
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "knowledge_sync_object_not_found"
+    assert (await sync_client.post(base + "/mutations", json=body())).status_code == 200
+    read = await sync_client.get(base + "/objects/http-memory")
+    assert read.status_code == 200
+    payload = read.json()
+    assert payload["version"]["object_id"] == "http-memory"
+    assert payload["version"]["content"]["entities"][0]["name"] == "Alice"
+    # The source memory never synced in this app: durable but source-unavailable.
+    assert payload["source_available"] is False
+    assert payload["source_current"] is False

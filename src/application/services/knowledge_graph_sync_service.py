@@ -14,6 +14,7 @@ from src.domain.model.knowledge_sync.contracts import (
     KnowledgeSyncPage,
     KnowledgeSyncScope,
     require_change_id,
+    require_identifier,
 )
 from src.domain.ports.repositories.knowledge_graph_sync_repository import (
     KnowledgeGraphSyncRepository,
@@ -54,6 +55,10 @@ class KnowledgeGraphSyncService:
     async def conflict(self, scope: KnowledgeSyncScope, conflict_id: str) -> dict[str, Any]:
         require_change_id(conflict_id)
         return await self.repository.graph_conflict(scope, conflict_id)
+
+    async def object(self, scope: KnowledgeSyncScope, object_id: str) -> dict[str, Any]:
+        require_identifier(object_id)
+        return await self.repository.graph_object(scope, object_id)
 
 
 @dataclass(frozen=True, kw_only=True)

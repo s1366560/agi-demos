@@ -142,7 +142,7 @@ def error_response(error: KnowledgeSyncError) -> JSONResponse:
         status = 503
     elif error.code == "knowledge_sync_forbidden":
         status = 403
-    elif error.code == "knowledge_sync_conflict_not_found":
+    elif error.code in {"knowledge_sync_conflict_not_found", "knowledge_sync_object_not_found"}:
         status = 404
     elif error.code in {
         "knowledge_sync_write_conflict",
@@ -309,6 +309,18 @@ def create_knowledge_graph_sync_router(application_dependency: Callable[..., Any
         except KnowledgeSyncError as error:
             return error_response(error)
 
+    async def graph_object(
+        project_id: str,
+        object_id: str,
+        application: KnowledgeGraphSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
+    ) -> JSONResponse:
+        try:
+            scope = await application.service.resolve_scope(user.id, project_id)
+            return JSONResponse(content=await application.service.object(scope, object_id))
+        except KnowledgeSyncError as error:
+            return error_response(error)
+
     async def graph_resolve(
         project_id: str,
         conflict_id: str,
@@ -337,4 +349,5 @@ def create_knowledge_graph_sync_router(application_dependency: Callable[..., Any
     router.add_api_route("/graph/mutations", graph_mutate, methods=["POST"])
     router.add_api_route("/graph/conflicts/{conflict_id}", graph_conflict, methods=["GET"])
     router.add_api_route("/graph/conflicts/{conflict_id}/resolve", graph_resolve, methods=["POST"])
+    router.add_api_route("/graph/objects/{object_id}", graph_object, methods=["GET"])
     return router
