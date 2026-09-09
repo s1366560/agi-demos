@@ -1250,7 +1250,29 @@ DATABASE_URL matches the running PostgreSQL.
 
 ### Same-commit release gates
 
-[Results recorded below once the full runs at the consolidation head complete.]
+Full suites at the consolidation head `a877f58d9` (the fixture-count commit
+`a877f58d9` is test-only; Desktop/Web/Rust ran at its parent `33bd64586` whose
+only delta is that Python fixture line):
+
+- Backend: `uv run pytest src/tests` with DATABASE_URL bound to the running
+  PostgreSQL — **17261 passed, 0 failed, 401 skipped** (2h06m,
+  `/tmp/qa-gates/backend-final-a877f58d9.log`). The first full run at
+  `33bd64586` (17260 passed) exposed one stale capability-count fixture
+  (diagnostics_export, fixed by `a877f58d9`); the earlier 13-failure set
+  (SQLite dialect gating + capability fixture + permission-migration DSN) was
+  repaired by `8add1a2f3` and `9ffa44d47`.
+- Desktop: `node tests/run.mjs` — **4586 passed, 0 failed, 3 skipped**
+  (binary-gated skips).
+- Web: `vitest run` — **3692 passed, 0 failed** (400 files). One CronJobs test
+  flaked under parallel gate load in the first pass and passed in isolation and
+  in the full rerun.
+- Rust: `cargo test --workspace` — all targets ok, 0 failed (includes core 104,
+  adapters-device, sidecar 862).
+- Known pre-existing debt outside this gate: `make type-check` (full-repo mypy)
+  reports 102 errors across 37 files, all in files untouched since before the
+  QA baseline `e9ae3a1d3` (verified zero overlap with every file changed by the
+  follow-up batches). Recorded as baseline debt, not introduced by these
+  batches.
 
 ### External blockers (unchanged, not closable from this repository)
 
