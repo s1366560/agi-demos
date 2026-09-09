@@ -219,10 +219,12 @@ export function validNativeRelationships(
       const r = result as K.NativeKnowledgeCloudOutcome;
       if (c.operation === 'resolve_push') {
         const decision = c.resolution.choice;
-        if (decision.decision === 'keep_current') {
+        if (decision.decision === 'keep_current' || decision.decision === 'keep_both') {
           if (
             r.receipt.status !== 'resolved' ||
-            (r.receipt.version?.revision ?? 0) !== c.resolution.guard.expected_remote_revision
+            (r.receipt.version?.revision ?? 0) !==
+              c.resolution.guard.expected_remote_revision ||
+            (decision.decision === 'keep_both') !== Object.hasOwn(r.receipt, 'copy_memory_id')
           )
             return false;
         } else if (

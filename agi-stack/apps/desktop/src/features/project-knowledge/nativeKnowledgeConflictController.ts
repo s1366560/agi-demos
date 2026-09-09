@@ -202,8 +202,16 @@ export function createNativeKnowledgeConflictController({
   };
   const decisions = (): readonly NativeKnowledgeDecision[] => {
     if (!model.context || !model.selection) return [];
-    if (model.selection.kind === 'push')
-      return session.allowed('resolve_push') ? ['keep_current', 'use_proposed', 'merged'] : [];
+    if (model.selection.kind === 'push') {
+      if (!session.allowed('resolve_push')) return [];
+      const choices: NativeKnowledgeDecision[] = ['keep_current', 'use_proposed'];
+      // A delete proposal has no content to preserve as a copy; the cloud and the
+      // local journal both refuse keep_both for it, so never offer the choice.
+      if ((model.context as NativeKnowledgeCloudContext).original_request.operation !== 'delete')
+        choices.push('keep_both');
+      choices.push('merged');
+      return choices;
+    }
     return session.allowed(
       model.selection.kind === 'pull' ? 'resolve_pull' : 'reconcile_resolution',
     )
@@ -321,9 +329,15 @@ export function createNativeKnowledgeConflictController({
       else {
         const context = fresh.context!;
         if (selection.kind === 'push') {
-          if (decision !== 'keep_current' && decision !== 'use_proposed' && decision !== 'merged')
+          if (
+            decision !== 'keep_current' &&
+            decision !== 'use_proposed' &&
+            decision !== 'keep_both' &&
+            decision !== 'merged'
+          )
             return;
           const cloud = context as NativeKnowledgeCloudContext;
+          if (decision === 'keep_both' && cloud.original_request.operation === 'delete') return;
           command = {
             operation: 'resolve_push',
             idempotency_key: newId(),

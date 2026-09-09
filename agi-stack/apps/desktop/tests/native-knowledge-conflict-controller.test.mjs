@@ -161,8 +161,35 @@ test('changed preview invalidates decision before any write, including non-guard
   assert.equal(controller.getSnapshot().phase, 'accepted');
 });
 
-test('push exposes only producer-supported choices and sends original conflict identity', async () => {
+test('push exposes producer-supported choices and sends original conflict identity', async () => {
   const { controller, calls } = fixture();
+  await controller.open({ kind: 'push', localSequence: 1 });
+  assert.deepEqual(controller.decisions(), ['keep_current', 'use_proposed', 'keep_both', 'merged']);
+  controller.choose('keep_both');
+  assert.equal(controller.getSnapshot().decision, 'keep_both');
+  await controller.submit();
+  const write = calls.find((item) => item.command.operation === 'resolve_push').command;
+  assert.equal(write.resolution.conflict_id, cloudContext.conflict_id);
+  assert.equal(write.resolution.local_sequence, cloudContext.local_sequence);
+  assert.deepEqual(write.resolution.choice, { decision: 'keep_both' });
+  assert.equal(controller.getSnapshot().pendingReconciliation, true);
+});
+
+test('push keep_both is never offered or sent for a delete proposal', async () => {
+  const deleted = {
+    ...cloudContext,
+    original_request: { ...cloudContext.original_request, operation: 'delete', content: null },
+    cloud_conflict: {
+      ...cloudContext.cloud_conflict,
+      proposed: { ...cloudContext.cloud_conflict.proposed, operation: 'delete', content: null },
+    },
+  };
+  const { controller, calls } = fixture({
+    execute: async (command) =>
+      command.operation === 'cloud_conflict_context'
+        ? envelope(command, { context: deleted })
+        : undefined,
+  });
   await controller.open({ kind: 'push', localSequence: 1 });
   assert.deepEqual(controller.decisions(), ['keep_current', 'use_proposed', 'merged']);
   controller.choose('keep_both');

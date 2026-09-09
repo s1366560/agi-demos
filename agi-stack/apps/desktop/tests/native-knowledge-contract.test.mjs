@@ -172,6 +172,50 @@ test('completed recovery records retain the sidecar automatic reconciliation pro
   }
 });
 
+test('push keep_both choice and copy receipt round-trip with copy identity enforced', () => {
+  const command = {
+    operation: 'resolve_push',
+    resolution: { ...cloudResolution, choice: { decision: 'keep_both' } },
+    idempotency_key: 'key',
+  };
+  const prepared = prepareNativeKnowledgeCommand(command);
+  assert(Object.isFrozen(prepared));
+  const copyReceipt = {
+    status: 'resolved',
+    change_id: changeId,
+    conflict_id: cloudResolution.conflict_id,
+    version: record.archive.remote,
+    sequence: 3,
+    copy_memory_id: 'memory-copy-1',
+    copy_version: { ...record.archive.remote, memory_id: 'memory-copy-1', revision: 1 },
+  };
+  const outcome = { resolution_id: changeId, receipt: copyReceipt, pending_reconciliation: false, replayed: false };
+  const response = requireNativeKnowledgeResponse(
+    envelope(prepared, outcome),
+    prepared,
+    projectScope,
+    nativeScope,
+  );
+  assert(Object.isFrozen(response.result.receipt));
+  for (const badReceipt of [
+    { ...record.receipt },
+    { ...copyReceipt, copy_memory_id: 'memory-copy-2' },
+    { ...copyReceipt, copy_version: { ...copyReceipt.copy_version, revision: 2 } },
+    (() => {
+      const { sequence: _sequence, ...rest } = copyReceipt;
+      return rest;
+    })(),
+  ])
+    assert.throws(() =>
+      requireNativeKnowledgeResponse(
+        envelope(prepared, { ...outcome, receipt: badReceipt }),
+        prepared,
+        projectScope,
+        nativeScope,
+      ),
+    );
+});
+
 test('local user metadata is bounded JSON, retained in immutable commands and explicitly clearable', async () => {
   const { memory } = await import('./nativeKnowledgeFixtures.mjs');
   const metadata = { nested: { values: [false, null, 7, '中文'] } };

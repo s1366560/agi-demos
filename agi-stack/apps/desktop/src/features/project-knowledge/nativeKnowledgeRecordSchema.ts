@@ -111,7 +111,7 @@ export const localChoice: s.NativeCheck = (v) =>
   s.object({ decision: s.literal('use_local', 'use_remote', 'keep_both') })(v) ||
   s.object({ decision: s.literal('merged'), content })(v);
 export const cloudChoice: s.NativeCheck = (v) =>
-  s.object({ decision: s.literal('keep_current', 'use_proposed') })(v) ||
+  s.object({ decision: s.literal('keep_current', 'use_proposed', 'keep_both') })(v) ||
   s.object({ decision: s.literal('merged'), content })(v);
 export const pullResolution: s.NativeCheck = (v) =>
   s.object({ ...guardShape, memory_id: s.identifier, choice: localChoice })(v) &&
@@ -179,8 +179,34 @@ const resolvedReceipt = s.object(
   {},
   true,
 );
+const copyVersion: s.NativeCheck = (v) =>
+  remote(v) &&
+  (v as Record<string, unknown>).revision === 1 &&
+  (v as Record<string, unknown>).deleted === false;
+/** Keep-both resolution: the cloud object is untouched and the pushed version
+ * survives as a fresh copy whose creation advances the journal. */
+const keepBothReceipt: s.NativeCheck = (v) =>
+  s.object(
+    {
+      status: s.literal('resolved'),
+      change_id: s.uuid,
+      conflict_id: s.uuid,
+      version: s.nullable(remote),
+      sequence: s.sequence,
+      copy_memory_id: s.identifier,
+      copy_version: copyVersion,
+    },
+    {},
+    true,
+  )(v) &&
+  (v as Record<string, unknown>).copy_memory_id ===
+    ((v as Record<string, unknown>).copy_version as Record<string, unknown>).memory_id;
 export const cloudReceipt: s.NativeCheck = (v) =>
-  appliedReceipt(v) || (resolvedReceipt(v) && !Object.hasOwn(v as object, 'sequence'));
+  appliedReceipt(v) ||
+  keepBothReceipt(v) ||
+  (resolvedReceipt(v) &&
+    !Object.hasOwn(v as object, 'sequence') &&
+    !Object.hasOwn(v as object, 'copy_memory_id'));
 export const pushReceipt: s.NativeCheck = (v) =>
   appliedReceipt(v) ||
   s.object({ status: s.literal('conflict'), change_id: s.uuid, conflict_id: s.uuid }, {}, true)(v);

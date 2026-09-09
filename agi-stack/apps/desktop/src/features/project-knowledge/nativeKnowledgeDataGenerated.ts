@@ -121,7 +121,7 @@ export type NativeKnowledgeLocalChoice = ({
 
 // prettier-ignore
 export type NativeKnowledgeCloudChoice = ({
-  readonly decision: ("keep_current") | ("use_proposed");
+  readonly decision: ("keep_current") | ("use_proposed") | ("keep_both");
 }) | ({
   readonly decision: "merged";
   readonly content: NativeKnowledgeContent;
