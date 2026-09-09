@@ -18,6 +18,7 @@ from src.domain.ports.services.dead_letter_queue_port import (
     DeadLetterMessage,
     DLQMessageNotFoundError,
     DLQMessageStatus,
+    DLQRetryError,
 )
 from src.infrastructure.adapters.primary.web.admin_dlq_application_authority_v2 import (
     AdminDlqApplicationAuthorityV2,
@@ -247,6 +248,11 @@ async def retry_message(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("DLQ message not found"),
+        ) from None
+    except DLQRetryError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_("DLQ message cannot be retried in its current state"),
         ) from None
 
 
