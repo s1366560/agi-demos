@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4, uuid5
 
 import pytest
 from sqlalchemy import select
@@ -330,3 +330,132 @@ async def test_edit_share_does_not_grant_delete_permission(
     with pytest.raises(KnowledgeSyncError, match="forbidden"):
         await repo.mutate(other, str(uuid4()), mutation("delete", 1))
     assert await db.get(Memory, "sync-memory-1") is not None
+
+
+async def test_keep_both_preserves_both_versions_and_replays_exact_receipt(
+    db: AsyncSession, sync_scope: KnowledgeSyncScope
+) -> None:
+    repo = SqlKnowledgeSyncRepository(db)
+    await repo.mutate(sync_scope, str(uuid4()), mutation())
+    await repo.mutate(sync_scope, str(uuid4()), mutation("update", 1, "Cloud edit"))
+    conflict = await repo.mutate(sync_scope, str(uuid4()), mutation("update", 1, "Offline edit"))
+    await db.commit()
+    conflict_id = conflict.to_dict()["receipt"]["conflict_id"]
+    key = str(uuid4())
+    resolution = KnowledgeSyncResolution(
+        conflict_id=conflict_id, expected_current_revision=2, decision="keep_both"
+    )
+    resolved = await repo.resolve(sync_scope, key, resolution)
+    await db.commit()
+    receipt = resolved.to_dict()["receipt"]
+    assert receipt["status"] == "resolved"
+    assert receipt["conflict_id"] == conflict_id
+    assert receipt["version"]["revision"] == 2
+    assert receipt["version"]["content"]["title"] == "Cloud edit"
+    copy_id = receipt["copy_memory_id"]
+    assert copy_id == str(uuid5(UUID(conflict_id), "keep-both-copy"))
+    assert copy_id != "sync-memory-1"
+    saved_version = receipt["copy_version"]
+    assert saved_version["memory_id"] == copy_id
+    assert saved_version["revision"] == 1 and not saved_version["deleted"]
+    assert saved_version["author_id"] == sync_scope.actor_id
+    assert saved_version["content"]["title"] == "Offline edit"
+    original = await db.get(Memory, "sync-memory-1")
+    assert original is not None and original.title == "Cloud edit" and original.version == 2
+    saved = await db.get(Memory, copy_id)
+    assert saved is not None and saved.title == "Offline edit" and saved.version == 1
+    assert saved.project_id == sync_scope.project_id
+    changes = (await repo.changes(sync_scope, 0, 100)).to_dict()["changes"]
+    assert changes[-1]["sequence"] == receipt["sequence"]
+    assert changes[-1]["version"]["memory_id"] == copy_id
+    assert (await repo.resolve(sync_scope, key, resolution)).receipt_json == resolved.receipt_json
+    with pytest.raises(KnowledgeSyncError, match="conflict_resolved"):
+        await repo.resolve(sync_scope, str(uuid4()), resolution)
+    followup = await repo.mutate(sync_scope, str(uuid4()), mutation("update", 2, "After copy"))
+    assert followup.to_dict()["receipt"]["version"]["revision"] == 3
+
+
+async def test_keep_both_stale_revision_rejects_without_copy_and_keeps_object_paused(
+    db: AsyncSession, sync_scope: KnowledgeSyncScope
+) -> None:
+    repo = SqlKnowledgeSyncRepository(db)
+    await repo.mutate(sync_scope, str(uuid4()), mutation())
+    await repo.mutate(sync_scope, str(uuid4()), mutation("update", 1, "Cloud edit"))
+    conflict = await repo.mutate(sync_scope, str(uuid4()), mutation("update", 1, "Offline edit"))
+    await db.commit()
+    conflict_id = conflict.to_dict()["receipt"]["conflict_id"]
+    with pytest.raises(KnowledgeSyncError, match="resolution_stale"):
+        await repo.resolve(
+            sync_scope,
+            str(uuid4()),
+            KnowledgeSyncResolution(
+                conflict_id=conflict_id, expected_current_revision=1, decision="keep_both"
+            ),
+        )
+    document = await repo.conflict(sync_scope, conflict_id)
+    assert document["resolved_change_id"] is None
+    assert (await repo.changes(sync_scope, 0, 100)).next_cursor == 2
+    with pytest.raises(KnowledgeSyncError, match="conflict_pending"):
+        await repo.mutate(sync_scope, str(uuid4()), mutation("update", 2, "Bypass"))
+    resolved = await repo.resolve(
+        sync_scope,
+        str(uuid4()),
+        KnowledgeSyncResolution(
+            conflict_id=conflict_id, expected_current_revision=2, decision="keep_both"
+        ),
+    )
+    assert resolved.to_dict()["receipt"]["status"] == "resolved"
+
+
+async def test_keep_both_delete_proposal_fails_closed_without_touching_either_version(
+    db: AsyncSession, sync_scope: KnowledgeSyncScope
+) -> None:
+    repo = SqlKnowledgeSyncRepository(db)
+    await repo.mutate(sync_scope, str(uuid4()), mutation())
+    await repo.mutate(sync_scope, str(uuid4()), mutation("update", 1, "Cloud edit"))
+    conflict = await repo.mutate(sync_scope, str(uuid4()), mutation("delete", 1))
+    await db.commit()
+    conflict_id = conflict.to_dict()["receipt"]["conflict_id"]
+    with pytest.raises(KnowledgeSyncError, match="input_invalid"):
+        await repo.resolve(
+            sync_scope,
+            str(uuid4()),
+            KnowledgeSyncResolution(
+                conflict_id=conflict_id, expected_current_revision=2, decision="keep_both"
+            ),
+        )
+    document = await repo.conflict(sync_scope, conflict_id)
+    assert document["resolved_change_id"] is None
+    original = await db.get(Memory, "sync-memory-1")
+    assert original is not None and original.title == "Cloud edit" and original.version == 2
+    assert (await repo.changes(sync_scope, 0, 100)).next_cursor == 2
+
+
+async def test_keep_both_revalidates_write_permission_at_resolution_time(
+    db: AsyncSession, sync_scope: KnowledgeSyncScope
+) -> None:
+    from sqlalchemy import update
+
+    from src.infrastructure.adapters.secondary.persistence.models import UserProject
+
+    repo = SqlKnowledgeSyncRepository(db)
+    await repo.mutate(sync_scope, str(uuid4()), mutation())
+    await repo.mutate(sync_scope, str(uuid4()), mutation("update", 1, "Cloud edit"))
+    conflict = await repo.mutate(sync_scope, str(uuid4()), mutation("update", 1, "Offline edit"))
+    await db.commit()
+    conflict_id = conflict.to_dict()["receipt"]["conflict_id"]
+    await db.execute(
+        update(UserProject).where(UserProject.user_id == sync_scope.actor_id).values(role="viewer")
+    )
+    await db.commit()
+    with pytest.raises(KnowledgeSyncError, match="forbidden"):
+        await repo.resolve(
+            sync_scope,
+            str(uuid4()),
+            KnowledgeSyncResolution(
+                conflict_id=conflict_id, expected_current_revision=2, decision="keep_both"
+            ),
+        )
+    document = await repo.conflict(sync_scope, conflict_id)
+    assert document["resolved_change_id"] is None
+    assert (await repo.changes(sync_scope, 0, 100)).next_cursor == 2

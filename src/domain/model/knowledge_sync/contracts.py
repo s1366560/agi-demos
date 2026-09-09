@@ -172,7 +172,7 @@ class MemorySyncVersion:
 class KnowledgeSyncResolution:
     conflict_id: str
     expected_current_revision: int
-    decision: Literal["keep_current", "use_proposed", "merged"]
+    decision: Literal["keep_current", "use_proposed", "merged", "keep_both"]
     content: MemorySyncContent | None = None
 
     def __post_init__(self) -> None:
@@ -180,7 +180,7 @@ class KnowledgeSyncResolution:
         if (
             type(self.expected_current_revision) is not int
             or not 0 <= self.expected_current_revision <= MAX_REVISION
-            or self.decision not in {"keep_current", "use_proposed", "merged"}
+            or self.decision not in {"keep_current", "use_proposed", "merged", "keep_both"}
             or (self.decision == "merged") != (self.content is not None)
         ):
             raise KnowledgeSyncError("knowledge_sync_input_invalid")

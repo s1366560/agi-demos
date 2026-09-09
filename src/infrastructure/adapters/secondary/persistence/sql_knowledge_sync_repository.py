@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
@@ -350,6 +350,7 @@ class SqlKnowledgeSyncRepository:
         version: MemorySyncVersion,
         *,
         retained_fields: dict[str, Any] | None = None,
+        receipt_override: dict[str, Any] | None = None,
     ) -> KnowledgeSyncOutcome:
         cursor = await self.db.get(
             Cursor, (scope.tenant_id, scope.project_id), populate_existing=True
@@ -377,7 +378,9 @@ class SqlKnowledgeSyncRepository:
             "sequence": cursor.sequence,
             "version": version.to_dict(),
         }
-        if retained_fields is not None:
+        if receipt_override is not None:
+            value = {**value, **receipt_override}
+        elif retained_fields is not None:
             value["retained_fields"] = retained_fields
         return await self._receipt(
             scope,
@@ -425,6 +428,8 @@ class SqlKnowledgeSyncRepository:
                 raise KnowledgeSyncError("knowledge_sync_conflict_resolved")
             if (current.revision if current else 0) != resolution.expected_current_revision:
                 raise KnowledgeSyncError("knowledge_sync_resolution_stale")
+            if resolution.decision == "keep_both" and proposed.content is None:
+                raise KnowledgeSyncError("knowledge_sync_input_invalid")
             row.resolved_change_id = change_id
             if resolution.decision == "keep_current":
                 return await self._receipt(
@@ -435,6 +440,26 @@ class SqlKnowledgeSyncRepository:
                         "status": "resolved",
                         "version": current.to_dict() if current else None,
                         "conflict_id": row.id,
+                    },
+                )
+            if resolution.decision == "keep_both":
+                # The cloud version stays intact; the proposed version survives as a
+                # new copy whose deterministic id is reserved by this conflict. The
+                # copy is a normal journal change, so every replica converges to both
+                # versions without overwriting either one.
+                copy_id = str(uuid5(UUID(row.id), "keep-both-copy"))
+                saved = await self._apply(scope, copy_id, None, proposed.content, deleted=False)
+                return await self._accepted(
+                    scope,
+                    change_id,
+                    request,
+                    saved,
+                    receipt_override={
+                        "status": "resolved",
+                        "version": current.to_dict() if current else None,
+                        "conflict_id": row.id,
+                        "copy_memory_id": copy_id,
+                        "copy_version": saved.to_dict(),
                     },
                 )
             content = resolution.content if resolution.decision == "merged" else proposed.content

@@ -60,7 +60,7 @@ class SyncResolutionBody(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     change_id: str
     expected_current_revision: int = Field(ge=0, le=MAX_REVISION)
-    decision: Literal["keep_current", "use_proposed", "merged"]
+    decision: Literal["keep_current", "use_proposed", "merged", "keep_both"]
     content: SyncContentBody | None = None
 
 
