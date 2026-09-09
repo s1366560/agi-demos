@@ -99,6 +99,13 @@
       "additionalProperties": false,
       "x-rust-type": "agistack_core::knowledge::sync::KnowledgeSyncLink"
     },
+    "NativeKnowledgeUnbindPolicy": {
+      "enum": [
+        "keep",
+        "delete"
+      ],
+      "x-rust-type": "agistack_core::knowledge::sync::KnowledgeUnbindPolicy"
+    },
     "NativeKnowledgeStatus": {
       "type": "object",
       "properties": {

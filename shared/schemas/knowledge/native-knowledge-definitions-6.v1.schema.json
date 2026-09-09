@@ -460,6 +460,23 @@
       "additionalProperties": false,
       "x-rust-name": "SyncLinkRequest"
     },
+    "NativeKnowledgeSyncUnbindRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeScope"
+        },
+        "policy": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeUnbindPolicy"
+        }
+      },
+      "required": [
+        "scope",
+        "policy"
+      ],
+      "additionalProperties": false,
+      "x-rust-name": "SyncUnbindRequest"
+    },
     "NativeKnowledgePushRequest": {
       "type": "object",
       "properties": {

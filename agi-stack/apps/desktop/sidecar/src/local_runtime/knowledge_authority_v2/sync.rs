@@ -5,9 +5,12 @@ use agistack_core::knowledge::sync::resolution::{
 };
 use agistack_core::knowledge::sync::{
     KnowledgeSyncLink, KnowledgeSyncOutboxChange, KnowledgeSyncRepository, KnowledgeSyncStatus,
+    KnowledgeUnbindPolicy,
 };
 
 use super::{KnowledgeAuthorityErrorV2, KnowledgeOperationV2};
+use crate::local_runtime::auth_context::AuthenticatedContext;
+use crate::local_runtime::LocalRuntimeState;
 use crate::trusted_session::TrustedSessionBroker;
 use agistack_core::knowledge::sync::push::{KnowledgePushReceipt, KnowledgePushRepository};
 
@@ -203,6 +206,35 @@ impl KnowledgeOperationV2 {
             .repository()?
             .configure_sync_link(&self.scope, link)
             .await?)
+    }
+
+    /// Local-only unbind: fencing, the explicit keep/delete choice, and the
+    /// association removal commit atomically while the caller's session,
+    /// membership, and generation fences are held through commit. No cloud
+    /// operation is attempted and downloaded copies are never wiped remotely.
+    pub(super) async fn sync_unbind(
+        &self,
+        state: &LocalRuntimeState,
+        auth: &AuthenticatedContext,
+        policy: KnowledgeUnbindPolicy,
+    ) -> Result<serde_json::Value, KnowledgeAuthorityErrorV2> {
+        self.authority.require_sync_release()?;
+        let repository = self.authority.repository()?;
+        let receipt = super::processing_context::with_read_current_checked(
+            self,
+            state,
+            auth,
+            true,
+            |_| Ok(()),
+            |clock| repository.unbind_sync_target_durable(&self.scope, policy, clock()?),
+        )?;
+        Ok(serde_json::json!({
+            "status": repository.sync_status(&self.scope).await?,
+            "association_state": "unbound",
+            "policy": policy,
+            "fenced_outbox": receipt.fenced_outbox,
+            "removed_local_copies": receipt.removed_local_copies,
+        }))
     }
 
     pub(super) async fn sync_outbox(

@@ -96,6 +96,18 @@
           "additionalProperties": false,
           "properties": {}
         },
+        "sync_unbind": {
+          "type": "object",
+          "properties": {
+            "policy": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeUnbindPolicy"
+            }
+          },
+          "required": [
+            "policy"
+          ],
+          "additionalProperties": false
+        },
         "sync_outbox": {
           "type": "object",
           "properties": {
@@ -265,6 +277,7 @@
         "sync_link",
         "sync_push",
         "sync_pull",
+        "sync_unbind",
         "sync_outbox",
         "remote_baseline",
         "push_conflicts",
@@ -414,6 +427,38 @@
             "applied",
             "conflicts",
             "has_more"
+          ],
+          "additionalProperties": false
+        },
+        "sync_unbind": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeStatus"
+            },
+            "association_state": {
+              "const": "unbound"
+            },
+            "policy": {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeUnbindPolicy"
+            },
+            "fenced_outbox": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "removed_local_copies": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "status",
+            "association_state",
+            "policy",
+            "fenced_outbox",
+            "removed_local_copies"
           ],
           "additionalProperties": false
         },
@@ -697,6 +742,7 @@
         "sync_link",
         "sync_push",
         "sync_pull",
+        "sync_unbind",
         "sync_outbox",
         "remote_baseline",
         "push_conflicts",

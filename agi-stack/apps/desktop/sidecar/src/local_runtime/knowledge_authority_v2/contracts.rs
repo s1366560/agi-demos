@@ -193,6 +193,13 @@ pub(crate) struct SyncLinkRequest {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct SyncUnbindRequest {
+    pub(crate) scope: KnowledgeOperationScopeV2,
+    pub(crate) policy: agistack_core::knowledge::sync::KnowledgeUnbindPolicy,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct PushRequest {
     pub(crate) scope: KnowledgeOperationScopeV2,
 }

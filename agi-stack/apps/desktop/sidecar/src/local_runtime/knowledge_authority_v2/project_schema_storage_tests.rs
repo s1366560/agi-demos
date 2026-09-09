@@ -68,7 +68,7 @@ async fn v14_project_schema_upgrade_backs_up_wal_and_keeps_new_authority_empty()
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .unwrap();
-    assert_eq!((version, heads, changes), (16, 0, 0));
+    assert_eq!((version, heads, changes), (17, 0, 0));
     drop(repo);
     let reopened = storage_lifecycle::open(&directory.0).unwrap();
     assert!(reopened

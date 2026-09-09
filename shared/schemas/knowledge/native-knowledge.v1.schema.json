@@ -178,6 +178,12 @@
     "NativeKnowledgeSyncLinkRequest": {
       "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeSyncLinkRequest"
     },
+    "NativeKnowledgeUnbindPolicy": {
+      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeUnbindPolicy"
+    },
+    "NativeKnowledgeSyncUnbindRequest": {
+      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeSyncUnbindRequest"
+    },
     "NativeKnowledgePushRequest": {
       "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgePushRequest"
     },
@@ -405,6 +411,15 @@
         "$ref": "#/$defs/NativeKnowledgeEnvelope"
       }
     },
+    "/api/v1/knowledge/sync-unbind": {
+      "method": "POST",
+      "request": {
+        "$ref": "#/$defs/NativeKnowledgeSyncUnbindRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/NativeKnowledgeEnvelope"
+      }
+    },
     "/api/v1/knowledge/sync-push": {
       "method": "POST",
       "request": {
@@ -621,6 +636,7 @@
     "sync_pull": "write",
     "sync_push": "write",
     "sync_status": "read",
+    "sync_unbind": "write",
     "text": "read",
     "update": "write",
     "view": "read",

@@ -466,3 +466,6 @@ mod sync_cloud_fixture;
 
 #[path = "sync_connection_tests.rs"]
 mod sync_connection_tests;
+
+#[path = "unbind_http_tests.rs"]
+mod unbind_http_tests;

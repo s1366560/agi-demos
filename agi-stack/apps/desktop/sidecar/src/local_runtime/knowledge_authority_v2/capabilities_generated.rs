@@ -54,6 +54,7 @@ pub(super) const WRITE_ACTIONS: &[&str] = &[
     "sync_link",
     "sync_pull",
     "sync_push",
+    "sync_unbind",
     "update",
 ];
 pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &[

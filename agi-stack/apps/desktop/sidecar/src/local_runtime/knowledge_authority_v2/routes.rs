@@ -52,6 +52,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
             Router::new()
                 .merge(sync_connection_routes::router())
                 .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
+                .route("/api/v1/knowledge/sync-unbind", post(unbind))
                 .route("/api/v1/knowledge/sync-push", post(push_once))
                 .route("/api/v1/knowledge/sync-pull", post(pull_once))
                 .route(
@@ -82,6 +83,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
 
 use super::contracts::{
     KnowledgeQuery, MutationRequest, PullRequest, PushRequest, QueryRequest, SyncLinkRequest,
+    SyncUnbindRequest,
 };
 
 type RouteResult = Result<Json<Value>, Response>;
@@ -254,6 +256,25 @@ async fn configure_sync_link(
         json!({"contract_version":VERSION,"scope":request.scope,"result": {
             "status":status,"association_state":"configured","remote_authorization":"unverified"
         }}),
+    ))
+}
+
+async fn unbind(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(lease): Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Json(request): Json<SyncUnbindRequest>,
+) -> RouteResult {
+    let operation = KnowledgeOperationV2::admit(lease, &authenticated, &request.scope)
+        .map_err(IntoResponse::into_response)?
+        .admit_capability(&state, &authenticated, "sync_unbind")
+        .map_err(IntoResponse::into_response)?;
+    let result = operation
+        .sync_unbind(&state, &authenticated, request.policy)
+        .await
+        .map_err(IntoResponse::into_response)?;
+    Ok(Json(
+        json!({"contract_version":VERSION,"scope":request.scope,"result":result}),
     ))
 }
 
