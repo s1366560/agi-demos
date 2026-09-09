@@ -604,6 +604,18 @@
             "expected_audit_attempt"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "const": "diagnostics_export"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "additionalProperties": false
         }
       ],
       "x-rust-name": "ProcessingQuery",

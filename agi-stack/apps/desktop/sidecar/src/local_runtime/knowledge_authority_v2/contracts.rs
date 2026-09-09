@@ -66,6 +66,7 @@ pub(crate) enum ProcessingQuery {
         source: agistack_core::knowledge::processing::ProcessingSource,
         expected_audit_attempt: u32,
     },
+    DiagnosticsExport {},
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

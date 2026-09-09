@@ -241,6 +241,289 @@
         "task"
       ],
       "additionalProperties": false
+    },
+    "NativeKnowledgeDiagnosticsExportApplication": {
+      "type": "object",
+      "properties": {
+        "module_ref": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "knowledge_schema_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "module_ref",
+        "service",
+        "version",
+        "knowledge_schema_version"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeDiagnosticsExportScope": {
+      "type": "object",
+      "properties": {
+        "tenant_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "context_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "profile_id": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "digest": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "project_id",
+        "context_revision",
+        "profile_id",
+        "generation",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeDiagnosticsExportProcessing": {
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingCoverage"
+        },
+        "last_success_ms": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failed": {
+          "type": "array",
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeProcessingFailureDetail"
+          },
+          "maxItems": 100
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "coverage",
+        "last_success_ms",
+        "failed",
+        "truncated"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeDiagnosticsExportIndex": {
+      "type": "object",
+      "properties": {
+        "configuration": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeEmbeddingConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active_build_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coverage": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeIndexCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_success_ms": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failed": {
+          "type": "array",
+          "items": {
+            "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeIndexFailureDetail"
+          },
+          "maxItems": 100
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "configuration",
+        "active_build_id",
+        "coverage",
+        "last_success_ms",
+        "failed",
+        "truncated"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeDiagnosticsExportSync": {
+      "type": "object",
+      "properties": {
+        "linked": {
+          "type": "boolean"
+        },
+        "pending_changes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pending_graph_changes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pull_conflicts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "push_conflicts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "graph_pull_conflicts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "graph_push_conflicts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pull_cursor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "graph_pull_cursor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "last_receipt_sequence": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "linked",
+        "pending_changes",
+        "pending_graph_changes",
+        "pull_conflicts",
+        "push_conflicts",
+        "graph_pull_conflicts",
+        "graph_push_conflicts",
+        "pull_cursor",
+        "graph_pull_cursor",
+        "last_receipt_sequence"
+      ],
+      "additionalProperties": false
+    },
+    "NativeKnowledgeDiagnosticsExport": {
+      "type": "object",
+      "properties": {
+        "diagnostics_export_version": {
+          "const": 1
+        },
+        "generated_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "application": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticsExportApplication"
+        },
+        "scope": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticsExportScope"
+        },
+        "processing": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticsExportProcessing"
+        },
+        "index": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticsExportIndex"
+        },
+        "sync": {
+          "anyOf": [
+            {
+              "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticsExportSync"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "diagnostics_export_version",
+        "generated_at_ms",
+        "application",
+        "scope",
+        "processing",
+        "index",
+        "sync"
+      ],
+      "additionalProperties": false
     }
   }
 }

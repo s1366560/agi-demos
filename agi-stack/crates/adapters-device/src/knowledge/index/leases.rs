@@ -116,6 +116,9 @@ impl SqliteKnowledgeRepository {
                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
                 params![b.scope.tenant_id,b.scope.project_id,b.build_id,i.source.change_sequence,i.audit_attempt,i.input_digest,lease.attempt,serde_json::to_string(vector).map_err(storage)?]).map_err(storage)?;
             finish(tx, lease, "completed", None)?;
+            tx.execute("UPDATE knowledge_index_jobs SET completed_at_ms=?1
+                WHERE tenant_id=?2 AND project_id=?3 AND build_id=?4 AND change_sequence=?5 AND audit_attempt=?6 AND input_digest=?7",
+                params![now,b.scope.tenant_id,b.scope.project_id,b.build_id,i.source.change_sequence,i.audit_attempt,i.input_digest]).map_err(storage)?;
             Ok(((), Some(expires)))
         })
     }
@@ -155,7 +158,7 @@ impl SqliteKnowledgeRepository {
             if status.state != IndexJobState::Failed || status.attempt != expected_attempt {
                 return Err(KnowledgeError::Conflict);
             };
-            tx.execute("UPDATE knowledge_index_jobs SET state='pending',failure_json=NULL WHERE tenant_id=?1 AND project_id=?2 AND build_id=?3
+            tx.execute("UPDATE knowledge_index_jobs SET state='pending',failure_json=NULL,completed_at_ms=NULL WHERE tenant_id=?1 AND project_id=?2 AND build_id=?3
                 AND change_sequence=?4 AND audit_attempt=?5 AND input_digest=?6",
                 params![build.scope.tenant_id,build.scope.project_id,build.build_id,input.source.change_sequence,input.audit_attempt,input.input_digest]).map_err(storage)?;
             Ok(((), None))

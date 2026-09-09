@@ -6,12 +6,16 @@ pub(in super::super) fn migrate(tx: &Transaction<'_>, previous: i64) -> Knowledg
         "SELECT count(*) FROM pragma_table_info('knowledge_index_jobs') WHERE name='config_revision'",
         [], |row| row.get(0),
     ).map_err(storage)?;
+    let completed: i64 = tx.query_row(
+        "SELECT count(*) FROM pragma_table_info('knowledge_index_jobs') WHERE name='completed_at_ms'",
+        [], |row| row.get(0),
+    ).map_err(storage)?;
     let tables: i64 = tx.query_row(
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='knowledge_index_configuration'",
         [], |row| row.get(0),
     ).map_err(storage)?;
-    if previous >= 11 {
-        return if columns == 1 && tables == 1 {
+    if previous >= 19 {
+        return if columns == 1 && tables == 1 && completed == 1 {
             Ok(())
         } else {
             Err(KnowledgeError::Storage(
@@ -19,10 +23,28 @@ pub(in super::super) fn migrate(tx: &Transaction<'_>, previous: i64) -> Knowledg
             ))
         };
     }
+    if previous >= 11 {
+        if columns != 1 || tables != 1 {
+            return Err(KnowledgeError::Storage(
+                "knowledge index configuration schema is missing".into(),
+            ));
+        }
+        if completed == 0 {
+            tx.execute_batch("ALTER TABLE knowledge_index_jobs ADD COLUMN completed_at_ms INTEGER CHECK(completed_at_ms>=0);")
+                .map_err(storage)?;
+        }
+        return Ok(());
+    }
     // Existing leases retain NULL and cannot be completed after migration.
     // Selection must be explicit; no active pointer is treated as user intent.
     if columns == 0 {
         tx.execute_batch("ALTER TABLE knowledge_index_jobs ADD COLUMN config_revision INTEGER CHECK(config_revision>0);")
+            .map_err(storage)?;
+    }
+    // Index completion timestamps exist from schema 19; earlier completions
+    // stay NULL and diagnostics report them as unrecorded.
+    if completed == 0 {
+        tx.execute_batch("ALTER TABLE knowledge_index_jobs ADD COLUMN completed_at_ms INTEGER CHECK(completed_at_ms>=0);")
             .map_err(storage)?;
     }
     tx.execute_batch(

@@ -8,6 +8,8 @@ use super::*;
 mod commands;
 #[path = "community_routes.rs"]
 mod community;
+#[path = "diagnostics_export.rs"]
+mod diagnostics_export;
 #[path = "graph_source_routes.rs"]
 mod graph_source;
 pub(super) use commands::command;
@@ -46,6 +48,9 @@ pub(super) async fn query(
         | ProcessingQuery::CommunityAudit { .. }) => {
             community::query(&operation, &state, &auth, query)
                 .map_err(IntoResponse::into_response)?
+        }
+        ProcessingQuery::DiagnosticsExport {} => {
+            return diagnostics_export::query(&operation, &state, &auth, &body.scope).await;
         }
         ProcessingQuery::Configuration {} => {
             let status =

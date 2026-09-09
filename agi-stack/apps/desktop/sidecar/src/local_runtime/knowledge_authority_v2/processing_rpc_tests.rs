@@ -11,6 +11,8 @@ mod admission;
 mod processing_retry;
 #[path = "diagnostics_rpc_tests.rs"]
 mod diagnostics;
+#[path = "diagnostics_export_rpc_tests.rs"]
+mod diagnostics_export;
 
 async fn request(
     state: Arc<LocalRuntimeState>,

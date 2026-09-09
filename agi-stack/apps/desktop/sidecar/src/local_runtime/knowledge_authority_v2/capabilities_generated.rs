@@ -7,6 +7,7 @@ pub(super) const READ_ACTIONS: &[&str] = &[
     "community_build",
     "community_builds",
     "configuration",
+    "diagnostics_export",
     "entities",
     "failed_index",
     "failed_processing",
@@ -77,6 +78,7 @@ pub(super) const LOCAL_ACCEPTANCE_ACTIONS: &[&str] = &[
     "create",
     "create_community_build",
     "delete",
+    "diagnostics_export",
     "entities",
     "failed_index",
     "failed_processing",
@@ -117,6 +119,7 @@ impl ProcessingQuery {
             Self::CommunityAudit { .. } => "community_audit",
             Self::CommunityBuilds { .. } => "community_builds",
             Self::GraphSource { .. } => "graph_source",
+            Self::DiagnosticsExport { .. } => "diagnostics_export",
         }
     }
 }

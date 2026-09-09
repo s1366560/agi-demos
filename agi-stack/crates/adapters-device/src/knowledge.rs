@@ -14,6 +14,10 @@ use rusqlite::{params, Connection, OptionalExtension};
 mod cloud_resolution;
 mod community;
 mod diagnostics;
+mod diagnostics_export;
+#[cfg(test)]
+#[path = "knowledge/diagnostics_export_tests.rs"]
+mod diagnostics_export_tests;
 mod graph_pull;
 mod graph_push;
 mod graph_resolution;
@@ -31,7 +35,9 @@ mod sync;
 mod sync_binding;
 mod unbind;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 18;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 19;
+
+pub use diagnostics_export::{DiagnosticsSuccessTimestamps, SyncDiagnostics};
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,

@@ -634,6 +634,12 @@
             "expected_audit_attempt"
           ],
           "additionalProperties": false
+        },
+        "diagnostics_export": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -976,6 +982,9 @@
         },
         "graph_source": {
           "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeSourceGraph"
+        },
+        "diagnostics_export": {
+          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeDiagnosticsExport"
         }
       },
       "required": [
