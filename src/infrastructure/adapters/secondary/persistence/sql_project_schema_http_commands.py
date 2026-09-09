@@ -88,8 +88,6 @@ class SqlProjectSchemaHttpCommands:
         # The command already copied provided fields into immutable JSON before this await.
         await self.authorization.authorize(scope, ProjectSchemaAction.REPLACE)
         async with self.sessions() as db:
-            if db.get_bind().dialect.name != "postgresql":
-                raise ProjectSchemaError("project_schema_postgresql_required")
             transaction = await db.begin()
             await lock_scope(db, scope)
             head = await load_head(db, scope)
@@ -100,6 +98,8 @@ class SqlProjectSchemaHttpCommands:
                 # These methods retain their existing internal commit/refresh behavior.
                 # They run in this isolated session under the same bootstrap lock.
                 return await legacy(db)
+            if db.get_bind().dialect.name != "postgresql":
+                raise ProjectSchemaError("project_schema_postgresql_required")
             try:
                 request_json = command.request_json()
             except ProjectSchemaError as error:

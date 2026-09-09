@@ -124,6 +124,11 @@ def _timestamps(value: dict[str, str | None]) -> dict[str, datetime | None]:
 async def active_schema_snapshot(
     session: AsyncSession, project_id: str, *, tenant_id: str | None = None
 ) -> ActiveSchemaSnapshot | None:
+    if session.get_bind().dialect.name != "postgresql":
+        # The document rebuild functions behind _SNAPSHOT are PostgreSQL-only, and
+        # commands require PostgreSQL, so no active head can exist on another
+        # dialect. Returning None keeps unenrolled projects on the legacy path.
+        return None
     with session.no_autoflush:
         result = await session.execute(_SNAPSHOT, {"project_id": project_id})
     row = result.mappings().one_or_none()
