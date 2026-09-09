@@ -1089,3 +1089,34 @@ prepared or activated by these tests.
 
 Subsequent cloud/native route, processing UI and continuous-owner implementation
 evidence is recorded in [the September 8 follow-up](knowledge-automation-followup-2026-09-08.md).
+
+### Branch hygiene audit and residual integration (2026-09-09)
+
+Audited all 59 branches reported unmerged against `594217a0a`. 57 are historical
+slices whose commits are patch-equivalent to cherry-picks already on main (cron
+readiness/cutover, knowledge CRUD/processing, sync, local intelligence, contracts,
+graph, QA tooling). Merging any of them would reintroduce stale file versions;
+they are retained for reference only and must not be merged.
+
+Two genuine residuals were integrated as independent batches:
+
+- `99fccbbba` commits the pure cross-scope project-schema history projection
+  (bootstrap scope transfer, single-transition successor projection preserving
+  tombstone deletion revisions, equivalence rejecting gaps/scope drift/exhausted
+  counters). It grants no receipt-authenticity, authorization or CAS rights and
+  has no consumers yet; transport and sync consumers remain the next schema-sync
+  batch. Evidence: 5 projection tests + shared contract fixture test passed.
+- `codex/desktop-local-mode-qa` was rebased as `c0fab37dc`, `19070a797` and
+  `a925a96df`: cargo.sh isolated-bootstrap now installs the one-time toolchain
+  through the rustup proxy CARGO_HOME; the sidecar supervisor awaits Workspace
+  Core initial readiness with a bounded fail-closed timeout; the desktop API
+  client tolerates an explicit null workspace policy. The branch's task-session
+  saga and workspace-name pair rule were verified superseded by main's stronger
+  store-level idempotency and deliberate nullable workspace-name contract, and
+  were not re-applied. Evidence: sidecar 847 passed, Desktop 4576 passed /
+  3 skipped, cargo.sh wrapper test passed.
+
+GitNexus impact/detect-changes could not run (index WAL failure); scope was
+verified from source and the full sidecar/Desktop suites instead. Rollback:
+revert each batch commit independently; no migrations or accepted-task state are
+involved.
