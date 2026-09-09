@@ -515,6 +515,9 @@
                 },
                 {
                   "const": "use_proposed"
+                },
+                {
+                  "const": "keep_both"
                 }
               ]
             }
