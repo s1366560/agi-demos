@@ -52,6 +52,10 @@ impl<'a> ValidatedMutation<'a> {
         })
     }
 
+    pub(super) fn as_request_json(&self) -> &str {
+        &self.request
+    }
+
     /// The caller owns authorization/deadline checks and the enclosing commit.
     /// Any later composition failure must roll back this same transaction.
     pub(super) fn apply_in_tx(

@@ -16,6 +16,7 @@ mod bounded;
 mod mutation;
 mod read;
 mod schema;
+pub mod sync;
 mod types;
 pub(super) use schema::migrate;
 pub use types::{

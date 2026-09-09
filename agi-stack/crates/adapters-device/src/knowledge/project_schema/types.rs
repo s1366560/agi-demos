@@ -11,6 +11,8 @@ pub enum ProjectSchemaStorageError {
     Document(#[from] ProjectSchemaError),
     #[error("project_schema_change_id_reused")]
     ChangeIdReused,
+    #[error("project_schema_sync_conflict")]
+    SyncConflict,
     #[error("project_schema_admission_changed")]
     AdmissionChanged,
     #[error("project_schema_response_too_large")]

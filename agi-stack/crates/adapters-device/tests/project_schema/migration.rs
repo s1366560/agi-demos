@@ -78,7 +78,7 @@ fn additive_v14_upgrade_preserves_memory_receipts_processing_and_sync_rows() {
         .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
         .unwrap();
     assert_eq!(version, KNOWLEDGE_SCHEMA_VERSION);
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
     assert_eq!(
         serde_json::to_value(block_on(repo.get(&scope(), &memory.id)).unwrap().unwrap()).unwrap(),
         serde_json::to_value(memory).unwrap()

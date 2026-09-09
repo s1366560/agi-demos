@@ -35,6 +35,21 @@ There is no API or capability registration, default activation, sync association
 transport outbox, scheduler, cloud dispatch, or automatic/semantic merge here.
 The local journal is durable history only and is not evidence of synchronization.
 
+Knowledge schema version 16 adds durable schema synchronization state under the
+existing Memory sync binding: an epoch-fenced cursor, immutable prepared
+transfer intent (at most one pending step), and immutable acceptance anchors
+mapping native and cloud receipt revisions. SQLite triggers require the Memory
+link/target association, chain every cursor advance to exactly one new anchor,
+and reject any direct cursor, intent or anchor mutation. Pull initialization
+and apply verify every presented cloud receipt through the pure cross-scope
+projection (`agistack_core::project_schema::projection`) before any local
+acceptance; bootstrap never overwrites a divergent non-empty native scope, an
+accepted empty native seed receives the source root as the next revision, and
+already equivalent heads bind without a write. A moved local head conflicts and
+is never rebased. Cloud-bound steps persist their exact request bytes so an
+uncertain remote outcome can be recovered by explicit receipt lookup. Native
+intent, acceptance, anchor and cursor advance commit in one transaction.
+
 The sidecar now has a dormant internal `ProjectSchemaOperationV2` wrapper. Its
 admission checks the live local session, workspace context and exact project
 generation before opening storage. Each operation repeats live read/write role

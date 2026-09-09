@@ -144,6 +144,24 @@ pub(super) fn receipt(
         .transpose()
 }
 
+/// Re-derive a journaled receipt from its exact persisted JSON, requiring the
+/// immutable journal itself to confirm the same actor, change and bytes.
+pub(super) fn journal_receipt_by_json(
+    tx: &Transaction<'_>,
+    scope: &KnowledgeScope,
+    json: &str,
+) -> ProjectSchemaStorageResult<ProjectSchemaReceipt> {
+    let body: ReceiptBody = serde_json::from_value(canonical_value(json)?)
+        .map_err(|_| ProjectSchemaStorageError::CorruptStorage)?;
+    let Some((_, receipt)) = receipt(tx, scope, &body.actor_id, &body.change_id)? else {
+        return Err(ProjectSchemaStorageError::CorruptStorage);
+    };
+    if receipt.as_json() != json || receipt.sequence() != body.sequence {
+        return Err(ProjectSchemaStorageError::CorruptStorage);
+    }
+    Ok(receipt)
+}
+
 pub(super) fn revision(
     tx: &Transaction<'_>,
     scope: &KnowledgeScope,
