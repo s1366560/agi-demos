@@ -25,6 +25,7 @@ pub struct KnowledgeSyncStatus {
     pub replica_id: String,
     pub link: Option<KnowledgeSyncLink>,
     pub pending_changes: u64,
+    pub pending_graph_changes: u64,
 }
 
 /// Explicit user choice for the locally downloaded copies at unbind time.
@@ -47,6 +48,7 @@ pub struct KnowledgeUnbindReceipt {
     pub link: KnowledgeSyncLink,
     pub policy: KnowledgeUnbindPolicy,
     pub fenced_outbox: u64,
+    pub fenced_graph_outbox: u64,
     pub removed_local_copies: u64,
 }
 
@@ -78,4 +80,6 @@ pub trait KnowledgeSyncRepository: Send + Sync {
 }
 
 pub mod cloud_resolution;
+pub mod graph;
+pub mod graph_resolution;
 pub mod resolution;

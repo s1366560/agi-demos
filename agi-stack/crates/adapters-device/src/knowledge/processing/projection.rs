@@ -64,6 +64,10 @@ pub(super) fn publish(
          DO UPDATE SET revision=excluded.revision,change_sequence=excluded.change_sequence,projection_json=excluded.projection_json",
         params![scope.tenant_id,scope.project_id,source.memory_id,source.revision,source.change_sequence,json],
     ).map_err(storage)?;
+    // The accepted projection is local-origin derived work: enqueue it for
+    // derived-record sync in the same transaction. Remote applies never pass
+    // through this path, so no echo can enter the outbox.
+    super::super::graph_sync::enqueue_local(tx, scope, source, lease.attempt, output)?;
     Ok(())
 }
 

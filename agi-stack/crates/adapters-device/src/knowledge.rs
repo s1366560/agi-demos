@@ -14,6 +14,10 @@ use rusqlite::{params, Connection, OptionalExtension};
 mod cloud_resolution;
 mod community;
 mod diagnostics;
+mod graph_pull;
+mod graph_push;
+mod graph_resolution;
+mod graph_sync;
 mod index;
 mod metadata;
 mod mutations;
@@ -27,7 +31,7 @@ mod sync;
 mod sync_binding;
 mod unbind;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 17;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 18;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -110,6 +114,7 @@ impl SqliteKnowledgeRepository {
         project_schema::migrate(&tx, version)?;
         project_schema::sync::migrate(&tx, version)?;
         unbind::migrate(&tx, version)?;
+        graph_sync::migrate(&tx, version)?;
         tx.execute(
             "UPDATE knowledge_schema SET version=?1",
             [KNOWLEDGE_SCHEMA_VERSION],

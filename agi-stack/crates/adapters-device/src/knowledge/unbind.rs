@@ -122,12 +122,24 @@ impl SqliteKnowledgeRepository {
                 params![scope.tenant_id, scope.project_id],
             )
             .map_err(storage)?;
+        let fenced_graph = tx
+            .execute(
+                "INSERT INTO knowledge_sync_graph_unbound_outbox(sequence)
+                 SELECT o.sequence FROM knowledge_sync_graph_outbox o
+                 WHERE o.tenant_id=?1 AND o.project_id=?2
+                 ON CONFLICT(sequence) DO NOTHING",
+                params![scope.tenant_id, scope.project_id],
+            )
+            .map_err(storage)?;
         for statement in [
             "DELETE FROM knowledge_sync_links WHERE tenant_id=?1 AND project_id=?2",
             "DELETE FROM knowledge_sync_targets WHERE tenant_id=?1 AND project_id=?2",
             "DELETE FROM knowledge_sync_pull_cursors WHERE tenant_id=?1 AND project_id=?2",
             "DELETE FROM knowledge_sync_pull_events WHERE tenant_id=?1 AND project_id=?2",
             "DELETE FROM knowledge_sync_pull_conflicts WHERE tenant_id=?1 AND project_id=?2",
+            "DELETE FROM knowledge_sync_graph_pull_cursors WHERE tenant_id=?1 AND project_id=?2",
+            "DELETE FROM knowledge_sync_graph_pull_events WHERE tenant_id=?1 AND project_id=?2",
+            "DELETE FROM knowledge_sync_graph_pull_conflicts WHERE tenant_id=?1 AND project_id=?2",
         ] {
             tx.execute(statement, params![scope.tenant_id, scope.project_id])
                 .map_err(storage)?;
@@ -146,6 +158,28 @@ impl SqliteKnowledgeRepository {
             )
             .map_err(storage)?;
             tx.execute(
+                "DELETE FROM knowledge_sync_graph_remote_versions
+                 WHERE tenant_id=?1 AND project_id=?2
+                   AND NOT EXISTS (
+                     SELECT 1 FROM knowledge_sync_graph_outbox o
+                     WHERE o.tenant_id=knowledge_sync_graph_remote_versions.tenant_id
+                       AND o.project_id=knowledge_sync_graph_remote_versions.project_id
+                       AND o.object_id=knowledge_sync_graph_remote_versions.object_id)",
+                params![scope.tenant_id, scope.project_id],
+            )
+            .map_err(storage)?;
+            tx.execute(
+                "UPDATE knowledge_sync_graph_objects SET deleted=1
+                 WHERE tenant_id=?1 AND project_id=?2 AND deleted=0
+                   AND NOT EXISTS (
+                     SELECT 1 FROM knowledge_sync_graph_outbox o
+                     WHERE o.tenant_id=knowledge_sync_graph_objects.tenant_id
+                       AND o.project_id=knowledge_sync_graph_objects.project_id
+                       AND o.object_id=knowledge_sync_graph_objects.object_id)",
+                params![scope.tenant_id, scope.project_id],
+            )
+            .map_err(storage)?;
+            tx.execute(
                 &format!(
                     "UPDATE knowledge_memories SET deleted=1
                      WHERE tenant_id=?1 AND project_id=?2 AND deleted=0 AND {}",
@@ -157,8 +191,9 @@ impl SqliteKnowledgeRepository {
         } else {
             0
         };
-        let (fenced_outbox, removed_local_copies) = (
+        let (fenced_outbox, fenced_graph_outbox, removed_local_copies) = (
             u64::try_from(fenced).map_err(storage)?,
+            u64::try_from(fenced_graph).map_err(storage)?,
             u64::try_from(removed).map_err(storage)?,
         );
         tx.execute(
@@ -188,6 +223,7 @@ impl SqliteKnowledgeRepository {
             link,
             policy,
             fenced_outbox,
+            fenced_graph_outbox,
             removed_local_copies,
         })
     }

@@ -61,7 +61,7 @@ pub(super) fn migrate(tx: &Transaction<'_>, previous_version: i64) -> KnowledgeR
     Ok(())
 }
 
-fn replica(conn: &Connection) -> KnowledgeResult<Uuid> {
+pub(super) fn replica(conn: &Connection) -> KnowledgeResult<Uuid> {
     let value: String = conn
         .query_row(
             "SELECT replica_id FROM knowledge_replica WHERE singleton=1",
@@ -100,10 +100,12 @@ pub(super) fn status(
             |row| row.get(0),
         )
         .map_err(storage)?;
+    let pending_graph_changes = super::graph_sync::pending_count(conn, scope)?;
     Ok(KnowledgeSyncStatus {
         replica_id: replica(conn)?.to_string(),
         link,
         pending_changes,
+        pending_graph_changes,
     })
 }
 
