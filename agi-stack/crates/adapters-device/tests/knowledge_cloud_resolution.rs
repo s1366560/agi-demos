@@ -134,6 +134,8 @@ fn merged() -> KnowledgeMergeContent {
 mod choices;
 #[path = "knowledge_cloud_resolution/guards.rs"]
 mod guards;
+#[path = "knowledge_cloud_resolution/keep_both.rs"]
+mod keep_both;
 #[path = "knowledge_cloud_resolution/persistence.rs"]
 mod persistence;
 

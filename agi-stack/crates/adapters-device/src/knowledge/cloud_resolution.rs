@@ -83,13 +83,20 @@ pub(super) fn accept_journal(
 ) -> KnowledgeResult<()> {
     let actor:Option<String>=tx.query_row("SELECT actor_id FROM knowledge_cloud_resolutions WHERE tenant_id=?1 AND project_id=?2 AND resolution_id=?3",params![scope.tenant_id,scope.project_id,id],|r|r.get(0)).optional().map_err(storage)?;
     if let Some(actor) = actor {
-        receipt::accept(
-            tx,
-            scope,
-            &actor,
-            id,
-            json!({"replayed":false,"receipt":{"status":"applied","change_id":id,"sequence":sequence,"version":version}}),
-        )?;
+        // A keep-both resolution echoes the saved copy, not the paused object.
+        // Rebuild the resolved receipt deterministically so a lost HTTP response
+        // recovers through the same fail-closed validation as the live response.
+        let record = load(tx, scope, &actor, id)?;
+        let receipt = if matches!(record.command.choice, KnowledgeCloudChoice::KeepBoth {}) {
+            json!({"status":"resolved","change_id":id,"conflict_id":record.command.conflict_id,
+                   "version":record.archive.remote.clone().unwrap_or(Value::Null),
+                   "sequence":sequence,
+                   "copy_memory_id":version["memory_id"].clone(),
+                   "copy_version":version})
+        } else {
+            json!({"status":"applied","change_id":id,"sequence":sequence,"version":version})
+        };
+        receipt::accept(tx, scope, &actor, id, json!({"replayed":false,"receipt":receipt}))?;
     }
     Ok(())
 }

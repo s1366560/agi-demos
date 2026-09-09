@@ -26,14 +26,21 @@ pub(super) fn prepare(
     if blocked {
         return Err(KnowledgeError::Conflict);
     }
-    if !matches!(command.choice, KnowledgeCloudChoice::KeepCurrent {})
-        && command.guard.expected_remote_revision >= MAX_REMOTE_REVISION
+    if !matches!(
+        command.choice,
+        KnowledgeCloudChoice::KeepCurrent {} | KnowledgeCloudChoice::KeepBoth {}
+    ) && command.guard.expected_remote_revision >= MAX_REMOTE_REVISION
     {
         return Err(KnowledgeError::InvalidInput);
     }
     if matches!(command.choice, KnowledgeCloudChoice::UseProposed {})
         && ctx.original_request["operation"] == "delete"
         && ctx.remote.is_none()
+    {
+        return Err(KnowledgeError::InvalidInput);
+    }
+    if matches!(command.choice, KnowledgeCloudChoice::KeepBoth {})
+        && ctx.original_request["operation"] == "delete"
     {
         return Err(KnowledgeError::InvalidInput);
     }
@@ -52,6 +59,7 @@ pub(super) fn prepare(
     let (decision, content) = match &command.choice {
         KnowledgeCloudChoice::KeepCurrent {} => ("keep_current", Value::Null),
         KnowledgeCloudChoice::UseProposed {} => ("use_proposed", Value::Null),
+        KnowledgeCloudChoice::KeepBoth {} => ("keep_both", Value::Null),
         KnowledgeCloudChoice::Merged { content } => {
             ("merged", serde_json::to_value(content).map_err(storage)?)
         }

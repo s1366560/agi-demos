@@ -21,6 +21,44 @@ fn validate(
         }
         return Ok(previous.clone());
     }
+    if matches!(record.command.choice, KnowledgeCloudChoice::KeepBoth {}) {
+        // The cloud object stays paused at its observed version while the proposed
+        // content survives as a new copy. The copy must echo the pushed bytes and
+        // advance the journal so every replica converges to both versions.
+        let sequence = receipt["sequence"]
+            .as_i64()
+            .filter(|s| *s > 0 && (*s as u64) > record.archive.observed_cursor);
+        if receipt["status"] != "resolved"
+            || receipt["conflict_id"] != record.command.conflict_id
+            || sequence.is_none()
+            || value != previous.as_ref().unwrap_or(&Value::Null)
+        {
+            return Err(KnowledgeError::InvalidInput);
+        }
+        let copy_id = receipt["copy_memory_id"]
+            .as_str()
+            .ok_or(KnowledgeError::InvalidInput)?;
+        valid_identifier(copy_id)?;
+        if copy_id == record.command.memory_id {
+            return Err(KnowledgeError::InvalidInput);
+        }
+        let copy = context::remote(
+            receipt.get("copy_version").ok_or(KnowledgeError::InvalidInput)?,
+            copy_id,
+        )?;
+        let expected: RemoteMemoryContent =
+            serde_json::from_value(record.archive.original_request["content"].clone())
+                .map_err(|_| KnowledgeError::InvalidInput)?;
+        let actor: String = tx.query_row("SELECT remote_actor_id FROM knowledge_sync_links WHERE tenant_id=?1 AND project_id=?2",params![scope.tenant_id,scope.project_id],|r|r.get(0)).map_err(storage)?;
+        if copy.revision != 1
+            || copy.deleted
+            || copy.author_id != actor
+            || copy.content != expected
+        {
+            return Err(KnowledgeError::InvalidInput);
+        }
+        return Ok(previous.clone());
+    }
     if receipt["status"] != "applied"
         || receipt["sequence"]
             .as_i64()
@@ -66,7 +104,9 @@ fn validate(
             serde_json::from_value(record.archive.original_request["content"].clone())
                 .map_err(|_| KnowledgeError::InvalidInput)?
         }
-        KnowledgeCloudChoice::KeepCurrent {} => return Err(KnowledgeError::InvalidInput),
+        KnowledgeCloudChoice::KeepCurrent {} | KnowledgeCloudChoice::KeepBoth {} => {
+            return Err(KnowledgeError::InvalidInput)
+        }
     };
     if remote.deleted != deleting || remote.content != expected {
         return Err(KnowledgeError::InvalidInput);

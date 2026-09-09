@@ -19,6 +19,8 @@ pub enum KnowledgeCloudChoice {
     KeepCurrent {},
     UseProposed {},
     Merged { content: KnowledgeMergeContent },
+    /// The cloud keeps its version and saves the proposed version as a copy.
+    KeepBoth {},
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
