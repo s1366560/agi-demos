@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{KnowledgeResult, KnowledgeScope, MemoryChange};
 
-pub mod push;
 pub mod pull;
+pub mod push;
 
 /// Explicit user-selected association. Configured does not mean the remote
 /// actor or project has been authenticated. Rebinding requires a future
@@ -25,6 +25,29 @@ pub struct KnowledgeSyncStatus {
     pub replica_id: String,
     pub link: Option<KnowledgeSyncLink>,
     pub pending_changes: u64,
+}
+
+/// Explicit user choice for the locally downloaded copies at unbind time.
+/// Local copies are never remotely revocable; unbinding is a purely local
+/// lifecycle decision with no "remote wipe" semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KnowledgeUnbindPolicy {
+    /// Cloud-origin downloaded memories stay as ordinary local records.
+    Keep,
+    /// Cloud-origin memories are tombstoned out of visibility immediately.
+    /// Local-origin records are never removed by this path.
+    Delete,
+}
+
+/// Durable record of one atomic unbind: the removed association, the chosen
+/// policy, and the fencing applied to the previous binding's pending work.
+#[derive(Debug, Clone, Serialize)]
+pub struct KnowledgeUnbindReceipt {
+    pub link: KnowledgeSyncLink,
+    pub policy: KnowledgeUnbindPolicy,
+    pub fenced_outbox: u64,
+    pub removed_local_copies: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,5 +77,5 @@ pub trait KnowledgeSyncRepository: Send + Sync {
     ) -> KnowledgeResult<Vec<KnowledgeSyncOutboxChange>>;
 }
 
-pub mod resolution;
 pub mod cloud_resolution;
+pub mod resolution;
