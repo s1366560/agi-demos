@@ -1120,3 +1120,146 @@ GitNexus impact/detect-changes could not run (index WAL failure); scope was
 verified from source and the full sidecar/Desktop suites instead. Rollback:
 revert each batch commit independently; no migrations or accepted-task state are
 involved.
+
+## Consolidation batches (2026-09-09)
+
+Branch hygiene audit first established that 57 of the 59 unmerged `codex/*`
+branches were historical cherry-pick sources already on main; merging any of
+them would regress. The two genuine residuals were integrated (previous
+section). The batches below close the remaining implementation gaps named by
+the follow-up plan. GitNexus impact/detect-changes was unavailable all day
+(LadybugDB WAL recovery failure); every batch substituted source-level caller
+enumeration plus full per-crate/per-app test suites, per the plan's rule that a
+dead index is never evidence.
+
+### Schema sync consumers (B1)
+
+`d2044d55e`, `11df20c39`, `c0e09957c` consolidate the uncommitted schema-sync
+WIP from the two temporary worktrees: strict cloud schema RPC envelopes,
+durable device sync storage (schema v16) orchestrating pull-apply through the
+projection layer from `99fccbbba` (race-safe bootstrap, empty-seed successor,
+equivalent-head binding, fail-closed moved heads, single-transaction
+intent+acceptance+anchor+cursor commits), and a closed sidecar transport view
+that sends prepared bytes once and recovers uncertainty only via receipt
+lookup. Admission/capability posture unchanged (closed). Evidence: core 104,
+adapters-device 74, sidecar 851 passed; strict clippy clean.
+
+### Sync unbind with explicit copy disposition (B2)
+
+`8dc141eb9`, `77c6c2134`, `c0b551b7f` add the unbind lifecycle the plan
+requires: one atomic SQLite transaction fences the binding generation's outbox
+(pending and prepared pushes can never resurface, including after re-bind),
+deletes link/target/cursor/conflict state so re-bind is genuinely fresh, and
+applies the user's explicit choice — KEEP leaves cloud-origin records as
+ordinary local records; DELETE tombstones them (v1 tombstones retained) so
+re-bind replay surfaces explicit conflicts instead of silent resurrection.
+Local copies never claim offline remote revocability. An immutable unbind audit
+row records link, policy, fenced and removed counts. Exposed as the closed
+capability `sync_unbind` through the desktop authority with a keep/delete/cancel
+panel action (en + zh-CN). Evidence: 7 storage tests, 3 sidecar RPC tests,
+desktop 4580 passed.
+
+### Push keep-both (B3)
+
+`e76ac1389`, `795b81089`, `69eb17ed8` complete push-side conflict semantics:
+cloud resolve decision `keep_both` keeps the cloud version and saves the
+proposed version as deterministic copy `uuid5(conflict_id, "keep-both-copy")`
+journaled as a normal change so all replicas converge; Rust
+`KnowledgeCloudChoice::KeepBoth` skips revision headroom, refuses delete
+proposals pre-send, validates copy receipts fail-closed (forged receipts leave
+the object paused; lost responses recover through journal-echo rebuild); the
+desktop push review offers keep_both with revision re-check on submit. Evidence:
+137 Rust tests, 35+85 Python unit/PG tests, desktop 4582 passed. `8add1a2f3`
+then moved the keep_both choice into the shared JSON Schema so the generated
+DTO is generator-produced, and updated the stale capability fixture (51 to 53
+actions, catching up `graph_source` and `sync_unbind`).
+
+### Entity/relationship + provenance sync (B4/B4b)
+
+Seven commits (`a143e98ea`, `73a298bcf`, `8e1cf10f7`, `2aa5033e9`,
+`4f3236209`, `7f84db938`, `95c790ed8`) extend sync beyond memories: the synced
+unit is one derived graph projection record per source memory (object ID equals
+the stable memory ID; positional entity identity so re-derivation replaces
+rather than duplicates; cloud Neo4j UUIDs never cross the wire). Cloud journals
+records in new PostgreSQL tables (migration `f3a9c51e7b24`; Neo4j is never the
+sync journal) with the same revision/cursor/tombstone/conflict machinery as
+memory sync, including keep-both with copy IDs and per-item authorization (no
+share grants for derived data). Local schema v18 adds graph outbox/cursors/
+conflicts; extraction publish enqueues in the same transaction; unbind fences
+graph state under Delete. Source availability is computed per read, so records
+arriving before their source memory are durable but source-unavailable until it
+lands. `33bd64586` wires the cloud extraction pipeline: the journal write rides
+the PG transaction that marks processing COMPLETED, via a new
+`derived_graph_write` admission for enrolled projects (legacy content admission
+unchanged), cursor-row-locked sequence allocation, upsert-on-re-extraction, and
+no enqueue on failure. Evidence: PG-gated suites 195 passed, device/sidecar/
+desktop suites green, strict clippy clean.
+
+### Sanitized diagnostics export (B5)
+
+`3d10bc06b`, `c90ba568b` add the closed capability `diagnostics_export`: a
+versioned JSON document (application/scope/processing/index/sync sections) with
+failure stages, last-success timestamps (schema v19 records index completion
+times; pre-upgrade completions report null), pending counts and content-free
+sync state. Construction is whitelist-only (no content, extraction I/O, LLM
+bodies, endpoints, headers, or credential digests are ever selected), with a
+deterministic recursive credential-marker redaction pass as defense in depth,
+and every export is recorded through the durable timeline audit sink. Desktop
+panel action uses the existing save dialog. Evidence: sidecar 862 passed
+(including planted-secret absence tests), desktop 4586 passed.
+
+### Scheduler reverse drain (B6)
+
+`510791ba7`, `6fd7f836b` implement the operator-driven Rust→Python reverse
+drain on the existing owner row and phase machine: prepare-reverse closes Rust
+admission by leaving `verified` (both sides deny during reversal — never two
+authorities), in-flight runs settle to terminal outcomes or durable resumable
+remainder, observe-reverse persists `cron-reverse-drain-observation.v1` (counts,
+terminal outcomes, last run IDs), and complete-reverse re-runs the blocking
+scan inside the completion transaction so a stale observation cannot authorize
+rollback. Post-rollback, stale Rust acquire/renew/fire/write-back all fail
+closed. CLI gains prepare-reverse/observe-reverse/complete-reverse with CAS.
+See [the reverse-drain boundary](cron-reverse-drain.md). Evidence: 144 cron
+unit, 76 scheduler PG integration, 3 Rust PG fencing tests, 30 server
+scheduler tests. Note: the local dev database is behind on alembic migrations;
+rehearsals must migrate first.
+
+### Populated governance samples (B7)
+
+`8c636c7cd` (DLQ terminal-state retry now 409 instead of 500) and `03314b69a`
+add `scripts/qa_governance_fixtures.py` (idempotent, `qa-governance:*`-marked,
+cleanly torn down) plus 44 closed-loop tests in `src/tests/integration/governance/`:
+populated events, DLQ retry/discard/batch against real Redis, trust
+approvals (allow_once/deny/allow_always with policy effects), playbook and
+verdict history, agent run logs via the production write path, and audit-log
+JSON/CSV export — each with member/outsider permission checks. See
+[the evidence note](qa-evidence/governance-populated-2026-09-09.md). Remaining
+gaps recorded there: no events detail endpoint; the run-log registry is
+process-local; DLQ keyspace is global.
+
+### SQLite dialect gating fix (B8)
+
+`9ffa44d47` fixes the regression behind 12 integration failures:
+`active_schema_snapshot` and the HTTP mutation executor ran PostgreSQL-only
+schema SQL on SQLite test engines. Snapshot reads now return None on other
+dialects (no active head can exist there, since commands require PostgreSQL),
+and mutations fall through to the legacy writer for unenrolled projects,
+raising `project_schema_postgresql_required` only when an active head truly
+needs the command functions. The permission-migration test passes once
+DATABASE_URL matches the running PostgreSQL.
+
+### Same-commit release gates
+
+[Results recorded below once the full runs at the consolidation head complete.]
+
+### External blockers (unchanged, not closable from this repository)
+
+- I4 production activation: flipping `owner_kind` to Rust in production and the
+  authenticated external deployment verification require a live deployment and
+  the trusted verifier identity; both stay operator actions. Reverse-drain
+  remainder becomes executable only via a future forward cutover.
+- I6: real SSO round trips, valid-invitation acceptance, device-authorization
+  waits, forced-password-change accounts, privileged Pool operations, and
+  signed Windows/Linux upgrade matrices need external accounts, certificates
+  and test targets; code paths exist but production evidence cannot be produced
+  locally.
