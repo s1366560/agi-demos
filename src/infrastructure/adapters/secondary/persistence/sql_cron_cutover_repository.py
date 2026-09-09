@@ -11,6 +11,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.cron.cutover import (
+    CRON_RUN_TERMINAL_OUTCOMES,
+    CronCutoverDrainDirection,
     CronCutoverPhase,
     CronCutoverSnapshot,
     CronDeploymentManifest,
@@ -18,6 +20,8 @@ from src.domain.model.cron.cutover import (
     CronDeploymentParticipant,
     CronDeploymentParticipantKind,
     CronDeploymentReceipt,
+    CronReverseDrainCompletion,
+    CronReverseDrainObservation,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.legacy_cron_admission_model import (
@@ -28,11 +32,22 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentSessionSnapshot,
     CronJobModel,
     CronJobRunModel,
+    CronOperationModel,
     CronSchedulerOwnerModel,
     HITLRequest,
 )
 
 _VERIFIER_UNAVAILABLE = "deployment_verifier_unavailable"
+_REVERSE_PROTOCOL = "cron-reverse-drain.v1"
+_REVERSE_UNOBSERVED = "reverse_drain_unobserved"
+# Mid-flight execution facts that must settle before Python may re-admit. Queued,
+# interrupted, waiting and retryable work is durable and resumable; it is recorded
+# in the drain observation but never blocks rollback completion.
+_REVERSE_BLOCKING_COUNTS = (
+    "active_rust_owner_lease",
+    "live_processing_operations",
+    "live_running_runs",
+)
 
 
 class CronCutoverConflictError(ValueError):
@@ -185,6 +200,155 @@ class SqlCronCutoverRepository:
         await self._session.flush()
         return self._snapshot(row)
 
+    async def prepare_reverse(self, expected_revision: int) -> CronCutoverSnapshot:
+        """Close Rust admission for a verified delegate and open the reverse drain.
+
+        The phase leaves `verified`, so every Rust admission/renewal/acquisition
+        predicate fails closed in the same transaction. The exact lease release CAS
+        does not check the phase, so the fenced owner can still release its lease.
+        Python admission stays closed because `owner_kind` remains `rust`.
+        """
+        row = await self._locked_row(expected_revision)
+        evidence, manifest = self._verified_rust_evidence(row)
+        evidence["reverse"] = {
+            "protocol": _REVERSE_PROTOCOL,
+            "deployment_id": manifest.deployment_id,
+            "source_owner_kind": "rust",
+            "target_owner_kind": "python",
+            "prepared_at": await self._database_time(),
+            "observations_recorded": 0,
+            "observation": None,
+            "blockers": [_REVERSE_UNOBSERVED],
+        }
+        row.cutover_evidence = evidence
+        row.cutover_phase = CronCutoverPhase.PREPARED
+        row.cutover_revision += 1
+        await self._session.flush()
+        return self._snapshot(row)
+
+    async def observe_reverse(self, expected_revision: int) -> CronCutoverSnapshot:
+        """Record a durable reverse-drain observation; never completes the drain."""
+        row = await self._locked_row(expected_revision)
+        evidence, reverse = self._reverse_evidence(row)
+        observation = await self._observe_reverse_database(reverse["prepared_at"])
+        reverse["observation"] = observation.to_wire()
+        reverse["observations_recorded"] = cast(int, reverse["observations_recorded"]) + 1
+        reverse["blockers"] = self._reverse_blockers(observation)
+        evidence["reverse"] = reverse
+        row.cutover_evidence = evidence
+        row.cutover_phase = CronCutoverPhase.BLOCKED
+        row.cutover_revision += 1
+        await self._session.flush()
+        return self._snapshot(row)
+
+    async def complete_reverse(self, expected_revision: int) -> CronCutoverSnapshot:
+        """Re-admit Python only after a recorded, still-settled reverse drain.
+
+        Re-checks the live blocking counts inside the completion transaction, so a
+        stale recorded observation cannot authorize rollback. History, receipts and
+        the verification evidence are preserved; the revision keeps increasing, so
+        the migration downgrade guard still refuses to drop the barrier afterwards.
+        """
+        row = await self._locked_row(expected_revision)
+        evidence, reverse = self._reverse_evidence(row)
+        if cast(int, reverse["observations_recorded"]) < 1:
+            raise CronCutoverConflictError("reverse drain was never observed")
+        current = await self._observe_reverse_database(reverse["prepared_at"])
+        if self._reverse_blockers(current):
+            raise CronCutoverConflictError("reverse drain has not settled")
+        reverse["completion"] = CronReverseDrainCompletion(
+            completed_at=await self._database_time(),
+            final_observation=current,
+        ).to_wire()
+        reverse["blockers"] = []
+        evidence["reverse"] = reverse
+        # Transient forward-direction diagnostics no longer apply to the rolled-back
+        # posture; the durable manifest, receipts, verification and reverse record stay.
+        evidence["blockers"] = []
+        row.cutover_evidence = evidence
+        row.owner_kind = "python"
+        row.cutover_phase = CronCutoverPhase.UNVERIFIED
+        row.cutover_revision += 1
+        await self._session.flush()
+        return self._snapshot(row)
+
+    @staticmethod
+    def _reverse_blockers(observation: CronReverseDrainObservation) -> list[str]:
+        counts = dict(observation.counts)
+        return [name for name in _REVERSE_BLOCKING_COUNTS if counts.get(name, 0) > 0]
+
+    @staticmethod
+    def _verified_rust_evidence(
+        row: CronSchedulerOwnerModel,
+    ) -> tuple[dict[str, object], CronDeploymentManifest]:
+        """Structurally mirror the unified verified-cutover admission predicate."""
+        if (
+            row.owner_kind != "rust"
+            or row.cutover_phase != CronCutoverPhase.VERIFIED
+            or row.cutover_revision < 1
+        ):
+            raise CronCutoverConflictError("scheduler owner is not a verified Rust delegate")
+        evidence: dict[str, object] = dict(row.cutover_evidence)
+        if evidence.get("protocol") != "cron-cutover-evidence.v1":
+            raise CronCutoverConflictError("scheduler cutover evidence protocol is unavailable")
+        manifest = CronDeploymentManifest.from_wire(evidence.get("manifest"))
+        verification = evidence.get("verification")
+        if not isinstance(verification, Mapping):
+            raise CronCutoverConflictError("scheduler deployment verification is unavailable")
+        record = cast(Mapping[object, object], verification)
+        if record.get("protocol") != "cron-deployment-verification.v1":
+            raise CronCutoverConflictError("scheduler deployment verification is unavailable")
+        revision = record.get("cutover_revision")
+        receipt_id = record.get("receipt_id")
+        verifier_id = record.get("verifier_id")
+        digests = (record.get("inventory_sha256"), record.get("evidence_sha256"))
+        if (
+            type(revision) is not int
+            or revision != row.cutover_revision
+            or record.get("deployment_id") != manifest.deployment_id
+            or not isinstance(receipt_id, str)
+            or not receipt_id
+            or not isinstance(verifier_id, str)
+            or not verifier_id
+            or any(
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or not set(digest).issubset("0123456789abcdef")
+                for digest in digests
+            )
+        ):
+            raise CronCutoverConflictError("scheduler deployment verification is unavailable")
+        return evidence, manifest
+
+    @staticmethod
+    def _reverse_evidence(
+        row: CronSchedulerOwnerModel,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        if row.owner_kind != "rust" or row.cutover_phase not in {
+            CronCutoverPhase.PREPARED,
+            CronCutoverPhase.BLOCKED,
+        }:
+            raise CronCutoverConflictError("scheduler cutover is not reverse-draining")
+        evidence: dict[str, object] = dict(row.cutover_evidence)
+        raw = evidence.get("reverse")
+        if not isinstance(raw, Mapping):
+            raise CronCutoverConflictError("scheduler reverse drain evidence is unavailable")
+        reverse: dict[str, object] = dict(cast(Mapping[str, object], raw))
+        prepared_at = reverse.get("prepared_at")
+        recorded = reverse.get("observations_recorded")
+        if (
+            reverse.get("protocol") != _REVERSE_PROTOCOL
+            or not isinstance(prepared_at, str)
+            or type(recorded) is not int
+            or recorded < 0
+            or "completion" in reverse
+        ):
+            raise CronCutoverConflictError("scheduler reverse drain evidence is unavailable")
+        observation = reverse.get("observation")
+        if observation is not None:
+            _ = CronReverseDrainObservation.from_wire(observation)
+        return evidence, reverse
+
     async def _locked_row(self, expected_revision: int) -> CronSchedulerOwnerModel:
         if type(expected_revision) is not int or expected_revision < 0:
             raise CronCutoverConflictError("invalid scheduler cutover revision")
@@ -254,6 +418,15 @@ class SqlCronCutoverRepository:
     @classmethod
     def _snapshot(cls, row: CronSchedulerOwnerModel) -> CronCutoverSnapshot:
         evidence: dict[str, object] = dict(row.cutover_evidence or {})
+        raw_reverse = evidence.get("reverse")
+        if (
+            row.owner_kind == "rust"
+            and CronCutoverPhase(row.cutover_phase)
+            in {CronCutoverPhase.PREPARED, CronCutoverPhase.BLOCKED}
+            and isinstance(raw_reverse, Mapping)
+            and cast(Mapping[object, object], raw_reverse).get("protocol") == _REVERSE_PROTOCOL
+        ):
+            return cls._reverse_snapshot(row, evidence, cast(Mapping[str, object], raw_reverse))
         raw_manifest = evidence.get("manifest")
         deployment_id = None
         if raw_manifest is not None:
@@ -270,8 +443,15 @@ class SqlCronCutoverRepository:
             if not isinstance(item, str):
                 raise CronCutoverConflictError("scheduler cutover blocker is invalid")
             blocker_codes.append(item)
+        phase = CronCutoverPhase(row.cutover_phase)
+        direction = None
+        if row.owner_kind == "draining" and phase in {
+            CronCutoverPhase.PREPARED,
+            CronCutoverPhase.BLOCKED,
+        }:
+            direction = CronCutoverDrainDirection.FORWARD
         return CronCutoverSnapshot(
-            phase=CronCutoverPhase(row.cutover_phase),
+            phase=phase,
             revision=row.cutover_revision,
             owner_kind=row.owner_kind,
             deployment_id=deployment_id,
@@ -279,6 +459,54 @@ class SqlCronCutoverRepository:
             observed_counts=tuple(cls._counts(evidence).items()),
             receipts_recorded=len(cast(list[object], receipts)),
             observed_at=observed_at,
+            drain_direction=direction,
+        )
+
+    @classmethod
+    def _reverse_snapshot(
+        cls,
+        row: CronSchedulerOwnerModel,
+        evidence: Mapping[str, object],
+        reverse: Mapping[str, object],
+    ) -> CronCutoverSnapshot:
+        raw_manifest = evidence.get("manifest")
+        deployment_id = None
+        if raw_manifest is not None:
+            deployment_id = CronDeploymentManifest.from_wire(raw_manifest).deployment_id
+        receipts = evidence.get("receipts", [])
+        if not isinstance(receipts, list):
+            raise CronCutoverConflictError("scheduler cutover evidence is invalid")
+        raw_blockers = reverse.get("blockers", [_REVERSE_UNOBSERVED])
+        if not isinstance(raw_blockers, list):
+            raise CronCutoverConflictError("scheduler reverse drain blockers are invalid")
+        blockers: list[str] = []
+        for item in cast(list[object], raw_blockers):
+            if not isinstance(item, str):
+                raise CronCutoverConflictError("scheduler reverse drain blocker is invalid")
+            blockers.append(item)
+        counts: tuple[tuple[str, int], ...] = ()
+        outcomes: tuple[tuple[str, int], ...] = ()
+        last_run_ids: tuple[str, ...] = ()
+        observed_at: str | None = None
+        raw_observation = reverse.get("observation")
+        if raw_observation is not None:
+            observation = CronReverseDrainObservation.from_wire(raw_observation)
+            counts = observation.counts
+            outcomes = observation.terminal_outcomes
+            last_run_ids = observation.last_run_ids
+            observed_at = observation.observed_at
+        return CronCutoverSnapshot(
+            phase=CronCutoverPhase(row.cutover_phase),
+            revision=row.cutover_revision,
+            owner_kind=row.owner_kind,
+            deployment_id=deployment_id,
+            blockers=tuple(blockers),
+            observed_counts=counts,
+            receipts_recorded=len(cast(list[object], receipts)),
+            observed_at=observed_at,
+            drain_direction=CronCutoverDrainDirection.REVERSE,
+            terminal_outcomes=outcomes,
+            last_run_ids=last_run_ids,
         )
 
     async def _observe_database(self) -> dict[str, int]:
@@ -321,6 +549,120 @@ class SqlCronCutoverRepository:
             result = await self._session.execute(refresh_select_statement(statement))
             counts[name] = result.scalar_one()
         return counts
+
+    async def _observe_reverse_database(self, prepared_at: object) -> CronReverseDrainObservation:
+        """Scan the global scope for Rust-side work, conservatively.
+
+        Open-state scans cover every cron run and operation regardless of origin:
+        work that cannot be safely correlated must not disappear from the drain
+        record. `live_*` counts are mid-flight execution with an unexpired lease;
+        everything else durable is resumable remainder, recorded for the operator.
+        Terminal outcomes and last run ids cover runs settled since reverse
+        preparation began — that is what actually drained.
+        """
+        if not isinstance(prepared_at, str):
+            raise CronCutoverConflictError("scheduler reverse drain preparation time is invalid")
+        try:
+            since = datetime.fromisoformat(prepared_at)
+        except ValueError:
+            raise CronCutoverConflictError(
+                "scheduler reverse drain preparation time is invalid"
+            ) from None
+        now = func.clock_timestamp()
+        queries = {
+            "active_rust_owner_lease": select(func.count())
+            .select_from(CronSchedulerOwnerModel)
+            .where(
+                CronSchedulerOwnerModel.scope_id == "global",
+                CronSchedulerOwnerModel.owner_kind == "rust",
+                CronSchedulerOwnerModel.lease_token.is_not(None),
+                CronSchedulerOwnerModel.lease_expires_at > now,
+            ),
+            "live_running_runs": select(func.count())
+            .select_from(CronJobRunModel)
+            .where(
+                CronJobRunModel.status == "running",
+                CronJobRunModel.runtime_lease_expires_at > now,
+            ),
+            "live_processing_operations": select(func.count())
+            .select_from(CronOperationModel)
+            .where(
+                CronOperationModel.status == "processing",
+                CronOperationModel.lease_expires_at > now,
+            ),
+            "queued_runs": select(func.count())
+            .select_from(CronJobRunModel)
+            .where(CronJobRunModel.status == "queued"),
+            "interrupted_runs": select(func.count())
+            .select_from(CronJobRunModel)
+            .where(
+                CronJobRunModel.status == "running",
+                (CronJobRunModel.runtime_lease_expires_at.is_(None))
+                | (CronJobRunModel.runtime_lease_expires_at <= now),
+            ),
+            "waiting_human_runs": select(func.count())
+            .select_from(CronJobRunModel)
+            .where(CronJobRunModel.status == "waiting_human"),
+            "retryable_operations": select(func.count())
+            .select_from(CronOperationModel)
+            .where(
+                (CronOperationModel.status.in_(("pending", "failed")))
+                | (
+                    (CronOperationModel.status == "processing")
+                    & (
+                        (CronOperationModel.lease_expires_at.is_(None))
+                        | (CronOperationModel.lease_expires_at <= now)
+                    )
+                )
+            ),
+            "waiting_runtime_operations": select(func.count())
+            .select_from(CronOperationModel)
+            .where(CronOperationModel.status == "waiting_runtime"),
+            "unresolved_hitl_requests": select(func.count())
+            .select_from(HITLRequest)
+            .where(HITLRequest.status.in_(("pending", "answered"))),
+            "retained_hitl_snapshots": select(func.count())
+            .select_from(AgentSessionSnapshot)
+            .where(AgentSessionSnapshot.snapshot_type == "hitl"),
+        }
+        counts: dict[str, int] = {}
+        for name, statement in queries.items():
+            result = await self._session.execute(refresh_select_statement(statement))
+            counts[name] = result.scalar_one()
+        drained = (
+            select(CronJobRunModel.status, func.count())
+            .where(
+                CronJobRunModel.finished_at.is_not(None),
+                CronJobRunModel.finished_at >= since,
+                CronJobRunModel.status.in_(sorted(CRON_RUN_TERMINAL_OUTCOMES)),
+            )
+            .group_by(CronJobRunModel.status)
+        )
+        outcomes = {
+            status: count
+            for status, count in (await self._session.execute(refresh_select_statement(drained)))
+        }
+        last = await self._session.execute(
+            refresh_select_statement(
+                select(CronJobRunModel.id)
+                .where(
+                    CronJobRunModel.finished_at.is_not(None),
+                    CronJobRunModel.finished_at >= since,
+                    CronJobRunModel.status.in_(sorted(CRON_RUN_TERMINAL_OUTCOMES)),
+                )
+                .order_by(CronJobRunModel.finished_at.desc(), CronJobRunModel.id.desc())
+                .limit(50)
+            )
+        )
+        return CronReverseDrainObservation.from_wire(
+            {
+                "protocol": "cron-reverse-drain-observation.v1",
+                "counts": counts,
+                "terminal_outcomes": outcomes,
+                "last_run_ids": list(last.scalars()),
+                "observed_at": await self._database_time(),
+            }
+        )
 
     async def _database_time(self) -> str:
         value: datetime = (

@@ -191,8 +191,12 @@ semantic judgment or an activation decision.
   multi-worker inventory plus signed/authenticated closure artifacts. The required
   external sample and verifier are not available in this repository batch.
 - Integrate the local APScheduler closure adapter with deployment discovery and the
-  authenticated verification writer. Define an audited abort/rollback protocol before using a
-  prepared deployment in production; dropping barrier evidence is not rollback.
+  authenticated verification writer. The audited rollback protocol for a verified
+  Rust delegation is the [reverse drain](cron-reverse-drain.md): it closes Rust
+  admission through the same barrier, records what drained, and re-admits Python
+  only after a live settlement re-check, without ever restoring dual schedulers.
+  Rolling back a merely *prepared* forward cutover still has no writer; dropping
+  barrier evidence is not rollback.
 - The [continuous Rust owner lifecycle](cron-owner-lifecycle.md) now renews control
   ownership independently of admitted work and preserves separate run leases.
   This local lifecycle does not supply the missing deployment drain evidence.

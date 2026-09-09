@@ -29,6 +29,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _ = receipt.add_argument("--expected-revision", type=int, required=True)
     observe = commands.add_parser("observe", help="Record current database blockers; do not verify")
     _ = observe.add_argument("--expected-revision", type=int, required=True)
+    prepare_reverse = commands.add_parser(
+        "prepare-reverse", help="Close Rust admission and open the reverse drain"
+    )
+    _ = prepare_reverse.add_argument("--expected-revision", type=int, required=True)
+    observe_reverse = commands.add_parser(
+        "observe-reverse", help="Record reverse drain counts; do not complete"
+    )
+    _ = observe_reverse.add_argument("--expected-revision", type=int, required=True)
+    complete_reverse = commands.add_parser(
+        "complete-reverse", help="Re-admit Python only after a settled reverse drain"
+    )
+    _ = complete_reverse.add_argument("--expected-revision", type=int, required=True)
     return parser.parse_args(argv)
 
 
@@ -49,6 +61,12 @@ async def execute_command(args: argparse.Namespace) -> dict[str, object]:
             result = await repository.record_receipt(receipt, args.expected_revision)
         elif args.command == "observe":
             result = await repository.observe(args.expected_revision)
+        elif args.command == "prepare-reverse":
+            result = await repository.prepare_reverse(args.expected_revision)
+        elif args.command == "observe-reverse":
+            result = await repository.observe_reverse(args.expected_revision)
+        elif args.command == "complete-reverse":
+            result = await repository.complete_reverse(args.expected_revision)
         else:
             raise ValueError("invalid cron cutover command")
         await session.commit()

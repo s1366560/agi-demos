@@ -16,6 +16,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentSessionSnapshot,
     CronJobModel,
     CronJobRunModel,
+    CronOperationModel,
     CronSchedulerOwnerModel,
     HITLRequest,
 )
@@ -46,6 +47,7 @@ async def database():
                 Table(name, metadata, Column("id", String, primary_key=True))
             CronJobModel.__table__.to_metadata(metadata)
             CronJobRunModel.__table__.to_metadata(metadata)
+            CronOperationModel.__table__.to_metadata(metadata)
             AgentSessionSnapshot.__table__.to_metadata(metadata)
             AgentRunAuthorityModel.__table__.to_metadata(metadata)
             HITLRequest.__table__.to_metadata(metadata)

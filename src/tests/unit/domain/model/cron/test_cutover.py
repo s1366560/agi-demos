@@ -2,7 +2,12 @@
 
 import pytest
 
-from src.domain.model.cron.cutover import CronDeploymentManifest, CronDeploymentReceipt
+from src.domain.model.cron.cutover import (
+    CronDeploymentManifest,
+    CronDeploymentReceipt,
+    CronReverseDrainCompletion,
+    CronReverseDrainObservation,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -59,3 +64,67 @@ def test_receipt_payloads_cannot_contain_raw_logs_or_credentials():
         CronDeploymentReceipt.from_wire(receipt_wire() | {"log": "sensitive content"})
     with pytest.raises(ValueError):
         CronDeploymentReceipt.from_wire(receipt_wire() | {"evidence_sha256": "invalid"})
+
+
+def reverse_observation_wire():
+    return {
+        "protocol": "cron-reverse-drain-observation.v1",
+        "counts": {
+            "active_rust_owner_lease": 0,
+            "live_running_runs": 0,
+            "queued_runs": 2,
+            "waiting_human_runs": 1,
+        },
+        "terminal_outcomes": {"success": 3, "failed": 1},
+        "last_run_ids": ["run-9", "run-7"],
+        "observed_at": "2026-09-09T01:02:03+00:00",
+    }
+
+
+def reverse_completion_wire():
+    return {
+        "protocol": "cron-reverse-drain-completion.v1",
+        "completed_at": "2026-09-09T02:03:04+00:00",
+        "final_observation": reverse_observation_wire(),
+    }
+
+
+def test_reverse_drain_observation_and_completion_round_trip():
+    observation = CronReverseDrainObservation.from_wire(reverse_observation_wire())
+    assert observation.to_wire() == reverse_observation_wire()
+    completion = CronReverseDrainCompletion.from_wire(reverse_completion_wire())
+    assert completion.to_wire() == reverse_completion_wire()
+
+
+@pytest.mark.parametrize("field", ["verified", "enable", "force", "activate_python"])
+def test_reverse_drain_records_cannot_carry_an_enable_or_force_override(field):
+    with pytest.raises(ValueError):
+        CronReverseDrainObservation.from_wire(reverse_observation_wire() | {field: True})
+    with pytest.raises(ValueError):
+        CronReverseDrainCompletion.from_wire(reverse_completion_wire() | {field: True})
+
+
+@pytest.mark.parametrize("outcome", ["running", "queued", "waiting_human", "unknown"])
+def test_reverse_drain_terminal_outcomes_only_accept_terminal_protocol_states(outcome):
+    wire = reverse_observation_wire()
+    wire["terminal_outcomes"] = {outcome: 1}
+    with pytest.raises(ValueError):
+        CronReverseDrainObservation.from_wire(wire)
+
+
+@pytest.mark.parametrize("count", [-1, 1.5, "2", True])
+def test_reverse_drain_counts_are_non_negative_integers(count):
+    wire = reverse_observation_wire()
+    wire["counts"] = {"queued_runs": count}
+    with pytest.raises(ValueError):
+        CronReverseDrainObservation.from_wire(wire)
+
+
+def test_reverse_drain_run_id_roster_is_bounded_and_unique():
+    wire = reverse_observation_wire()
+    wire["last_run_ids"] = ["run-1", "run-1"]
+    with pytest.raises(ValueError):
+        CronReverseDrainObservation.from_wire(wire)
+    wire["last_run_ids"] = [f"run-{index}" for index in range(101)]
+    with pytest.raises(ValueError):
+        CronReverseDrainObservation.from_wire(wire)
