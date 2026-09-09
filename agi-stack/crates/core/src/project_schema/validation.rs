@@ -13,7 +13,7 @@ fn require(condition: bool) -> Result<(), ProjectSchemaError> {
     }
 }
 
-fn uuid(value: &str) -> Result<(), ProjectSchemaError> {
+pub(super) fn uuid(value: &str) -> Result<(), ProjectSchemaError> {
     require(
         value.len() == 36
             && value != "00000000-0000-0000-0000-000000000000"
