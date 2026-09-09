@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { useI18n } from '../../i18n';
 import type { NativeKnowledgeConflictController } from './nativeKnowledgeConflictController';
 import type {
@@ -19,6 +21,7 @@ export function NativeKnowledgeSyncPanel({
   connectionReady?: boolean;
 }>) {
   const { t } = useI18n();
+  const [unbindOpen, setUnbindOpen] = useState(false);
   const allowed = (operation: string) => model.allowedActions.includes(operation);
   if (
     ![
@@ -92,6 +95,36 @@ export function NativeKnowledgeSyncPanel({
           <summary>{t('nativeSync.lastResult')}</summary>
           <pre>{JSON.stringify(model.result, null, 2)}</pre>
         </details>
+      ) : null}
+      {allowed('sync_unbind') && model.status?.link ? (
+        <section className="native-knowledge-unbind">
+          {unbindOpen ? (
+            <div role="group" aria-label={t('nativeSync.unbindTitle')}>
+              <p>{t('nativeSync.unbindHelp')}</p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void controller.unbind('keep')}
+              >
+                {t('nativeSync.unbindKeep')}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void controller.unbind('delete')}
+              >
+                {t('nativeSync.unbindDelete')}
+              </button>
+              <button type="button" disabled={busy} onClick={() => setUnbindOpen(false)}>
+                {t('nativeSync.unbindCancel')}
+              </button>
+            </div>
+          ) : (
+            <button type="button" disabled={!ready} onClick={() => setUnbindOpen(true)}>
+              {t('nativeSync.unbind')}
+            </button>
+          )}
+        </section>
       ) : null}
       {allowed('sync_outbox') && model.outbox ? (
         <section>

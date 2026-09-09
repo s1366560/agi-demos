@@ -151,6 +151,16 @@ export const cases = [
     { status, association_state: 'configured', remote_authorization: 'unverified' },
   ],
   [
+    { operation: 'sync_unbind', policy: 'keep' },
+    {
+      status: { ...status, link: null, pending_changes: 0 },
+      association_state: 'unbound',
+      policy: 'keep',
+      fenced_outbox: 1,
+      removed_local_copies: 0,
+    },
+  ],
+  [
     { operation: 'sync_push' },
     {
       local_sequence: 1,

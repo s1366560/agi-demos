@@ -10,6 +10,7 @@ const all = [
   'sync_status',
   'sync_pull',
   'sync_push',
+  'sync_unbind',
   'sync_outbox',
   'pull_conflicts',
   'push_conflicts',
@@ -128,6 +129,69 @@ test('unknown sync requires a successful complete refresh before a new explicit 
   assert.equal(calls.filter((item) => item.command.operation === 'sync_push').length, 1);
   await controller.sync('sync_push');
   assert.equal(calls.filter((item) => item.command.operation === 'sync_push').length, 2);
+});
+
+test('unbind forwards the explicit policy and refreshes the cleared binding state', async () => {
+  const { controller, calls } = fixture({
+    execute: async (command, _request, previous) => {
+      if (
+        command.operation === 'sync_status' &&
+        previous.some((item) => item.command.operation === 'sync_unbind')
+      )
+        return envelope(command, { status: { ...status, link: null, pending_changes: 0 } });
+      return undefined;
+    },
+  });
+  await controller.refresh();
+  await controller.unbind('delete');
+  const unbindCalls = calls.filter((item) => item.command.operation === 'sync_unbind');
+  assert.equal(unbindCalls.length, 1);
+  assert.equal(unbindCalls[0].command.policy, 'delete');
+  assert.equal(controller.getSnapshot().phase, 'ready');
+  assert.equal(controller.getSnapshot().status.link, null);
+  assert.equal(controller.getSnapshot().status.pending_changes, 0);
+});
+
+test('unbind without the declared action or a configured link performs no RPC', async () => {
+  const restricted = fixture({ authority: { allowedActions: ['sync_status'] } });
+  await restricted.controller.refresh();
+  await restricted.controller.unbind('keep');
+  assert.equal(
+    restricted.calls.some((item) => item.command.operation === 'sync_unbind'),
+    false,
+  );
+  const unlinked = fixture({
+    execute: async (command) =>
+      command.operation === 'sync_status'
+        ? envelope(command, { status: { ...status, link: null } })
+        : undefined,
+  });
+  await unlinked.controller.refresh();
+  await unlinked.controller.unbind('keep');
+  assert.equal(
+    unlinked.calls.some((item) => item.command.operation === 'sync_unbind'),
+    false,
+  );
+});
+
+test('unknown unbind requires a successful complete refresh before a new explicit unbind', async () => {
+  let failWrite = true;
+  const { controller, calls } = fixture({
+    execute: async (command) => {
+      if (command.operation === 'sync_unbind' && failWrite) throw error(502);
+    },
+  });
+  await controller.refresh();
+  await controller.unbind('keep');
+  assert.equal(controller.getSnapshot().phase, 'uncertain');
+  assert.equal(controller.getSnapshot().recoveryRequired, true);
+  await controller.unbind('keep');
+  assert.equal(calls.filter((item) => item.command.operation === 'sync_unbind').length, 1);
+  failWrite = false;
+  await controller.refresh();
+  assert.equal(controller.getSnapshot().recoveryRequired, false);
+  await controller.unbind('keep');
+  assert.equal(calls.filter((item) => item.command.operation === 'sync_unbind').length, 2);
 });
 
 test('sync scope drift clears data, no configured link forbids sync, and stop discards a late read', async () => {

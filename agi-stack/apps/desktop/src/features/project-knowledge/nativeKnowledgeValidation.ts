@@ -111,6 +111,7 @@ export function requireNativeKnowledgeCommandOptions(
       'update',
       'delete',
       'sync_link',
+      'sync_unbind',
       'resolve_pull',
       'resolve_push',
       'resume_resolution',

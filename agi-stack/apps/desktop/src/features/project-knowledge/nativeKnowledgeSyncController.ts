@@ -179,8 +179,49 @@ export function createNativeKnowledgeSyncController({
       });
     }
   };
-  const moreOutbox = async () => {
+  const unbind = async (policy: 'keep' | 'delete') => {
+    if (!canSync()) return;
     if (
+      model.phase !== 'ready' ||
+      model.recoveryRequired ||
+      !session.allowed('sync_unbind') ||
+      !session.allowed('sync_status') ||
+      !observed ||
+      !model.status?.link
+    )
+      return;
+    const request = session.begin();
+    emit({ phase: 'syncing', error: null, result: null });
+    let accepted = false;
+    try {
+      await session.execute({ operation: 'sync_unbind', policy }, request, observed);
+      if (!session.current(request)) return;
+      accepted = true;
+      // Unbinding invalidates every synced source even when the follow-up read fails.
+      void Promise.resolve()
+        .then(() => {
+          if (session.current(request)) onAccepted?.();
+        })
+        .catch(() => {});
+      const patch = await collect(request);
+      if (session.current(request)) {
+        emit({ ...patch, phase: 'ready' });
+      }
+    } catch (error) {
+      if (!session.current(request)) return;
+      const failure = nativeKnowledgeUiFailure(error);
+      if (failure === 'contextChanged') {
+        observed = undefined;
+        model = initial();
+      }
+      emit({
+        phase: !accepted && failure === 'uncertain' ? 'uncertain' : 'error',
+        recoveryRequired: !accepted && failure === 'uncertain',
+        error: accepted && failure === 'uncertain' ? 'failed' : failure,
+      });
+    }
+  };
+  const moreOutbox = async () => {    if (
       busy() ||
       model.recoveryRequired ||
       !session.allowed('sync_outbox') ||
@@ -288,6 +329,7 @@ export function createNativeKnowledgeSyncController({
       void refresh();
     },
     sync,
+    unbind,
     moreOutbox,
     morePending,
     stop: () => {

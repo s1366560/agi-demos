@@ -16,7 +16,7 @@ const { NativeKnowledgeConflictEditor } = require(
 const h = React.createElement;
 const render = (element) => renderToStaticMarkup(h(I18nProvider, null, element));
 const noop = () => {};
-const syncController = { refresh: noop, sync: noop, moreOutbox: noop, morePending: noop };
+const syncController = { refresh: noop, sync: noop, unbind: noop, moreOutbox: noop, morePending: noop };
 const conflictController = {
   open: noop,
   choose: noop,
@@ -74,6 +74,20 @@ test('sync UI labels configured links as unverified and never offers an arbitrar
   const unlinked = syncPage({ ...syncModel, status: { ...status, link: null } });
   assert.match(unlinked, /Remote project selection is not available yet/);
   assert.match(unlinked, /disabled="">Pull one page/);
+});
+
+test('unbind entry requires the declared action and a configured link, and never suggests remote revocation', () => {
+  const permitted = syncPage({ ...syncModel, allowedActions: ['sync_status', 'sync_unbind'] });
+  assert.match(permitted, /Stop syncing…/);
+  assert.doesNotMatch(permitted, /Stop and keep local copies|Stop and delete downloaded copies/);
+  const withoutAction = syncPage({ ...syncModel, allowedActions: ['sync_status', 'sync_push'] });
+  assert.doesNotMatch(withoutAction, /Stop syncing…/);
+  const unlinked = syncPage({
+    ...syncModel,
+    allowedActions: ['sync_status', 'sync_unbind'],
+    status: { ...status, link: null },
+  });
+  assert.doesNotMatch(unlinked, /Stop syncing…/);
 });
 
 test('sync UI checks exact operation declarations, recovery locks writes but exposes refresh', () => {

@@ -149,6 +149,8 @@ function wire(command: NativeKnowledgeCommand): Readonly<{
       };
     case 'sync_link':
       return { path: 'sync-link', body: { link: command.link } };
+    case 'sync_unbind':
+      return { path: 'sync-unbind', body: { policy: command.policy } };
     case 'sync_push':
       return { path: 'sync-push', body: {} };
     case 'sync_pull':

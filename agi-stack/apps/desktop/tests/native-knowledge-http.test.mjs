@@ -23,7 +23,8 @@ const json = (body, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 const pathFor = (op) => {
-  if (['sync_link', 'sync_push', 'sync_pull'].includes(op)) return op.replace('_', '-');
+  if (['sync_link', 'sync_unbind', 'sync_push', 'sync_pull'].includes(op))
+    return op.replace('_', '-');
   if (['resolve_pull', 'resolve_push', 'resume_resolution', 'reconcile_resolution'].includes(op))
     return `sync-${op.replaceAll('_', '-')}`;
   if (
@@ -175,6 +176,7 @@ test('selected-state native commands require observed scope and reject every sco
   const selected = cases.filter(([c]) =>
     [
       'sync_link',
+      'sync_unbind',
       'resolve_pull',
       'resolve_push',
       'resume_resolution',

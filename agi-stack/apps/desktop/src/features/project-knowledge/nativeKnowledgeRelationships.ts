@@ -145,6 +145,10 @@ export function validNativeRelationships(
       return true;
     case 'sync_link':
       return sameJson((result as K.NativeKnowledgeResultMap['sync_link']).status.link, c.link);
+    case 'sync_unbind': {
+      const r = result as K.NativeKnowledgeResultMap['sync_unbind'];
+      return r.policy === c.policy && r.status.link === null && r.status.pending_changes === 0;
+    }
     case 'sync_push':
     case 'sync_pull':
       return true;

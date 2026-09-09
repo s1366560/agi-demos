@@ -46,6 +46,7 @@ export type NativeKnowledgeSelectedOperation =
   | 'update'
   | 'delete'
   | 'sync_link'
+  | 'sync_unbind'
   | 'resolve_pull'
   | 'resolve_push'
   | 'resume_resolution'

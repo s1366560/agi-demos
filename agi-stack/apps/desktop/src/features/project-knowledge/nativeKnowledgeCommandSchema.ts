@@ -28,6 +28,7 @@ export const commands: Readonly<Record<NativeKnowledgeOperation, s.NativeCheck>>
   }),
   sync_status: command('sync_status'),
   sync_link: command('sync_link', { link: r.link }),
+  sync_unbind: command('sync_unbind', { policy: s.literal('keep', 'delete') }),
   sync_push: command('sync_push'),
   sync_pull: command('sync_pull'),
   sync_outbox: command('sync_outbox', { after_sequence: s.integer(), limit }),
@@ -70,6 +71,13 @@ export const results: Readonly<Record<NativeKnowledgeOperation, s.NativeCheck>> 
     status: r.status,
     association_state: s.literal('configured'),
     remote_authorization: s.literal('unverified'),
+  }),
+  sync_unbind: s.object({
+    status: r.status,
+    association_state: s.literal('unbound'),
+    policy: s.literal('keep', 'delete'),
+    fenced_outbox: s.integer(),
+    removed_local_copies: s.integer(),
   }),
   sync_push: s.nullable(
     s.object({ local_sequence: s.sequence, replayed: s.bool, receipt: r.pushReceipt }),
