@@ -199,7 +199,7 @@ async def test_actual_host_uses_dynamic_qa_descriptor_and_rejects_template_heade
             old = None
             for expected in vectors["descriptors"]:
                 descriptor, routes = await publish(snapshot, expected["generation"])
-                assert descriptor == expected and len(routes) == 6
+                assert descriptor == expected and len(routes) == 11
                 if old is not None:
                     response = await client.get("/condition", headers={HEADER: json.dumps(old)})
                     assert response.status_code == 412, response.text
