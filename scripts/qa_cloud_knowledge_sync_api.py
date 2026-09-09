@@ -179,7 +179,7 @@ def select_qa_routes(
                 ),
             )
         selected.append(definition)
-    if cloud_count != 6 or frozenset(found) != QA_HTTP_ROUTES:
+    if cloud_count != 11 or frozenset(found) != QA_HTTP_ROUTES:
         raise RuntimeError(
             f"QA routes missing: {sorted(QA_HTTP_ROUTES - found)}; cloud_count={cloud_count}"
         )

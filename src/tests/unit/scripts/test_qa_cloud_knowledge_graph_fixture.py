@@ -205,7 +205,7 @@ def test_qa_route_selection_preserves_only_two_production_graph_read_handlers():
             endpoint=lambda: None,
             name=str(number),
         )
-        for number in range(6)
+        for number in range(11)
     )
     selected = select_qa_routes((*placeholders, *cloud, *graph_routes), host=MagicMock())
     actual = tuple(route for route in selected if route.path.startswith("/api/v1/graph/"))
