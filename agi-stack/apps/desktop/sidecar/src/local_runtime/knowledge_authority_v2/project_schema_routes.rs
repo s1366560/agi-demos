@@ -61,7 +61,7 @@ impl From<ProjectSchemaStorageError> for SchemaRpcError {
             ScopeMismatch | AdmissionChanged => {
                 Self(StatusCode::FORBIDDEN, "project_schema_forbidden")
             }
-            ChangeIdReused | Document(ProjectSchemaError::RevisionConflict) => {
+            ChangeIdReused | SyncConflict | Document(ProjectSchemaError::RevisionConflict) => {
                 Self(StatusCode::CONFLICT, "project_schema_conflict")
             }
             ResponseTooLarge => Self(

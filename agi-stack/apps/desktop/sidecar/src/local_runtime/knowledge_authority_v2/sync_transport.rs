@@ -15,6 +15,12 @@ use crate::trusted_session::TrustedSessionBroker;
 mod cloud_transport;
 pub(super) use cloud_transport::CloudResolutionResponse;
 
+// This view has no production caller until dedicated schema admission is opened.
+// It exposes no Memory operations and therefore cannot bypass Memory enrollment.
+#[allow(dead_code)]
+#[path = "schema_cloud_transport.rs"]
+pub(super) mod schema;
+
 pub(super) struct VerifiedCloudTransport {
     connection: TrustedCloudConnection,
     pub(super) generation: SyncCloudGeneration,

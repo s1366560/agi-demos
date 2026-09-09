@@ -39,6 +39,21 @@ impl TrustedCloudConnection {
     pub(super) async fn open(
         broker: &TrustedSessionBroker,
     ) -> Result<Self, KnowledgeAuthorityErrorV2> {
+        Self::open_checked(broker, None).await
+    }
+
+    /// Reject a changed durable origin before sending credentials or discovery.
+    pub(super) async fn open_for_authority(
+        broker: &TrustedSessionBroker,
+        expected_authority: &str,
+    ) -> Result<Self, KnowledgeAuthorityErrorV2> {
+        Self::open_checked(broker, Some(expected_authority)).await
+    }
+
+    async fn open_checked(
+        broker: &TrustedSessionBroker,
+        expected_authority: Option<&str>,
+    ) -> Result<Self, KnowledgeAuthorityErrorV2> {
         let snapshot = broker
             .snapshot()
             .map_err(|_| KnowledgeAuthorityErrorV2::TransportUnavailable)?;
@@ -65,6 +80,9 @@ impl TrustedCloudConnection {
         };
         if !valid_identifier(&connection.canonical_authority) {
             return Err(KnowledgeAuthorityErrorV2::TransportUnavailable);
+        }
+        if expected_authority.is_some_and(|expected| expected != connection.canonical_authority) {
+            return Err(KnowledgeAuthorityErrorV2::ScopeMismatch);
         }
         let user = connection.get(connection.url("auth/me"), None).await?;
         // The production auth.User response has no id alias.
@@ -167,12 +185,42 @@ impl TrustedCloudConnection {
         request: RequestBuilder,
         accepted: &[StatusCode],
     ) -> Result<(StatusCode, Value), KnowledgeAuthorityErrorV2> {
+        let response = self.send_response(request, accepted, &|| Ok(())).await?;
+        let status = response.status();
+        let body = self.bounded_json(response).await?;
+        self.ensure_current()?;
+        Ok((status, body))
+    }
+
+    /// The schema view retains exact receipt bytes. Identity, status handling,
+    /// redirects and streaming all use the same connection as Memory transport.
+    pub(super) async fn send_bounded_bytes(
+        &self,
+        request: RequestBuilder,
+        accepted: &[StatusCode],
+        max_bytes: usize,
+        check_local: &(dyn Fn() -> Result<(), KnowledgeAuthorityErrorV2> + Sync),
+    ) -> Result<(StatusCode, Vec<u8>), KnowledgeAuthorityErrorV2> {
+        let response = self.send_response(request, accepted, check_local).await?;
+        let status = response.status();
+        let body = self.bounded_bytes(response, max_bytes, check_local).await?;
+        Ok((status, body))
+    }
+
+    async fn send_response(
+        &self,
+        request: RequestBuilder,
+        accepted: &[StatusCode],
+        check_local: &(dyn Fn() -> Result<(), KnowledgeAuthorityErrorV2> + Sync),
+    ) -> Result<Response, KnowledgeAuthorityErrorV2> {
+        check_local()?;
         self.ensure_current()?;
         let response = request
             .send()
             .await
             .map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)?;
         self.ensure_current()?;
+        check_local()?;
         let status = response.status();
         if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
             return Err(KnowledgeAuthorityErrorV2::Forbidden);
@@ -183,15 +231,25 @@ impl TrustedCloudConnection {
         if !accepted.contains(&status) {
             return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
         }
-        let body = self.bounded_json(response).await?;
-        self.ensure_current()?;
-        Ok((status, body))
+        Ok(response)
     }
 
     async fn bounded_json(&self, response: Response) -> Result<Value, KnowledgeAuthorityErrorV2> {
+        let bytes = self
+            .bounded_bytes(response, MAX_RESPONSE_BYTES, &|| Ok(()))
+            .await?;
+        serde_json::from_slice(&bytes).map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)
+    }
+
+    async fn bounded_bytes(
+        &self,
+        response: Response,
+        max_bytes: usize,
+        check_local: &(dyn Fn() -> Result<(), KnowledgeAuthorityErrorV2> + Sync),
+    ) -> Result<Vec<u8>, KnowledgeAuthorityErrorV2> {
         if response
             .content_length()
-            .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+            .is_some_and(|length| length > max_bytes as u64)
         {
             return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
         }
@@ -199,14 +257,16 @@ impl TrustedCloudConnection {
         let mut bytes = Vec::new();
         while let Some(chunk) = stream.next().await {
             self.ensure_current()?;
+            check_local()?;
             let chunk = chunk.map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)?;
-            if bytes.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
+            if bytes.len().saturating_add(chunk.len()) > max_bytes {
                 return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
             }
             bytes.extend_from_slice(&chunk);
         }
         self.ensure_current()?;
-        serde_json::from_slice(&bytes).map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)
+        check_local()?;
+        Ok(bytes)
     }
 
     fn check_snapshot(

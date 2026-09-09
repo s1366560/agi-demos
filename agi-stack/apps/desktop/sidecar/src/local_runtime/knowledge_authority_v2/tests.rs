@@ -25,6 +25,8 @@ mod push_http_tests;
 mod push_session_tests;
 #[path = "renderer_contract_tests.rs"]
 mod renderer_contract_tests;
+#[path = "schema_cloud_transport_tests.rs"]
+mod schema_cloud_transport_tests;
 #[path = "storage_tests.rs"]
 mod storage_tests;
 
