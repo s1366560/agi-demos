@@ -46,7 +46,7 @@ export const link = {
   remote_project_id: 'remote-project',
   remote_actor_id: 'remote-actor',
 };
-export const status = { replica_id: uuid, link, pending_changes: 1 };
+export const status = { replica_id: uuid, link, pending_changes: 1, pending_graph_changes: 0 };
 export const guard = {
   expected_local_revision: 1,
   expected_remote_revision: 2,

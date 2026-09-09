@@ -48,6 +48,7 @@ export const nativeMemoriesEnUS = {
   'nativeSync.syncUncertain':
     'The synchronization result is unknown. Refresh the outbox, conflicts and resolutions before explicitly starting another synchronization.',
   'nativeSync.pendingChanges': 'Pending local changes',
+  'nativeSync.pendingGraphChanges': 'Pending derived record changes',
   'nativeSync.linkConfigured': 'Association configured. Remote authorization is unverified.',
   'nativeSync.linkUnavailable':
     'No remote project is associated. Remote project selection is not available yet.',
@@ -143,6 +144,7 @@ export const nativeMemoriesZhCN: Record<keyof typeof nativeMemoriesEnUS, string>
   'nativeSync.syncUncertain':
     '同步结果未知，请先刷新待发送队列、冲突和处理记录，再明确发起下一次同步。',
   'nativeSync.pendingChanges': '待同步的本地变更',
+  'nativeSync.pendingGraphChanges': '待同步的派生记录变更',
   'nativeSync.linkConfigured': '关联已配置，远端授权尚未验证。',
   'nativeSync.linkUnavailable': '尚未关联远端项目，远端项目选择暂不可用。',
   'nativeSync.remoteTenant': '远端租户',

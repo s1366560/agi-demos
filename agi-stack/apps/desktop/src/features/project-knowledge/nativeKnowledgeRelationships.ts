@@ -182,6 +182,48 @@ export function validNativeRelationships(
         )
       );
     }
+    case 'graph_pull_conflicts':
+    case 'graph_push_conflicts':
+    case 'graph_resolution_history':
+    case 'synced_graph_projections':
+      return true;
+    case 'graph_pull_conflict_context': {
+      const r = (result as K.NativeKnowledgeResultMap['graph_pull_conflict_context'])
+        .context as unknown as { object_id?: string } | null;
+      return r === null || r.object_id === c.id;
+    }
+    case 'remote_graph_baseline':
+      return true;
+    case 'synced_graph_projection': {
+      const r = (result as K.NativeKnowledgeResultMap['synced_graph_projection']).projection;
+      return r === null || r.object_id === c.id;
+    }
+    case 'resolve_graph_pull': {
+      const r = (result as K.NativeKnowledgeResultMap['resolve_graph_pull'])
+        .receipt as unknown as {
+          object_id?: string;
+          conflict_sequences?: readonly number[];
+          remote_baseline_revision?: number;
+        };
+      return (
+        r.object_id === c.resolution.object_id &&
+        sameJson(r.conflict_sequences, c.resolution.conflict_sequences) &&
+        r.remote_baseline_revision === c.resolution.expected_remote_revision
+      );
+    }
+    case 'resolve_graph_push': {
+      const r = (result as K.NativeKnowledgeResultMap['resolve_graph_push'])
+        .receipt as unknown as {
+          status?: string;
+          change_id?: string;
+          conflict_id?: string;
+        };
+      return (
+        r.status === 'resolved' &&
+        r.change_id === c.change_id &&
+        r.conflict_id === c.conflict_id
+      );
+    }
     case 'pull_conflict_context': {
       const r = (result as K.NativeKnowledgeResultMap['pull_conflict_context']).context;
       return r === null || (r.memory_id === c.id && context(r, scope));

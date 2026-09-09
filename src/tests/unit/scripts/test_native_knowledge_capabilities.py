@@ -23,7 +23,7 @@ def test_capability_action_catalog_and_closed_fixture_match_shared_contract() ->
     rust, ts = render_capability_catalog(schema, definitions)
     assert RUST.with_name("capabilities_generated.rs").read_text() == rust
     assert TYPESCRIPT.with_name("nativeKnowledgeCapabilityActionsGenerated.ts").read_text() == ts
-    assert len(schema["x-capability-actions"]) == 53
+    assert len(schema["x-capability-actions"]) == 62
     assert set(
         definitions["NativeKnowledgeCapabilityEntry"]["properties"]["allowed_actions"]["items"][
             "enum"
@@ -40,6 +40,8 @@ def test_capability_action_catalog_and_closed_fixture_match_shared_contract() ->
         "sync_pull",
         "resolve_pull",
         "resolve_push",
+        "resolve_graph_pull",
+        "resolve_graph_push",
         "resume_resolution",
         "reconcile_resolution",
         "sync_unbind",

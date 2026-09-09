@@ -1,3 +1,11 @@
+use agistack_core::knowledge::sync::graph::{
+    GraphPullReceipt, KnowledgeGraphPullRepository, KnowledgeGraphPushReceipt,
+    KnowledgeGraphPushRepository, KnowledgeGraphSyncReadRepository, SyncedGraphProjection,
+};
+use agistack_core::knowledge::sync::graph_resolution::{
+    GraphPullConflictContext, GraphPullConflictResolution, GraphResolutionOutcome,
+    KnowledgeGraphResolutionRepository,
+};
 use agistack_core::knowledge::sync::pull::{KnowledgePullReceipt, KnowledgePullRepository};
 use agistack_core::knowledge::sync::resolution::{
     KnowledgePullConflictContext, KnowledgePullConflictResolution, KnowledgeResolutionOutcome,
@@ -161,6 +169,230 @@ impl KnowledgeOperationV2 {
                 conflict,
             )?))
         })
+    }
+
+    pub(super) async fn graph_push_once(
+        &self,
+        broker: &TrustedSessionBroker,
+    ) -> Result<Option<KnowledgeGraphPushReceipt>, KnowledgeAuthorityErrorV2> {
+        if !self.writable {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
+        }
+        let repository = self.authority.repository()?;
+        let link = repository
+            .sync_status(&self.scope)
+            .await?
+            .link
+            .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
+        let transport = self.connect_sync_transport(broker, link).await?;
+        let Some(prepared) = repository
+            .prepare_graph_push(&self.scope, &transport.target)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let (response, conflict) = transport.graph_push(&prepared).await?;
+        transport.with_current_session(|| {
+            Ok(Some(repository.accept_graph_push_receipt_durable(
+                &self.scope,
+                &transport.target,
+                prepared.local_sequence,
+                response,
+                conflict,
+            )?))
+        })
+    }
+
+    pub(super) async fn graph_pull_once(
+        &self,
+        broker: &TrustedSessionBroker,
+    ) -> Result<GraphPullReceipt, KnowledgeAuthorityErrorV2> {
+        if !self.writable {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
+        }
+        let repository = self.authority.repository()?;
+        let link = repository
+            .sync_status(&self.scope)
+            .await?
+            .link
+            .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
+        let transport = self.connect_sync_transport(broker, link).await?;
+        let after = repository
+            .graph_pull_cursor(&self.scope, &transport.target)
+            .await?;
+        let response = transport.graph_pull(after).await?;
+        transport.with_current_session(|| {
+            Ok(repository.accept_graph_pull_page_durable(
+                &self.scope,
+                &transport.target,
+                after,
+                response,
+            )?)
+        })
+    }
+
+    pub(super) async fn graph_pull_conflicts(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .graph_pull_conflicts(&self.scope, limit)
+            .await?)
+    }
+
+    pub(super) async fn graph_push_conflicts(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .graph_push_conflicts(&self.scope, limit)
+            .await?)
+    }
+
+    pub(super) async fn graph_pull_conflict_context(
+        &self,
+        id: &str,
+    ) -> Result<Option<GraphPullConflictContext>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .graph_pull_conflict_context(&self.scope, id)
+            .await?)
+    }
+
+    pub(super) async fn graph_resolution_history(
+        &self,
+        id: &str,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .graph_resolution_history(&self.scope, id, limit)
+            .await?)
+    }
+
+    pub(super) async fn remote_graph_baseline(
+        &self,
+        id: &str,
+    ) -> Result<Option<serde_json::Value>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .remote_graph_baseline(&self.scope, id)
+            .await?)
+    }
+
+    pub(super) async fn synced_graph_projection(
+        &self,
+        id: &str,
+    ) -> Result<Option<SyncedGraphProjection>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .synced_graph_projection(&self.scope, id)
+            .await?)
+    }
+
+    pub(super) async fn synced_graph_projections(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<SyncedGraphProjection>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .synced_graph_projections(&self.scope, limit, offset)
+            .await?)
+    }
+
+    pub(super) async fn resolve_graph_pull_conflicts(
+        &self,
+        broker: &TrustedSessionBroker,
+        key: &str,
+        resolution: GraphPullConflictResolution,
+    ) -> Result<GraphResolutionOutcome, KnowledgeAuthorityErrorV2> {
+        if !self.writable {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
+        }
+        let repository = self.authority.repository()?;
+        let link = repository
+            .sync_status(&self.scope)
+            .await?
+            .link
+            .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
+        let transport = self.connect_sync_transport(broker, link).await?;
+        transport.with_current_session(|| {
+            Ok(repository.resolve_graph_pull_conflicts_durable(
+                &self.scope,
+                &transport.target,
+                &self.actor_id,
+                key,
+                resolution,
+            )?)
+        })
+    }
+
+    /// Resolve a cloud-detected graph push conflict: the cloud decides with a
+    /// revision re-check, then the durable local settle verifies the receipt
+    /// against the paused push before any local state moves.
+    pub(super) async fn resolve_graph_push(
+        &self,
+        broker: &TrustedSessionBroker,
+        request: super::contracts::GraphResolvePushRequest,
+    ) -> Result<serde_json::Value, KnowledgeAuthorityErrorV2> {
+        if !self.writable {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
+        }
+        if !matches!(
+            request.decision.as_str(),
+            "keep_current" | "use_proposed" | "merged" | "keep_both"
+        ) || request.expected_current_revision < 0.0
+            || request.expected_current_revision > i32::MAX as f64
+            || request.expected_current_revision.fract() != 0.0
+            || (request.decision == "merged") != request.content.is_some()
+        {
+            return Err(KnowledgeAuthorityErrorV2::Knowledge(
+                agistack_core::knowledge::KnowledgeError::InvalidInput,
+            ));
+        }
+        let repository = self.authority.repository()?;
+        let link = repository
+            .sync_status(&self.scope)
+            .await?
+            .link
+            .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
+        let transport = self.connect_sync_transport(broker, link).await?;
+        // A conflict lookup first: the cloud resolve body is only sent for a
+        // conflict the cloud still reports for this actor.
+        let conflict = transport.graph_conflict(&request.conflict_id).await?;
+        if conflict["resolved_change_id"].is_string() {
+            return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
+        }
+        let body = serde_json::json!({
+            "change_id": request.change_id,
+            "expected_current_revision": request.expected_current_revision as u64,
+            "decision": request.decision,
+            "content": request.content,
+        });
+        let response = transport
+            .graph_resolve(&request.conflict_id, body)
+            .await?;
+        let receipt = transport.with_current_session(|| {
+            Ok(repository.settle_graph_push_resolution_durable(
+                &self.scope,
+                &transport.target,
+                &request.conflict_id,
+                &request.change_id,
+                &request.decision,
+                response,
+            )?)
+        })?;
+        Ok(serde_json::json!({"receipt": receipt, "replayed": false}))
     }
 
     pub(super) async fn remote_baseline(

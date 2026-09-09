@@ -72,6 +72,7 @@ const envelope = (result) => ({ contract_version: '1.0.0', scope, result });
 const status = {
   replica_id: '00000000-0000-4000-8000-000000000001',
   pending_changes: 0,
+  pending_graph_changes: 0,
   link: {
     remote_tenant_id: 'remote-tenant',
     remote_project_id: 'remote-project',

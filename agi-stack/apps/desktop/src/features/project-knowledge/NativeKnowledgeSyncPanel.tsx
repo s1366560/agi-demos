@@ -50,6 +50,9 @@ export function NativeKnowledgeSyncPanel({
           <p>
             {t('nativeSync.pendingChanges')}: {model.status.pending_changes}
           </p>
+          <p>
+            {t('nativeSync.pendingGraphChanges')}: {model.status.pending_graph_changes}
+          </p>
           {model.status.link ? (
             <>
               <p>{t('nativeSync.linkConfigured')}</p>

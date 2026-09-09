@@ -144,6 +144,13 @@ pub(crate) enum KnowledgeQuery {
     PullConflicts { limit: usize },
     PullConflictContext { id: String },
     ResolutionHistory { id: String, limit: usize },
+    GraphPullConflicts { limit: usize },
+    GraphPushConflicts { limit: usize },
+    GraphPullConflictContext { id: String },
+    GraphResolutionHistory { id: String, limit: usize },
+    RemoteGraphBaseline { id: String },
+    SyncedGraphProjection { id: String },
+    SyncedGraphProjections { limit: usize, offset: usize },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -354,6 +361,26 @@ pub(crate) struct SyncTargetRequest {
     pub(crate) tenant_id: String,
     pub(crate) project_id: String,
     pub(crate) expected_generation: SyncCloudGeneration,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GraphResolutionRequest {
+    pub(crate) scope: KnowledgeOperationScopeV2,
+    pub(crate) resolution:
+        agistack_core::knowledge::sync::graph_resolution::GraphPullConflictResolution,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GraphResolvePushRequest {
+    pub(crate) scope: KnowledgeOperationScopeV2,
+    pub(crate) conflict_id: String,
+    pub(crate) change_id: String,
+    pub(crate) expected_current_revision: f64,
+    pub(crate) decision: String,
+    #[serde(deserialize_with = "required_nullable")]
+    pub(crate) content: Option<serde_json::Value>,
 }
 
 fn required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>

@@ -72,15 +72,72 @@ impl VerifiedCloudTransport {
         self.get(url).await
     }
 
+    pub(super) async fn graph_pull(&self, after: u64) -> Result<Value, KnowledgeAuthorityErrorV2> {
+        let mut url = self.project_url(&["knowledge-sync", "graph", "changes"])?;
+        url.query_pairs_mut()
+            .append_pair("after", &after.to_string())
+            .append_pair("limit", "1");
+        self.get(url).await
+    }
+
+    pub(super) async fn graph_conflict(&self, id: &str) -> Result<Value, KnowledgeAuthorityErrorV2> {
+        self.get(self.project_url(&["knowledge-sync", "graph", "conflicts", id])?)
+            .await
+    }
+
+    pub(super) async fn graph_resolve(
+        &self,
+        id: &str,
+        body: Value,
+    ) -> Result<Value, KnowledgeAuthorityErrorV2> {
+        let request = self
+            .connection
+            .request(
+                Method::POST,
+                self.project_url(&["knowledge-sync", "graph", "conflicts", id, "resolve"])?,
+                Some(&self.generation),
+            )?
+            .header("content-type", "application/json")
+            .body(body.to_string());
+        let (status, response) = self.connection.send(request, &[StatusCode::OK]).await?;
+        if status != StatusCode::OK || response["receipt"]["status"] != "resolved" {
+            return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
+        }
+        self.ensure_current()?;
+        Ok(response)
+    }
+
     pub(super) async fn push(
         &self,
+        prepared: &PreparedKnowledgePush,
+    ) -> Result<(Value, Option<Value>), KnowledgeAuthorityErrorV2> {
+        self.push_to(&["knowledge-sync", "mutations"], &["knowledge-sync", "conflicts"], prepared)
+            .await
+    }
+
+    pub(super) async fn graph_push(
+        &self,
+        prepared: &PreparedKnowledgePush,
+    ) -> Result<(Value, Option<Value>), KnowledgeAuthorityErrorV2> {
+        self.push_to(
+            &["knowledge-sync", "graph", "mutations"],
+            &["knowledge-sync", "graph", "conflicts"],
+            prepared,
+        )
+        .await
+    }
+
+    async fn push_to(
+        &self,
+        mutation_path: &[&str],
+        conflict_path: &[&str],
         prepared: &PreparedKnowledgePush,
     ) -> Result<(Value, Option<Value>), KnowledgeAuthorityErrorV2> {
         let request = self
             .connection
             .request(
                 Method::POST,
-                self.project_url(&["knowledge-sync", "mutations"])?,
+                self.project_url(mutation_path)?,
                 Some(&self.generation),
             )?
             .header("content-type", "application/json")
@@ -96,10 +153,9 @@ impl VerifiedCloudTransport {
             let id = response["receipt"]["conflict_id"]
                 .as_str()
                 .ok_or(KnowledgeAuthorityErrorV2::RemoteRejected)?;
-            Some(
-                self.get(self.project_url(&["knowledge-sync", "conflicts", id])?)
-                    .await?,
-            )
+            let mut path = conflict_path.to_vec();
+            path.push(id);
+            Some(self.get(self.project_url(&path)?).await?)
         } else {
             if response["receipt"]["status"] != "applied" {
                 return Err(KnowledgeAuthorityErrorV2::RemoteRejected);

@@ -1,693 +1,735 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://memstack.local/schemas/native-knowledge.v1.schema.json",
-  "title": "Native knowledge RPC wire contract",
-  "description": "One schema authority for CRUD, synchronization and processing RPCs. Production publication remains governed by the joint release gate. Client view maps preserve the existing sync API; HTTP envelopes do not add an operation field.",
-  "$defs": {
-    "NativeKnowledgeJson": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeJson"
-    },
-    "NativeKnowledgeObject": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeObject"
-    },
-    "NativeKnowledgeScope": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeScope"
-    },
-    "NativeKnowledgeLink": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeLink"
-    },
-    "NativeKnowledgeStatus": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeStatus"
-    },
-    "NativeKnowledgeMemory": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeMemory"
-    },
-    "NativeKnowledgeContent": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeContent"
-    },
-    "NativeKnowledgeRemote": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeRemote"
-    },
-    "NativeKnowledgeProposal": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeProposal"
-    },
-    "NativeKnowledgePushConflict": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgePushConflict"
-    },
-    "NativeKnowledgePullConflict": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgePullConflict"
-    },
-    "NativeKnowledgeGuard": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeGuard"
-    },
-    "NativeKnowledgeLocalChoice": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeLocalChoice"
-    },
-    "NativeKnowledgeCloudChoice": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeCloudChoice"
-    },
-    "NativeKnowledgePullResolution": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgePullResolution"
-    },
-    "NativeKnowledgeCloudResolution": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeCloudResolution"
-    },
-    "NativeKnowledgeReconciliation": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeReconciliation"
-    },
-    "NativeKnowledgePullContext": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgePullContext"
-    },
-    "NativeKnowledgeCloudContext": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeCloudContext"
-    },
-    "NativeKnowledgeLocalReceipt": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeLocalReceipt"
-    },
-    "NativeKnowledgeReconciliationReceipt": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeReconciliationReceipt"
-    },
-    "NativeKnowledgeAppliedReceipt": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeAppliedReceipt"
-    },
-    "NativeKnowledgeResolvedReceipt": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeResolvedReceipt"
-    },
-    "NativeKnowledgeCloudReceipt": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeCloudReceipt"
-    },
-    "NativeKnowledgeCloudOutcome": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeCloudOutcome"
-    },
-    "NativeKnowledgeResolutionRecord": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeResolutionRecord"
-    },
-    "Page": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/Page"
-    },
-    "Id": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/Id"
-    },
-    "ResolutionId": {
-      "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/ResolutionId"
-    },
-    "NativeKnowledgeRequestMap": {
-      "$ref": "native-knowledge-definitions-3.v1.schema.json#/$defs/NativeKnowledgeRequestMap"
-    },
-    "NativeKnowledgeResultMap": {
-      "$ref": "native-knowledge-definitions-3.v1.schema.json#/$defs/NativeKnowledgeResultMap"
-    },
-    "NativeKnowledgeProcessingSource": {
-      "$ref": "native-knowledge-definitions-3.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
-    },
-    "NativeKnowledgeRetrievalPosition": {
-      "$ref": "native-knowledge-definitions-3.v1.schema.json#/$defs/NativeKnowledgeRetrievalPosition"
-    },
-    "NativeKnowledgeRetrievalCursor": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRetrievalCursor"
-    },
-    "NativeKnowledgeRetrievalRequest": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRetrievalRequest"
-    },
-    "NativeKnowledgeEntity": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeEntity"
-    },
-    "NativeKnowledgeEntityReference": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeEntityReference"
-    },
-    "NativeKnowledgeRetrievedEntity": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRetrievedEntity"
-    },
-    "NativeKnowledgeRelationship": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRelationship"
-    },
-    "NativeKnowledgeRetrievedRelationship": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRetrievedRelationship"
-    },
-    "NativeKnowledgeTextHit": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeTextHit"
-    },
-    "NativeKnowledgeProcessingCoverage": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeProcessingCoverage"
-    },
-    "NativeKnowledgeIndexCoverage": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeIndexCoverage"
-    },
-    "NativeKnowledgeEmbeddingConfiguration": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeEmbeddingConfiguration"
-    },
-    "NativeKnowledgeIndexSource": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeIndexSource"
-    },
-    "NativeKnowledgeSemanticHit": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeSemanticHit"
-    },
-    "NativeKnowledgeProcessingQueryMap": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeProcessingQueryMap"
-    },
-    "NativeKnowledgeProcessingResultMap": {
-      "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeProcessingResultMap"
-    },
-    "NativeKnowledgeProcessingCommandMap": {
-      "$ref": "native-knowledge-definitions-5.v1.schema.json#/$defs/NativeKnowledgeProcessingCommandMap"
-    },
-    "NativeKnowledgeProcessingQuery": {
-      "$ref": "native-knowledge-definitions-5.v1.schema.json#/$defs/NativeKnowledgeProcessingQuery"
-    },
-    "NativeKnowledgeProcessingCommand": {
-      "$ref": "native-knowledge-definitions-5.v1.schema.json#/$defs/NativeKnowledgeProcessingCommand"
-    },
-    "NativeKnowledgeStorageQueryMap": {
-      "$ref": "native-knowledge-definitions-5.v1.schema.json#/$defs/NativeKnowledgeStorageQueryMap"
-    },
-    "NativeKnowledgeStorageQuery": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeStorageQuery"
-    },
-    "NativeKnowledgeCloudQuery": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeCloudQuery"
-    },
-    "NativeKnowledgeMutation": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeMutation"
-    },
-    "NativeKnowledgeQueryRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeQueryRequest"
-    },
-    "NativeKnowledgeMutationRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeMutationRequest"
-    },
-    "NativeKnowledgeSyncLinkRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeSyncLinkRequest"
-    },
-    "NativeKnowledgeUnbindPolicy": {
-      "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeUnbindPolicy"
-    },
-    "NativeKnowledgeSyncUnbindRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeSyncUnbindRequest"
-    },
-    "NativeKnowledgePushRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgePushRequest"
-    },
-    "NativeKnowledgePullRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgePullRequest"
-    },
-    "NativeKnowledgeResolveRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeResolveRequest"
-    },
-    "NativeKnowledgeResumeRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeResumeRequest"
-    },
-    "NativeKnowledgeReconcileRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeReconcileRequest"
-    },
-    "NativeKnowledgeCloudQueryRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeCloudQueryRequest"
-    },
-    "NativeKnowledgeResolutionRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeResolutionRequest"
-    },
-    "NativeKnowledgeProcessingQueryRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeProcessingQueryRequest"
-    },
-    "NativeKnowledgeProcessingCommandRequest": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeProcessingCommandRequest"
-    },
-    "NativeKnowledgeEnvelope": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeEnvelope"
-    },
-    "NativeKnowledgeErrorEnvelope": {
-      "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeErrorEnvelope"
-    },
-    "NativeKnowledgeChange": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeChange"
-    },
-    "NativeKnowledgeStorageResultMap": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeStorageResultMap"
-    },
-    "NativeKnowledgeMutationResult": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeMutationResult"
-    },
-    "NativeKnowledgeIndexFailure": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeIndexFailure"
-    },
-    "NativeKnowledgeProcessingFailure": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeProcessingFailure"
-    },
-    "NativeKnowledgeIndexReceipt": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeIndexReceipt"
-    },
-    "NativeKnowledgeProcessingReceipt": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeProcessingReceipt"
-    },
-    "NativeKnowledgeProcessingCommandResultMap": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeProcessingCommandResultMap"
-    },
-    "NativeKnowledgeContextResponse": {
-      "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeContextResponse"
-    },
-    "NativeKnowledgeStoredMemory": {
-      "$ref": "native-knowledge-definitions-8.v1.schema.json#/$defs/NativeKnowledgeStoredMemory"
-    },
-    "NativeKnowledgeMutationMemory": {
-      "$ref": "native-knowledge-definitions-8.v1.schema.json#/$defs/NativeKnowledgeMutationMemory"
-    },
-    "NativeKnowledgeCapabilityScope": {
-      "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilityScope"
-    },
-    "NativeKnowledgeCapabilityEntry": {
-      "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilityEntry"
-    },
-    "NativeKnowledgeCapabilitiesResponse": {
-      "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilitiesResponse"
-    },
-    "NativeKnowledgeCloudGenerationDescriptor": {
-      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeCloudGenerationDescriptor"
-    },
-    "NativeKnowledgeCloudGeneration": {
-      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeCloudGeneration"
-    },
-    "NativeKnowledgeSyncConnection": {
-      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncConnection"
-    },
-    "NativeKnowledgeSyncTenant": {
-      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncTenant"
-    },
-    "NativeKnowledgeSyncProject": {
-      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncProject"
-    },
-    "NativeKnowledgeSyncEnrollment": {
-      "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollment"
-    },
-    "NativeKnowledgeSyncConnectionRequest": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncConnectionRequest"
-    },
-    "NativeKnowledgeSyncTenantsRequest": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTenantsRequest"
-    },
-    "NativeKnowledgeSyncProjectsRequest": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncProjectsRequest"
-    },
-    "NativeKnowledgeSyncEnrollmentRequest": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollmentRequest"
-    },
-    "NativeKnowledgeSyncTargetRequest": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTargetRequest"
-    },
-    "NativeKnowledgeSyncConnectionResult": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncConnectionResult"
-    },
-    "NativeKnowledgeSyncTenantsResult": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTenantsResult"
-    },
-    "NativeKnowledgeSyncProjectsResult": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncProjectsResult"
-    },
-    "NativeKnowledgeSyncEnrollmentResult": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollmentResult"
-    },
-    "NativeKnowledgeSyncBindingResult": {
-      "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncBindingResult"
-    },
-    "NativeKnowledgeDiagnosticRequest": {
-      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeDiagnosticRequest"
-    },
-    "NativeKnowledgeProcessingFailureDetail": {
-      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeProcessingFailureDetail"
-    },
-    "NativeKnowledgeIndexFailureDetail": {
-      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeIndexFailureDetail"
-    },
-    "NativeKnowledgeAuditSummary": {
-      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeAuditSummary"
-    },
-    "NativeKnowledgeProcessingTaskSnapshot": {
-      "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeProcessingTaskSnapshot"
-    },
-    "NativeKnowledgeCommunityFailure": {
-      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityFailure"
-    },
-    "NativeKnowledgeCommunitySelection": {
-      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunitySelection"
-    },
-    "NativeKnowledgeCommunityBuildReceipt": {
-      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildReceipt"
-    },
-    "NativeKnowledgeCommunityBuildStatus": {
-      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildStatus"
-    },
-    "NativeKnowledgeCommunityEvidence": {
-      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityEvidence"
-    },
-    "NativeKnowledgeCommunityDecision": {
-      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityDecision"
-    },
-    "NativeKnowledgeCommunitySubmission": {
-      "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunitySubmission"
-    },
-    "NativeKnowledgeCommunityResult": {
-      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityResult"
-    },
-    "NativeKnowledgeCommunityJobStatus": {
-      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityJobStatus"
-    },
-    "NativeKnowledgeCommunityAuditSummary": {
-      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityAuditSummary"
-    },
-    "NativeKnowledgeCommunityCandidateProgress": {
-      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityCandidateProgress"
-    },
-    "NativeKnowledgeCommunityBuildPage": {
-      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildPage"
-    },
-    "NativeKnowledgeCommunityBuildHistoryPage": {
-      "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildHistoryPage"
-    },
-    "NativeKnowledgeSourceGraph": {
-      "$ref": "native-knowledge-definitions-15.v1.schema.json#/$defs/NativeKnowledgeSourceGraph"
-    }
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://memstack.local/schemas/native-knowledge.v1.schema.json",
+ "title": "Native knowledge RPC wire contract",
+ "description": "One schema authority for CRUD, synchronization and processing RPCs. Production publication remains governed by the joint release gate. Client view maps preserve the existing sync API; HTTP envelopes do not add an operation field.",
+ "$defs": {
+  "NativeKnowledgeJson": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeJson"
   },
-  "x-routes": {
-    "/api/v1/knowledge/query": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeQueryRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result_map": {
-        "$ref": "#/$defs/NativeKnowledgeStorageResultMap"
-      },
-      "operation_path": "query.operation"
-    },
-    "/api/v1/knowledge/mutations": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeMutationRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result": {
-        "$ref": "#/$defs/NativeKnowledgeMutationResult"
-      },
-      "required_headers": [
-        "idempotency-key"
-      ],
-      "conditional_headers": {
-        "update": [
-          "x-expected-revision"
-        ],
-        "delete": [
-          "x-expected-revision"
-        ]
-      }
-    },
-    "/api/v1/knowledge/sync-link": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeSyncLinkRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      }
-    },
-    "/api/v1/knowledge/sync-unbind": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeSyncUnbindRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      }
-    },
-    "/api/v1/knowledge/sync-push": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgePushRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      }
-    },
-    "/api/v1/knowledge/sync-pull": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgePullRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      }
-    },
-    "/api/v1/knowledge/sync-resolve-push": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeResolveRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "required_headers": [
-        "idempotency-key"
-      ]
-    },
-    "/api/v1/knowledge/sync-resume-resolution": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeResumeRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      }
-    },
-    "/api/v1/knowledge/sync-reconcile-resolution": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeReconcileRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      }
-    },
-    "/api/v1/knowledge/sync-cloud-query": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeCloudQueryRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      }
-    },
-    "/api/v1/knowledge/sync-resolve-pull": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeResolutionRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "required_headers": [
-        "idempotency-key"
-      ]
-    },
-    "/api/v1/knowledge/processing-query": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeProcessingQueryRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result_map": {
-        "$ref": "#/$defs/NativeKnowledgeProcessingResultMap"
-      },
-      "operation_path": "query.operation"
-    },
-    "/api/v1/knowledge/processing-command": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeProcessingCommandRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result_map": {
-        "$ref": "#/$defs/NativeKnowledgeProcessingCommandResultMap"
-      },
-      "operation_path": "command.operation"
-    },
-    "/api/v1/knowledge/context": {
-      "method": "GET",
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeContextResponse"
-      }
-    },
-    "/api/v1/knowledge/capabilities": {
-      "method": "GET",
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeCapabilitiesResponse"
-      }
-    },
-    "/api/v1/knowledge/sync-connection": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeSyncConnectionRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result": {
-        "$ref": "#/$defs/NativeKnowledgeSyncConnectionResult"
-      }
-    },
-    "/api/v1/knowledge/sync-tenants": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeSyncTenantsRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result": {
-        "$ref": "#/$defs/NativeKnowledgeSyncTenantsResult"
-      }
-    },
-    "/api/v1/knowledge/sync-projects": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeSyncProjectsRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result": {
-        "$ref": "#/$defs/NativeKnowledgeSyncProjectsResult"
-      }
-    },
-    "/api/v1/knowledge/sync-enrollment": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result": {
-        "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentResult"
-      }
-    },
-    "/api/v1/knowledge/sync-enroll": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeSyncTargetRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result": {
-        "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentResult"
-      }
-    },
-    "/api/v1/knowledge/sync-bind": {
-      "method": "POST",
-      "request": {
-        "$ref": "#/$defs/NativeKnowledgeSyncTargetRequest"
-      },
-      "response": {
-        "$ref": "#/$defs/NativeKnowledgeEnvelope"
-      },
-      "result": {
-        "$ref": "#/$defs/NativeKnowledgeSyncBindingResult"
-      }
-    }
+  "NativeKnowledgeObject": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeObject"
   },
-  "$ref": "#/$defs/NativeKnowledgeEnvelope",
-  "x-capability-actions": {
-    "cloud_conflict_context": "read",
-    "configuration": "read",
-    "configure_embedding": "write",
-    "create": "write",
-    "delete": "write",
-    "entities": "read",
-    "get": "read",
-    "index_one": "write",
-    "list": "read",
-    "pending_resolutions": "read",
-    "process_one": "write",
-    "promote_index": "write",
-    "pull_conflict_context": "read",
-    "pull_conflicts": "read",
-    "push_conflicts": "read",
-    "reconcile_resolution": "write",
-    "reconciliation_context": "read",
-    "relationships": "read",
-    "remote_baseline": "read",
-    "resolution": "read",
-    "resolution_by_key": "read",
-    "resolution_history": "read",
-    "resolutions": "read",
-    "resolve_pull": "write",
-    "resolve_push": "write",
-    "resume_resolution": "write",
-    "retry_index": "write",
-    "select_embedding": "write",
-    "semantic": "read",
-    "sync_link": "write",
-    "sync_outbox": "read",
-    "sync_pull": "write",
-    "sync_push": "write",
-    "sync_status": "read",
-    "sync_unbind": "write",
-    "text": "read",
-    "update": "write",
-    "view": "read",
-    "failed_processing": "read",
-    "failed_index": "read",
-    "processing_audits": "read",
-    "retry_processing": "write",
-    "processing_task": "read",
-    "community_active": "read",
-    "community_build": "read",
-    "community_audit": "read",
-    "create_community_build": "write",
-    "select_community_build": "write",
-    "process_community_one": "write",
-    "retry_community": "write",
-    "activate_community_build": "write",
-    "community_builds": "read",
-    "graph_source": "read"
+  "NativeKnowledgeScope": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeScope"
   },
-  "x-local-acceptance-actions": [
-    "view",
-    "list",
-    "get",
-    "create",
-    "update",
-    "delete",
-    "configuration",
-    "configure_embedding",
-    "select_embedding",
-    "process_one",
-    "index_one",
-    "promote_index",
-    "retry_index",
-    "text",
-    "semantic",
-    "entities",
-    "relationships",
-    "failed_processing",
-    "failed_index",
-    "processing_audits",
-    "retry_processing",
-    "processing_task",
-    "community_active",
-    "community_build",
-    "community_audit",
-    "create_community_build",
-    "select_community_build",
-    "process_community_one",
-    "retry_community",
-    "activate_community_build",
-    "community_builds",
-    "graph_source"
-  ]
+  "NativeKnowledgeLink": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeLink"
+  },
+  "NativeKnowledgeStatus": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeStatus"
+  },
+  "NativeKnowledgeMemory": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeMemory"
+  },
+  "NativeKnowledgeContent": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeContent"
+  },
+  "NativeKnowledgeRemote": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeRemote"
+  },
+  "NativeKnowledgeProposal": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeProposal"
+  },
+  "NativeKnowledgePushConflict": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgePushConflict"
+  },
+  "NativeKnowledgePullConflict": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgePullConflict"
+  },
+  "NativeKnowledgeGuard": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeGuard"
+  },
+  "NativeKnowledgeLocalChoice": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeLocalChoice"
+  },
+  "NativeKnowledgeCloudChoice": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeCloudChoice"
+  },
+  "NativeKnowledgePullResolution": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgePullResolution"
+  },
+  "NativeKnowledgeCloudResolution": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeCloudResolution"
+  },
+  "NativeKnowledgeReconciliation": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeReconciliation"
+  },
+  "NativeKnowledgePullContext": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgePullContext"
+  },
+  "NativeKnowledgeCloudContext": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeCloudContext"
+  },
+  "NativeKnowledgeLocalReceipt": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeLocalReceipt"
+  },
+  "NativeKnowledgeReconciliationReceipt": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeReconciliationReceipt"
+  },
+  "NativeKnowledgeAppliedReceipt": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeAppliedReceipt"
+  },
+  "NativeKnowledgeResolvedReceipt": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeResolvedReceipt"
+  },
+  "NativeKnowledgeCloudReceipt": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeCloudReceipt"
+  },
+  "NativeKnowledgeCloudOutcome": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeCloudOutcome"
+  },
+  "NativeKnowledgeResolutionRecord": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/NativeKnowledgeResolutionRecord"
+  },
+  "Page": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/Page"
+  },
+  "Id": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/Id"
+  },
+  "ResolutionId": {
+   "$ref": "native-knowledge-definitions-2.v1.schema.json#/$defs/ResolutionId"
+  },
+  "NativeKnowledgeRequestMap": {
+   "$ref": "native-knowledge-definitions-3.v1.schema.json#/$defs/NativeKnowledgeRequestMap"
+  },
+  "NativeKnowledgeResultMap": {
+   "$ref": "native-knowledge-definitions-3.v1.schema.json#/$defs/NativeKnowledgeResultMap"
+  },
+  "NativeKnowledgeProcessingSource": {
+   "$ref": "native-knowledge-definitions-3.v1.schema.json#/$defs/NativeKnowledgeProcessingSource"
+  },
+  "NativeKnowledgeRetrievalPosition": {
+   "$ref": "native-knowledge-definitions-3.v1.schema.json#/$defs/NativeKnowledgeRetrievalPosition"
+  },
+  "NativeKnowledgeRetrievalCursor": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRetrievalCursor"
+  },
+  "NativeKnowledgeRetrievalRequest": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRetrievalRequest"
+  },
+  "NativeKnowledgeEntity": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeEntity"
+  },
+  "NativeKnowledgeEntityReference": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeEntityReference"
+  },
+  "NativeKnowledgeRetrievedEntity": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRetrievedEntity"
+  },
+  "NativeKnowledgeRelationship": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRelationship"
+  },
+  "NativeKnowledgeRetrievedRelationship": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeRetrievedRelationship"
+  },
+  "NativeKnowledgeTextHit": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeTextHit"
+  },
+  "NativeKnowledgeProcessingCoverage": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeProcessingCoverage"
+  },
+  "NativeKnowledgeIndexCoverage": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeIndexCoverage"
+  },
+  "NativeKnowledgeEmbeddingConfiguration": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeEmbeddingConfiguration"
+  },
+  "NativeKnowledgeIndexSource": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeIndexSource"
+  },
+  "NativeKnowledgeSemanticHit": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeSemanticHit"
+  },
+  "NativeKnowledgeProcessingQueryMap": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeProcessingQueryMap"
+  },
+  "NativeKnowledgeProcessingResultMap": {
+   "$ref": "native-knowledge-definitions-4.v1.schema.json#/$defs/NativeKnowledgeProcessingResultMap"
+  },
+  "NativeKnowledgeProcessingCommandMap": {
+   "$ref": "native-knowledge-definitions-5.v1.schema.json#/$defs/NativeKnowledgeProcessingCommandMap"
+  },
+  "NativeKnowledgeProcessingQuery": {
+   "$ref": "native-knowledge-definitions-5.v1.schema.json#/$defs/NativeKnowledgeProcessingQuery"
+  },
+  "NativeKnowledgeProcessingCommand": {
+   "$ref": "native-knowledge-definitions-5.v1.schema.json#/$defs/NativeKnowledgeProcessingCommand"
+  },
+  "NativeKnowledgeStorageQueryMap": {
+   "$ref": "native-knowledge-definitions-5.v1.schema.json#/$defs/NativeKnowledgeStorageQueryMap"
+  },
+  "NativeKnowledgeStorageQuery": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeStorageQuery"
+  },
+  "NativeKnowledgeCloudQuery": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeCloudQuery"
+  },
+  "NativeKnowledgeMutation": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeMutation"
+  },
+  "NativeKnowledgeQueryRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeQueryRequest"
+  },
+  "NativeKnowledgeMutationRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeMutationRequest"
+  },
+  "NativeKnowledgeSyncLinkRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeSyncLinkRequest"
+  },
+  "NativeKnowledgeUnbindPolicy": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeUnbindPolicy"
+  },
+  "NativeKnowledgeSyncUnbindRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeSyncUnbindRequest"
+  },
+  "NativeKnowledgePushRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgePushRequest"
+  },
+  "NativeKnowledgePullRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgePullRequest"
+  },
+  "NativeKnowledgeResolveRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeResolveRequest"
+  },
+  "NativeKnowledgeResumeRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeResumeRequest"
+  },
+  "NativeKnowledgeReconcileRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeReconcileRequest"
+  },
+  "NativeKnowledgeCloudQueryRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeCloudQueryRequest"
+  },
+  "NativeKnowledgeResolutionRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeResolutionRequest"
+  },
+  "NativeKnowledgeProcessingQueryRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeProcessingQueryRequest"
+  },
+  "NativeKnowledgeProcessingCommandRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeProcessingCommandRequest"
+  },
+  "NativeKnowledgeEnvelope": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeEnvelope"
+  },
+  "NativeKnowledgeErrorEnvelope": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeErrorEnvelope"
+  },
+  "NativeKnowledgeChange": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeChange"
+  },
+  "NativeKnowledgeStorageResultMap": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeStorageResultMap"
+  },
+  "NativeKnowledgeMutationResult": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeMutationResult"
+  },
+  "NativeKnowledgeIndexFailure": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeIndexFailure"
+  },
+  "NativeKnowledgeProcessingFailure": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeProcessingFailure"
+  },
+  "NativeKnowledgeIndexReceipt": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeIndexReceipt"
+  },
+  "NativeKnowledgeProcessingReceipt": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeProcessingReceipt"
+  },
+  "NativeKnowledgeProcessingCommandResultMap": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeProcessingCommandResultMap"
+  },
+  "NativeKnowledgeContextResponse": {
+   "$ref": "native-knowledge-definitions-7.v1.schema.json#/$defs/NativeKnowledgeContextResponse"
+  },
+  "NativeKnowledgeStoredMemory": {
+   "$ref": "native-knowledge-definitions-8.v1.schema.json#/$defs/NativeKnowledgeStoredMemory"
+  },
+  "NativeKnowledgeMutationMemory": {
+   "$ref": "native-knowledge-definitions-8.v1.schema.json#/$defs/NativeKnowledgeMutationMemory"
+  },
+  "NativeKnowledgeCapabilityScope": {
+   "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilityScope"
+  },
+  "NativeKnowledgeCapabilityEntry": {
+   "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilityEntry"
+  },
+  "NativeKnowledgeCapabilitiesResponse": {
+   "$ref": "native-knowledge-definitions-9.v1.schema.json#/$defs/NativeKnowledgeCapabilitiesResponse"
+  },
+  "NativeKnowledgeCloudGenerationDescriptor": {
+   "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeCloudGenerationDescriptor"
+  },
+  "NativeKnowledgeCloudGeneration": {
+   "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeCloudGeneration"
+  },
+  "NativeKnowledgeSyncConnection": {
+   "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncConnection"
+  },
+  "NativeKnowledgeSyncTenant": {
+   "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncTenant"
+  },
+  "NativeKnowledgeSyncProject": {
+   "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncProject"
+  },
+  "NativeKnowledgeSyncEnrollment": {
+   "$ref": "native-knowledge-definitions-10.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollment"
+  },
+  "NativeKnowledgeSyncConnectionRequest": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncConnectionRequest"
+  },
+  "NativeKnowledgeSyncTenantsRequest": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTenantsRequest"
+  },
+  "NativeKnowledgeSyncProjectsRequest": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncProjectsRequest"
+  },
+  "NativeKnowledgeSyncEnrollmentRequest": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollmentRequest"
+  },
+  "NativeKnowledgeSyncTargetRequest": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTargetRequest"
+  },
+  "NativeKnowledgeSyncConnectionResult": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncConnectionResult"
+  },
+  "NativeKnowledgeSyncTenantsResult": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncTenantsResult"
+  },
+  "NativeKnowledgeSyncProjectsResult": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncProjectsResult"
+  },
+  "NativeKnowledgeSyncEnrollmentResult": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncEnrollmentResult"
+  },
+  "NativeKnowledgeSyncBindingResult": {
+   "$ref": "native-knowledge-definitions-11.v1.schema.json#/$defs/NativeKnowledgeSyncBindingResult"
+  },
+  "NativeKnowledgeDiagnosticRequest": {
+   "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeDiagnosticRequest"
+  },
+  "NativeKnowledgeProcessingFailureDetail": {
+   "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeProcessingFailureDetail"
+  },
+  "NativeKnowledgeIndexFailureDetail": {
+   "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeIndexFailureDetail"
+  },
+  "NativeKnowledgeAuditSummary": {
+   "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeAuditSummary"
+  },
+  "NativeKnowledgeProcessingTaskSnapshot": {
+   "$ref": "native-knowledge-definitions-12.v1.schema.json#/$defs/NativeKnowledgeProcessingTaskSnapshot"
+  },
+  "NativeKnowledgeCommunityFailure": {
+   "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityFailure"
+  },
+  "NativeKnowledgeCommunitySelection": {
+   "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunitySelection"
+  },
+  "NativeKnowledgeCommunityBuildReceipt": {
+   "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildReceipt"
+  },
+  "NativeKnowledgeCommunityBuildStatus": {
+   "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildStatus"
+  },
+  "NativeKnowledgeCommunityEvidence": {
+   "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityEvidence"
+  },
+  "NativeKnowledgeCommunityDecision": {
+   "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunityDecision"
+  },
+  "NativeKnowledgeCommunitySubmission": {
+   "$ref": "native-knowledge-definitions-13.v1.schema.json#/$defs/NativeKnowledgeCommunitySubmission"
+  },
+  "NativeKnowledgeCommunityResult": {
+   "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityResult"
+  },
+  "NativeKnowledgeCommunityJobStatus": {
+   "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityJobStatus"
+  },
+  "NativeKnowledgeCommunityAuditSummary": {
+   "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityAuditSummary"
+  },
+  "NativeKnowledgeCommunityCandidateProgress": {
+   "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityCandidateProgress"
+  },
+  "NativeKnowledgeCommunityBuildPage": {
+   "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildPage"
+  },
+  "NativeKnowledgeCommunityBuildHistoryPage": {
+   "$ref": "native-knowledge-definitions-14.v1.schema.json#/$defs/NativeKnowledgeCommunityBuildHistoryPage"
+  },
+  "NativeKnowledgeSourceGraph": {
+   "$ref": "native-knowledge-definitions-15.v1.schema.json#/$defs/NativeKnowledgeSourceGraph"
+  },
+  "NativeKnowledgeGraphLocalChoice": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeGraphLocalChoice"
+  },
+  "NativeKnowledgeGraphPullResolution": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeGraphPullResolution"
+  },
+  "NativeKnowledgeSyncedGraphProjection": {
+   "$ref": "native-knowledge-definitions-1.v1.schema.json#/$defs/NativeKnowledgeSyncedGraphProjection"
+  },
+  "NativeKnowledgeGraphResolutionRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeGraphResolutionRequest"
+  },
+  "NativeKnowledgeGraphResolvePushRequest": {
+   "$ref": "native-knowledge-definitions-6.v1.schema.json#/$defs/NativeKnowledgeGraphResolvePushRequest"
+  }
+ },
+ "x-routes": {
+  "/api/v1/knowledge/query": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeQueryRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result_map": {
+    "$ref": "#/$defs/NativeKnowledgeStorageResultMap"
+   },
+   "operation_path": "query.operation"
+  },
+  "/api/v1/knowledge/mutations": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeMutationRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result": {
+    "$ref": "#/$defs/NativeKnowledgeMutationResult"
+   },
+   "required_headers": [
+    "idempotency-key"
+   ],
+   "conditional_headers": {
+    "update": [
+     "x-expected-revision"
+    ],
+    "delete": [
+     "x-expected-revision"
+    ]
+   }
+  },
+  "/api/v1/knowledge/sync-link": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeSyncLinkRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  },
+  "/api/v1/knowledge/sync-unbind": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeSyncUnbindRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  },
+  "/api/v1/knowledge/sync-push": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgePushRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  },
+  "/api/v1/knowledge/sync-pull": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgePullRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  },
+  "/api/v1/knowledge/sync-resolve-push": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeResolveRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "required_headers": [
+    "idempotency-key"
+   ]
+  },
+  "/api/v1/knowledge/sync-resume-resolution": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeResumeRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  },
+  "/api/v1/knowledge/sync-reconcile-resolution": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeReconcileRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  },
+  "/api/v1/knowledge/sync-cloud-query": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeCloudQueryRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  },
+  "/api/v1/knowledge/sync-resolve-pull": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeResolutionRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "required_headers": [
+    "idempotency-key"
+   ]
+  },
+  "/api/v1/knowledge/processing-query": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeProcessingQueryRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result_map": {
+    "$ref": "#/$defs/NativeKnowledgeProcessingResultMap"
+   },
+   "operation_path": "query.operation"
+  },
+  "/api/v1/knowledge/processing-command": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeProcessingCommandRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result_map": {
+    "$ref": "#/$defs/NativeKnowledgeProcessingCommandResultMap"
+   },
+   "operation_path": "command.operation"
+  },
+  "/api/v1/knowledge/context": {
+   "method": "GET",
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeContextResponse"
+   }
+  },
+  "/api/v1/knowledge/capabilities": {
+   "method": "GET",
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeCapabilitiesResponse"
+   }
+  },
+  "/api/v1/knowledge/sync-connection": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeSyncConnectionRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result": {
+    "$ref": "#/$defs/NativeKnowledgeSyncConnectionResult"
+   }
+  },
+  "/api/v1/knowledge/sync-tenants": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeSyncTenantsRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result": {
+    "$ref": "#/$defs/NativeKnowledgeSyncTenantsResult"
+   }
+  },
+  "/api/v1/knowledge/sync-projects": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeSyncProjectsRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result": {
+    "$ref": "#/$defs/NativeKnowledgeSyncProjectsResult"
+   }
+  },
+  "/api/v1/knowledge/sync-enrollment": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result": {
+    "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentResult"
+   }
+  },
+  "/api/v1/knowledge/sync-enroll": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeSyncTargetRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result": {
+    "$ref": "#/$defs/NativeKnowledgeSyncEnrollmentResult"
+   }
+  },
+  "/api/v1/knowledge/sync-bind": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeSyncTargetRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   },
+   "result": {
+    "$ref": "#/$defs/NativeKnowledgeSyncBindingResult"
+   }
+  },
+  "/api/v1/knowledge/sync-resolve-graph-pull": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeGraphResolutionRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  },
+  "/api/v1/knowledge/sync-resolve-graph-push": {
+   "method": "POST",
+   "request": {
+    "$ref": "#/$defs/NativeKnowledgeGraphResolvePushRequest"
+   },
+   "response": {
+    "$ref": "#/$defs/NativeKnowledgeEnvelope"
+   }
+  }
+ },
+ "$ref": "#/$defs/NativeKnowledgeEnvelope",
+ "x-capability-actions": {
+  "cloud_conflict_context": "read",
+  "configuration": "read",
+  "configure_embedding": "write",
+  "create": "write",
+  "delete": "write",
+  "entities": "read",
+  "get": "read",
+  "index_one": "write",
+  "list": "read",
+  "pending_resolutions": "read",
+  "process_one": "write",
+  "promote_index": "write",
+  "pull_conflict_context": "read",
+  "pull_conflicts": "read",
+  "push_conflicts": "read",
+  "reconcile_resolution": "write",
+  "reconciliation_context": "read",
+  "relationships": "read",
+  "remote_baseline": "read",
+  "resolution": "read",
+  "resolution_by_key": "read",
+  "resolution_history": "read",
+  "resolutions": "read",
+  "resolve_pull": "write",
+  "resolve_push": "write",
+  "resume_resolution": "write",
+  "retry_index": "write",
+  "select_embedding": "write",
+  "semantic": "read",
+  "sync_link": "write",
+  "sync_outbox": "read",
+  "sync_pull": "write",
+  "sync_push": "write",
+  "sync_status": "read",
+  "sync_unbind": "write",
+  "text": "read",
+  "update": "write",
+  "view": "read",
+  "failed_processing": "read",
+  "failed_index": "read",
+  "processing_audits": "read",
+  "retry_processing": "write",
+  "processing_task": "read",
+  "community_active": "read",
+  "community_build": "read",
+  "community_audit": "read",
+  "create_community_build": "write",
+  "select_community_build": "write",
+  "process_community_one": "write",
+  "retry_community": "write",
+  "activate_community_build": "write",
+  "community_builds": "read",
+  "graph_source": "read",
+  "graph_pull_conflicts": "read",
+  "graph_push_conflicts": "read",
+  "graph_pull_conflict_context": "read",
+  "graph_resolution_history": "read",
+  "remote_graph_baseline": "read",
+  "synced_graph_projection": "read",
+  "synced_graph_projections": "read",
+  "resolve_graph_pull": "write",
+  "resolve_graph_push": "write"
+ },
+ "x-local-acceptance-actions": [
+  "view",
+  "list",
+  "get",
+  "create",
+  "update",
+  "delete",
+  "configuration",
+  "configure_embedding",
+  "select_embedding",
+  "process_one",
+  "index_one",
+  "promote_index",
+  "retry_index",
+  "text",
+  "semantic",
+  "entities",
+  "relationships",
+  "failed_processing",
+  "failed_index",
+  "processing_audits",
+  "retry_processing",
+  "processing_task",
+  "community_active",
+  "community_build",
+  "community_audit",
+  "create_community_build",
+  "select_community_build",
+  "process_community_one",
+  "retry_community",
+  "activate_community_build",
+  "community_builds",
+  "graph_source"
+ ]
 }

@@ -32,6 +32,7 @@ export type NativeKnowledgeStatus = {
   readonly replica_id: string;
   readonly link: (NativeKnowledgeLink) | (null);
   readonly pending_changes: number;
+  readonly pending_graph_changes: number;
 };
 
 // prettier-ignore
@@ -473,7 +474,7 @@ export type NativeKnowledgeCapabilityEntry = {
   readonly reason_code: (string) | (null);
   readonly service_version: (string) | (null);
   readonly contract_version: (string) | (null);
-  readonly allowed_actions: readonly ("activate_community_build" | "cloud_conflict_context" | "community_active" | "community_audit" | "community_build" | "configuration" | "configure_embedding" | "create" | "create_community_build" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "index_one" | "list" | "pending_resolutions" | "process_community_one" | "process_one" | "processing_audits" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_community" | "retry_index" | "select_embedding" | "select_community_build" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "sync_unbind" | "text" | "update" | "view" | "retry_processing" | "processing_task" | "community_builds" | "graph_source")[];
+  readonly allowed_actions: readonly ("activate_community_build" | "cloud_conflict_context" | "community_active" | "community_audit" | "community_build" | "community_builds" | "configuration" | "configure_embedding" | "create" | "create_community_build" | "delete" | "entities" | "failed_index" | "failed_processing" | "get" | "graph_pull_conflict_context" | "graph_pull_conflicts" | "graph_push_conflicts" | "graph_resolution_history" | "graph_source" | "index_one" | "list" | "pending_resolutions" | "process_community_one" | "process_one" | "processing_audits" | "processing_task" | "promote_index" | "pull_conflict_context" | "pull_conflicts" | "push_conflicts" | "reconcile_resolution" | "reconciliation_context" | "relationships" | "remote_baseline" | "remote_graph_baseline" | "resolution" | "resolution_by_key" | "resolution_history" | "resolutions" | "resolve_graph_pull" | "resolve_graph_push" | "resolve_pull" | "resolve_push" | "resume_resolution" | "retry_community" | "retry_index" | "retry_processing" | "select_community_build" | "select_embedding" | "semantic" | "sync_link" | "sync_outbox" | "sync_pull" | "sync_push" | "sync_status" | "sync_unbind" | "synced_graph_projection" | "synced_graph_projections" | "text" | "update" | "view")[];
   readonly scope: NativeKnowledgeCapabilityScope;
   readonly authority_revision: (number) | (null);
   readonly retryable: boolean;
@@ -734,4 +735,38 @@ export type NativeKnowledgeSourceGraph = {
   readonly content: string;
   readonly entities: readonly (NativeKnowledgeEntity)[];
   readonly relationships: readonly (NativeKnowledgeRelationship)[];
+};
+
+// prettier-ignore
+export type NativeKnowledgeGraphLocalChoice = ({
+  readonly decision: "use_local";
+}) | ({
+  readonly decision: "use_remote";
+}) | ({
+  readonly decision: "merged";
+  readonly content: NativeKnowledgeJson;
+}) | ({
+  readonly decision: "keep_both";
+});
+
+// prettier-ignore
+export type NativeKnowledgeGraphPullResolution = {
+  readonly expected_local_revision: number;
+  readonly expected_remote_revision: number;
+  readonly expected_baseline_revision: number;
+  readonly conflict_sequences: readonly (number)[];
+  readonly object_id: string;
+  readonly choice: NativeKnowledgeGraphLocalChoice;
+};
+
+// prettier-ignore
+export type NativeKnowledgeSyncedGraphProjection = {
+  readonly object_id: string;
+  readonly revision: number;
+  readonly deleted: boolean;
+  readonly author_id: string;
+  readonly created_at_ms: number;
+  readonly content: NativeKnowledgeJson;
+  readonly source_available: boolean;
+  readonly source_current: boolean;
 };

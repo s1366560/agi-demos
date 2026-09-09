@@ -35,6 +35,7 @@ export const status = s.object({
   replica_id: s.uuid,
   link: s.nullable(link),
   pending_changes: s.integer(),
+  pending_graph_changes: s.integer(),
 });
 export const content = s.object({
   title: (v) => s.identifier(v) && [...String(v)].length <= 500,
@@ -113,6 +114,38 @@ export const localChoice: s.NativeCheck = (v) =>
 export const cloudChoice: s.NativeCheck = (v) =>
   s.object({ decision: s.literal('keep_current', 'use_proposed', 'keep_both') })(v) ||
   s.object({ decision: s.literal('merged'), content })(v);
+const graphEntity = s.object({ name: s.identifier, kind: s.identifier });
+const graphRelationship = s.object({
+  source_index: s.integer(),
+  target_index: s.integer(),
+  relation_type: s.identifier,
+  fact: (v) => typeof v === 'string' && v.trim().length > 0,
+  score: (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1,
+});
+export const graphContent = s.object({
+  source_revision: s.integer(1, 2_147_483_646),
+  change_sequence: s.sequence,
+  audit_attempt: s.integer(1, 2_147_483_646),
+  entities: s.array(graphEntity, 200),
+  relationships: s.array(graphRelationship, 500),
+});
+export const graphLocalChoice: s.NativeCheck = (v) =>
+  s.object({ decision: s.literal('use_local', 'use_remote', 'keep_both') })(v) ||
+  s.object({ decision: s.literal('merged'), content: graphContent })(v);
+export const graphPullResolution: s.NativeCheck = (v) =>
+  s.object({ ...guardShape, object_id: s.identifier, choice: graphLocalChoice })(v) &&
+  Number((v as Record<string, unknown>).expected_remote_revision) > 0 &&
+  ((v as Record<string, unknown>).conflict_sequences as number[]).length > 0;
+export const syncedGraphProjection = s.object({
+  object_id: s.identifier,
+  revision: s.integer(1, 2_147_483_647),
+  deleted: s.bool,
+  author_id: s.identifier,
+  created_at_ms: s.integer(),
+  content: graphContent,
+  source_available: s.bool,
+  source_current: s.bool,
+});
 export const pullResolution: s.NativeCheck = (v) =>
   s.object({ ...guardShape, memory_id: s.identifier, choice: localChoice })(v) &&
   Number((v as Record<string, unknown>).expected_remote_revision) > 0 &&

@@ -33,6 +33,7 @@ pub(super) struct Cloud {
     pub(super) release: Notify,
     pub(super) calls: Mutex<Vec<Phase>>,
     pub(super) cursors: Mutex<Vec<u64>>,
+    pub(super) graph_cursors: Mutex<Vec<u64>>,
     pub(super) fail_next: AtomicBool,
     pub(super) malformed: AtomicBool,
     pub(super) wrong_actor: AtomicBool,
@@ -66,6 +67,16 @@ async fn project(
     Json(
         json!({"id":"remote-project","tenant_id":if cloud.wrong_project.load(Ordering::SeqCst) {"wrong"} else {"remote-tenant"}}),
     )
+}
+async fn graph_changes(
+    State(cloud): State<Arc<Cloud>>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    assert_eq!(query.len(), 2);
+    assert_eq!(query.get("limit").unwrap(), "1");
+    let after: u64 = query.get("after").unwrap().parse().unwrap();
+    cloud.graph_cursors.lock().unwrap().push(after);
+    Json(json!({"changes":[],"next_cursor":0,"has_more":false})).into_response()
 }
 async fn changes(
     State(cloud): State<Arc<Cloud>>,
@@ -121,6 +132,7 @@ pub(super) async fn cloud(phase: Phase) -> (Arc<Cloud>, String, tokio::task::Joi
         release: Notify::new(),
         calls: Mutex::new(vec![]),
         cursors: Mutex::new(vec![]),
+        graph_cursors: Mutex::new(vec![]),
         fail_next: AtomicBool::new(false),
         malformed: AtomicBool::new(false),
         wrong_actor: AtomicBool::new(false),
@@ -133,6 +145,10 @@ pub(super) async fn cloud(phase: Phase) -> (Arc<Cloud>, String, tokio::task::Joi
         .route(
             "/api/v1/projects/remote-project/knowledge-sync/changes",
             get(changes),
+        )
+        .route(
+            "/api/v1/projects/remote-project/knowledge-sync/graph/changes",
+            get(graph_changes),
         )
         .layer(axum::middleware::from_fn(crate::local_runtime::knowledge_authority_v2::tests::sync_cloud_fixture::require_generation))
         .with_state(Arc::clone(&cloud));
@@ -219,6 +235,7 @@ async fn trusted_pull_retries_same_cursor_after_malformed_or_failed_page_without
     assert_eq!(operation.sync_status().await.unwrap().pending_changes, 1);
     assert_eq!(operation.changes(0, 20).await.unwrap().len(), 2);
     assert_eq!(*cloud.cursors.lock().unwrap(), [0, 0, 0, 4]);
+    assert_eq!(*cloud.graph_cursors.lock().unwrap(), [0]);
     drop(operation);
     state.platform_plugin_authority_v2.deactivate().await;
     server.abort();

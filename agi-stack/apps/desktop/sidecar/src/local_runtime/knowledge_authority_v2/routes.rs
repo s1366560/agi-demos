@@ -18,6 +18,8 @@ pub(super) mod capability_routes;
 mod cloud_routes;
 #[path = "context_route.rs"]
 mod context_route;
+#[path = "graph_routes.rs"]
+mod graph_routes;
 #[path = "processing_routes.rs"]
 mod processing_routes;
 #[path = "resolution_routes.rs"]
@@ -74,6 +76,14 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
                 .route(
                     "/api/v1/knowledge/sync-resolve-pull",
                     post(resolution_routes::resolve_pull),
+                )
+                .route(
+                    "/api/v1/knowledge/sync-resolve-graph-pull",
+                    post(graph_routes::resolve_graph_pull),
+                )
+                .route(
+                    "/api/v1/knowledge/sync-resolve-graph-push",
+                    post(graph_routes::resolve_graph_push),
                 )
                 .route_layer(axum::middleware::from_fn(
                     sync_admission::require_sync_release,
@@ -172,6 +182,31 @@ async fn query(
         }
         KnowledgeQuery::Change { sequence } => {
             json!({"change": operation.change(sequence).await.map_err(IntoResponse::into_response)?.ok_or_else(not_found)?})
+        }
+        KnowledgeQuery::GraphPullConflicts { limit } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            json!({"items":operation.graph_pull_conflicts(limit).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::GraphPushConflicts { limit } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            json!({"items":operation.graph_push_conflicts(limit).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::GraphPullConflictContext { id } => {
+            json!({"context":operation.graph_pull_conflict_context(&id).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::GraphResolutionHistory { id, limit } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            json!({"items":operation.graph_resolution_history(&id, limit).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::RemoteGraphBaseline { id } => {
+            json!({"version":operation.remote_graph_baseline(&id).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::SyncedGraphProjection { id } => {
+            json!({"projection":operation.synced_graph_projection(&id).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::SyncedGraphProjections { limit, offset } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            json!({"items":operation.synced_graph_projections(limit, offset).await.map_err(IntoResponse::into_response)?})
         }
     };
     Ok(Json(
@@ -294,6 +329,17 @@ async fn push_once(
         .push_once(&broker)
         .await
         .map_err(IntoResponse::into_response)?;
+    // Derived records ride the same drain loop: once the memory outbox is
+    // empty, one pending graph record is pushed per call. Receipts share the
+    // memory receipt wire shape, so the response contract is unchanged.
+    let result = match result {
+        Some(receipt) => Some(json!(receipt)),
+        None => operation
+            .graph_push_once(&broker)
+            .await
+            .map_err(IntoResponse::into_response)?
+            .map(|receipt| json!(receipt)),
+    };
     Ok(Json(
         json!({"contract_version":VERSION,"scope":request.scope,"result":result}),
     ))
@@ -315,6 +361,17 @@ async fn pull_once(
         .pull_once(&broker)
         .await
         .map_err(IntoResponse::into_response)?;
+    // Once the memory stream is drained at the current cursor, the same call
+    // advances the derived-record stream. Both receipts share one wire shape.
+    let result = if result.applied == 0 && result.conflicts == 0 && !result.has_more {
+        let graph = operation
+            .graph_pull_once(&broker)
+            .await
+            .map_err(IntoResponse::into_response)?;
+        json!(graph)
+    } else {
+        json!(result)
+    };
     Ok(Json(
         json!({"contract_version":VERSION,"scope":request.scope,"result":result}),
     ))

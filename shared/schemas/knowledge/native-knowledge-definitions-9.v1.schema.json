@@ -1,244 +1,253 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://memstack.local/schemas/native-knowledge-definitions-9.v1.schema.json",
-  "$defs": {
-    "NativeKnowledgeCapabilityScope": {
-      "type": "object",
-      "properties": {
-        "tenant_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "project_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "workspace_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "instance_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://memstack.local/schemas/native-knowledge-definitions-9.v1.schema.json",
+ "$defs": {
+  "NativeKnowledgeCapabilityScope": {
+   "type": "object",
+   "properties": {
+    "tenant_id": {
+     "anyOf": [
+      {
+       "type": "string"
       },
-      "required": [
-        "tenant_id",
-        "project_id",
-        "workspace_id",
-        "instance_id"
-      ],
-      "additionalProperties": false
+      {
+       "type": "null"
+      }
+     ]
     },
-    "NativeKnowledgeCapabilityEntry": {
-      "type": "object",
-      "properties": {
-        "availability": {
-          "enum": [
-            "available",
-            "degraded",
-            "unavailable",
-            "not_applicable"
-          ]
-        },
-        "reason_code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "service_version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "contract_version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "allowed_actions": {
-          "type": "array",
-          "items": {
-            "enum": [
-              "activate_community_build",
-              "cloud_conflict_context",
-              "community_active",
-              "community_audit",
-              "community_build",
-              "configuration",
-              "configure_embedding",
-              "create",
-              "create_community_build",
-              "delete",
-              "entities",
-              "failed_index",
-              "failed_processing",
-              "get",
-              "index_one",
-              "list",
-              "pending_resolutions",
-              "process_community_one",
-              "process_one",
-              "processing_audits",
-              "promote_index",
-              "pull_conflict_context",
-              "pull_conflicts",
-              "push_conflicts",
-              "reconcile_resolution",
-              "reconciliation_context",
-              "relationships",
-              "remote_baseline",
-              "resolution",
-              "resolution_by_key",
-              "resolution_history",
-              "resolutions",
-              "resolve_pull",
-              "resolve_push",
-              "resume_resolution",
-              "retry_community",
-              "retry_index",
-              "select_embedding",
-              "select_community_build",
-              "semantic",
-              "sync_link",
-              "sync_outbox",
-              "sync_pull",
-              "sync_push",
-              "sync_status",
-              "sync_unbind",
-              "text",
-              "update",
-              "view",
-              "retry_processing",
-              "processing_task",
-              "community_builds",
-              "graph_source"
-            ]
-          }
-        },
-        "scope": {
-          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCapabilityScope"
-        },
-        "authority_revision": {
-          "anyOf": [
-            {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "retryable": {
-          "type": "boolean"
-        },
-        "authority_source": {
-          "enum": [
-            "cloud_service",
-            "sidecar",
-            "electron",
-            "native_runtime",
-            "renderer"
-          ]
-        },
-        "supporting_authority_sources": {
-          "type": "array",
-          "items": {
-            "enum": [
-              "cloud_service",
-              "sidecar",
-              "electron",
-              "native_runtime",
-              "renderer"
-            ]
-          }
-        },
-        "provenance": {
-          "enum": [
-            "observed",
-            "declared"
-          ]
-        }
+    "project_id": {
+     "anyOf": [
+      {
+       "type": "string"
       },
-      "required": [
-        "availability",
-        "reason_code",
-        "service_version",
-        "contract_version",
-        "allowed_actions",
-        "scope",
-        "authority_revision",
-        "retryable",
-        "authority_source",
-        "supporting_authority_sources",
-        "provenance"
-      ],
-      "additionalProperties": false
+      {
+       "type": "null"
+      }
+     ]
     },
-    "NativeKnowledgeCapabilitiesResponse": {
-      "type": "object",
-      "properties": {
-        "contract_version": {
-          "const": "1.0.0"
-        },
-        "scope": {
-          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeScope"
-        },
-        "actor_id": {
-          "type": "string"
-        },
-        "result": {
-          "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCapabilityEntry"
-        }
+    "workspace_id": {
+     "anyOf": [
+      {
+       "type": "string"
       },
-      "required": [
-        "contract_version",
-        "scope",
-        "actor_id",
-        "result"
-      ],
-      "additionalProperties": false
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "instance_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
     }
+   },
+   "required": [
+    "tenant_id",
+    "project_id",
+    "workspace_id",
+    "instance_id"
+   ],
+   "additionalProperties": false
+  },
+  "NativeKnowledgeCapabilityEntry": {
+   "type": "object",
+   "properties": {
+    "availability": {
+     "enum": [
+      "available",
+      "degraded",
+      "unavailable",
+      "not_applicable"
+     ]
+    },
+    "reason_code": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "service_version": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "contract_version": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "allowed_actions": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "activate_community_build",
+       "cloud_conflict_context",
+       "community_active",
+       "community_audit",
+       "community_build",
+       "community_builds",
+       "configuration",
+       "configure_embedding",
+       "create",
+       "create_community_build",
+       "delete",
+       "entities",
+       "failed_index",
+       "failed_processing",
+       "get",
+       "graph_pull_conflict_context",
+       "graph_pull_conflicts",
+       "graph_push_conflicts",
+       "graph_resolution_history",
+       "graph_source",
+       "index_one",
+       "list",
+       "pending_resolutions",
+       "process_community_one",
+       "process_one",
+       "processing_audits",
+       "processing_task",
+       "promote_index",
+       "pull_conflict_context",
+       "pull_conflicts",
+       "push_conflicts",
+       "reconcile_resolution",
+       "reconciliation_context",
+       "relationships",
+       "remote_baseline",
+       "remote_graph_baseline",
+       "resolution",
+       "resolution_by_key",
+       "resolution_history",
+       "resolutions",
+       "resolve_graph_pull",
+       "resolve_graph_push",
+       "resolve_pull",
+       "resolve_push",
+       "resume_resolution",
+       "retry_community",
+       "retry_index",
+       "retry_processing",
+       "select_community_build",
+       "select_embedding",
+       "semantic",
+       "sync_link",
+       "sync_outbox",
+       "sync_pull",
+       "sync_push",
+       "sync_status",
+       "sync_unbind",
+       "synced_graph_projection",
+       "synced_graph_projections",
+       "text",
+       "update",
+       "view"
+      ]
+     }
+    },
+    "scope": {
+     "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCapabilityScope"
+    },
+    "authority_revision": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 9007199254740991
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "retryable": {
+     "type": "boolean"
+    },
+    "authority_source": {
+     "enum": [
+      "cloud_service",
+      "sidecar",
+      "electron",
+      "native_runtime",
+      "renderer"
+     ]
+    },
+    "supporting_authority_sources": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "cloud_service",
+       "sidecar",
+       "electron",
+       "native_runtime",
+       "renderer"
+      ]
+     }
+    },
+    "provenance": {
+     "enum": [
+      "observed",
+      "declared"
+     ]
+    }
+   },
+   "required": [
+    "availability",
+    "reason_code",
+    "service_version",
+    "contract_version",
+    "allowed_actions",
+    "scope",
+    "authority_revision",
+    "retryable",
+    "authority_source",
+    "supporting_authority_sources",
+    "provenance"
+   ],
+   "additionalProperties": false
+  },
+  "NativeKnowledgeCapabilitiesResponse": {
+   "type": "object",
+   "properties": {
+    "contract_version": {
+     "const": "1.0.0"
+    },
+    "scope": {
+     "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeScope"
+    },
+    "actor_id": {
+     "type": "string"
+    },
+    "result": {
+     "$ref": "native-knowledge.v1.schema.json#/$defs/NativeKnowledgeCapabilityEntry"
+    }
+   },
+   "required": [
+    "contract_version",
+    "scope",
+    "actor_id",
+    "result"
+   ],
+   "additionalProperties": false
   }
+ }
 }
