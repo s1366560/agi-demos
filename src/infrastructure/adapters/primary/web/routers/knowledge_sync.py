@@ -14,9 +14,17 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.application.services.knowledge_graph_sync_service import KnowledgeGraphSyncApplication
 from src.application.services.knowledge_sync_service import KnowledgeSyncApplication
 from src.domain.model.knowledge_sync.contracts import (
+    MAX_GRAPH_ENTITIES,
+    MAX_GRAPH_RELATIONSHIPS,
     MAX_REVISION,
+    GraphSyncContent,
+    GraphSyncEntity,
+    GraphSyncMutation,
+    GraphSyncRelationship,
+    GraphSyncResolution,
     KnowledgeSyncError,
     KnowledgeSyncResolution,
     MemorySyncContent,
@@ -62,6 +70,71 @@ class SyncResolutionBody(BaseModel):
     expected_current_revision: int = Field(ge=0, le=MAX_REVISION)
     decision: Literal["keep_current", "use_proposed", "merged", "keep_both"]
     content: SyncContentBody | None = None
+
+
+class GraphSyncEntityBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    name: str = Field(min_length=1, max_length=512)
+    kind: str = Field(min_length=1, max_length=512)
+
+
+class GraphSyncRelationshipBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_index: int = Field(ge=0)
+    target_index: int = Field(ge=0)
+    relation_type: str = Field(min_length=1, max_length=512)
+    fact: str = Field(min_length=1, max_length=4096)
+    score: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+
+
+class GraphSyncContentBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_revision: int = Field(ge=1, lt=MAX_REVISION)
+    change_sequence: int = Field(ge=1, le=2**63 - 1)
+    audit_attempt: int = Field(ge=1, lt=MAX_REVISION)
+    entities: list[GraphSyncEntityBody] = Field(
+        default_factory=list[GraphSyncEntityBody], max_length=MAX_GRAPH_ENTITIES
+    )
+    relationships: list[GraphSyncRelationshipBody] = Field(
+        default_factory=list[GraphSyncRelationshipBody], max_length=MAX_GRAPH_RELATIONSHIPS
+    )
+
+    def domain(self) -> GraphSyncContent:
+        return GraphSyncContent(
+            source_revision=self.source_revision,
+            change_sequence=self.change_sequence,
+            audit_attempt=self.audit_attempt,
+            entities=tuple(
+                GraphSyncEntity(name=entity.name, kind=entity.kind) for entity in self.entities
+            ),
+            relationships=tuple(
+                GraphSyncRelationship(
+                    source_index=relation.source_index,
+                    target_index=relation.target_index,
+                    relation_type=relation.relation_type,
+                    fact=relation.fact,
+                    score=relation.score,
+                )
+                for relation in self.relationships
+            ),
+        )
+
+
+class GraphSyncMutationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    change_id: str
+    operation: Literal["create", "update", "delete"]
+    object_id: str = Field(min_length=1, max_length=512)
+    expected_revision: int = Field(ge=0, lt=MAX_REVISION)
+    content: GraphSyncContentBody | None = None
+
+
+class GraphSyncResolutionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    change_id: str
+    expected_current_revision: int = Field(ge=0, le=MAX_REVISION)
+    decision: Literal["keep_current", "use_proposed", "merged", "keep_both"]
+    content: GraphSyncContentBody | None = None
 
 
 def error_response(error: KnowledgeSyncError) -> JSONResponse:
@@ -176,4 +249,92 @@ def create_knowledge_sync_router(application_dependency: Callable[..., Any]) -> 
     router.add_api_route("/mutations", mutate, methods=["POST"])
     router.add_api_route("/conflicts/{conflict_id}", conflict, methods=["GET"])
     router.add_api_route("/conflicts/{conflict_id}/resolve", resolve, methods=["POST"])
+    return router
+
+
+def create_knowledge_graph_sync_router(application_dependency: Callable[..., Any]) -> APIRouter:
+    router = APIRouter(prefix="/projects/{project_id}/knowledge-sync", tags=["knowledge-sync"])
+
+    async def graph_changes(
+        project_id: str,
+        after: Annotated[int, Query(ge=0, le=2**63 - 1)] = 0,
+        limit: Annotated[int, Query(ge=1, le=500)] = 100,
+        application: KnowledgeGraphSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
+    ) -> JSONResponse:
+        try:
+            scope = await application.service.resolve_scope(user.id, project_id)
+            page = await application.service.changes(scope, after, limit)
+            return JSONResponse(content=page.to_dict())
+        except KnowledgeSyncError as error:
+            return error_response(error)
+
+    async def graph_mutate(
+        project_id: str,
+        body: GraphSyncMutationBody,
+        application: KnowledgeGraphSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
+    ) -> JSONResponse:
+        try:
+            scope = await application.service.resolve_scope(user.id, project_id)
+            outcome = await application.service.mutate(
+                scope,
+                body.change_id,
+                GraphSyncMutation(
+                    operation=body.operation,
+                    object_id=body.object_id,
+                    expected_revision=body.expected_revision,
+                    content=body.content.domain() if body.content else None,
+                ),
+            )
+            # Conflict receipts must survive HTTP 409; see the memory router note.
+            await application.commit()
+            response = outcome.to_dict()
+            return JSONResponse(
+                status_code=409 if response["receipt"]["status"] == "conflict" else 200,
+                content=response,
+            )
+        except KnowledgeSyncError as error:
+            return error_response(error)
+
+    async def graph_conflict(
+        project_id: str,
+        conflict_id: str,
+        application: KnowledgeGraphSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
+    ) -> JSONResponse:
+        try:
+            scope = await application.service.resolve_scope(user.id, project_id)
+            return JSONResponse(content=await application.service.conflict(scope, conflict_id))
+        except KnowledgeSyncError as error:
+            return error_response(error)
+
+    async def graph_resolve(
+        project_id: str,
+        conflict_id: str,
+        body: GraphSyncResolutionBody,
+        application: KnowledgeGraphSyncApplication = Depends(application_dependency),
+        user: User = Depends(get_current_user),
+    ) -> JSONResponse:
+        try:
+            scope = await application.service.resolve_scope(user.id, project_id)
+            outcome = await application.service.resolve(
+                scope,
+                body.change_id,
+                GraphSyncResolution(
+                    conflict_id=conflict_id,
+                    expected_current_revision=body.expected_current_revision,
+                    decision=body.decision,
+                    content=body.content.domain() if body.content else None,
+                ),
+            )
+            await application.commit()
+            return JSONResponse(content=outcome.to_dict())
+        except KnowledgeSyncError as error:
+            return error_response(error)
+
+    router.add_api_route("/graph/changes", graph_changes, methods=["GET"])
+    router.add_api_route("/graph/mutations", graph_mutate, methods=["POST"])
+    router.add_api_route("/graph/conflicts/{conflict_id}", graph_conflict, methods=["GET"])
+    router.add_api_route("/graph/conflicts/{conflict_id}/resolve", graph_resolve, methods=["POST"])
     return router

@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:a9c3ec8f826021cf426798dce80dbedefeb5f6d28c6946a0a3a1db9bd9422d'
-    '3a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:882ef6bcfae58177887f7194515503578df64051a9387f3f7434a249826517'
+    '42","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1002,8 +1002,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'c663a449a02920a7fcabe4465","entrypoint":"src.infrastructure.plugins.v2.billing_services:'
     '_apply_billing_application_v2","module_ref":"builtin://memstack/application/billing-serv'
     'ices","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"'
-    ']},{"artifact_digest":"sha256:c54fa3c232333bd2b460ca2b72a042dc5d7c76d4fd568c888c9314a5b7'
-    'c5ea0b","artifact_source":"repo+python://src/infrastructure/plugins/v2/cloud_knowledge_s'
+    ']},{"artifact_digest":"sha256:992feaff4aca0d86ffc6a78b74ca93c48aaab974e2f96e50af599f08e7'
+    '13c457","artifact_source":"repo+python://src/infrastructure/plugins/v2/cloud_knowledge_s'
     'ync_services.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2'
     '020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"operation'
     '-scoped-provider","type":"string"}},"required":["strategy"],"type":"object"},"events":{"'
@@ -3764,7 +3764,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'ture.plugins.v2.cicd_pipeline_repository_services:_apply_cicd_pipeline_repository_provid'
     'er_v2","module_ref":"builtin://memstack/persistence/cicd-pipeline-repository-provider","'
     'plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"ar'
-    'tifact_digest":"sha256:c54fa3c232333bd2b460ca2b72a042dc5d7c76d4fd568c888c9314a5b7c5ea0b"'
+    'tifact_digest":"sha256:992feaff4aca0d86ffc6a78b74ca93c48aaab974e2f96e50af599f08e713c457"'
     ',"artifact_source":"repo+python://src/infrastructure/plugins/v2/cloud_knowledge_sync_ser'
     'vices.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/'
     'schema","additionalProperties":false,"properties":{"strategy":{"const":"request-async-se'
@@ -4576,7 +4576,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'ack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:a9c3ec8f826021cf426798dce80dbedefeb5f6d28c6946a0a3a1db9bd9422d3a"
+    "sha256:882ef6bcfae58177887f7194515503578df64051a9387f3f7434a24982651742"
 )
 # fmt: on
 

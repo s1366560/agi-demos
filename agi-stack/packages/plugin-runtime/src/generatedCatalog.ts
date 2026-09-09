@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:a9c3ec8f826021cf426798dce80dbedefeb5f6d28c6946a0a3a1db9bd9',
-  '422d3a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:882ef6bcfae58177887f7194515503578df64051a9387f3f7434a24982',
+  '651742","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1066,8 +1066,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '734c6b36445a1d657fbf4d02c663a449a02920a7fcabe4465","entrypoint":"src.infrastructure.',
   'plugins.v2.billing_services:_apply_billing_application_v2","module_ref":"builtin://m',
   'emstack/application/billing-services","plugin_id":"memstack-runtime-kernel","plugin_',
-  'version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:c54fa3c232333bd2b4',
-  '60ca2b72a042dc5d7c76d4fd568c888c9314a5b7c5ea0b","artifact_source":"repo+python://src',
+  'version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:992feaff4aca0d86ff',
+  'c6a78b74ca93c48aaab974e2f96e50af599f08e713c457","artifact_source":"repo+python://src',
   '/infrastructure/plugins/v2/cloud_knowledge_sync_services.py","contract":{"config_sch',
   'ema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties',
   '":false,"properties":{"strategy":{"const":"operation-scoped-provider","type":"string',
@@ -3960,7 +3960,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'cicd_pipeline_repository_services:_apply_cicd_pipeline_repository_provider_v2","modu',
   'le_ref":"builtin://memstack/persistence/cicd-pipeline-repository-provider","plugin_i',
   'd":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifa',
-  'ct_digest":"sha256:c54fa3c232333bd2b460ca2b72a042dc5d7c76d4fd568c888c9314a5b7c5ea0b"',
+  'ct_digest":"sha256:992feaff4aca0d86ffc6a78b74ca93c48aaab974e2f96e50af599f08e713c457"',
   ',"artifact_source":"repo+python://src/infrastructure/plugins/v2/cloud_knowledge_sync',
   '_services.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/',
   '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"requ',
@@ -4816,4 +4816,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:a9c3ec8f826021cf426798dce80dbedefeb5f6d28c6946a0a3a1db9bd9422d3a' as const;
+  'sha256:882ef6bcfae58177887f7194515503578df64051a9387f3f7434a24982651742' as const;

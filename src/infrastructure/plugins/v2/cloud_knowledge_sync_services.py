@@ -8,12 +8,19 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.knowledge_graph_sync_service import (
+    KnowledgeGraphSyncApplication,
+    KnowledgeGraphSyncService,
+)
 from src.application.services.knowledge_sync_service import (
     KnowledgeSyncApplication,
     KnowledgeSyncService,
 )
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncScope
 from src.domain.model.plugins.generated_v2 import ScopeKindV2
+from src.domain.ports.repositories.knowledge_graph_sync_repository import (
+    KnowledgeGraphSyncRepository,
+)
 from src.domain.ports.repositories.knowledge_sync_enrollment_repository import (
     KnowledgeSyncEnrollmentRepository,
 )
@@ -41,9 +48,14 @@ _DB_SERVICE = "service:operation.db-session"
 _IDENTITY_SERVICE = "service:operation.identity"
 
 
+class CloudKnowledgeSyncStoreProtocolV2(
+    KnowledgeSyncRepository, KnowledgeGraphSyncRepository, Protocol
+): ...
+
+
 @dataclass(frozen=True, kw_only=True)
 class CloudKnowledgeSyncRepositoriesV2:
-    sync: KnowledgeSyncRepository
+    sync: CloudKnowledgeSyncStoreProtocolV2
     enrollment: KnowledgeSyncEnrollmentRepository
     commit: Callable[[], Awaitable[None]]
 
@@ -51,6 +63,7 @@ class CloudKnowledgeSyncRepositoriesV2:
 @dataclass(frozen=True, kw_only=True)
 class CloudKnowledgeSyncServicesV2:
     sync: KnowledgeSyncApplication
+    graph_sync: KnowledgeGraphSyncApplication
     enrollment: KnowledgeSyncEnrollmentRepository
 
 
@@ -155,6 +168,10 @@ class CloudKnowledgeSyncResolverV2:
         return CloudKnowledgeSyncServicesV2(
             sync=KnowledgeSyncApplication(
                 service=KnowledgeSyncService(repository=repositories.sync),
+                commit=repositories.commit,
+            ),
+            graph_sync=KnowledgeGraphSyncApplication(
+                service=KnowledgeGraphSyncService(repository=repositories.sync),
                 commit=repositories.commit,
             ),
             enrollment=repositories.enrollment,

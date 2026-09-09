@@ -226,7 +226,7 @@ async def test_observation_reports_its_request_pin_when_host_publishes_during_au
     await assert_no_writes(f)
 
 
-async def test_disabling_profile_removes_all_six_routes_even_with_a_previous_condition(
+async def test_disabling_profile_removes_all_sync_routes_even_with_a_previous_condition(
     cloud_sync_http,
 ):
     f = cloud_sync_http

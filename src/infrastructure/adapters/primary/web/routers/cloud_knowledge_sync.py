@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.infrastructure.adapters.primary.web.cloud_knowledge_sync_authority_v2 import (
+    cloud_knowledge_graph_sync_application_dependency_v2,
     cloud_knowledge_sync_application_dependency_v2,
     cloud_knowledge_sync_authority_dependency_v2,
     cloud_knowledge_sync_observation_dependency_v2,
@@ -18,6 +19,7 @@ from src.infrastructure.adapters.primary.web.cloud_knowledge_sync_generation_v2 
     cloud_knowledge_sync_generation_payload_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.knowledge_sync import (
+    create_knowledge_graph_sync_router,
     create_knowledge_sync_router,
     error_response,
 )
@@ -31,7 +33,13 @@ class KnowledgeSyncEnrollmentBody(BaseModel):
 
 
 def create_cloud_knowledge_sync_router() -> APIRouter:
-    router = create_knowledge_sync_router(cloud_knowledge_sync_application_dependency_v2)
+    router = APIRouter()
+    router.include_router(
+        create_knowledge_sync_router(cloud_knowledge_sync_application_dependency_v2)
+    )
+    router.include_router(
+        create_knowledge_graph_sync_router(cloud_knowledge_graph_sync_application_dependency_v2)
+    )
 
     async def enrollment_status(
         authority: CloudKnowledgeSyncServicesV2 = Depends(
@@ -67,6 +75,7 @@ def create_cloud_knowledge_sync_router() -> APIRouter:
         except KnowledgeSyncError as error:
             return error_response(error)
 
-    router.add_api_route("/enrollment", enrollment_status, methods=["GET"])
-    router.add_api_route("/enrollment", enroll_project, methods=["POST"])
+    enrollment_path = "/projects/{project_id}/knowledge-sync/enrollment"
+    router.add_api_route(enrollment_path, enrollment_status, methods=["GET"])
+    router.add_api_route(enrollment_path, enroll_project, methods=["POST"])
     return router

@@ -14569,7 +14569,7 @@
       },
       "contract_digest": "sha256:7f8f02e9d69e6405776b0260347685201f6796d3a0658ff3272da4f2e3121a25",
       "artifact": {
-        "digest": "sha256:c54fa3c232333bd2b460ca2b72a042dc5d7c76d4fd568c888c9314a5b7c5ea0b",
+        "digest": "sha256:992feaff4aca0d86ffc6a78b74ca93c48aaab974e2f96e50af599f08e713c457",
         "source": "repo+python://src/infrastructure/plugins/v2/cloud_knowledge_sync_services.py"
       }
     },
@@ -14616,7 +14616,7 @@
       },
       "contract_digest": "sha256:65881e8372db7fb47142dda8cfc068896093a1d2985a16584d5a0cbc9664352e",
       "artifact": {
-        "digest": "sha256:c54fa3c232333bd2b460ca2b72a042dc5d7c76d4fd568c888c9314a5b7c5ea0b",
+        "digest": "sha256:992feaff4aca0d86ffc6a78b74ca93c48aaab974e2f96e50af599f08e713c457",
         "source": "repo+python://src/infrastructure/plugins/v2/cloud_knowledge_sync_services.py"
       }
     },

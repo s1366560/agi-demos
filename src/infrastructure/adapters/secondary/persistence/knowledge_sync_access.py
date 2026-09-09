@@ -9,6 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.knowledge_sync.contracts import (
+    GraphSyncVersion,
     KnowledgeSyncError,
     KnowledgeSyncScope,
     MemorySyncContent,
@@ -76,6 +77,19 @@ async def authorize_write(
     ).all()
     if not any(share.permissions.get("edit") is True for share in shares):
         raise KnowledgeSyncError("knowledge_sync_forbidden")
+
+
+def authorize_derived_write(
+    scope: KnowledgeSyncScope,
+    member: UserProject,
+    current: GraphSyncVersion | None,
+) -> None:
+    """Derived records carry no share grants; authorship plus role decide."""
+    if member.role not in {"owner", "admin", "member"}:
+        raise KnowledgeSyncError("knowledge_sync_forbidden")
+    if current is None or current.author_id == scope.actor_id or member.role in {"owner", "admin"}:
+        return
+    raise KnowledgeSyncError("knowledge_sync_forbidden")
 
 
 def snapshot(memory: Memory) -> MemorySyncVersion:

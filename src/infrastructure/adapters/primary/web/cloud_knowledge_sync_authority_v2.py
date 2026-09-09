@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.knowledge_graph_sync_service import KnowledgeGraphSyncApplication
 from src.application.services.knowledge_sync_service import KnowledgeSyncApplication
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
@@ -116,3 +117,9 @@ async def cloud_knowledge_sync_application_dependency_v2(
     authority: CloudKnowledgeSyncServicesV2 = Depends(cloud_knowledge_sync_authority_dependency_v2),
 ) -> KnowledgeSyncApplication:
     return authority.sync
+
+
+async def cloud_knowledge_graph_sync_application_dependency_v2(
+    authority: CloudKnowledgeSyncServicesV2 = Depends(cloud_knowledge_sync_authority_dependency_v2),
+) -> KnowledgeGraphSyncApplication:
+    return authority.graph_sync

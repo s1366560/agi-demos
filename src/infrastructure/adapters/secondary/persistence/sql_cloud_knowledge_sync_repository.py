@@ -14,6 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.knowledge_sync.contracts import (
+    GraphSyncMutation,
+    GraphSyncResolution,
     KnowledgeSyncError,
     KnowledgeSyncOutcome,
     KnowledgeSyncPage,
@@ -29,6 +31,9 @@ from src.infrastructure.adapters.secondary.persistence.knowledge_sync_access imp
 )
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
     KnowledgeSyncEnrollmentModel as Enrollment,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_knowledge_graph_sync_repository import (
+    SqlKnowledgeGraphSyncRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_knowledge_sync_enrollment import (
     SqlKnowledgeSyncEnrollment,
@@ -50,6 +55,7 @@ class SqlCloudKnowledgeSyncRepository:
         self.scope = scope
         self.current = current
         self.foundation = SqlKnowledgeSyncRepository(db)
+        self.graph_foundation = SqlKnowledgeGraphSyncRepository(db)
 
     async def status(self) -> KnowledgeSyncEnrollmentState:
         self.current()
@@ -126,5 +132,35 @@ class SqlCloudKnowledgeSyncRepository:
     async def conflict(self, scope: KnowledgeSyncScope, conflict_id: str) -> dict[str, Any]:
         await self._admit(scope)
         result = await self.foundation.conflict(scope, conflict_id)
+        self.current()
+        return result
+
+    async def mutate_graph(
+        self, scope: KnowledgeSyncScope, change_id: str, mutation: GraphSyncMutation
+    ) -> KnowledgeSyncOutcome:
+        await self._admit(scope)
+        result = await self.graph_foundation.mutate_graph(scope, change_id, mutation)
+        self.current()
+        return result
+
+    async def resolve_graph(
+        self, scope: KnowledgeSyncScope, change_id: str, resolution: GraphSyncResolution
+    ) -> KnowledgeSyncOutcome:
+        await self._admit(scope)
+        result = await self.graph_foundation.resolve_graph(scope, change_id, resolution)
+        self.current()
+        return result
+
+    async def graph_changes(
+        self, scope: KnowledgeSyncScope, after: int, limit: int
+    ) -> KnowledgeSyncPage:
+        await self._admit(scope)
+        result = await self.graph_foundation.graph_changes(scope, after, limit)
+        self.current()
+        return result
+
+    async def graph_conflict(self, scope: KnowledgeSyncScope, conflict_id: str) -> dict[str, Any]:
+        await self._admit(scope)
+        result = await self.graph_foundation.graph_conflict(scope, conflict_id)
         self.current()
         return result

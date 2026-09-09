@@ -109,7 +109,7 @@ async def cloud_sync_http(pg_sync, request):
                 for item in builder.definitions
                 if item.owner_entry_id == CLOUD_KNOWLEDGE_SYNC_HTTP_ENTRY_V2
             )
-        assert len(definitions) == (6 if routes_enabled else 0)
+        assert len(definitions) == (10 if routes_enabled else 0)
         private = FastAPI()
         private.dependency_overrides[get_db] = database
         private.dependency_overrides[get_current_user] = current_user
