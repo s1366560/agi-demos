@@ -10,6 +10,9 @@ from sqlalchemy import delete
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.infrastructure.adapters.primary.web.startup import workflow
 from src.infrastructure.adapters.secondary.persistence.models import Memory, TaskLog
+from src.infrastructure.adapters.secondary.persistence.sql_knowledge_graph_sync_repository import (
+    SqlKnowledgeGraphSyncRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_knowledge_sync_enrollment import (
     SqlKnowledgeSyncEnrollment,
 )
@@ -84,15 +87,32 @@ async def test_invalid_source_never_enters_graph(processing, mismatch):
             assert memory.processing_status == "PENDING"
 
 
-async def test_bootstrap_before_job_rejects_graph(processing):
+async def test_bootstrap_before_job_journals_the_derived_record(processing):
     sessions, scope, payload = processing
     async with sessions() as session:
         await SqlKnowledgeSyncEnrollment(session).bootstrap(scope)
         await session.commit()
-    graph = SimpleNamespace(process_episode=AsyncMock())
-    with pytest.raises(KnowledgeSyncError):
-        await workflow._run_episode_processing_workflow(payload, graph)
-    graph.process_episode.assert_not_awaited()
+    from src.infrastructure.graph.schemas import EntityNode
+
+    alice = EntityNode(name="Alice", entity_type="Person")
+    result = SimpleNamespace(nodes=[alice], edges=[], episodic_edges=[])
+    graph = SimpleNamespace(process_episode=AsyncMock(return_value=result))
+    # Enrolled projects no longer fence the pipeline: it is a derived writer
+    # and journals its extraction into the PostgreSQL sync journal.
+    await workflow._run_episode_processing_workflow(payload, graph)
+    graph.process_episode.assert_awaited_once()
+    async with sessions() as session:
+        memory = await session.get(Memory, "memory")
+        assert memory is not None and memory.processing_status == "COMPLETED"
+        repo = SqlKnowledgeGraphSyncRepository(session)
+        page = await repo.graph_changes(scope, 0, 100)
+        changes = page.to_dict()["changes"]
+        assert len(changes) == 1
+        version = changes[0]["version"]
+        assert version["object_id"] == "memory"
+        assert version["content"]["source_revision"] == 2
+        assert version["content"]["audit_attempt"] == 1
+        assert version["content"]["entities"] == [{"name": "Alice", "kind": "Person"}]
 
 
 @pytest.mark.parametrize("ending", ["success", "failure", "cancel"])

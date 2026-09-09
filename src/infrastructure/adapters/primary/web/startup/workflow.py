@@ -3,13 +3,19 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from typing import Any, cast
 
 from sqlalchemy import select
 
-from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
+from src.domain.model.knowledge_sync.contracts import (
+    GraphSyncContent,
+    GraphSyncEntity,
+    GraphSyncRelationship,
+    KnowledgeSyncError,
+)
 from src.domain.model.memory.processing import MemoryProcessingSource
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.background_tasks import TaskManager
@@ -23,10 +29,15 @@ from src.infrastructure.adapters.secondary.persistence.memory_processing import 
 )
 from src.infrastructure.adapters.secondary.persistence.memory_processing_admission import (
     canonical_graph_tenant,
+    derived_graph_write,
+    graph_write_lease_kind,
     legacy_graph_write,
     require_processing_source,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Memory, TaskLog
+from src.infrastructure.adapters.secondary.persistence.sql_knowledge_graph_sync_repository import (
+    SqlKnowledgeGraphSyncRepository,
+)
 from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 from src.infrastructure.plugins.v2.boundary import (
     current_process_generation_host_v2,
@@ -43,6 +54,83 @@ logger = logging.getLogger(__name__)
 GraphWorkflowHandler = Callable[[dict[str, Any], object], Awaitable[dict[str, object]]]
 
 
+@dataclass(frozen=True, kw_only=True)
+class DerivedProjectionDraft:
+    """One pipeline-derived projection bound for the sync journal."""
+
+    tenant_id: str
+    project_id: str
+    memory_id: str
+    author_id: str
+    source_revision: int
+    entities: tuple[GraphSyncEntity, ...]
+    relationships: tuple[GraphSyncRelationship, ...]
+
+
+def _derived_projection_draft(
+    result: object,
+    *,
+    tenant_id: str,
+    project_id: str,
+    memory_id: str,
+    author_id: str,
+    source_revision: int,
+) -> DerivedProjectionDraft | None:
+    """Map an extraction result into the portable positional projection form.
+
+    Entity identity is positional: relationships resolve their endpoints to
+    indexes inside this result's entity list. Edges pointing at entities
+    outside the extraction result cannot be expressed and are skipped. A
+    structurally unjournalable shape skips the enqueue entirely; it never
+    blocks the primary processing state because the record is rebuildable.
+    """
+    nodes = list(getattr(result, "nodes", []) or [])
+    edges = list(getattr(result, "edges", []) or [])
+    try:
+        entities = tuple(GraphSyncEntity(name=node.name, kind=node.entity_type) for node in nodes)
+    except (KnowledgeSyncError, AttributeError, TypeError):
+        logger.warning("derived projection has an invalid entity shape; sync enqueue skipped")
+        return None
+    positions = {getattr(node, "uuid", None): position for position, node in enumerate(nodes)}
+    relationships: list[GraphSyncRelationship] = []
+    try:
+        for edge in edges:
+            source = positions.get(getattr(edge, "source_uuid", None))
+            target = positions.get(getattr(edge, "target_uuid", None))
+            if source is None or target is None:
+                continue
+            relationships.append(
+                GraphSyncRelationship(
+                    source_index=source,
+                    target_index=target,
+                    relation_type=edge.relationship_type,
+                    fact=edge.fact or edge.relationship_type,
+                    score=edge.weight,
+                )
+            )
+        # Validate the portable shape now so the journal write cannot fail on
+        # input later; the allocated journal sequence is filled in at enqueue.
+        _ = GraphSyncContent(
+            source_revision=source_revision,
+            change_sequence=1,
+            audit_attempt=1,
+            entities=entities,
+            relationships=tuple(relationships),
+        )
+    except (KnowledgeSyncError, AttributeError, TypeError):
+        logger.warning("derived projection has an invalid portable shape; sync enqueue skipped")
+        return None
+    return DerivedProjectionDraft(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        memory_id=memory_id,
+        author_id=author_id,
+        source_revision=source_revision,
+        entities=entities,
+        relationships=tuple(relationships),
+    )
+
+
 async def _update_episode_processing_records(
     *,
     task_id: str | None,
@@ -53,8 +141,14 @@ async def _update_episode_processing_records(
     result: dict[str, Any] | None = None,
     error_message: str | None = None,
     processing_source: MemoryProcessingSource | None = None,
+    derived: DerivedProjectionDraft | None = None,
 ) -> bool:
-    """Persist task and memory processing state for the episode workflow."""
+    """Persist task and memory processing state for the episode workflow.
+
+    When a derived projection draft is supplied, its sync-journal write rides
+    the same transaction, so the durable extraction state and the journaled
+    record commit or roll back together. Neo4j never participates here.
+    """
     if not task_id and not memory_id:
         return True
 
@@ -82,6 +176,16 @@ async def _update_episode_processing_records(
                     task.started_at = now
                 if status in {"COMPLETED", "FAILED"}:
                     task.completed_at = now
+        if derived is not None:
+            _ = await SqlKnowledgeGraphSyncRepository(session).enqueue_derived(
+                tenant_id=derived.tenant_id,
+                project_id=derived.project_id,
+                memory_id=derived.memory_id,
+                author_id=derived.author_id,
+                source_revision=derived.source_revision,
+                entities=derived.entities,
+                relationships=derived.relationships,
+            )
 
         return True
 
@@ -129,13 +233,19 @@ async def _run_episode_processing_workflow(
 
     admitted = False
     try:
-        async with legacy_graph_write(
+        lease = (
+            await graph_write_lease_kind(async_session_factory, project_id=project_id)
+            if project_id
+            else "legacy"
+        )
+        admission_factory = derived_graph_write if lease == "derived" else legacy_graph_write
+        async with admission_factory(
             async_session_factory,
             project_id=project_id,
             tenant_id=tenant_id,
             memory_id=memory_id,
         ) as admission:
-            await require_processing_source(
+            memory = await require_processing_source(
                 admission,
                 processing_source,
                 episode_uuid=episode_uuid,
@@ -166,6 +276,14 @@ async def _run_episode_processing_workflow(
                     ),
                 )
                 result_payload = _episode_processing_result(result, episode_uuid)
+                derived = _derived_projection_draft(
+                    result,
+                    tenant_id=tenant_id,
+                    project_id=cast(str, project_id),
+                    memory_id=memory.id,
+                    author_id=memory.author_id,
+                    source_revision=memory.version,
+                )
                 applied = await _update_episode_processing_records(
                     task_id=task_id,
                     memory_id=memory_id,
@@ -174,6 +292,7 @@ async def _run_episode_processing_workflow(
                     progress=100,
                     message="Graph processing complete",
                     result=result_payload,
+                    derived=derived,
                 )
                 if not applied:
                     raise KnowledgeSyncError("knowledge_sync_write_conflict")
@@ -189,7 +308,7 @@ async def _run_episode_processing_workflow(
                     error_message=str(exc) or "Graph processing cancelled",
                 )
                 if not applied:
-                    await _update_episode_processing_records(
+                    _ = await _update_episode_processing_records(
                         task_id=task_id,
                         memory_id=None,
                         status="FAILED",

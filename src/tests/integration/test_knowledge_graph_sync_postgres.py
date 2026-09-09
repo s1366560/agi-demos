@@ -53,6 +53,9 @@ DEPENDENCY_TABLES = (
     "projects",
     "user_tenants",
     "user_projects",
+    "memories",
+    "task_logs",
+    "knowledge_sync_enrollments",
 )
 
 
@@ -221,3 +224,214 @@ async def test_pg_conflict_and_keep_both_copy_converge_through_the_journal(pg_sy
             receipt["copy_object_id"],
         ]
         assert versions[-1]["content"]["entities"][0]["name"] == "Offline"
+
+
+class _ExplodingNeo4j:
+    async def execute_query(self, *_args, **_kwargs):
+        raise ConnectionError("neo4j unavailable")
+
+
+def _extraction_result():
+    from types import SimpleNamespace
+
+    from src.infrastructure.graph.schemas import EntityEdge, EntityNode
+
+    alice = EntityNode(name="Alice", entity_type="Person")
+    acme = EntityNode(name="OpenAI", entity_type="Organization")
+    edge = EntityEdge(
+        source_uuid=alice.uuid,
+        target_uuid=acme.uuid,
+        relationship_type="WORKS_AT",
+        fact="Alice works at OpenAI",
+        weight=0.8,
+    )
+    return SimpleNamespace(nodes=[alice, acme], edges=[edge], episodic_edges=[])
+
+
+def _seed_pipeline(
+    session,
+    *,
+    project_id: str,
+    enabled: bool,
+    task_id: str,
+    revision: int = 1,
+) -> None:
+    from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+        KnowledgeSyncEnrollmentModel,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import Memory, TaskLog
+
+    session.add(
+        KnowledgeSyncEnrollmentModel(project_id=project_id, tenant_id="tenant", enabled=enabled)
+    )
+    session.add(
+        Memory(
+            id="memory" if project_id == "project" else f"memory-{project_id}",
+            project_id=project_id,
+            title="Pipeline memory",
+            content="Alice works at OpenAI.",
+            author_id="actor",
+            task_id=task_id,
+            processing_status="PENDING",
+            version=revision,
+        )
+    )
+    session.add(
+        TaskLog(
+            id=task_id,
+            group_id=project_id,
+            task_type="add_episode",
+            status="PENDING",
+            payload={},
+            entity_type="episode",
+        )
+    )
+
+
+async def test_pg_pipeline_journals_cloud_origin_record_and_pull_observes_it(
+    pg_sync, monkeypatch
+) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    import src.infrastructure.adapters.primary.web.startup.workflow as workflow_module
+    from src.infrastructure.adapters.primary.web.startup.workflow import (
+        _run_episode_processing_workflow,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import Memory
+
+    sessions, scope = pg_sync
+    monkeypatch.setattr(workflow_module, "async_session_factory", sessions)
+    async with sessions() as session:
+        _seed_pipeline(session, project_id="project", enabled=True, task_id="task")
+        await session.commit()
+    # The extraction result already exists; every later Neo4j contact fails.
+    graph_service = SimpleNamespace(
+        process_episode=AsyncMock(return_value=_extraction_result()),
+        _neo4j_client=_ExplodingNeo4j(),
+    )
+    payload = {
+        "task_id": "task",
+        "memory_id": "memory",
+        "source_revision": 1,
+        "uuid": "memory",
+        "content": "Alice works at OpenAI.",
+        "project_id": "project",
+        "tenant_id": "tenant",
+        "user_id": "actor",
+    }
+    result = await _run_episode_processing_workflow(payload, graph_service)
+    assert result == {"episode_uuid": "memory", "entities": 2, "relationships": 1, "mentions": 0}
+    async with sessions() as session:
+        repo = SqlKnowledgeGraphSyncRepository(session)
+        # A sync puller observes the cloud-origin record through the journal.
+        page = await repo.graph_changes(scope, 0, 100)
+        changes = page.to_dict()["changes"]
+        assert page.next_cursor == 1 and not page.has_more and len(changes) == 1
+        version = changes[0]["version"]
+        assert version["object_id"] == "memory"
+        assert version["revision"] == 1
+        assert version["author_id"] == "actor"
+        assert version["deleted"] is False
+        assert version["content"] == {
+            "source_revision": 1,
+            "change_sequence": 1,
+            "audit_attempt": 1,
+            "entities": [
+                {"name": "Alice", "kind": "Person"},
+                {"name": "OpenAI", "kind": "Organization"},
+            ],
+            "relationships": [
+                {
+                    "source_index": 0,
+                    "target_index": 1,
+                    "relation_type": "WORKS_AT",
+                    "fact": "Alice works at OpenAI",
+                    "score": 0.8,
+                }
+            ],
+        }
+        read = await repo.graph_object(scope, "memory")
+        assert read["source_available"] is True
+        assert read["source_current"] is True
+        memory = await session.get(Memory, "memory")
+        assert memory is not None and memory.processing_status == "COMPLETED"
+
+
+async def test_pg_reextraction_replaces_and_unenrolled_keeps_legacy_behavior(
+    pg_sync, monkeypatch
+) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    import src.infrastructure.adapters.primary.web.startup.workflow as workflow_module
+    from src.infrastructure.adapters.primary.web.startup.workflow import (
+        _run_episode_processing_workflow,
+    )
+    from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+        KnowledgeGraphSyncObjectModel,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        Memory,
+        Project,
+        UserProject,
+    )
+
+    sessions, scope = pg_sync
+    monkeypatch.setattr(workflow_module, "async_session_factory", sessions)
+    async with sessions() as session:
+        _seed_pipeline(session, project_id="project", enabled=True, task_id="task")
+        session.add(
+            Project(id="legacy-project", name="Legacy", tenant_id="tenant", owner_id="actor")
+        )
+        await session.flush()
+        session.add(
+            UserProject(id="up-legacy", project_id="legacy-project", user_id="actor", role="owner")
+        )
+        _seed_pipeline(session, project_id="legacy-project", enabled=False, task_id="task-legacy")
+        await session.commit()
+    graph_service = SimpleNamespace(process_episode=AsyncMock(return_value=_extraction_result()))
+
+    def payload(task_id: str, memory_id: str, project_id: str, revision: int) -> dict:
+        return {
+            "task_id": task_id,
+            "memory_id": memory_id,
+            "source_revision": revision,
+            "uuid": memory_id,
+            "content": "Alice works at OpenAI.",
+            "project_id": project_id,
+            "tenant_id": "tenant",
+            "user_id": "actor",
+        }
+
+    await _run_episode_processing_workflow(payload("task", "memory", "project", 1), graph_service)
+    # Re-extraction of the same memory replaces the record at the next revision.
+    async with sessions() as session:
+        memory = await session.get(Memory, "memory")
+        assert memory is not None
+        memory.version = 2
+        memory.processing_status = "PENDING"
+        await session.commit()
+    await _run_episode_processing_workflow(payload("task", "memory", "project", 2), graph_service)
+    # The unenrolled project keeps legacy behavior: completion without a record.
+    await _run_episode_processing_workflow(
+        payload("task-legacy", "memory-legacy-project", "legacy-project", 1), graph_service
+    )
+
+    async with sessions() as session:
+        repo = SqlKnowledgeGraphSyncRepository(session)
+        page = await repo.graph_changes(scope, 0, 100)
+        changes = page.to_dict()["changes"]
+        assert page.next_cursor == 2 and len(changes) == 2
+        latest = changes[-1]["version"]
+        assert latest["revision"] == 2
+        assert latest["content"]["source_revision"] == 2
+        assert latest["content"]["change_sequence"] == 2
+        stored = await session.get(KnowledgeGraphSyncObjectModel, ("tenant", "project", "memory"))
+        assert stored is not None and stored.revision == 2
+        legacy = await session.get(
+            KnowledgeGraphSyncObjectModel, ("tenant", "legacy-project", "memory-legacy-project")
+        )
+        assert legacy is None
+        legacy_memory = await session.get(Memory, "memory-legacy-project")
+        assert legacy_memory is not None and legacy_memory.processing_status == "COMPLETED"

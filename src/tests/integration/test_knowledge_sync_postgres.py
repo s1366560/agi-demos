@@ -112,6 +112,19 @@ def bootstrap(connection: sa.Connection) -> None:
         guard_revision.downgrade()
         assert "knowledge_sync_enrollments" not in sa.inspect(connection).get_table_names()
         guard_revision.upgrade()
+        graph_path = (
+            Path(__file__).parents[3]
+            / "alembic/versions/f3a9c51e7b24_add_durable_knowledge_graph_sync_journal.py"
+        )
+        graph_spec = importlib.util.spec_from_file_location("graph_sync_revision", graph_path)
+        assert graph_spec and graph_spec.loader
+        graph_revision = importlib.util.module_from_spec(graph_spec)
+        graph_spec.loader.exec_module(graph_revision)
+        graph_revision.upgrade()
+        assert "knowledge_sync_graph_objects" in sa.inspect(connection).get_table_names()
+        graph_revision.downgrade()
+        assert "knowledge_sync_graph_objects" not in sa.inspect(connection).get_table_names()
+        graph_revision.upgrade()
 
 
 @pytest.fixture

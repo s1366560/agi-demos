@@ -23,7 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.model.knowledge_sync.contracts import (
     MAX_REVISION,
     GraphSyncContent,
+    GraphSyncEntity,
     GraphSyncMutation,
+    GraphSyncRelationship,
     GraphSyncResolution,
     GraphSyncVersion,
     KnowledgeSyncError,
@@ -44,8 +46,9 @@ from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models imp
     KnowledgeGraphSyncObjectModel as GraphObject,
     KnowledgeGraphSyncReceiptModel as Receipt,
     KnowledgeGraphSyncTombstoneModel as Tombstone,
+    KnowledgeSyncEnrollmentModel as Enrollment,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Memory, UserProject
+from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, UserProject
 
 
 def canonical(value: dict[str, Any]) -> str:
@@ -265,6 +268,25 @@ class SqlKnowledgeGraphSyncRepository:
             _ = await self.db.execute(delete(Tombstone).where(Tombstone.object_id == object_id))
         return version
 
+    async def _allocate_sequence(self, scope: KnowledgeSyncScope) -> int:
+        # The cursor row lock serializes journal allocation across actor
+        # mutations and pipeline enqueues alike; pipeline admissions never
+        # touch this table, so no cross-lease row lock interplay is possible.
+        cursor = await self.db.scalar(
+            select(Cursor)
+            .where(Cursor.tenant_id == scope.tenant_id, Cursor.project_id == scope.project_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if cursor is None:
+            cursor = Cursor(tenant_id=scope.tenant_id, project_id=scope.project_id, sequence=0)
+            self.db.add(cursor)
+            await self.db.flush()
+        if cursor.sequence >= 2**63 - 1:
+            raise KnowledgeSyncError("knowledge_sync_cursor_exhausted")
+        cursor.sequence += 1
+        return cursor.sequence
+
     async def _accepted(
         self,
         scope: KnowledgeSyncScope,
@@ -274,20 +296,12 @@ class SqlKnowledgeGraphSyncRepository:
         *,
         receipt_override: dict[str, Any] | None = None,
     ) -> KnowledgeSyncOutcome:
-        cursor = await self.db.get(
-            Cursor, (scope.tenant_id, scope.project_id), populate_existing=True
-        )
-        if cursor is None:
-            cursor = Cursor(tenant_id=scope.tenant_id, project_id=scope.project_id, sequence=0)
-            self.db.add(cursor)
-        if cursor.sequence >= 2**63 - 1:
-            raise KnowledgeSyncError("knowledge_sync_cursor_exhausted")
-        cursor.sequence += 1
+        sequence = await self._allocate_sequence(scope)
         self.db.add(
             Change(
                 tenant_id=scope.tenant_id,
                 project_id=scope.project_id,
-                sequence=cursor.sequence,
+                sequence=sequence,
                 actor_id=scope.actor_id,
                 change_id=change_id,
                 object_id=version.object_id,
@@ -297,7 +311,7 @@ class SqlKnowledgeGraphSyncRepository:
         )
         value: dict[str, Any] = {
             "status": "applied",
-            "sequence": cursor.sequence,
+            "sequence": sequence,
             "version": version.to_dict(),
         }
         if receipt_override is not None:
@@ -374,6 +388,64 @@ class SqlKnowledgeGraphSyncRepository:
             deleted = resolution.decision == "use_proposed" and proposed.operation == "delete"
             version = await self._apply(scope, row.object_id, current, content, deleted=deleted)
             return await self._accepted(scope, change_id, request, version)
+
+    async def enqueue_derived(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        memory_id: str,
+        author_id: str,
+        source_revision: int,
+        entities: tuple[GraphSyncEntity, ...],
+        relationships: tuple[GraphSyncRelationship, ...],
+    ) -> GraphSyncVersion | None:
+        """Journal one pipeline-derived projection; a no-op unless enrolled.
+
+        This is the system path used by the extraction pipeline, not an actor
+        request: no receipt and no conflict intake. The write rides the
+        caller's transaction so it commits atomically with the PG state that
+        makes the extraction result durable. The record's provenance change
+        sequence is the journal sequence allocated here, and the cloud has no
+        audit-attempt counter, so the accepted pipeline run is attempt 1.
+        Re-extraction replaces the per-memory record at the next revision.
+        Neo4j never participates.
+        """
+        scope = KnowledgeSyncScope(tenant_id=tenant_id, project_id=project_id, actor_id=author_id)
+        async with self._transaction():
+            enrollment = await self.db.get(Enrollment, project_id)
+            if enrollment is None or not enrollment.enabled or enrollment.tenant_id != tenant_id:
+                return None
+            project = await self.db.scalar(
+                select(Project)
+                .where(Project.id == project_id)
+                .execution_options(populate_existing=True)
+            )
+            if project is None or project.tenant_id != tenant_id:
+                raise KnowledgeSyncError("knowledge_sync_forbidden")
+            current = await self._current(scope, memory_id)
+            sequence = await self._allocate_sequence(scope)
+            content = GraphSyncContent(
+                source_revision=source_revision,
+                change_sequence=sequence,
+                audit_attempt=1,
+                entities=entities,
+                relationships=relationships,
+            )
+            version = await self._apply(scope, memory_id, current, content, deleted=False)
+            self.db.add(
+                Change(
+                    tenant_id=scope.tenant_id,
+                    project_id=scope.project_id,
+                    sequence=sequence,
+                    actor_id=author_id,
+                    change_id=str(uuid4()),
+                    object_id=version.object_id,
+                    revision=version.revision,
+                    snapshot=version.to_dict(),
+                )
+            )
+            return version
 
     async def graph_changes(
         self, scope: KnowledgeSyncScope, after: int, limit: int

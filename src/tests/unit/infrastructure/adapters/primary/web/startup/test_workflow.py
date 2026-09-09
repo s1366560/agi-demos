@@ -533,3 +533,273 @@ async def test_incremental_refresh_workflow_processes_loaded_episodes(
         user_id=test_user.id,
         excluded_entity_types=None,
     )
+
+
+def _extraction_result() -> SimpleNamespace:
+    from src.infrastructure.graph.schemas import EntityEdge, EntityNode
+
+    alice = EntityNode(name="Alice", entity_type="Person")
+    acme = EntityNode(name="OpenAI", entity_type="Organization")
+    edge = EntityEdge(
+        source_uuid=alice.uuid,
+        target_uuid=acme.uuid,
+        relationship_type="WORKS_AT",
+        fact="Alice works at OpenAI",
+        weight=0.8,
+    )
+    return SimpleNamespace(nodes=[alice, acme], edges=[edge], episodic_edges=[])
+
+
+def _payload(memory_id: str, task_id: str, project: Project, user: User) -> dict[str, object]:
+    return {
+        "task_id": task_id,
+        "memory_id": memory_id,
+        "source_revision": 1,
+        "uuid": memory_id,
+        "content": "Alice from OpenAI met Bob at Microsoft.",
+        "project_id": project.id,
+        "tenant_id": project.tenant_id,
+        "user_id": user.id,
+    }
+
+
+def _session_factory(test_db: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        workflow_module,
+        "async_session_factory",
+        async_sessionmaker(test_db.bind, class_=AsyncSession, expire_on_commit=False),
+    )
+
+
+async def _enroll(test_db: AsyncSession, project: Project) -> None:
+    from sqlalchemy import update
+
+    await test_db.execute(
+        update(KnowledgeSyncEnrollmentModel)
+        .where(KnowledgeSyncEnrollmentModel.project_id == project.id)
+        .values(enabled=True)
+    )
+    await test_db.commit()
+
+
+async def _journal_state(test_db: AsyncSession, project: Project, memory_id: str):
+    from sqlalchemy import func, select
+
+    from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+        KnowledgeGraphSyncChangeModel,
+        KnowledgeGraphSyncObjectModel,
+    )
+
+    stored = await test_db.get(
+        KnowledgeGraphSyncObjectModel, (project.tenant_id, project.id, memory_id)
+    )
+    changes = await test_db.scalar(
+        select(func.count())
+        .select_from(KnowledgeGraphSyncChangeModel)
+        .where(KnowledgeGraphSyncChangeModel.project_id == project.id)
+    )
+    return stored, changes
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrolled_extraction_enqueues_exactly_one_derived_record_with_provenance(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _session_factory(test_db, monkeypatch)
+    await _enroll(test_db, test_project_db)
+    memory_id, task_id = str(uuid4()), str(uuid4())
+    memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
+    test_db.add_all([memory, _task(task_id, test_project_db.id, {})])
+    await test_db.commit()
+    graph_service = SimpleNamespace(process_episode=AsyncMock(return_value=_extraction_result()))
+
+    result = await _run_episode_processing_workflow(
+        _payload(memory_id, task_id, test_project_db, test_user), graph_service
+    )
+
+    assert result["entities"] == 2 and result["relationships"] == 1
+    stored, changes = await _journal_state(test_db, test_project_db, memory_id)
+    assert changes == 1
+    assert stored is not None and stored.revision == 1 and stored.deleted is False
+    assert stored.author_id == test_user.id
+    payload = stored.payload
+    content = payload["content"]
+    assert content["source_revision"] == 1
+    assert content["change_sequence"] == 1
+    assert content["audit_attempt"] == 1
+    assert content["entities"] == [
+        {"name": "Alice", "kind": "Person"},
+        {"name": "OpenAI", "kind": "Organization"},
+    ]
+    assert content["relationships"] == [
+        {
+            "source_index": 0,
+            "target_index": 1,
+            "relation_type": "WORKS_AT",
+            "fact": "Alice works at OpenAI",
+            "score": 0.8,
+        }
+    ]
+    await test_db.refresh(memory)
+    assert memory.processing_status == "COMPLETED"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unenrolled_extraction_completes_without_journaling(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _session_factory(test_db, monkeypatch)
+    # The autouse fence leaves the project unenrolled: legacy behavior is kept.
+    memory_id, task_id = str(uuid4()), str(uuid4())
+    memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
+    test_db.add_all([memory, _task(task_id, test_project_db.id, {})])
+    await test_db.commit()
+    graph_service = SimpleNamespace(process_episode=AsyncMock(return_value=_extraction_result()))
+
+    await _run_episode_processing_workflow(
+        _payload(memory_id, task_id, test_project_db, test_user), graph_service
+    )
+
+    stored, changes = await _journal_state(test_db, test_project_db, memory_id)
+    assert stored is None and changes == 0
+    await test_db.refresh(memory)
+    assert memory.processing_status == "COMPLETED"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_reextraction_replaces_the_record_at_the_next_revision(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _session_factory(test_db, monkeypatch)
+    await _enroll(test_db, test_project_db)
+    memory_id, task_id = str(uuid4()), str(uuid4())
+    memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
+    test_db.add_all([memory, _task(task_id, test_project_db.id, {})])
+    await test_db.commit()
+    graph_service = SimpleNamespace(process_episode=AsyncMock(return_value=_extraction_result()))
+
+    await _run_episode_processing_workflow(
+        _payload(memory_id, task_id, test_project_db, test_user), graph_service
+    )
+    memory.version = 2
+    memory.processing_status = "PENDING"
+    await test_db.commit()
+    payload = {**_payload(memory_id, task_id, test_project_db, test_user), "source_revision": 2}
+    await _run_episode_processing_workflow(payload, graph_service)
+
+    stored, changes = await _journal_state(test_db, test_project_db, memory_id)
+    assert changes == 2
+    assert stored is not None and stored.revision == 2
+    assert stored.payload["content"]["source_revision"] == 2
+    assert stored.payload["content"]["change_sequence"] == 2
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unjournalable_shape_completes_without_enqueuing_partial_records(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _session_factory(test_db, monkeypatch)
+    await _enroll(test_db, test_project_db)
+    memory_id, task_id = str(uuid4()), str(uuid4())
+    memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
+    test_db.add_all([memory, _task(task_id, test_project_db.id, {})])
+    await test_db.commit()
+    bad = SimpleNamespace(
+        nodes=[SimpleNamespace(name="  ", entity_type="Person", uuid="x")],
+        edges=[],
+        episodic_edges=[],
+    )
+    graph_service = SimpleNamespace(process_episode=AsyncMock(return_value=bad))
+
+    await _run_episode_processing_workflow(
+        _payload(memory_id, task_id, test_project_db, test_user), graph_service
+    )
+
+    stored, changes = await _journal_state(test_db, test_project_db, memory_id)
+    assert stored is None and changes == 0
+    await test_db.refresh(memory)
+    assert memory.processing_status == "COMPLETED"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_neo4j_unavailable_after_extraction_does_not_block_the_journal(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _session_factory(test_db, monkeypatch)
+    await _enroll(test_db, test_project_db)
+    memory_id, task_id = str(uuid4()), str(uuid4())
+    memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
+    test_db.add_all([memory, _task(task_id, test_project_db.id, {})])
+    await test_db.commit()
+
+    class ExplodingNeo4j:
+        async def execute_query(self, *_args, **_kwargs):
+            raise ConnectionError("neo4j unavailable")
+
+    # The extraction result already exists; every later Neo4j contact fails.
+    graph_service = SimpleNamespace(
+        process_episode=AsyncMock(return_value=_extraction_result()),
+        _neo4j_client=ExplodingNeo4j(),
+    )
+
+    await _run_episode_processing_workflow(
+        _payload(memory_id, task_id, test_project_db, test_user), graph_service
+    )
+
+    stored, changes = await _journal_state(test_db, test_project_db, memory_id)
+    assert changes == 1 and stored is not None and stored.revision == 1
+    await test_db.refresh(memory)
+    assert memory.processing_status == "COMPLETED"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_failed_extraction_enqueues_nothing(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _session_factory(test_db, monkeypatch)
+    await _enroll(test_db, test_project_db)
+    memory_id, task_id = str(uuid4()), str(uuid4())
+    memory = _memory(memory_id, test_project_db, test_user)
+    memory.task_id = task_id
+    test_db.add_all([memory, _task(task_id, test_project_db.id, {})])
+    await test_db.commit()
+    graph_service = SimpleNamespace(process_episode=AsyncMock(side_effect=RuntimeError("boom")))
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await _run_episode_processing_workflow(
+            _payload(memory_id, task_id, test_project_db, test_user), graph_service
+        )
+
+    stored, changes = await _journal_state(test_db, test_project_db, memory_id)
+    assert stored is None and changes == 0
+    await test_db.refresh(memory)
+    assert memory.processing_status == "FAILED"
