@@ -9,7 +9,7 @@
  * @see https://react.dev/reference/react/lazy
  */
 
-import { lazy, Suspense, useState, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import type { ComponentType, LazyExoticComponent, ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -374,27 +374,3 @@ export type {
   FormProps,
   LayoutProps,
 } from 'antd';
-
-// ============================================================================
-// Helper Hooks for Services
-
-// ============================================================================
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useLazyNotification() {
-  const [notificationApi, setNotificationApi] = useState<typeof import('antd').notification | null>(
-    null
-  );
-
-  useEffect(() => {
-    void import('antd')
-      .then((m) => {
-        setNotificationApi(() => m.notification);
-      })
-      .catch((error: unknown) => {
-        console.error('Failed to load Ant Design notification API:', error);
-      });
-  }, []);
-
-  return notificationApi;
-}

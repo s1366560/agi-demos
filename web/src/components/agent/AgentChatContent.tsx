@@ -33,7 +33,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { Dropdown, Modal, message } from 'antd';
+import { App, Dropdown, Modal } from 'antd';
 import {
   GripHorizontal,
   Download,
@@ -75,7 +75,6 @@ import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
 
 import { AppLauncher } from '@/components/mcp-app/AppLauncher';
-import { useLazyNotification } from '@/components/ui/lazyAntd';
 
 // Import design components
 import { formatDateTime } from '../../utils/date';
@@ -223,7 +222,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     loadConversationList = true,
   }) => {
     const { t } = useTranslation();
-    const notification = useLazyNotification();
+    const { message, notification } = App.useApp();
     const { projectId: urlProjectId, conversation: conversationId } = useParams<{
       projectId: string;
       conversation?: string | undefined;
@@ -561,7 +560,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       return () => {
         window.removeEventListener('keydown', handleKeyShortcut);
       };
-    }, [inputBarRef, t]);
+    }, [inputBarRef, message, t]);
 
     // Load conversations only when this surface owns the list. Tenant workspace
     // pages delegate list ownership to TenantChatSidebar so tenant switches do
@@ -652,7 +651,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     // Handle errors
     useEffect(() => {
       if (error) {
-        notification?.error({
+        notification.error({
           message: t('agent.chat.errors.title'),
           description: error,
           onClose: clearError,
@@ -663,7 +662,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     // Handle doom loop
     useEffect(() => {
       if (doomLoopDetected) {
-        notification?.warning({
+        notification.warning({
           message: t('agent.chat.doomLoop.title'),
           description: t('agent.chat.doomLoop.description', {
             tool: doomLoopDetected.tool_name,
@@ -744,6 +743,7 @@ ${content}`;
         navigationSuffix,
         activeAgentId,
         isExternalAcpAgent,
+        message,
         t,
       ]
     );
@@ -808,7 +808,7 @@ ${content}`;
           })
         );
       },
-      [timeline, handleSend, t]
+      [timeline, handleSend, message, t]
     );
 
     // Delete: remove the message from the local timeline/messages stores.
@@ -972,7 +972,7 @@ ${content}`;
         );
         console.error('Failed to switch plan mode:', err);
       }
-    }, [activeConversationId, conversationId, isPlanMode, t]);
+    }, [activeConversationId, conversationId, isPlanMode, message, t]);
 
     const chatColumn = (
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
