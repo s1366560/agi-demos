@@ -52,7 +52,7 @@ function SourceRow({ source }: { source: Source }) {
       href={source.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+      className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
     >
       <span className="line-clamp-1">{source.title}</span>
       <ExternalLink size={11} className="flex-shrink-0 opacity-70" />

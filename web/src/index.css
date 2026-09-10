@@ -357,6 +357,23 @@ body {
   color: var(--color-text-inverse);
 }
 
+/* ============================================================================
+ * ANCHOR COLORS
+ *
+ * AntD injects a global `a { color: var(--ant-color-link) }` reset and derives
+ * that token from `colorInfo` unless the seed pins it, so every anchor used to
+ * render in the saturated info cyan #38d6ff — 1.9:1 on white, below AA, and
+ * off-system for a monochrome palette.
+ *
+ * The fix lives in `theme/antdTheme.ts` (`colorLink*` pinned per theme), which
+ * covers every anchor, `Typography.Link`, `Button type="link"` and `Alert` in
+ * one place. Ordinary anchors in JSX then need no color class at all.
+ *
+ * Markdown prose keeps an explicit rule so its links stay correct no matter
+ * which surface renders them (chat bubble, canvas, skill docs) and so the
+ * intent is greppable from CSS.
+ * ============================================================================ */
+
 /* Keep scroll chained inside overlay surfaces so a fling at the bottom of a
  * modal/drawer never scrolls the page behind it. */
 .ant-modal-body,
@@ -1792,8 +1809,18 @@ img[loading='lazy'] {
   background-color: var(--color-border-dark);
 }
 
-/* --- Links --- */
-.memstack-prose a:hover {
+/* --- Links ---
+ * Markdown links resolve to the same brand accent as every other anchor (the
+ * pinned `colorLink` token above). Stated explicitly here so prose keeps AA
+ * contrast no matter which surface renders it — chat bubbles, canvas, skill
+ * docs. `--color-primary` flips per theme, so one rule covers both. */
+.memstack-prose a {
+  color: var(--color-primary);
+}
+
+.memstack-prose a:hover,
+.memstack-prose a:focus-visible {
+  color: var(--color-primary-light);
   text-decoration: underline;
 }
 

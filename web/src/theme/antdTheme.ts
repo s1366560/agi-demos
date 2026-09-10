@@ -69,6 +69,26 @@ export const colors = {
   tileRose: '#ff6978',
 };
 
+// Link colors — part of the monochrome accent family (values from tokens.ts).
+//
+// AntD derives `colorLink` from `colorInfo` when the seed is unset, which
+// painted every anchor (and `Typography.Link` / `Button type="link"`, via
+// `operationUnit`) in the saturated info cyan #38d6ff — off-system, and only
+// 1.9:1 on white. Pinning the seed per theme fixes every anchor surface at
+// once; `index.css` only adds an explicit rule for markdown prose links.
+const linkColors = {
+  light: {
+    base: tokens.light.link,
+    hover: tokens.light.linkHover,
+    active: tokens.light.linkActive,
+  },
+  dark: {
+    base: tokens.dark.link,
+    hover: tokens.dark.linkHover,
+    active: tokens.dark.linkActive,
+  },
+} as const;
+
 // Motion tokens shared by both themes (values from tokens.ts).
 const motionTokens = {
   motion: true,
@@ -93,6 +113,11 @@ export const lightTheme: ThemeConfig = {
     colorPrimaryText: colors.primary,
     colorPrimaryTextHover: colors.primaryLight,
     colorPrimaryTextActive: colors.primaryDark,
+
+    // Link Colors (pinned — unset means "derive from colorInfo", i.e. info cyan)
+    colorLink: linkColors.light.base,
+    colorLinkHover: linkColors.light.hover,
+    colorLinkActive: linkColors.light.active,
 
     // Background Colors
     colorBgBase: colors.bgLight,
@@ -297,6 +322,11 @@ export const darkTheme: ThemeConfig = {
     colorPrimaryText: colors.primaryCyanDark,
     colorPrimaryTextHover: '#ffffff',
     colorPrimaryTextActive: '#d9d9d9',
+
+    // Link Colors (pinned — the dark algorithm otherwise lands on a dimmed cyan)
+    colorLink: linkColors.dark.base,
+    colorLinkHover: linkColors.dark.hover,
+    colorLinkActive: linkColors.dark.active,
 
     // Background Colors
     colorBgBase: colors.bgDark,

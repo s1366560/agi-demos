@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { darkTheme, lightTheme } from '@/theme/antdTheme';
 import { tokens } from '@/theme/tokens';
 
 const css = readFileSync(resolve(__dirname, '../../index.css'), 'utf8');
@@ -108,6 +109,49 @@ describe('token sync: index.css ↔ tokens.ts', () => {
     const raw = varValue(themeBlock, name);
     expect(raw, `--${name} missing`).toMatch(/rem$/);
     expect(Math.round(parseFloat(raw!.replace('rem', '')) * 16)).toBe(px);
+  });
+
+  /* ---------- Link colors: AntD seed ↔ tokens.ts ↔ index.css ----------
+   * Regression guard for the off-system info-cyan links (#38d6ff). AntD falls
+   * back to `colorInfo` when `colorLink` is unset, so an unpinned seed or a
+   * drifted hex must fail here rather than ship. */
+  it.each([
+    ['light', lightTheme, tokens.light.link, tokens.light.linkHover, tokens.light.linkActive],
+    ['dark', darkTheme, tokens.dark.link, tokens.dark.linkHover, tokens.dark.linkActive],
+  ])('%s theme pins colorLink to the design-system accent', (name, theme, base, hover, active) => {
+    const token = theme.token ?? {};
+    expect(token.colorLink, `${name} colorLink`).toBe(base);
+    expect(token.colorLinkHover, `${name} colorLinkHover`).toBe(hover);
+    expect(token.colorLinkActive, `${name} colorLinkActive`).toBe(active);
+    // The link accent is the neutral brand accent, never the info hue.
+    expect([base, hover, active]).not.toContain(tokens.status.info);
+  });
+
+  it('links keep AA contrast on their own surface', () => {
+    const luminance = (hex: string) => {
+      const channel = (offset: number) => {
+        const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+    };
+    const contrast = (fg: string, bg: string) => {
+      const [light, dark] = [luminance(fg), luminance(bg)].sort((a, b) => b - a);
+      return (light + 0.05) / (dark + 0.05);
+    };
+    for (const color of [tokens.light.link, tokens.light.linkHover, tokens.light.linkActive]) {
+      expect(contrast(color, '#ffffff'), `${color} on white`).toBeGreaterThanOrEqual(4.5);
+    }
+    for (const color of [tokens.dark.link, tokens.dark.linkHover, tokens.dark.linkActive]) {
+      expect(
+        contrast(color, tokens.dark.panel),
+        `${color} on ${tokens.dark.panel}`
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('index.css states the prose link colors explicitly', () => {
+    expect(css).toMatch(/\.memstack-prose a\s*\{[^}]*color:\s*var\(--color-primary\)/s);
   });
 
   /* ---------- No retired brand literals anywhere in index.css ---------- */

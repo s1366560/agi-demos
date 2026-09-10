@@ -641,7 +641,7 @@ function DeliveryPanel({
               href={run.external_url}
               target="_blank"
               rel="noreferrer"
-              className="mt-1 inline-flex max-w-full items-center gap-1 break-all text-xs leading-5 text-brand-primary hover:underline"
+              className="mt-1 inline-flex max-w-full items-center gap-1 break-all text-xs leading-5 text-primary hover:underline"
             >
               <span className="min-w-0 truncate">{run.external_id ?? run.external_url}</span>
               <ArrowUpRight className="h-3 w-3 shrink-0" aria-hidden />

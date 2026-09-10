@@ -33,6 +33,11 @@ export const tokens = {
     // Accent — monochrome (near-white on dark); `cyan` key kept for compatibility.
     cyan: '#f2f2f2',
     cyanSoft: '#242424',
+
+    // Link accent (ramp order follows AntD 6 -> 5 -> 7: base -> hover -> active).
+    link: '#f2f2f2',
+    linkHover: '#ffffff',
+    linkActive: '#d9d9d9',
   },
   light: {
     bg: '#f7f7f7',
@@ -49,6 +54,11 @@ export const tokens = {
     // Near-black accent for AA contrast on white (approx 13:1).
     cyan: '#262626',
     cyanSoft: '#eeeeee',
+
+    // Link accent (ramp order follows AntD 6 -> 5 -> 7: base -> hover -> active).
+    link: '#262626',
+    linkHover: '#525252',
+    linkActive: '#171717',
   },
 
   // Status — spec-faithful, tuned for both themes.
