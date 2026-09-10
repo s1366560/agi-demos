@@ -130,7 +130,7 @@ function formatToolProviderLabel(
 function SummaryStat({ label, value, hint }: SummaryStatProps) {
   return (
     <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-4 py-4 dark:border-slate-800 dark:bg-slate-900">
-      <dt className="text-xs font-semibold uppercase text-slate-400">{label}</dt>
+      <dt className="text-xs font-semibold uppercase tracking-label text-slate-400">{label}</dt>
       <dd className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{value}</dd>
       {hint ? (
         <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{hint}</p>
@@ -144,7 +144,7 @@ function Section({ title, description, children }: SectionProps) {
     <section className="px-6 py-6 sm:px-8">
       <div className="grid gap-5 xl:grid-cols-[220px_minmax(0,1fr)]">
         <div>
-          <h3 className="text-sm font-semibold uppercase text-slate-700 dark:text-slate-200">
+          <h3 className="text-xs font-semibold uppercase tracking-label text-slate-700 dark:text-slate-200">
             {title}
           </h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>

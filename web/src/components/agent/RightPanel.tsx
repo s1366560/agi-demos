@@ -33,6 +33,7 @@ import { AgentGraphView } from './AgentGraphView';
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { buildWorkspaceAgentNodes } from './multiAgent/workspaceAgentPanelModel';
 import { Resizer } from './Resizer';
+import { PANEL_HEADER_CLASSES, PANEL_SCROLL_BODY_CLASSES } from './styles';
 import { TaskList } from './TaskList';
 import { TaskLanePanel } from './tasks/TaskLanePanel';
 import { WorkspaceTaskPlanPanel } from './workspace/WorkspaceTaskPlanPanel';
@@ -160,7 +161,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
 
         {executionPathDecision ? (
           <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
               <Route size={13} />
               <span>{tFallback(t, 'agent.rightPanel.insights.routing', 'Routing')}</span>
             </div>
@@ -197,7 +198,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
 
         {selectionTrace ? (
           <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
               {tFallback(t, 'agent.rightPanel.insights.selection', 'Selection')}
             </div>
             <div className="mt-1 text-sm text-slate-800 dark:text-slate-100">
@@ -226,7 +227,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
 
         {policyFiltered ? (
           <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
               <Filter size={13} />
               <span>{tFallback(t, 'agent.rightPanel.insights.policy', 'Policy')}</span>
             </div>
@@ -249,7 +250,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
 
         {latestToolsetChange ? (
           <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
               {tFallback(t, 'agent.rightPanel.insights.toolset', 'Toolset')}
             </div>
             <div className="mt-1 text-sm text-slate-800 dark:text-slate-100">
@@ -277,7 +278,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
             className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3"
             data-testid="execution-narrative"
           >
-            <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
               {tFallback(t, 'agent.rightPanel.insights.narrative', 'Execution Narrative')}
             </div>
             <div className="mt-2 space-y-2">
@@ -286,7 +287,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
                   key={entry.id}
                   className="rounded border border-slate-200/70 dark:border-slate-700/70 p-2"
                 >
-                  <div className="text-xs-plus uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <div className="text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
                     {entry.stage}
                   </div>
                   <div className="text-xs text-slate-700 dark:text-slate-200">{entry.summary}</div>
@@ -401,22 +402,22 @@ const AgentSessionMessagesPanel = memo<{
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-slate-200/60 px-4 py-3 dark:border-slate-700/50">
+    <div className="flex h-full flex-col min-h-0">
+      <div className="flex-shrink-0 border-b border-slate-200/60 px-4 py-2 dark:border-slate-700/50">
         <div className="flex items-center gap-2">
           <Bot size={15} className="text-slate-500 dark:text-slate-400" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {tFallback(t, 'agent.rightPanel.agentSession.title', 'Agent session')}
             </p>
-            <code className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
+            <code className="block truncate text-xs-plus text-slate-500 dark:text-slate-400">
               {sessionId}
             </code>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className={`${PANEL_SCROLL_BODY_CLASSES} p-3`}>
         {loading ? (
           <div className="space-y-2" role="status">
             <div className="h-12 rounded-md bg-slate-100 dark:bg-slate-800" />
@@ -457,10 +458,10 @@ const AgentSessionMessagesPanel = memo<{
                   className="rounded-md border border-slate-200/70 bg-white px-3 py-2 dark:border-slate-700/60 dark:bg-slate-900/35"
                 >
                   <div className="mb-1 flex min-w-0 items-center gap-2">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-label text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {agentEventRole(event, t)}
                     </span>
-                    <span className="ml-auto shrink-0 text-[11px] text-content-tertiary">
+                    <span className="ml-auto shrink-0 text-xs-plus text-content-tertiary">
                       {agentEventTimestamp(event, i18n.language || 'en')}
                     </span>
                   </div>
@@ -691,15 +692,15 @@ export const RightPanel = memo<RightPanelProps>(
           />
         ) : null}
 
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/50">
+          <div className={PANEL_HEADER_CLASSES}>
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                 <ListTodo size={16} className="text-slate-600 dark:text-slate-300" />
               </div>
               <div className="flex flex-col min-w-0">
-                <h2 className="font-semibold text-slate-900 dark:text-slate-100 leading-tight">
+                <h2 className="text-sm font-semibold leading-tight text-slate-900 dark:text-slate-100">
                   {tFallback(t, 'agent.rightPanel.tabs.tasks', 'Tasks')}
                 </h2>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -726,7 +727,7 @@ export const RightPanel = memo<RightPanelProps>(
                   onClick={() => {
                     setPreferredTab('tasks');
                   }}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                  className={`rounded-md px-2 py-1 text-xs transition-colors duration-150 hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-700 dark:hover:text-slate-100 ${
                     activeTab === 'tasks'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
                       : 'text-slate-500 dark:text-slate-400'
@@ -751,7 +752,7 @@ export const RightPanel = memo<RightPanelProps>(
                         : tFallback(t, 'agent.rightPanel.switchToLane', 'Switch to lane view')
                     }
                     aria-pressed={taskView === 'lanes'}
-                    className="ml-1 px-2 py-1 text-xs rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                    className="ml-1 rounded-md px-2 py-1 text-xs text-slate-500 transition-colors duration-150 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-slate-400 dark:hover:text-slate-100"
                     data-testid="task-view-toggle"
                   >
                     {taskView === 'lanes'
@@ -771,11 +772,11 @@ export const RightPanel = memo<RightPanelProps>(
                     }
                   }}
                   disabled={!hasAgentSession}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                  className={`rounded-md px-2 py-1 text-xs transition-colors duration-150 hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-700 dark:hover:text-slate-100 ${
                     activeTab === 'agent'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
                       : 'text-slate-500 dark:text-slate-400'
-                  } ${!hasAgentSession ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } `}
                 >
                   <span className="inline-flex items-center gap-1">
                     <Bot size={12} aria-hidden />
@@ -794,7 +795,7 @@ export const RightPanel = memo<RightPanelProps>(
                     }
                   }}
                   disabled={!hasInsights}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                  className={`rounded-md px-2 py-1 text-xs transition-colors duration-150 hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-700 dark:hover:text-slate-100 ${
                     activeTab === 'insights'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
                       : 'text-slate-500 dark:text-slate-400'
@@ -814,7 +815,7 @@ export const RightPanel = memo<RightPanelProps>(
                     }
                   }}
                   disabled={!hasAgents}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                  className={`rounded-md px-2 py-1 text-xs transition-colors duration-150 hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-700 dark:hover:text-slate-100 ${
                     activeTab === 'agents'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
                       : 'text-slate-500 dark:text-slate-400'
@@ -834,7 +835,7 @@ export const RightPanel = memo<RightPanelProps>(
                     }
                   }}
                   disabled={!hasGraph}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                  className={`rounded-md px-2 py-1 text-xs transition-colors duration-150 hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-700 dark:hover:text-slate-100 ${
                     activeTab === 'graph'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
                       : 'text-slate-500 dark:text-slate-400'
@@ -874,7 +875,7 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
           ) : activeTab === 'insights' ? (
             <div
-              className="flex-1 overflow-y-auto p-3"
+              className={`${PANEL_SCROLL_BODY_CLASSES} p-3`}
               role="tabpanel"
               id="right-panel-panel-insights"
               aria-labelledby="right-panel-tab-insights"
@@ -889,7 +890,7 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
           ) : activeTab === 'agents' ? (
             <div
-              className="flex-1 overflow-y-auto"
+              className={PANEL_SCROLL_BODY_CLASSES}
               role="tabpanel"
               id="right-panel-panel-agents"
               aria-labelledby="right-panel-tab-agents"
@@ -915,7 +916,7 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
           ) : (
             <div
-              className="flex-1 overflow-y-auto"
+              className={PANEL_SCROLL_BODY_CLASSES}
               role="tabpanel"
               id="right-panel-panel-tasks"
               aria-labelledby="right-panel-tab-tasks"

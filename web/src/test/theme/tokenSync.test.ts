@@ -154,6 +154,36 @@ describe('token sync: index.css ↔ tokens.ts', () => {
     expect(css).toMatch(/\.memstack-prose a\s*\{[^}]*color:\s*var\(--color-primary\)/s);
   });
 
+  /* ---------- Typography: the tokens that actually reach the DOM ---------- */
+  describe('typography tokens', () => {
+    it('@theme declares --font-sans, the token Tailwind preflight resolves for <html>', () => {
+      // Declaring only --font-display/--font-body left every Tailwind-rendered
+      // element on system-ui while Ant Design rendered Inter.
+      // Quote style differs by file (CSS single, TS double), so compare stacks.
+      const stack = (value: string) => value.replace(/["']/g, '');
+      expect(stack(varValue(themeBlock, 'font-sans') ?? '')).toBe(stack(tokens.fontFamilySans));
+      expect(varValue(themeBlock, 'font-display')).toBe('var(--font-sans)');
+      expect(varValue(themeBlock, 'font-body')).toBe('var(--font-sans)');
+    });
+
+    it('body pins the UI typeface so an AntD reset cannot win', () => {
+      expect(css).toMatch(/body\s*\{[^}]*font-family:\s*var\(--font-sans\)/s);
+    });
+
+    it.each([['text-2xs'], ['text-xs-plus'], ['text-code']])(
+      '@theme --%s declares a line-height companion',
+      (name) => {
+        // Stock Tailwind sizes reset leading; custom steps must too, or every
+        // dense label inherits an arbitrary ancestor line-height.
+        expect(varValue(themeBlock, `${name}--line-height`)).not.toBeNull();
+      }
+    );
+
+    it('@theme declares the uppercase label tracking step', () => {
+      expect(varValue(themeBlock, 'tracking-label')).toBe('0.05em');
+    });
+  });
+
   /* ---------- No retired brand literals anywhere in index.css ---------- */
   it('index.css contains no retired brand palette literals', () => {
     // NOTE: '#737373' and '#181818' were part of the retired pre-mission-control

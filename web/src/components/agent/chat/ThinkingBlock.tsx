@@ -131,7 +131,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
 
               <span
                 id={labelId}
-                className="text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-shrink-0"
+                className="text-2xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400 flex-shrink-0"
               >
                 {t('agent.thinking.title', 'Thinking')}
               </span>

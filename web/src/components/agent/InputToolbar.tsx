@@ -246,10 +246,10 @@ export const InputToolbar = memo<InputToolbarProps>(
                 disabled={!!(isStreaming || disabled)}
                 aria-label={t('agent.inputBar.advancedSettings', 'Advanced settings')}
                 className={`
-                  flex items-center justify-center h-8 w-8 rounded-lg transition-colors
-                  text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
-                  hover:bg-slate-100 dark:hover:bg-slate-700/50
-                  disabled:opacity-40
+                  flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150
+                  text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700/50 dark:hover:text-slate-300
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
+                  disabled:cursor-not-allowed disabled:opacity-40
                   ${overflowOpen ? 'text-primary bg-primary/5' : ''}
                 `}
               >
@@ -282,7 +282,7 @@ export const InputToolbar = memo<InputToolbarProps>(
                     : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode (Shift+Tab)')
                 }
                 className={`
-                  flex items-center justify-center h-8 w-8 rounded-lg transition-colors
+                  flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed
                   ${
                     isPlanMode
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50'
@@ -317,7 +317,7 @@ export const InputToolbar = memo<InputToolbarProps>(
               size="small"
               icon={<Square size={14} className="fill-current" />}
               onClick={onAbort}
-              className="rounded-xl flex items-center gap-1.5 h-8 px-3 shadow-sm"
+              className="flex h-8 items-center gap-1.5 rounded-lg px-3 shadow-sm"
             >
               {t('agent.inputBar.stop', 'Stop')}
             </LazyButton>

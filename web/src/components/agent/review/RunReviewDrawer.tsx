@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { Drawer } from 'antd';
 import { FileDiff, RefreshCw } from 'lucide-react';
 
-
 import type { RunSummary } from '@/services/projectWorkService';
 import type { ActiveAgentRun } from '@/services/runInputService';
 import {
@@ -156,13 +155,13 @@ export function RunReviewDrawer({ run, latestTurnId }: RunReviewDrawerProps) {
                     summary.input_tokens !== undefined &&
                     summary.output_tokens !== null &&
                     summary.output_tokens !== undefined && (
-                    <span>
-                      {t('agent.runReview.tokens', {
-                        defaultValue: '{{count}} tokens',
-                        count: summary.input_tokens + summary.output_tokens,
-                      })}
-                    </span>
-                  )}
+                      <span>
+                        {t('agent.runReview.tokens', {
+                          defaultValue: '{{count}} tokens',
+                          count: summary.input_tokens + summary.output_tokens,
+                        })}
+                      </span>
+                    )}
                   {summary.files_changed !== null && summary.files_changed !== undefined && (
                     <span>
                       {t('agent.runReview.changeCount', {
@@ -175,14 +174,14 @@ export function RunReviewDrawer({ run, latestTurnId }: RunReviewDrawerProps) {
                     summary.checks_passed !== undefined &&
                     summary.checks_failed !== null &&
                     summary.checks_failed !== undefined && (
-                    <span>
-                      {t('agent.runReview.checkCount', {
-                        defaultValue: '{{passed}} passed · {{failed}} failed',
-                        passed: summary.checks_passed,
-                        failed: summary.checks_failed,
-                      })}
-                    </span>
-                  )}
+                      <span>
+                        {t('agent.runReview.checkCount', {
+                          defaultValue: '{{passed}} passed · {{failed}} failed',
+                          passed: summary.checks_passed,
+                          failed: summary.checks_failed,
+                        })}
+                      </span>
+                    )}
                 </div>
               </section>
             )}
@@ -220,7 +219,7 @@ export function RunReviewDrawer({ run, latestTurnId }: RunReviewDrawerProps) {
                           {file.hunks.map((hunk, index) => (
                             <pre
                               key={hunk.id || `${hunk.header}:${String(index)}`}
-                              className="min-w-max rounded bg-slate-950 p-2 text-[11px] leading-5 text-slate-200"
+                              className="min-w-max rounded bg-slate-950 p-2 text-xs-plus leading-5 text-slate-200"
                             >
                               {hunk.header}
                               {'\n'}

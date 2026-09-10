@@ -196,7 +196,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
         data-testid="conversation-mode-panel"
         data-runtime-role-contract="derived"
       >
-        <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
           {t('agent.workspace.mode.label', 'Mode')}
         </div>
         <Segmented<Mode>
@@ -214,7 +214,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
           className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60"
           data-testid="conversation-mode-summary"
         >
-          <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <div className="text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
             {t('agent.workspace.mode.summaryLabel', 'Actor model')}
           </div>
           <div className="mt-2 space-y-1 text-xs text-slate-700 dark:text-slate-300">
@@ -246,7 +246,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
 
         {showTaskPicker ? (
           <div className="mt-4" data-testid="conversation-task-picker">
-            <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
               {t('agent.workspace.task.label', 'Linked workspace task')}
             </div>
             <Select<string | null>
@@ -262,7 +262,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
               className="w-full"
               data-testid="conversation-task-select"
             />
-            <div className="mt-1 text-[11px] text-content-tertiary">
+            <div className="mt-1 text-xs-plus text-content-tertiary">
               {t(
                 'agent.workspace.task.hint',
                 'Goal, budget and termination are driven by the linked task.'
@@ -270,7 +270,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
             </div>
             {linkedTask ? (
               <div
-                className="mt-2 text-[11px] text-slate-500 dark:text-slate-400"
+                className="mt-2 text-xs-plus text-slate-500 dark:text-slate-400"
                 data-testid="conversation-linked-task-summary"
               >
                 {`${t('agent.workspace.task.summaryLabel', 'Linked task')}: ${linkedTask.title} · ${linkedTask.status}`}

@@ -38,7 +38,7 @@ function StatusBadge({ status, label, duration }: StatusBadgeProps) {
 
   if (status === 'running') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-2xs font-bold uppercase tracking-wider">
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-2xs font-semibold uppercase tracking-label">
         <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
         {label ?? t('agent.agentToolCards.status.running')}
       </span>
@@ -46,14 +46,14 @@ function StatusBadge({ status, label, duration }: StatusBadgeProps) {
   }
   if (status === 'error') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-2xs font-bold uppercase tracking-wider">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-2xs font-semibold uppercase tracking-label">
         <AlertCircle size={12} />
         {label ?? t('agent.agentToolCards.status.error')}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-2xs font-bold uppercase tracking-wider">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-2xs font-semibold uppercase tracking-label">
       <Check size={12} />
       {label ?? t('agent.agentToolCards.status.done')}
       {duration !== undefined && (
@@ -116,7 +116,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
       </div>
       <div className="px-3 py-2 space-y-1.5">
         <div className="flex items-center gap-2">
-          <span className="text-2xs uppercase tracking-wider text-content-tertiary w-12 shrink-0">
+          <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary w-12 shrink-0">
             {t('agent.agentToolCards.agent')}
           </span>
           <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
@@ -125,7 +125,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
         </div>
         {sessionId && (
           <div className="flex items-center gap-2">
-            <span className="text-2xs uppercase tracking-wider text-content-tertiary w-12 shrink-0">
+            <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary w-12 shrink-0">
               {t('agent.agentToolCards.session')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
@@ -135,7 +135,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
         )}
         {message && (
           <div className="flex items-start gap-2 mt-1">
-            <span className="text-2xs uppercase tracking-wider text-content-tertiary w-12 shrink-0 pt-0.5">
+            <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary w-12 shrink-0 pt-0.5">
               {t('agent.agentToolCards.task')}
             </span>
             <span className="text-xs-plus text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -187,7 +187,7 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
       <div className="px-3 py-2 space-y-1.5">
         {sessionId && (
           <div className="flex items-center gap-2">
-            <span className="text-2xs uppercase tracking-wider text-content-tertiary w-14 shrink-0">
+            <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary w-14 shrink-0">
               {t('agent.agentToolCards.session')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
@@ -197,7 +197,7 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
         )}
         {status === 'success' && (
           <div className="flex items-center gap-2">
-            <span className="text-2xs uppercase tracking-wider text-content-tertiary w-14 shrink-0">
+            <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary w-14 shrink-0">
               {t('agent.agentToolCards.stopped')}
             </span>
             <span className="text-xs text-slate-600 dark:text-slate-300">
@@ -244,7 +244,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
       <div className="px-3 py-2 space-y-1.5">
         {agentId && (
           <div className="flex items-center gap-2">
-            <span className="text-2xs uppercase tracking-wider text-content-tertiary w-8 shrink-0">
+            <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary w-8 shrink-0">
               {t('agent.agentToolCards.to')}
             </span>
             <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
@@ -254,7 +254,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
         )}
         {targetSession && (
           <div className="flex items-center gap-2">
-            <span className="text-2xs uppercase tracking-wider text-content-tertiary w-8 shrink-0">
+            <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary w-8 shrink-0">
               {t('agent.agentToolCards.sessionShort')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
@@ -264,7 +264,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
         )}
         {message && (
           <div className="flex items-start gap-2 mt-1">
-            <span className="text-2xs uppercase tracking-wider text-content-tertiary w-8 shrink-0 pt-0.5">
+            <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary w-8 shrink-0 pt-0.5">
               {t('agent.agentToolCards.messageShort')}
             </span>
             <span className="text-xs-plus text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -329,7 +329,7 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
                   {name}
                 </span>
                 {canSpawn && (
-                  <span className="text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded">
+                  <span className="text-2xs text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded">
                     {t('agent.agentToolCards.spawnable')}
                   </span>
                 )}
@@ -412,7 +412,7 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span
-                      className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                      className={`text-2xs font-semibold uppercase tracking-label px-1.5 py-0.5 rounded ${
                         st === 'running'
                           ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
                           : st === 'completed'
@@ -422,9 +422,7 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
                     >
                       {statusLabel}
                     </span>
-                    {mode && (
-                      <span className="text-[9px] text-content-tertiary">{mode}</span>
-                    )}
+                    {mode && <span className="text-2xs text-content-tertiary">{mode}</span>}
                   </div>
                   {taskSummary && (
                     <div className="text-2xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
@@ -497,7 +495,7 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
                 className="flex items-start gap-2 py-1 px-2 rounded bg-white/60 dark:bg-slate-800/40"
               >
                 <span
-                  className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${
+                  className={`text-2xs font-semibold uppercase tracking-label px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${
                     role === 'task' || role === 'request'
                       ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
                       : role === 'response' || role === 'result'

@@ -176,7 +176,7 @@ export const MentionPicker = memo(
                   ) : null}
                 </span>
                 {candidate.label ? (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-900 dark:bg-slate-800 dark:text-slate-100">
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs-plus text-slate-900 dark:bg-slate-800 dark:text-slate-100">
                     {candidate.label}
                   </span>
                 ) : null}

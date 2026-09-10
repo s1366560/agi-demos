@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { LAYOUT_BG_CLASSES } from './styles';
+import { LAYOUT_BG_CLASSES, PANEL_BORDER_CLASSES } from './styles';
 
 export interface SplitPaneLayoutProps {
   leftContent: ReactNode;
@@ -145,13 +145,13 @@ export const SplitPaneLayout: FC<SplitPaneLayoutProps> = ({
           onMouseDown={handleSplitDrag}
         >
           <div
-            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-border-light/50 transition-colors ${handleIndicatorHover}`}
+            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-300/70 transition-colors dark:bg-slate-600/70 ${handleIndicatorHover}`}
           />
         </div>
 
         {/* Right Panel */}
         <div
-          className={`split-pane-panel split-pane-right h-full overflow-hidden border-l border-border-light/60 dark:border-border-dark/50 mobile-full ${rightClassName}`}
+          className={`split-pane-panel split-pane-right h-full overflow-hidden border-l ${PANEL_BORDER_CLASSES} mobile-full ${rightClassName}`}
           style={rightPaneStyle}
         >
           {rightContent}

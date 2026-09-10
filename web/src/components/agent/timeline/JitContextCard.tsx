@@ -152,7 +152,7 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
         </span>
         <span className="text-blue-500/80 dark:text-blue-400/80">({String(searchMs)}ms)</span>
         {pinnedCount > 0 ? (
-          <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+          <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-2xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
             <Pin size={10} />
             {t('components.jitContext.pinned', {
               defaultValue: '{{count}} pinned',
@@ -205,7 +205,7 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
                 >
                   <div className="mb-1 flex flex-wrap items-center gap-1.5">
                     <span
-                      className="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-mono font-medium text-blue-700 dark:bg-blue-900/60 dark:text-blue-300"
+                      className="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-2xs font-mono font-medium text-blue-700 dark:bg-blue-900/60 dark:text-blue-300"
                       title={t('components.jitContext.scoreTitle', {
                         defaultValue: 'Score: {{score}}',
                         score: String(m.score),
@@ -213,10 +213,10 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
                     >
                       {formatScore(m.score)}
                     </span>
-                    <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {m.category}
                     </span>
-                    <span className="text-[10px] text-content-tertiary">
+                    <span className="text-2xs text-content-tertiary">
                       {t('components.jitContext.viaSource', {
                         defaultValue: 'via {{source}}',
                         source: m.source,
@@ -252,7 +252,7 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
                       onClick={() => {
                         toggleHit(idx);
                       }}
-                      className="mt-1 inline-flex items-center text-[10px] font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                      className="mt-1 inline-flex items-center text-2xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
                     >
                       {isExpanded
                         ? t('components.jitContext.showLess', { defaultValue: 'Show less' })
@@ -280,7 +280,7 @@ const SourceChip: FC<SourceChipProps> = ({ label, count, active, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium transition-colors ${
       active
         ? 'border-blue-500 bg-blue-500 text-white'
         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'

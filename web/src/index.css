@@ -177,19 +177,35 @@ html:not(.app-ready) * {
 
   /* ========================================================================
      * TYPOGRAPHY
-     * Inter for UI, JetBrains Mono for code
+     * Inter for UI, JetBrains Mono for code.
+     *
+     * `--font-sans` is the token that actually reaches the DOM: Tailwind's
+     * preflight sets `font-family: var(--default-font-family, ...)` on <html>,
+     * and `--default-font-family` resolves to `--font-sans`. Declaring only
+     * `--font-display` / `--font-body` left the whole Tailwind tree on
+     * system-ui while Ant Design rendered Inter — two fonts in one view.
+     * `--font-display` / `--font-body` now alias `--font-sans` for the
+     * explicit `.font-display` / `.font-body` call sites.
      * ======================================================================== */
 
-  --font-display:
+  --font-sans:
     'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-body:
-    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: var(--font-sans);
+  --font-body: var(--font-sans);
   --font-mono:
     'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 
-  /* Type Scale (Major Third - 1.25) */
+  /* Type Scale (Major Third - 1.25)
+   *
+   * Stock Tailwind sizes carry a `--text-<name>--line-height` companion and
+   * therefore reset leading. The custom steps below must declare one too, or
+   * every dense label silently inherits whatever leading its ancestor set. */
   --text-2xs: 0.625rem; /* 10px - Dense data UI: badges, timestamps, metadata */
+  --text-2xs--line-height: 1.4; /* 14px */
   --text-xs-plus: 0.6875rem; /* 11px - Compact labels, secondary metadata */
+  --text-xs-plus--line-height: 1.45; /* 16px */
+  --text-code: 0.8125rem; /* 13px - code blocks, tables, dense previews */
+  --text-code--line-height: 1.6;
   --text-xs: 0.75rem; /* 12px */
   --text-sm: 0.875rem; /* 14px */
   --text-base: 1rem; /* 16px */
@@ -199,6 +215,11 @@ html:not(.app-ready) * {
   --text-3xl: 1.875rem; /* 30px */
   --text-4xl: 2.25rem; /* 36px */
   --text-5xl: 3rem; /* 48px */
+
+  /* Letter-spacing for uppercase micro-labels. The `uppercase` role used to
+   * span tracking-wide / tracking-wider and four arbitrary em values; this is
+   * the single step for it. */
+  --tracking-label: 0.05em;
 
   /* ========================================================================
      * SPACING SCALE
@@ -348,6 +369,9 @@ html.dark {
 body {
   /* Removes the legacy 300ms mobile tap-delay for click targets. */
   touch-action: manipulation;
+  /* Single source for the UI typeface (see --font-sans in @theme). Stated on
+   * body as well as <html> so Ant Design's own body-level reset cannot win. */
+  font-family: var(--font-sans);
   background-color: var(--color-background-light);
   color: var(--color-text-primary);
 }
@@ -384,6 +408,47 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+/* ============================================================================
+ * INTERACTIVE AFFORDANCES
+ *
+ * Tailwind v4 preflight dropped the `button { cursor: pointer }` default, so
+ * every one of the ~220 hand-written <button> elements in the app rendered
+ * with the arrow cursor unless it happened to add `cursor-pointer` itself.
+ * Restore the affordance in the base layer (utilities still win), which also
+ * makes an explicit `disabled:cursor-not-allowed` the only opt-out needed.
+ * ============================================================================ */
+
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+
+  /* Default visible focus for every keyboard-reachable control. Components
+   * that declare their own ring (`focus-visible:outline-none` + ring utilities)
+   * win, because utilities sit in a later layer. Without this, the ~120 raw
+   * buttons that opt into no focus styling at all were invisible to keyboard
+   * users — AntD buttons were covered, hand-written ones were not. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* Text selection follows the monochrome palette instead of the UA blue, and
+ * stays legible in both themes. */
+::selection {
+  background-color: var(--color-primary);
+  color: var(--color-background-light);
+}
+
+.dark ::selection {
+  background-color: var(--color-primary);
+  color: var(--color-background-dark);
 }
 
 /* ============================================================================
@@ -535,10 +600,11 @@ body {
  * Consistent hover/focus/active states
  * ============================================================================ */
 
-/* Focus ring */
+/* Focus ring — one recipe, driven by the button focus token so it follows the
+ * monochrome palette instead of the retired info-blue. */
 .focus-ring:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgb(30 63 174 / 0.5);
+  box-shadow: var(--button-focus-ring);
 }
 
 /* ============================================================================
@@ -764,6 +830,7 @@ body {
   font-weight: 500;
   line-height: 1.2;
   border-radius: var(--button-radius);
+  cursor: pointer;
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
@@ -1526,7 +1593,10 @@ textarea.ant-input,
   min-width: var(--split-pane-min-width, 0);
 }
 
-@media (max-width: 768px) {
+/* Stacked split panes below the `md:` breakpoint. The bound is 767px so it
+ * cannot collide with Tailwind's `md:` (min-width: 768px); at exactly 768px
+ * both used to match and the desktop/stacked rules fought. */
+@media (max-width: 767px) {
   .mobile-stack {
     flex-direction: column !important;
     overflow-x: hidden;
@@ -1536,7 +1606,7 @@ textarea.ant-input,
     width: 100% !important;
     min-width: 0 !important;
     min-height: 0;
-    flex: 1 1 0;
+    flex: 1 1 auto;
   }
 
   .mobile-hidden {
@@ -1729,7 +1799,7 @@ img[loading='lazy'] {
 }
 
 .memstack-prose pre > code {
-  font-size: 0.8125rem;
+  font-size: var(--text-code);
   line-height: 1.65;
   background-color: var(--color-surface-muted);
   overflow-x: auto;
@@ -1743,7 +1813,7 @@ img[loading='lazy'] {
 .memstack-prose table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8125rem;
+  font-size: var(--text-code);
   margin-top: 0.75rem;
   margin-bottom: 0.75rem;
 }
@@ -1891,7 +1961,7 @@ img[loading='lazy'] {
 .xlsx-preview table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.8125rem;
+  font-size: var(--text-code);
   line-height: 1.25rem;
 }
 

@@ -111,10 +111,7 @@ export function ProjectActivityInbox({
       ]);
       setItems(work.items);
       let resolvedReadState = serverReadState;
-      const pending = reconcilePendingActivityReceipts(
-        work.items,
-        readPending(storageScope)
-      );
+      const pending = reconcilePendingActivityReceipts(work.items, readPending(storageScope));
       if (pending.length > 0) {
         resolvedReadState = await projectWorkService.updateReadState(projectId, {
           expected_authority_revision: serverReadState.authority_revision,
@@ -160,10 +157,7 @@ export function ProjectActivityInbox({
         return true;
       } catch (caught) {
         if (caught instanceof ApiError && caught.isType(ApiErrorType.NETWORK)) {
-          writePending(
-            storageScope,
-            mergeReceipts(readPending(storageScope), entries)
-          );
+          writePending(storageScope, mergeReceipts(readPending(storageScope), entries));
         }
         setError(caught instanceof Error ? caught.message : String(caught));
         return false;
@@ -270,7 +264,7 @@ export function ProjectActivityInbox({
                     <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
                       {item.title}
                     </span>
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-label text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                       {t(`agent.activity.group.${item.group}`, {
                         defaultValue: item.group,
                       })}
@@ -285,7 +279,7 @@ export function ProjectActivityInbox({
                   item.run_summary?.input_tokens !== undefined &&
                   item.run_summary.output_tokens !== null &&
                   item.run_summary.output_tokens !== undefined ? (
-                    <p className="mt-2 text-[11px] text-slate-400">
+                    <p className="mt-2 text-xs-plus text-slate-400">
                       {t('agent.activity.usage', {
                         defaultValue: '{{tokens}} tokens · {{cost}} {{currency}}',
                         tokens: item.run_summary.input_tokens + item.run_summary.output_tokens,

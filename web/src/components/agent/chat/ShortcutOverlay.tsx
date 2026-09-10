@@ -178,7 +178,7 @@ export const ShortcutOverlay = memo(() => {
         <div className="px-6 py-4 space-y-5 max-h-[60vh] overflow-y-auto">
           {sections.map((section) => (
             <div key={section.title}>
-              <h3 className="text-xs font-semibold text-content-tertiary uppercase tracking-wider mb-2.5">
+              <h3 className="text-xs font-semibold uppercase tracking-label text-content-tertiary mb-2.5">
                 {section.title}
               </h3>
               <div className="space-y-1.5">

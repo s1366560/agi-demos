@@ -174,14 +174,14 @@ export function PatternInspector({
         {/* Metadata Grid */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
+            <p className="text-xs font-semibold uppercase tracking-label text-slate-500 mb-1">
               {t('components.patternInspector.labels.status', { defaultValue: 'Status' })}
             </p>
             {statusBadge}
           </div>
           {pattern.avgRuntime && (
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
+              <p className="text-xs font-semibold uppercase tracking-label text-slate-500 mb-1">
                 {t('components.patternInspector.labels.avgRuntime', {
                   defaultValue: 'Avg Runtime',
                 })}
@@ -191,7 +191,7 @@ export function PatternInspector({
           )}
           {pattern.successRate !== undefined && (
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
+              <p className="text-xs font-semibold uppercase tracking-label text-slate-500 mb-1">
                 {t('components.patternInspector.labels.successRate', {
                   defaultValue: 'Success Rate',
                 })}
@@ -201,7 +201,7 @@ export function PatternInspector({
           )}
           {pattern.usageCount !== undefined && (
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
+              <p className="text-xs font-semibold uppercase tracking-label text-slate-500 mb-1">
                 {t('components.patternInspector.labels.usageCount', {
                   defaultValue: 'Usage Count',
                 })}

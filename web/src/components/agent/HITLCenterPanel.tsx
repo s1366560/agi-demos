@@ -37,10 +37,10 @@ type FilterType = 'all' | 'clarification' | 'decision' | 'env_var';
 const filterOptions: FilterType[] = ['all', 'clarification', 'decision', 'env_var'];
 
 const badgeBase =
-  'inline-flex h-[18px] items-center rounded-full border border-slate-200 bg-slate-100 px-2 text-[11px] font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
+  'inline-flex h-[18px] items-center rounded-full border border-slate-200 bg-slate-100 px-2 text-xs-plus font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
 
 const actionBtnBase =
-  'inline-flex h-[26px] items-center rounded border border-slate-200 px-2 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
+  'inline-flex h-[26px] items-center rounded border border-slate-200 px-2 text-xs-plus font-medium transition disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
 function getMetaString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   if (!metadata) return null;
@@ -167,10 +167,10 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
         aria-label={t('agent.hitl.center.aria', { defaultValue: 'Pending HITL requests' })}
       >
         <header className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <h3 className="text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
             {t('agent.hitl.center.title', { defaultValue: 'HITL Center' })}
             {visible.length > 0 && (
-              <span className="ml-2 rounded-full bg-slate-900 px-1.5 text-[10px] font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900">
+              <span className="ml-2 rounded-full bg-slate-900 px-1.5 text-2xs font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900">
                 {visible.length}
               </span>
             )}
@@ -284,7 +284,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                   <p className="line-clamp-2 text-sm text-slate-900 dark:text-slate-100">
                     {req.question}
                   </p>
-                  <p className="mt-1 text-[11px] text-content-tertiary">
+                  <p className="mt-1 text-xs-plus text-content-tertiary">
                     {formatDateTime(req.created_at)}
                   </p>
                 </button>

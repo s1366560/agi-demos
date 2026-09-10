@@ -194,7 +194,7 @@ export function PatternList({
     >
       <div className="min-w-[40rem]">
         {/* Table Header */}
-        <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-border-dark text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-border-dark text-xs font-semibold uppercase tracking-label text-slate-500">
           <div className="col-span-2">
             {t('agent.patternList.columns.status', { defaultValue: 'Status' })}
           </div>

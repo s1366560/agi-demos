@@ -588,7 +588,7 @@ const TimelineStepItem = memo<{
           )}
         </div>
         {step.duration != null && (
-          <span className="mt-0.5 max-w-10 truncate text-center text-[10px] leading-none tabular-nums text-content-tertiary">
+          <span className="mt-0.5 max-w-10 truncate text-center text-2xs leading-none tabular-nums text-content-tertiary">
             {formatDuration(step.duration)}
           </span>
         )}
@@ -675,7 +675,7 @@ const TimelineStepItem = memo<{
           >
             {step.input && Object.keys(step.input).length > 0 && (
               <div className="bg-slate-50/75 dark:bg-slate-800/40 rounded-md p-2 border border-slate-200/40 dark:border-slate-700/35">
-                <div className="text-2xs font-medium text-slate-400 uppercase tracking-wider mb-1">
+                <div className="text-2xs font-semibold uppercase tracking-label text-slate-400 mb-1">
                   {t('agent.timeline.input', 'Input')}
                 </div>
                 <pre className="text-slate-600 dark:text-slate-300 font-mono whitespace-pre-wrap break-words overflow-x-auto max-h-50 overflow-y-auto">
@@ -691,7 +691,7 @@ const TimelineStepItem = memo<{
                     : 'bg-slate-50/75 dark:bg-slate-800/40 border-slate-200/40 dark:border-slate-700/35'
                 }`}
               >
-                <div className="text-2xs font-medium text-slate-400 uppercase tracking-wider mb-1">
+                <div className="text-2xs font-semibold uppercase tracking-label text-slate-400 mb-1">
                   {t('agent.timeline.output', 'Output')}
                 </div>
                 <pre

@@ -124,9 +124,7 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution; t: TFunction }
               }}
             />
             <span style={{ color: tc.muted }}>{seg.label}</span>
-            <span className="font-medium tabular-nums">
-              {formatTokens(seg.value)}
-            </span>
+            <span className="font-medium tabular-nums">{formatTokens(seg.value)}</span>
             <span style={{ color: tc.mutedLight }}>
               ({((seg.value / total) * 100).toFixed(0)}%)
             </span>
@@ -242,10 +240,8 @@ export const ContextDetailPanel: FC = () => {
             strokeColor={getOccupancyColor(occupancy)}
             format={() => (
               <div>
-                <div className="text-xl font-semibold tabular-nums">
-                  {occupancy.toFixed(1)}%
-                </div>
-                <div className="text-[11px]" style={{ color: tc.muted }}>
+                <div className="text-xl font-semibold tabular-nums">{occupancy.toFixed(1)}%</div>
+                <div className="text-xs-plus" style={{ color: tc.muted }}>
                   {formatTokens(currentTokens)} / {formatTokens(tokenBudget)}
                 </div>
               </div>
@@ -311,7 +307,7 @@ export const ContextDetailPanel: FC = () => {
               <div className="text-lg font-semibold" style={{ color: tc.success }}>
                 {formatTokens(history.total_tokens_saved)}
               </div>
-              <div className="text-[11px]" style={{ color: tc.muted }}>
+              <div className="text-xs-plus" style={{ color: tc.muted }}>
                 {t('agent.contextDetail.summary.tokensSaved')}
               </div>
             </div>
@@ -324,7 +320,7 @@ export const ContextDetailPanel: FC = () => {
               <div className="text-lg font-semibold" style={{ color: tc.info }}>
                 {history.total_compressions}
               </div>
-              <div className="text-[11px]" style={{ color: tc.muted }}>
+              <div className="text-xs-plus" style={{ color: tc.muted }}>
                 {t('agent.contextDetail.summary.compressions')}
               </div>
             </div>
@@ -337,7 +333,7 @@ export const ContextDetailPanel: FC = () => {
               <div className="text-lg font-semibold" style={{ color: tc.warningDark }}>
                 {(history.average_compression_ratio * 100).toFixed(0)}%
               </div>
-              <div className="text-[11px]" style={{ color: tc.muted }}>
+              <div className="text-xs-plus" style={{ color: tc.muted }}>
                 {t('agent.contextDetail.summary.avgRatio')}
               </div>
             </div>
@@ -350,7 +346,7 @@ export const ContextDetailPanel: FC = () => {
               <div className="text-lg font-semibold" style={{ color: tc.purple }}>
                 {history.average_savings_pct.toFixed(0)}%
               </div>
-              <div className="text-[11px]" style={{ color: tc.muted }}>
+              <div className="text-xs-plus" style={{ color: tc.muted }}>
                 {t('agent.contextDetail.summary.avgSavings')}
               </div>
             </div>

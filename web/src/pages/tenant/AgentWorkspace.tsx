@@ -484,7 +484,7 @@ export const AgentWorkspace: FC = () => {
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div
           role="alert"
-          className="bg-white dark:bg-surface-dark rounded-xl border border-red-200 dark:border-red-900/60 shadow-sm p-8 max-w-lg text-center"
+          className="max-w-lg rounded-xl border border-red-200 bg-white p-8 text-center shadow-sm dark:border-red-900/60 dark:bg-surface-dark"
         >
           <AlertCircle size={32} className="mx-auto text-red-500 dark:text-red-400" />
           <p className="mt-4 text-base font-semibold text-slate-900 dark:text-white">
@@ -509,7 +509,7 @@ export const AgentWorkspace: FC = () => {
   if (tenantProjectsWithResolvedStoredProject.length === 0 && !effectiveProjectId) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
-        <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-12 max-w-lg">
+        <div className="max-w-lg rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-surface-dark">
           <LazyEmpty
             description={t('agent.workspace.noProjects')}
             image={AntEmpty.PRESENTED_IMAGE_SIMPLE}

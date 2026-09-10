@@ -223,12 +223,12 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
         return (
           <div className="flex h-full min-h-0 flex-col bg-surface-light dark:bg-surface-dark">
             <div className="border-b border-border-separator px-4 py-3 dark:border-border-dark">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-label text-text-secondary dark:text-text-muted">
                 <GitBranch className="h-4 w-4" aria-hidden />
                 {t('agent.graphView.workspaceTitle', { defaultValue: 'Workspace Execution Graph' })}
               </div>
               {workspaceError ? (
-                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-status-text-warning dark:text-status-text-warning-dark">
+                <div className="mt-2 flex items-center gap-1.5 text-xs-plus text-status-text-warning dark:text-status-text-warning-dark">
                   <AlertCircle className="h-3.5 w-3.5" aria-hidden />
                   {t('agent.graphView.workspaceFallback', {
                     defaultValue: 'Showing the latest available workspace graph.',
@@ -313,7 +313,7 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
         <div className="border-b border-border-separator px-4 py-3 dark:border-border-dark">
           <div className="flex min-w-0 items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-label text-text-secondary dark:text-text-muted">
                 <GitBranch className="h-4 w-4" aria-hidden />
                 {t('agent.graphView.title', { defaultValue: 'Execution Graph' })}
               </div>
@@ -321,13 +321,15 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
                 {graphRun.graphName}
               </h3>
             </div>
-            <div className="shrink-0 text-right text-[11px] text-text-muted">
-              <div className="font-mono uppercase">{graphRun.status}</div>
+            <div className="shrink-0 text-right text-xs-plus text-text-muted">
+              <div className="font-mono font-semibold uppercase tracking-label">
+                {graphRun.status}
+              </div>
               <div>{formatDuration(graphRun.durationSeconds)}</div>
             </div>
           </div>
           {isGraphLoading ? (
-            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-text-muted">
+            <div className="mt-2 flex items-center gap-1.5 text-xs-plus text-text-muted">
               <Loader2
                 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none"
                 aria-hidden
@@ -337,7 +339,7 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
               })}
             </div>
           ) : graphError ? (
-            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-status-text-warning dark:text-status-text-warning-dark">
+            <div className="mt-2 flex items-center gap-1.5 text-xs-plus text-status-text-warning dark:text-status-text-warning-dark">
               <AlertCircle className="h-3.5 w-3.5" aria-hidden />
               {t('agent.graphView.fallbackDefinition', {
                 defaultValue: 'Using live handoffs because the graph definition is unavailable.',
@@ -368,7 +370,7 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
                     t('agent.graphView.unassigned', { defaultValue: 'Unassigned' })}
                 </div>
               </div>
-              <div className="shrink-0 text-right font-mono text-[11px] text-text-muted">
+              <div className="shrink-0 text-right font-mono text-xs-plus text-text-muted">
                 <div>{selectedNode.status}</div>
                 <div>{selectedNode.attemptId ?? selectedNode.kind}</div>
               </div>

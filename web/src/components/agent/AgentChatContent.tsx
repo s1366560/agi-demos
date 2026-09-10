@@ -101,7 +101,7 @@ import { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 import { Resizer } from './Resizer';
 import { RunReviewDrawer } from './review/RunReviewDrawer';
 import { SplitPaneLayout } from './SplitPaneLayout';
-import { LAYOUT_BG_CLASSES } from './styles';
+import { ICON_BUTTON_CLASSES, LAYOUT_BG_CLASSES } from './styles';
 import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 import { useProjectConversationLoader } from './useProjectConversationLoader';
 
@@ -986,7 +986,7 @@ ${content}`;
           </div>
         )}
         {(currentConversation || activeAgentNode?.name) && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-1.5 flex items-center gap-2 min-w-0">
+          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-2 flex items-center gap-2 min-w-0">
             <ConversationAgentBadge conversation={currentConversation} />
             {currentConversation && (
               <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
@@ -1029,10 +1029,10 @@ ${content}`;
           />
         </div>
         <div
-          className="relative flex flex-shrink-0 flex-col border-t border-slate-200/45 bg-white shadow-[0_-1px_2px_rgba(15,23,42,0.025)] dark:border-slate-800/55 dark:bg-slate-900"
+          className="relative flex flex-shrink-0 flex-col border-t border-slate-200/60 bg-white shadow-[0_-1px_2px_rgba(15,23,42,0.025)] dark:border-slate-700/50 dark:bg-slate-900"
           style={{ minHeight: inputHeight }}
         >
-          <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">
+          <div className="absolute -top-2 left-0 right-0 z-20 flex justify-center">
             <Resizer
               direction="vertical"
               currentSize={inputHeight}
@@ -1216,7 +1216,7 @@ ${content}`;
                 onClick={() => {
                   setEvidenceOpen(true);
                 }}
-                className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className={ICON_BUTTON_CLASSES}
                 title={t('evidence.open', 'Evidence')}
                 aria-label={t('evidence.open', 'Evidence')}
                 data-testid="open-evidence-drawer"
@@ -1231,7 +1231,7 @@ ${content}`;
                   setCompareMode(true);
                   setShowComparePicker(true);
                 }}
-                className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className={ICON_BUTTON_CLASSES}
                 title={t('comparison.compare', 'Compare')}
                 aria-label={t('comparison.compare', 'Compare')}
               >
@@ -1263,7 +1263,7 @@ ${content}`;
               >
                 <button
                   type="button"
-                  className="flex items-center gap-0.5 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className={`${ICON_BUTTON_CLASSES} gap-0.5`}
                   title={t('agent.actions.export', 'Export')}
                   aria-label={t('agent.actions.export', 'Export')}
                 >

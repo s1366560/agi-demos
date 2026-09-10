@@ -837,7 +837,7 @@ const SandboxFileButton: React.FC<{ path: string; children: React.ReactNode }> =
           setOpening(false);
         });
       }}
-      className="inline-flex max-w-full items-baseline gap-1 rounded px-1 text-left font-medium text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:text-primary/80 hover:decoration-primary/70 disabled:cursor-wait disabled:opacity-60"
+      className="inline-flex max-w-full items-baseline gap-1 rounded px-1 text-left font-medium text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:text-primary/80 hover:decoration-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-wait disabled:opacity-60"
       title={t('agent.messageBubble.openSandboxFileInCanvas', {
         defaultValue: 'Open {{path}} in Canvas',
         path,
@@ -1258,7 +1258,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
             <div className="px-4 pb-4 border-t border-slate-200/45 dark:border-slate-700/35">
               {/* Input */}
               <div className="mt-3">
-                <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
+                <p className="mb-2 text-2xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
                   {t('agent.messageBubble.input', 'Input')}
                 </p>
                 <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
@@ -1277,7 +1277,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
               {/* Output */}
               {observeEvent && (
                 <div className="mt-3">
-                  <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
+                  <p className="mb-2 text-2xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
                     {t('agent.messageBubble.output', 'Output')}
                   </p>
                   {(() => {

@@ -169,7 +169,7 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
             {config.icon}
             <Text strong>{displayLabel}</Text>
             {estimatedTimeRemaining && (
-              <Text type="secondary" className="text-[11px]">
+              <Text type="secondary" className="text-xs-plus">
                 (~{estimatedTimeRemaining} remaining)
               </Text>
             )}

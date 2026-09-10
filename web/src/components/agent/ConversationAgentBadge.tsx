@@ -68,7 +68,7 @@ export function ConversationAgentBadge({ conversation }: ConversationAgentBadgeP
     >
       <Bot size={12} />
       <span className="max-w-[12rem] truncate">{label}</span>
-      {isExternalAcp && <span className="text-[10px] font-semibold text-cyan-600">ACP</span>}
+      {isExternalAcp && <span className="text-2xs font-semibold text-cyan-600">ACP</span>}
     </span>
   );
 }

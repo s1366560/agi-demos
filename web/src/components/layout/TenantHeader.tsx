@@ -138,12 +138,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
         projectBasePath,
         t: (key, fallback) => (fallback ? t(key, fallback) : t(key)),
       }),
-    [
-      basePath,
-      generationNavigationItems,
-      projectBasePath,
-      t,
-    ]
+    [basePath, generationNavigationItems, projectBasePath, t]
   );
   const contextualNavGroups = useMemo(
     () => groupTenantTopNavItems(contextualNavItems),
@@ -244,7 +239,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
                 title={commandPaletteLabel}
               >
                 <Command size={16} />
-                <kbd className="text-[10px] font-medium tracking-wide text-slate-600 dark:text-slate-300">
+                <kbd className="text-2xs font-medium tracking-wide text-slate-600 dark:text-slate-300">
                   {isMacPlatform ? '⌘K' : 'Ctrl K'}
                 </kbd>
               </button>
@@ -431,7 +426,7 @@ function GroupedNavMenu({
                 }
               >
                 {showGroupHeaders && group.label ? (
-                  <p className="px-3 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                  <p className="px-3 pb-1 pt-2 text-2xs font-semibold uppercase tracking-label text-slate-400">
                     {group.label}
                   </p>
                 ) : null}
@@ -548,7 +543,7 @@ function SearchButton({ searchPath }: { searchPath: string | null }) {
           type="button"
           disabled
           aria-label={t('common.search', 'Search')}
-          className="p-1.5 sm:p-2 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed"
+          className="rounded-lg p-1.5 text-slate-300 disabled:cursor-not-allowed dark:text-slate-600 sm:p-2"
         >
           <Search size={18} />
         </button>
@@ -778,7 +773,7 @@ function HeaderUserMenu({
                     setTenantsLoadError(true);
                   });
                 }}
-                className="shrink-0 font-medium underline hover:no-underline"
+                className="shrink-0 rounded-sm font-medium underline underline-offset-2 transition-colors hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 {t('common.retry', 'Retry')}
               </button>
@@ -788,7 +783,7 @@ function HeaderUserMenu({
           {availableTenants.length > 0 && (
             <>
               <div className="px-4 py-2">
-                <p className="text-2xs font-semibold text-slate-400 uppercase tracking-wider">
+                <p className="text-2xs font-semibold uppercase tracking-label text-slate-400">
                   {t('nav.tenant', 'Tenant')}
                 </p>
               </div>

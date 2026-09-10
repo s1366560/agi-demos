@@ -77,7 +77,7 @@ function InvestBadge({
   const styles = STATUS_STYLES[check.status];
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-mono font-medium ${styles.wrap}`}
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-2xs font-mono font-medium ${styles.wrap}`}
       title={`${k}: ${check.reason || styles.label}`}
     >
       <span>{INVEST_LABEL[k]}</span>
@@ -89,7 +89,7 @@ function InvestBadge({
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="border-t border-slate-200/70 py-2 dark:border-slate-700/50">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-tertiary">
+      <div className="text-2xs font-semibold uppercase tracking-label text-content-tertiary">
         {label}
       </div>
       <div className="mt-1 text-xs leading-5 text-slate-700 dark:text-slate-200">{children}</div>
@@ -150,11 +150,11 @@ const ParsedStoryView: FC<{
         </span>
         <span className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-tertiary">
+            <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary">
               {tFallback(t, 'agent.canonicalStory.story', 'Story')} · v{String(story.version)}
             </span>
             {!dependencyOk ? (
-              <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
                 <AlertTriangle size={10} />
                 {tFallback(t, 'agent.canonicalStory.dependsOnOthers', 'depends on others')}
               </span>
@@ -167,7 +167,7 @@ const ParsedStoryView: FC<{
             {investEntries.map(({ k, check }) => (
               <InvestBadge key={k} k={k} check={check} />
             ))}
-            <span className="ml-1 text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="ml-1 text-xs-plus text-slate-500 dark:text-slate-400">
               {t('agent.canonicalStory.acceptanceCount', {
                 defaultValue: '{{count}} AC',
                 count: acCount,
@@ -209,14 +209,14 @@ const ParsedStoryView: FC<{
                     key={ac.id}
                     className="flex items-start gap-2 border-b border-slate-100 pb-1 last:border-b-0 dark:border-slate-800"
                   >
-                    <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-1 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-1 font-mono text-2xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {ac.id}
                     </span>
                     <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
                       {ac.text}
                     </span>
                     <span
-                      className={`shrink-0 text-[9px] font-semibold uppercase tracking-[0.1em] ${
+                      className={`shrink-0 text-2xs font-semibold uppercase tracking-label ${
                         ac.testable
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : 'text-rose-500 dark:text-rose-400'
@@ -335,7 +335,7 @@ const InvalidStoryView: FC<{ result: CanonicalStoryParseResult }> = ({ result })
         </span>
       </button>
       {open ? (
-        <div className="border-t border-amber-200/70 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/60 dark:text-amber-300">
+        <div className="border-t border-amber-200/70 px-3 py-2 text-xs-plus text-amber-700 dark:border-amber-900/60 dark:text-amber-300">
           <ul className="mb-2 list-disc space-y-0.5 pl-4">
             {result.issues.map((issue) => (
               <li key={issue} className="break-words">
@@ -343,7 +343,7 @@ const InvalidStoryView: FC<{ result: CanonicalStoryParseResult }> = ({ result })
               </li>
             ))}
           </ul>
-          <pre className="overflow-x-auto rounded bg-amber-100/60 p-2 font-mono text-[10px] leading-4 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+          <pre className="overflow-x-auto rounded bg-amber-100/60 p-2 font-mono text-2xs leading-4 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
             {result.rawYaml}
           </pre>
         </div>

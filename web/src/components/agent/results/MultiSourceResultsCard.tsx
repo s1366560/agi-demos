@@ -70,7 +70,7 @@ function SourceRow({ source }: { source: Source }) {
         <div className="flex items-center gap-2">
           {titleNode}
           {typeof source.score === 'number' ? (
-            <span className="text-[10px] tabular-nums text-content-tertiary">
+            <span className="text-2xs tabular-nums text-content-tertiary">
               {source.score.toFixed(2)}
             </span>
           ) : null}
@@ -97,7 +97,7 @@ function GroupBlock({ group, defaultOpen }: { group: SourceGroup; defaultOpen: b
         onClick={() => {
           setOpen((v) => !v);
         }}
-        className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs uppercase tracking-wide text-slate-500 transition-colors hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/40"
+        className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-label text-slate-500 transition-colors hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/40"
         aria-expanded={open}
       >
         <span className="flex items-center gap-1.5">
@@ -105,9 +105,7 @@ function GroupBlock({ group, defaultOpen }: { group: SourceGroup; defaultOpen: b
           <span className="font-medium normal-case text-slate-700 dark:text-slate-200">
             {group.label}
           </span>
-          <span className="text-[10px] text-content-tertiary">
-            {group.sources.length}
-          </span>
+          <span className="text-2xs text-content-tertiary">{group.sources.length}</span>
         </span>
       </button>
       {open ? (
@@ -167,7 +165,7 @@ export const MultiSourceResultsCard = memo(function MultiSourceResultsCard({
           <Globe size={13} className="text-slate-500 dark:text-slate-400" />
           <span>{tFallback(t, 'agent.results.multiSource.title', 'Aggregated sources')}</span>
         </div>
-        <span className="text-[10px] tabular-nums text-slate-500 dark:text-slate-400">
+        <span className="text-2xs tabular-nums text-slate-500 dark:text-slate-400">
           {totalSources} {tFallback(t, 'agent.results.multiSource.from', 'from')} {searchStepCount}{' '}
           {callLabel} · {groups.length} {groupLabel}
         </span>

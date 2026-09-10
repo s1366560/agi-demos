@@ -216,7 +216,7 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
             count: info.taskCount,
           })}
         </span>
-        <span className="text-[9px] px-1 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium uppercase tracking-wider">
+        <span className="text-2xs font-semibold uppercase tracking-label px-1 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
           {t('agent.subagent.parallel_badge', 'Parallel')}
         </span>
       </div>
@@ -623,7 +623,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         </span>
 
         <div className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold leading-5 text-slate-800 dark:text-slate-100">
+          <span className="block truncate text-code font-semibold leading-5 text-slate-800 dark:text-slate-100">
             {headerLabel}
           </span>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-slate-500 dark:text-slate-400">
@@ -673,7 +673,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         <div className="mx-4 mt-2 rounded-md bg-slate-50/75 dark:bg-slate-800/40 px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono leading-relaxed animate-fade-in border border-slate-200/40 dark:border-slate-700/35">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-            <span className="text-content-tertiary text-2xs uppercase tracking-wider font-sans">
+            <span className="text-content-tertiary text-2xs font-semibold uppercase tracking-label font-sans">
               {t('agent.subagent.live_preview')}
             </span>
           </div>
@@ -761,16 +761,14 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
             />
           )}
 
-          {group.status === 'running' &&
-            activeConversationId &&
-            expectedRunRevision === null && (
-              <p className="text-2xs text-content-tertiary">
-                {t(
-                  'agent.subagent.controlAuthorityUnavailable',
-                  'Sub-agent controls are unavailable until the run authority revision is received.'
-                )}
-              </p>
-            )}
+          {group.status === 'running' && activeConversationId && expectedRunRevision === null && (
+            <p className="text-2xs text-content-tertiary">
+              {t(
+                'agent.subagent.controlAuthorityUnavailable',
+                'Sub-agent controls are unavailable until the run authority revision is received.'
+              )}
+            </p>
+          )}
 
           {/* 2.2 - Inline Detail Panel refinement (moved to bottom of body) */}
           <div className="pt-1 flex justify-end">

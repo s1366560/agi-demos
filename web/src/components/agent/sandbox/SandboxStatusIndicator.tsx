@@ -817,7 +817,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
         <button
           type="button"
           className={`
-            flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
+            flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium
             ${config.bgColor} ${config.color}
             transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             cursor-pointer hover:opacity-80
@@ -832,7 +832,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
         <span
           tabIndex={0}
           className={`
-            flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
+            flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium
             ${config.bgColor} ${config.color}
             transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70

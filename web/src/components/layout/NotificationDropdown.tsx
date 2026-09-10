@@ -208,7 +208,7 @@ export function NotificationDropdown({
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-4 text-white">
+          <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-2xs font-semibold leading-4 text-white">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -226,7 +226,7 @@ export function NotificationDropdown({
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
               {t('notifications.title', 'Notifications')}
               {unreadCount > 0 && (
-                <span className="ml-1.5 text-[10px] font-medium text-rose-500">
+                <span className="ml-1.5 text-2xs font-medium text-rose-500">
                   {unreadCount} {t('notifications.unread', 'unread')}
                 </span>
               )}
@@ -238,7 +238,7 @@ export function NotificationDropdown({
                   onClick={() => {
                     void markAllAsRead();
                   }}
-                  className="text-[11px] text-blue-600 hover:underline dark:text-blue-400"
+                  className="text-xs-plus text-blue-600 hover:underline dark:text-blue-400"
                 >
                   {t('notifications.markAllRead', 'Mark all read')}
                 </button>
@@ -250,7 +250,7 @@ export function NotificationDropdown({
                     setOpen(false);
                     void navigate(viewAllPath);
                   }}
-                  className="text-[11px] text-slate-500 hover:underline dark:text-slate-400"
+                  className="text-xs-plus text-slate-500 hover:underline dark:text-slate-400"
                 >
                   {t('notifications.viewAll', 'View all')}
                 </button>
@@ -319,10 +319,10 @@ export function NotificationDropdown({
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                           )}
                         </span>
-                        <span className="mt-0.5 line-clamp-2 block text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="mt-0.5 line-clamp-2 block text-xs-plus text-slate-500 dark:text-slate-400">
                           {n.message}
                         </span>
-                        <span className="mt-1 block text-[10px] text-slate-400">
+                        <span className="mt-1 block text-2xs text-slate-400">
                           {formatRelative(now, n.created_at, t, locale)}
                         </span>
                       </span>

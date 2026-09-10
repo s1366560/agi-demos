@@ -47,3 +47,54 @@ export const WIDE_MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[98%] md:max-w-[96%] lg:max
  * Used by: AgentChatContent layout mode containers.
  */
 export const LAYOUT_BG_CLASSES = 'bg-slate-50 dark:bg-slate-950';
+
+/* ============================================================================
+ * TYPOGRAPHY ROLES
+ *
+ * One role, one class string. Sizes resolve to the tokens declared in
+ * `index.css` `@theme` (--text-2xs / --text-xs-plus / --text-code), never to
+ * arbitrary pixel-literal utilities, so a dense label keeps the same size
+ * and leading whatever component renders it.
+ * ============================================================================ */
+
+/**
+ * Uppercase micro-label for panel section headers, group labels and metadata
+ * keys ("EXECUTION", "TOOLS", "ARTIFACTS").
+ * Was: 5 sizes x 4 weights x 6 tracking values across the workspace.
+ */
+export const SECTION_LABEL_CLASSES = 'text-2xs font-semibold uppercase tracking-label';
+
+/* ============================================================================
+ * SURFACE / CHROME ROLES
+ * ============================================================================ */
+
+/**
+ * Panel seam colour shared by every workspace pane edge and divider.
+ * Mixing this with the raw `--color-border-*` tokens made the split-pane
+ * seam read as a different grey from the panel headers beside it.
+ */
+export const PANEL_BORDER_CLASSES = 'border-slate-200/60 dark:border-slate-700/50';
+
+/**
+ * Header bar of a side panel: title row pinned above a scrolling body.
+ */
+export const PANEL_HEADER_CLASSES = `flex flex-shrink-0 items-center justify-between gap-2 border-b ${PANEL_BORDER_CLASSES} px-4 py-2`;
+
+/**
+ * Body region that owns scrolling inside a flex column.
+ * `min-h-0` is required or the pane grows past its container instead of
+ * scrolling; `min-w-0` keeps long children from widening the column.
+ */
+export const PANEL_SCROLL_BODY_CLASSES = 'flex-1 min-h-0 min-w-0 overflow-y-auto';
+
+/* ============================================================================
+ * INTERACTION ROLES
+ * ============================================================================ */
+
+/**
+ * Square icon-only button for workspace chrome (toolbars, status strips,
+ * hover-revealed message actions). Same affordance, same recipe everywhere:
+ * neutral resting state, single-step hover, visible focus ring, no reflow.
+ */
+export const ICON_BUTTON_CLASSES =
+  'inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-700 dark:hover:text-slate-300';

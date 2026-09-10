@@ -432,7 +432,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
                       <span
                         className={
                           index === 0 && display.roleLabel === part
-                            ? 'shrink-0 font-medium uppercase'
+                            ? 'shrink-0 font-semibold uppercase tracking-label'
                             : 'truncate'
                         }
                       >
@@ -472,7 +472,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
                 type="button"
                 aria-label={t('agent.sidebar.rename', 'Rename')}
                 title={t('agent.sidebar.rename', 'Rename')}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 onClick={(event) => {
                   event.stopPropagation();
                   onRename(event);
@@ -1585,8 +1585,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       inert={isCollapsed}
       className={`
         ${mobile ? 'flex' : 'hidden md:flex'}
-        flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark
-        flex-none z-20 h-full
+        flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200/60 dark:border-slate-700/50
+        flex-none z-20 h-full min-h-0 overflow-hidden
         ${
           isCollapsed
             ? 'absolute inset-y-0 left-0 -translate-x-full pointer-events-none motion-reduce:translate-x-0 motion-reduce:opacity-0'
@@ -1642,7 +1642,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       )}
 
       {/* Header */}
-      <div className="h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800/50 shrink-0">
+      <div className="flex h-14 shrink-0 items-center border-b border-slate-200/60 px-4 dark:border-slate-700/50">
         <div className="flex items-center gap-3 w-full min-w-0">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
             <Bot className="text-slate-50 dark:text-slate-900" size={24} />
@@ -1651,13 +1651,15 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             <div className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
               {t('agent.sidebar.workspaceTitle', 'Agent Workspace')}
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300">{conversationCountText}</p>
+            <p className="truncate text-xs text-slate-600 dark:text-slate-300">
+              {conversationCountText}
+            </p>
           </div>
         </div>
       </div>
 
       {/* Project Selector */}
-      <div className="space-y-2 border-b border-slate-100 p-3 dark:border-slate-800/50">
+      <div className="space-y-2 border-b border-slate-200/60 p-3 dark:border-slate-700/50">
         <div
           className="relative"
           title={projectSwitcherDisabled ? projectSwitcherDisabledReason : undefined}
@@ -1701,7 +1703,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             <button
               type="button"
               onClick={loadProjectsForSwitcher}
-              className="shrink-0 font-medium underline hover:no-underline"
+              className="shrink-0 rounded-sm font-medium underline underline-offset-2 transition-colors hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               {t('common.retry', 'Retry')}
             </button>
@@ -1743,7 +1745,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   <button
                     type="button"
                     aria-current={isSelectedProject ? 'true' : undefined}
-                    className="flex min-h-8 w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="flex min-h-8 w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-slate-200 dark:hover:bg-slate-800"
                     onClick={() => {
                       handleProjectChange(project.id);
                     }}
@@ -1771,7 +1773,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               onClick={() => {
                 handleProjectSearch(projectSearchQuery);
               }}
-              className="shrink-0 font-medium underline hover:no-underline"
+              className="shrink-0 rounded-sm font-medium underline underline-offset-2 transition-colors hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               {t('common.retry', 'Retry')}
             </button>
@@ -1844,7 +1846,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {/* Conversation List */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto custom-scrollbar"
+        className="flex-1 min-h-0 overflow-y-auto custom-scrollbar"
         onScroll={handleConversationScroll}
       >
         <div className="px-3">
@@ -1867,7 +1869,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   <button
                     type="button"
                     onClick={handleRetryLoadConversations}
-                    className="mt-2 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    className="mt-2 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     {t('common.retry', 'Retry')}
                   </button>
@@ -1950,13 +1952,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {/* Mobile Navigation Links - shown only in mobile drawer */}
       {mobile && tenantId && contextualNavItems.length > 0 && (
         <div className="border-t border-slate-100 dark:border-slate-800/50 px-3 py-2">
-          <p className="text-2xs font-semibold text-slate-400 uppercase tracking-wider px-2 mb-1">
+          <p className="text-2xs font-semibold uppercase tracking-label text-slate-400 px-2 mb-1">
             {t('nav.navigation', 'Navigation')}
           </p>
           {contextualNavGroups.map((group) => (
             <div key={group.id} className="py-1">
               {group.label ? (
-                <p className="px-2 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                <p className="px-2 pb-1 pt-2 text-2xs font-semibold uppercase tracking-label text-slate-400">
                   {group.label}
                 </p>
               ) : null}

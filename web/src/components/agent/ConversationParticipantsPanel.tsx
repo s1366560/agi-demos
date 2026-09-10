@@ -25,7 +25,7 @@ export interface ConversationParticipantsPanelProps {
 }
 
 const badgeBase =
-  'inline-flex h-[18px] items-center rounded-full border border-slate-200 bg-slate-100 px-2 text-[11px] font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
+  'inline-flex h-[18px] items-center rounded-full border border-slate-200 bg-slate-100 px-2 text-xs-plus font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
 
 const modeLabel = (mode: string) => mode.replace(/_/g, ' ');
 
@@ -109,7 +109,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
         })}
       >
         <header className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <h3 className="text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
             {t('agent.participants.title', { defaultValue: 'Participants' })}
           </h3>
           <span className={badgeBase} title={effective_mode}>

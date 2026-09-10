@@ -255,7 +255,7 @@ export function ReasoningLogCard({
               size={14}
               className="group-open/reasoning:rotate-90 transition-transform"
             />
-            <span className="font-semibold uppercase text-2xs text-primary">
+            <span className="text-2xs font-semibold uppercase tracking-label text-primary">
               {t('components.messageStream.reasoningLog', { defaultValue: 'Reasoning Log' })}
             </span>
             <span className="text-xs">{summary}</span>
@@ -325,7 +325,7 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <span className="text-2xs uppercase font-bold text-red-600 flex items-center gap-1">
+          <span className="text-2xs font-semibold uppercase tracking-label text-red-600 flex items-center gap-1">
             <AlertCircle size={12} />
             {t('components.messageStream.error', { defaultValue: 'Error' })}
           </span>
@@ -357,7 +357,7 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <span className="text-2xs uppercase font-bold text-emerald-600 flex items-center gap-1">
+        <span className="text-2xs font-semibold uppercase tracking-label text-emerald-600 flex items-center gap-1">
           <TerminalSquare size={12} />
           {t('components.messageStream.output', { defaultValue: 'Output' })}
         </span>
@@ -768,21 +768,21 @@ export function ToolExecutionCardDisplay({
     switch (status) {
       case 'preparing':
         return (
-          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-semibold uppercase tracking-label">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             {t('components.messageStream.status.preparing', { defaultValue: 'Preparing' })}
           </div>
         );
       case 'running':
         return (
-          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-semibold uppercase tracking-label">
             <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
             {t('components.messageStream.status.running', { defaultValue: 'Running' })}
           </div>
         );
       case 'success':
         return (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 text-2xs font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 text-2xs font-semibold uppercase tracking-label">
             <Check size={12} />
             {t('components.messageStream.status.success', { defaultValue: 'Success' })}
             {duration !== undefined && (
@@ -792,7 +792,7 @@ export function ToolExecutionCardDisplay({
         );
       case 'error':
         return (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-500/10 text-red-600 text-2xs font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-500/10 text-red-600 text-2xs font-semibold uppercase tracking-label">
             <X size={12} />
             {t('components.messageStream.status.failed', { defaultValue: 'Failed' })}
             {duration !== undefined && (
@@ -842,7 +842,7 @@ export function ToolExecutionCardDisplay({
             {/* Preparing State - streaming arguments */}
             {status === 'preparing' && partialArguments && (
               <div className="space-y-1">
-                <span className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
+                <span className="text-2xs font-semibold uppercase tracking-label text-text-muted flex items-center gap-1">
                   <FileEdit size={12} />
                   {t('components.messageStream.buildingArguments', {
                     defaultValue: 'Building Arguments',
@@ -877,7 +877,7 @@ export function ToolExecutionCardDisplay({
             {/* Input Parameters */}
             {parameters && status !== 'preparing' && (
               <div className="space-y-1">
-                <span className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
+                <span className="text-2xs font-semibold uppercase tracking-label text-text-muted flex items-center gap-1">
                   <FileInput size={12} />
                   {t('components.messageStream.input', { defaultValue: 'Input' })}
                 </span>
@@ -892,7 +892,7 @@ export function ToolExecutionCardDisplay({
             {/* Execution Mode */}
             {executionMode && (
               <div className="space-y-1">
-                <span className="text-2xs uppercase font-bold text-text-muted">
+                <span className="text-2xs font-semibold uppercase tracking-label text-text-muted">
                   {t('components.messageStream.executionMode', {
                     defaultValue: 'Execution Mode',
                   })}
@@ -906,7 +906,7 @@ export function ToolExecutionCardDisplay({
             {/* Running State */}
             {status === 'running' && (
               <div className="space-y-2">
-                <span className="text-2xs uppercase font-bold text-text-muted">
+                <span className="text-2xs font-semibold uppercase tracking-label text-text-muted">
                   {t('components.messageStream.liveResults', { defaultValue: 'Live Results' })}
                 </span>
                 <div className="border border-dashed border-slate-200 dark:border-border-dark rounded-md p-6 flex flex-col items-center justify-center gap-2 text-center bg-slate-50/50 dark:bg-background-dark/20">

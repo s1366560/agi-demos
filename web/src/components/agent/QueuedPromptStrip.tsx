@@ -39,7 +39,7 @@ const Pill = memo<{
   const preview = prompt.text.length > 60 ? `${prompt.text.slice(0, 60).trim()}…` : prompt.text;
   return (
     <div
-      className={`group inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] ${
+      className={`group inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs-plus ${
         isHead && isStreaming
           ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700/60 dark:bg-blue-950/30 dark:text-blue-300'
           : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-200'
@@ -49,12 +49,12 @@ const Pill = memo<{
       <Clock size={10} className="shrink-0 opacity-70" />
       <span className="truncate">{preview}</span>
       {prompt.skillName ? (
-        <span className="shrink-0 rounded bg-white/70 px-1 font-mono text-[9px] text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+        <span className="shrink-0 rounded bg-white/70 px-1 font-mono text-2xs text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
           /{prompt.skillName}
         </span>
       ) : null}
       {prompt.subAgentName ? (
-        <span className="shrink-0 rounded bg-white/70 px-1 font-mono text-[9px] text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+        <span className="shrink-0 rounded bg-white/70 px-1 font-mono text-2xs text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
           @{prompt.subAgentName}
         </span>
       ) : null}
@@ -83,7 +83,7 @@ export const QueuedPromptStrip = memo<QueuedPromptStripProps>(({ conversationId,
       className="flex flex-wrap items-center gap-1 px-3 pb-1 pt-2"
       data-testid="queued-prompt-strip"
     >
-      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-tertiary">
+      <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary">
         {t('agent.queuedPrompt.count', {
           defaultValue: 'Queued · {{count}}',
           count: queue.length,

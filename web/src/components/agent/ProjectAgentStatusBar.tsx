@@ -703,7 +703,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             >
               <div
                 className={`
-                  flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
+                  flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium
                   ${poolTierConfig?.bgColor ?? 'bg-slate-100 dark:bg-slate-800'}
                   ${poolTierConfig?.color ?? 'text-slate-500'}
                   transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 cursor-help
@@ -743,7 +743,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         {showExecState ? (
           <div
             className={`
-              flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
+              flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium
               ${execConfig.bgColor} ${execConfig.color} border ${execConfig.borderColor}
               transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             `}
@@ -778,7 +778,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           >
             <div
               className={`
-                flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
+                flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium
                 ${config.bgColor} ${config.color}
                 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 cursor-help
               `}
@@ -787,7 +787,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 size={12}
                 className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''}
               />
-              <span className="hidden sm:inline">{t(config.label)}</span>
+              <span className="hidden min-w-0 truncate sm:inline-block">{t(config.label)}</span>
               {status.resources.activeCalls > 0 ? (
                 <span className="ml-0.5">({status.resources.activeCalls})</span>
               ) : null}
@@ -1020,10 +1020,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 }}
                 disabled={isActionPending}
                 className={`
-                  p-1 rounded transition-colors
+                  rounded-md p-1 transition-colors duration-150
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
+                  disabled:cursor-not-allowed disabled:opacity-40
                   ${
                     isActionPending
-                      ? 'text-slate-400 cursor-not-allowed'
+                      ? 'text-slate-400'
                       : 'text-orange-500 hover:bg-orange-100 dark:hover:bg-orange-900/30'
                   }
                 `}
@@ -1048,10 +1050,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 }}
                 disabled={isActionPending}
                 className={`
-                  p-1 rounded transition-colors
+                  rounded-md p-1 transition-colors duration-150
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
+                  disabled:cursor-not-allowed disabled:opacity-40
                   ${
                     isActionPending
-                      ? 'text-slate-400 cursor-not-allowed'
+                      ? 'text-slate-400'
                       : 'text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
                   }
                 `}
@@ -1095,10 +1099,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   }
                   disabled={isActionPending}
                   className={`
-                    p-1 rounded transition-colors
+                    rounded-md p-1 transition-colors duration-150
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
+                    disabled:cursor-not-allowed disabled:opacity-40
                     ${
                       isActionPending
-                        ? 'text-slate-400 cursor-not-allowed'
+                        ? 'text-slate-400'
                         : 'text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30'
                     }
                   `}
@@ -1128,10 +1134,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   aria-label={t('agent.lifecycle.controls.restartAgent')}
                   disabled={isActionPending}
                   className={`
-                    p-1 rounded transition-colors
+                    rounded-md p-1 transition-colors duration-150
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
+                    disabled:cursor-not-allowed disabled:opacity-40
                     ${
                       isActionPending
-                        ? 'text-slate-400 cursor-not-allowed'
+                        ? 'text-slate-400'
                         : 'text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30'
                     }
                   `}

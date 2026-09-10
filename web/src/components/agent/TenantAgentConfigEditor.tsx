@@ -33,7 +33,6 @@ import {
   serializeRuntimeHooks,
 } from './tenantAgentConfigHelpers';
 
-
 import type {
   HookExecutorKind,
   HookFamily,
@@ -74,7 +73,7 @@ interface EditableCustomRuntimeHook extends RuntimeHookConfig {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <div className="mb-4">
-      <h3 className="text-sm font-semibold uppercase text-slate-700 dark:text-slate-200">
+      <h3 className="text-xs font-semibold uppercase tracking-label text-slate-700 dark:text-slate-200">
         {title}
       </h3>
       <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
@@ -432,7 +431,7 @@ export function TenantAgentConfigEditor({
     <Modal
       title={
         <div className="pr-8">
-          <p className="text-xs font-semibold uppercase text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-label text-slate-400">
             {t('tenant.agentConfigEditor.eyebrow')}
           </p>
           <h2 className="mt-2 text-xl font-semibold text-slate-950">
@@ -744,7 +743,7 @@ export function TenantAgentConfigEditor({
                             {entry.description ||
                               t('tenant.agentConfigEditor.runtimeHooks.defaultHookDescription')}
                           </p>
-                          <p className="mt-2 text-xs uppercase tracking-[0.14em] text-slate-400">
+                          <p className="mt-2 text-xs font-semibold uppercase tracking-label text-slate-400">
                             {entry.plugin_name} / {entry.hook_name}
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">

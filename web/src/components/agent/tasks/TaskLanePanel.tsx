@@ -163,10 +163,8 @@ const LaneTaskRow = memo<{ task: AgentTask }>(({ task }) => {
         <Icon size={14} className={isActive ? 'animate-spin motion-reduce:animate-none' : ''} />
       </span>
       <span
-        className={`min-w-0 flex-1 text-xs leading-snug ${
-          isDone
-            ? 'text-content-tertiary line-through'
-            : 'text-slate-700 dark:text-slate-200'
+        className={`min-w-0 flex-1 break-words text-xs leading-snug ${
+          isDone ? 'text-content-tertiary line-through' : 'text-slate-700 dark:text-slate-200'
         }`}
       >
         {task.content}
@@ -262,8 +260,8 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-slate-200/60 px-4 py-3 dark:border-slate-700/50">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex-shrink-0 border-b border-slate-200/60 px-4 py-2 dark:border-slate-700/50">
         <div className="mb-1.5 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>
             {t('agent.taskLanePanel.doneSummary', {
@@ -289,7 +287,7 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
         </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-3">
         {lanes.map((lane) => {
           const isCollapsed = collapsed[lane.key];
           const laneLabelKey =
@@ -311,12 +309,12 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                   {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                 </span>
                 <span className={`h-1.5 w-1.5 rounded-full ${lane.accent}`} />
-                <span className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-600 dark:text-slate-300">
+                <span className="text-xs font-semibold uppercase tracking-label text-slate-600 dark:text-slate-300">
                   {t(`agent.taskLanePanel.lanes.${laneLabelKey}`, {
                     defaultValue: lane.label,
                   })}
                 </span>
-                <span className="ml-auto rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                <span className="ml-auto rounded bg-slate-200/80 px-1.5 py-0.5 text-2xs font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {lane.tasks.length}
                 </span>
               </button>
@@ -327,10 +325,10 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                     if (evidence.length === 0 || lane.tasks.length === 0) return null;
                     return (
                       <div
-                        className="flex flex-wrap items-center gap-1 px-3 pb-1.5 text-[10px] text-slate-500 dark:text-slate-400"
+                        className="flex flex-wrap items-center gap-1 px-3 pb-1.5 text-2xs text-slate-500 dark:text-slate-400"
                         data-testid="lane-contract-hint"
                       >
-                        <span className="uppercase tracking-[0.1em]">
+                        <span className="font-semibold uppercase tracking-label">
                           {t('agent.taskLanePanel.advancesWith', {
                             defaultValue: 'advances with',
                           })}
@@ -351,7 +349,7 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                     );
                   })()}
                   {lane.tasks.length === 0 ? (
-                    <p className="px-3 pb-2 text-[11px] text-content-tertiary">
+                    <p className="px-3 pb-2 text-xs-plus text-content-tertiary">
                       {t('agent.taskLanePanel.emptyLane', { defaultValue: 'Empty.' })}
                     </p>
                   ) : (

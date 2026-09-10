@@ -42,15 +42,15 @@ const ItemRow: React.FC<ItemRowProps> = ({ artifact }) => {
   const content = (
     <>
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium text-slate-900 dark:text-slate-100 truncate">
+        <div className="text-code font-medium text-slate-900 dark:text-slate-100 truncate">
           {artifact.filename}
         </div>
-        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+        <div className="text-xs-plus text-slate-500 dark:text-slate-400 truncate">
           {artifact.mimeType} · {sizeKb} KB
           {artifact.sourceTool ? ` · ${artifact.sourceTool}` : ''}
         </div>
       </div>
-      <span className="text-[11px] text-content-tertiary shrink-0">
+      <span className="text-xs-plus text-content-tertiary shrink-0">
         {formatTimeOnly(artifact.createdAt)}
       </span>
     </>

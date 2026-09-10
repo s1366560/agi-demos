@@ -730,7 +730,7 @@ export const CanvasFileExplorer = memo<CanvasFileExplorerProps>(({ projectId }) 
   return (
     <aside className="hidden h-full w-[260px] shrink-0 flex-col border-r border-slate-200 bg-slate-50/90 md:flex xl:w-[272px] dark:border-slate-800 dark:bg-slate-950/90">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-2 dark:border-slate-800">
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-label text-slate-500 dark:text-slate-400">
           {t('agent.canvas.fileExplorer.title', { defaultValue: 'Files' })}
         </span>
         <button

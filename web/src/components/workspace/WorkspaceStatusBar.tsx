@@ -56,7 +56,7 @@ const Slot: React.FC<SlotProps> = ({ data }) => {
 
   return (
     <div
-      className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] text-blue-800 dark:text-slate-200"
+      className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-xs text-blue-800 dark:text-slate-200"
       title={data.hint ?? `${data.label}: ${data.value}`}
     >
       <span className={`inline-block h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`} />
@@ -117,7 +117,10 @@ export const WorkspaceStatusBar: React.FC<WorkspaceStatusBarProps> = ({
       {slots.map((slot, idx) => (
         <React.Fragment key={slot.label}>
           {idx > 0 && (
-            <span aria-hidden="true" className="mx-1 text-[var(--color-border-separator)] dark:text-slate-700">
+            <span
+              aria-hidden="true"
+              className="mx-1 text-[var(--color-border-separator)] dark:text-slate-700"
+            >
               ·
             </span>
           )}

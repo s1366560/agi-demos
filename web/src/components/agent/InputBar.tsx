@@ -646,7 +646,7 @@ export const InputBar = memo<InputBarProps>(
     const charCount = content.length;
 
     return (
-      <div className="h-full min-w-0 flex flex-col p-2 sm:p-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2 sm:p-4">
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -711,7 +711,7 @@ export const InputBar = memo<InputBarProps>(
                       type="button"
                       onClick={onTogglePlanMode}
                       aria-label={t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')}
-                      className="ml-auto flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-primary/60 transition-colors hover:bg-primary/10 hover:text-primary"
+                      className="ml-auto flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-primary/60 transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     >
                       <X size={12} />
                     </button>
@@ -754,7 +754,7 @@ export const InputBar = memo<InputBarProps>(
               className="flex flex-shrink-0 flex-wrap items-center gap-1.5 px-3 pt-2 sm:px-4"
               data-testid="run-input-delivery"
             >
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-tertiary">
+              <span className="text-2xs font-semibold uppercase tracking-label text-content-tertiary">
                 {t('agent.runInput.delivery', { defaultValue: 'Delivery' })}
               </span>
               {runInputDeliveryOptions.map((delivery) => (
@@ -764,7 +764,7 @@ export const InputBar = memo<InputBarProps>(
                   onClick={() => onRunInputDeliveryChange?.(delivery)}
                   disabled={runInputSubmitting}
                   aria-pressed={runInputDelivery === delivery}
-                  className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                  className={`rounded-full border px-2 py-0.5 text-xs-plus transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 ${
                     runInputDelivery === delivery
                       ? 'border-primary/50 bg-primary/10 text-primary'
                       : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'
@@ -776,7 +776,7 @@ export const InputBar = memo<InputBarProps>(
                 </button>
               ))}
               {runInputError && (
-                <span className="text-[11px] text-red-600 dark:text-red-400" role="status">
+                <span className="text-xs-plus text-red-600 dark:text-red-400" role="status">
                   {t('agent.runInput.failed', {
                     defaultValue: 'Not accepted. Your draft was kept.',
                   })}
@@ -793,7 +793,7 @@ export const InputBar = memo<InputBarProps>(
               {runInputs.map((input) => (
                 <div
                   key={input.id}
-                  className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                  className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs-plus text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                 >
                   <span className="min-w-0 flex-1 truncate">{input.content}</span>
                   <span className="shrink-0 text-slate-400">
@@ -813,7 +813,7 @@ export const InputBar = memo<InputBarProps>(
                       onClick={() => {
                         void onPromoteRunInput(input.id);
                       }}
-                      className="shrink-0 rounded border border-primary/40 px-1.5 py-0.5 text-primary hover:bg-primary/10 disabled:opacity-40"
+                      className="shrink-0 rounded border border-primary/40 px-1.5 py-0.5 text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {t('agent.runInput.promote', { defaultValue: 'Start next plan' })}
                     </button>
@@ -897,7 +897,7 @@ export const InputBar = memo<InputBarProps>(
                       name: selectedSkill.name,
                       defaultValue: 'Remove /{{name}} skill',
                     })}
-                    className="-mr-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    className="-mr-0.5 rounded-md p-0.5 transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   >
                     <X size={10} />
                   </button>
@@ -918,7 +918,7 @@ export const InputBar = memo<InputBarProps>(
                       name: selectedSubAgent,
                       defaultValue: 'Remove @{{name}} subagent',
                     })}
-                    className="-mr-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-purple-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    className="-mr-0.5 rounded-md p-0.5 transition-colors duration-150 hover:bg-purple-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   >
                     <X size={10} />
                   </button>
@@ -1072,7 +1072,7 @@ const AttachmentChip = memo<{
             }}
             aria-label={retryLabel}
             title={retryLabel}
-            className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             <RotateCw size={12} className="text-red-500" />
           </button>
@@ -1086,7 +1086,7 @@ const AttachmentChip = memo<{
         disabled={file.status === 'uploading'}
         aria-label={removeLabel}
         title={removeLabel}
-        className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ml-0.5 disabled:opacity-30"
+        className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ml-0.5 disabled:opacity-30"
       >
         <X size={12} className="text-slate-400 hover:text-slate-600" />
       </button>

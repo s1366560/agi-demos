@@ -144,8 +144,8 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
                 setMode(m.key);
               }}
               className={`
-                flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
-                transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 cursor-pointer
+                flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium
+                transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
                 ${
                   isActive
                     ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'

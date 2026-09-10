@@ -150,9 +150,7 @@ const WorkspaceTaskPlanRowItem = memo<{ row: WorkspaceTaskPlanRow; locale: strin
                 {row.title}
               </p>
               {timestamp ? (
-                <span className="shrink-0 text-[11px] text-content-tertiary">
-                  {timestamp}
-                </span>
+                <span className="shrink-0 text-xs-plus text-content-tertiary">{timestamp}</span>
               ) : null}
             </div>
             {row.description ? (
@@ -160,8 +158,8 @@ const WorkspaceTaskPlanRowItem = memo<{ row: WorkspaceTaskPlanRow; locale: strin
                 {row.description}
               </p>
             ) : null}
-            <div className="mt-2 flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-              <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-medium uppercase tracking-[0.08em] text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <div className="mt-2 flex min-w-0 items-center gap-1.5 text-xs-plus text-slate-500 dark:text-slate-400">
+              <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-semibold uppercase tracking-label text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {t(`agent.rightPanel.workspacePlan.status.${row.status}`, {
                   defaultValue: config.label,
                 })}
@@ -260,11 +258,11 @@ const WorkspaceTaskPlanLaneGroups = memo<WorkspaceTaskPlanLaneGroupsProps>(
                   {iterationGroupTitle(group.iterationIndex, t)}
                 </span>
                 {isCurrentIteration ? (
-                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-label text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                     {tFallback(t, 'agent.rightPanel.workspacePlan.current', 'Current')}
                   </span>
                 ) : null}
-                <span className="ml-auto rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                <span className="ml-auto rounded bg-slate-200/80 px-1.5 py-0.5 text-2xs font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {group.rows.length}
                 </span>
               </button>
@@ -360,7 +358,7 @@ export const WorkspaceTaskPlanPanel = memo<WorkspaceTaskPlanPanelProps>(
                   {workspacePlanTitle(snapshot, t)}
                 </p>
                 {snapshot?.plan?.status ? (
-                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-label text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     {snapshot.plan.status}
                   </span>
                 ) : null}
