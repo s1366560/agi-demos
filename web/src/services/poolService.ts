@@ -13,6 +13,7 @@
  * @packageDocumentation
  */
 
+import { isCancellationError } from '../utils/isCancellationError';
 import { logger } from '../utils/logger';
 
 import { ApiError } from './client/ApiError';
@@ -232,6 +233,11 @@ export function isPoolForbiddenError(error: unknown): boolean {
 const forbiddenWarnedEndpoints = new Set<string>();
 
 function logPoolFailure(context: string, endpoint: string, error: unknown): void {
+  if (isCancellationError(error)) {
+    // Aborted by a tenant switch or web-operation generation refresh; this is
+    // expected noise, not a failure.
+    return;
+  }
   if (isPoolForbiddenError(error)) {
     if (!forbiddenWarnedEndpoints.has(endpoint)) {
       forbiddenWarnedEndpoints.add(endpoint);

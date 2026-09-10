@@ -19,6 +19,7 @@ import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { formatStorage } from '../../hooks/useDateFormatter';
 import { tenantAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
+import { isCancellationError } from '../../utils/isCancellationError';
 import { logger } from '../../utils/logger';
 
 interface TenantOverviewProject {
@@ -82,18 +83,6 @@ function getTenantOverviewStats(tenantId: string): Promise<TenantOverviewStats> 
 }
 
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
-
-/**
- * Requests in flight during a tenant switch (or a web-operation generation
- * refresh) are deliberately aborted. Those cancellations are expected noise,
- * not failures, so they must not surface as error logs or error UI.
- */
-const isCancellationError = (error: unknown): boolean => {
-  if (error instanceof DOMException && error.name === 'AbortError') return true;
-  const code = (error as { code?: unknown } | null)?.code;
-  if (code === 'ERR_CANCELED') return true;
-  return error instanceof Error && error.message === 'canceled';
-};
 
 const isActiveProject = (status?: string | null): boolean => status?.toLowerCase() === 'active';
 
