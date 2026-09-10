@@ -162,10 +162,11 @@ describe('UnifiedRuntimes', () => {
       expect(screen.getAllByText('Global administrator role required').length).toBeGreaterThan(0);
     });
 
-    // 403 is a stable permission verdict: no react-query retries, and the
-    // 15s refetch interval switches itself off after the failure.
+    // 403 is a stable permission verdict: no react-query retries, the 15s
+    // refetch interval switches itself off, and the instances query never
+    // fires because the failed status yields no `enabled: true` data.
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(poolService.getStatus).toHaveBeenCalledTimes(1);
-    expect(poolService.listInstances).toHaveBeenCalledTimes(1);
+    expect(poolService.listInstances).not.toHaveBeenCalled();
   });
 });

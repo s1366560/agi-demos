@@ -29,7 +29,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import PlainTextResponse
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.routers.agent.access import has_global_admin_access
+from src.infrastructure.adapters.primary.web.routers.agent.access import (
+    has_global_admin_access,
+    require_tenant_access,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Tenant, User
@@ -254,6 +257,30 @@ async def resolve_pool_authority_scope(
     return PoolAuthorityScope(scope=PoolScope.TENANT, tenant_id=tenant_id)
 
 
+async def require_pool_read_access(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
+) -> User:
+    """Require global admin for global reads, tenant admin for tenant-scoped reads."""
+    if resolved_scope.scope is PoolScope.GLOBAL:
+        if not await has_global_admin_access(db, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_("Global admin access required"),
+            )
+        return current_user
+    if current_user.is_superuser:
+        return current_user
+    await require_tenant_access(
+        db,
+        current_user,
+        cast(str, resolved_scope.tenant_id),
+        require_admin=True,
+    )
+    return current_user
+
+
 # ============================================================================
 # Helper: build InstanceInfo from an instance
 # ============================================================================
@@ -393,6 +420,7 @@ def _empty_pool_status(
 
 
 async def _get_pool_status(
+    current_user: User = Depends(require_pool_read_access),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
 ) -> PoolStatusResponse:
     """获取池状态概览.
@@ -462,6 +490,7 @@ async def _get_pool_status(
 
 
 async def _list_instances(
+    current_user: User = Depends(require_pool_read_access),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
     tier: str | None = Query(None, description="按分级筛选"),
@@ -501,6 +530,7 @@ async def _list_instances(
 
 async def _get_instance(
     instance_key: str,
+    current_user: User = Depends(require_pool_read_access),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
 ) -> InstanceInfo:
@@ -512,9 +542,9 @@ async def _get_instance(
 
 async def _pause_instance(
     instance_key: str,
+    current_user: User = Depends(require_pool_global_admin),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
-    current_user: User = Depends(require_pool_global_admin),
 ) -> OperationResponse:
     """暂停实例."""
     instance = _get_scoped_instance(manager, instance_key, resolved_scope)
@@ -542,9 +572,9 @@ async def _pause_instance(
 
 async def _resume_instance(
     instance_key: str,
+    current_user: User = Depends(require_pool_global_admin),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
-    current_user: User = Depends(require_pool_global_admin),
 ) -> OperationResponse:
     """恢复实例."""
     instance = _get_scoped_instance(manager, instance_key, resolved_scope)
@@ -572,10 +602,10 @@ async def _resume_instance(
 
 async def _terminate_instance(
     instance_key: str,
+    current_user: User = Depends(require_pool_global_admin),
     graceful: bool = Query(True, description="是否优雅终止"),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
-    current_user: User = Depends(require_pool_global_admin),
 ) -> OperationResponse:
     """终止实例."""
     instance = _get_scoped_instance(manager, instance_key, resolved_scope)
@@ -610,10 +640,10 @@ async def _terminate_instance(
 async def _set_project_tier(
     project_id: str,
     request: SetTierRequest,
+    current_user: User = Depends(require_pool_global_admin),
     tenant_id: str = Query(..., description="租户ID"),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
-    current_user: User = Depends(require_pool_global_admin),
 ) -> SetTierResponse:
     """设置项目分级."""
     if resolved_scope.scope is not PoolScope.TENANT or resolved_scope.tenant_id != tenant_id:
@@ -661,6 +691,7 @@ async def _set_project_tier(
 
 async def _get_project_tier(
     project_id: str,
+    current_user: User = Depends(require_pool_read_access),
     tenant_id: str = Query(..., description="租户ID"),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
@@ -681,6 +712,7 @@ async def _get_project_tier(
 
 
 async def _get_metrics_json(
+    current_user: User = Depends(require_pool_read_access),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
 ) -> MetricsResponse:
@@ -728,6 +760,7 @@ async def _get_metrics_json(
 
 
 async def _get_metrics_prometheus(
+    current_user: User = Depends(require_pool_global_admin),
     manager: AgentPoolManager = Depends(_get_pool_manager),
     resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
 ) -> PlainTextResponse:
@@ -770,7 +803,6 @@ def create_pool_router(
     router = APIRouter(
         prefix=prefix,
         tags=cast("list[str | Enum]", tags or ["Agent Pool Admin"]),
-        dependencies=[Depends(require_pool_global_admin)],
     )
 
     # Status

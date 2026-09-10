@@ -2498,7 +2498,8 @@
         "memory": "内存",
         "sandboxes": "沙箱",
         "sandboxHealth": "沙箱健康",
-        "sandboxMemory": "沙箱内存"
+        "sandboxMemory": "沙箱内存",
+        "capacityUnavailable": "租户容量不可用"
       },
       "sandboxHealthValue": "{{healthy}} 健康 / {{attention}} 需关注",
       "instances": "实例",

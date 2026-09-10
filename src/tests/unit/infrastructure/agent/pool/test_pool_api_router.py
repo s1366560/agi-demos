@@ -364,3 +364,205 @@ async def test_set_project_tier_sanitizes_invalid_tier() -> None:
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
     assert exc_info.value.detail == "Invalid project tier"
     assert "secret-tier" not in exc_info.value.detail
+
+
+# ============================================================================
+# Tenant-scoped read access (require_pool_read_access)
+# ============================================================================
+
+_TENANT_READ_PATHS = [
+    "/api/v1/admin/pool/status?scope=tenant&tenant_id=tenant-a",
+    "/api/v1/admin/pool/instances?scope=tenant&tenant_id=tenant-a",
+    "/api/v1/admin/pool/instances/stored-a?scope=tenant&tenant_id=tenant-a",
+    "/api/v1/admin/pool/projects/project-a/tier?scope=tenant&tenant_id=tenant-a",
+    "/api/v1/admin/pool/metrics?scope=tenant&tenant_id=tenant-a",
+]
+
+
+def _tenant_scoped_app(monkeypatch, current_user, *, tenant_exists: bool = True) -> FastAPI:
+    """Build the pool app with auth helpers stubbed at the module boundary."""
+    app = _pool_test_app()
+    db = AsyncMock()
+    db.execute.return_value = SimpleNamespace(
+        scalar_one_or_none=lambda: "tenant-a" if tenant_exists else None
+    )
+    app.dependency_overrides[get_current_user] = lambda: current_user
+    app.dependency_overrides[get_db] = lambda: db
+    manager = SimpleNamespace(
+        _instances={"stored-a": _instance("tenant-a", "project-a")},
+        classify_project=AsyncMock(return_value=SimpleNamespace(value="hot")),
+    )
+    app.dependency_overrides[router._get_pool_manager] = lambda: manager
+    monkeypatch.setattr(router, "has_global_admin_access", AsyncMock(return_value=False))
+    tenant_access = AsyncMock()
+    monkeypatch.setattr(router, "require_tenant_access", tenant_access)
+    app.state.tenant_access = tenant_access
+    app.state.db = db
+    return app
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("path", _TENANT_READ_PATHS)
+async def test_tenant_admin_reads_scoped_endpoints(monkeypatch, path: str) -> None:
+    current_user = SimpleNamespace(id="tenant-admin-1", is_superuser=False, roles=[])
+    app = _tenant_scoped_app(monkeypatch, current_user)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(path)
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    if "resolved_scope" in body:
+        assert body["resolved_scope"] == "tenant"
+    else:
+        assert body["tenant_id"] == "tenant-a"
+    app.state.tenant_access.assert_awaited_once_with(
+        app.state.db, current_user, "tenant-a", require_admin=True
+    )
+
+
+@pytest.mark.unit
+async def test_tenant_member_without_admin_role_cannot_read(monkeypatch) -> None:
+    app = _tenant_scoped_app(
+        monkeypatch, SimpleNamespace(id="member-1", is_superuser=False, roles=[])
+    )
+    app.state.tenant_access.side_effect = HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/admin/pool/status?scope=tenant&tenant_id=tenant-a")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json() == {"detail": "Admin access required"}
+
+
+@pytest.mark.unit
+async def test_non_member_cannot_read_tenant_scope(monkeypatch) -> None:
+    app = _tenant_scoped_app(
+        monkeypatch, SimpleNamespace(id="outsider-1", is_superuser=False, roles=[])
+    )
+    app.state.tenant_access.side_effect = HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access required"
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/admin/pool/status?scope=tenant&tenant_id=tenant-a")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json() == {"detail": "Tenant access required"}
+
+
+@pytest.mark.unit
+async def test_tenant_admin_cannot_read_global_scope(monkeypatch) -> None:
+    app = _tenant_scoped_app(
+        monkeypatch, SimpleNamespace(id="tenant-admin-1", is_superuser=False, roles=[])
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        scoped = await client.get("/api/v1/admin/pool/status?scope=global")
+        implicit = await client.get("/api/v1/admin/pool/status")
+
+    assert scoped.status_code == status.HTTP_403_FORBIDDEN
+    assert scoped.json() == {"detail": "Global admin access required"}
+    assert implicit.status_code == status.HTTP_403_FORBIDDEN
+    app.state.tenant_access.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_superuser_reads_tenant_scope_without_membership(monkeypatch) -> None:
+    current_user = SimpleNamespace(id="root-1", is_superuser=True, roles=[])
+    app = _tenant_scoped_app(monkeypatch, current_user)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/admin/pool/status?scope=tenant&tenant_id=tenant-a")
+
+    assert response.status_code == status.HTTP_200_OK
+    app.state.tenant_access.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_missing_tenant_returns_404_before_access_check(monkeypatch) -> None:
+    app = _tenant_scoped_app(
+        monkeypatch,
+        SimpleNamespace(id="tenant-admin-1", is_superuser=False, roles=[]),
+        tenant_exists=False,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/api/v1/admin/pool/status?scope=tenant&tenant_id=missing-tenant"
+        )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json() == {"detail": "Tenant not found"}
+    app.state.tenant_access.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/api/v1/admin/pool/instances/stored-a/pause?scope=tenant&tenant_id=tenant-a"),
+        ("POST", "/api/v1/admin/pool/instances/stored-a/resume?scope=tenant&tenant_id=tenant-a"),
+        ("DELETE", "/api/v1/admin/pool/instances/stored-a?scope=tenant&tenant_id=tenant-a"),
+        (
+            "POST",
+            "/api/v1/admin/pool/projects/project-a/tier?scope=tenant&tenant_id=tenant-a",
+        ),
+    ],
+)
+async def test_tenant_admin_cannot_write_pool_resources(
+    monkeypatch, method: str, path: str
+) -> None:
+    app = _tenant_scoped_app(
+        monkeypatch, SimpleNamespace(id="tenant-admin-1", is_superuser=False, roles=[])
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.request(method, path, json={"tier": "hot"})
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json() == {"detail": "Global admin access required"}
+    app.state.tenant_access.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_prometheus_metrics_stay_global_admin_only(monkeypatch) -> None:
+    current_user = SimpleNamespace(id="tenant-admin-1", is_superuser=False, roles=[])
+    app = _tenant_scoped_app(monkeypatch, current_user)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        global_scope = await client.get("/api/v1/admin/pool/metrics/prometheus?scope=global")
+        tenant_scope = await client.get(
+            "/api/v1/admin/pool/metrics/prometheus?scope=tenant&tenant_id=tenant-a"
+        )
+
+    assert global_scope.status_code == status.HTTP_403_FORBIDDEN
+    assert global_scope.json() == {"detail": "Global admin access required"}
+    assert tenant_scope.status_code == status.HTTP_403_FORBIDDEN
+    app.state.tenant_access.assert_not_called()

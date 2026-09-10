@@ -122,9 +122,13 @@ export function UnifiedRuntimes() {
     ...poolQueryGuards,
   });
 
+  // When the pool status reports the feature disabled, skip the instances
+  // query entirely: the backend answers 503 by design and there is nothing
+  // to poll.
   const poolInstancesQuery = useQuery({
     queryKey: ['runtimes', 'pool', 'instances', tenantId ?? 'global'],
     queryFn: () => poolService.listInstances({ page: 1, page_size: 100 }, poolScope),
+    enabled: poolStatusQuery.data?.enabled === true,
     ...poolQueryGuards,
   });
 
