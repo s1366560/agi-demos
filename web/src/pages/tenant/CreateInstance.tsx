@@ -3,9 +3,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { Alert, Steps, Form, Input, InputNumber, Space, Descriptions } from 'antd';
+import { App, Alert, Steps, Form, Input, InputNumber, Space, Descriptions } from 'antd';
 
-import { LazyButton, LazySelect, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyButton, LazySelect } from '@/components/ui/lazyAntd';
 
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { instanceTemplateService } from '../../services/instanceTemplateService';
@@ -73,7 +73,7 @@ export const CreateInstance: React.FC = () => {
   const { tenantId: urlTenantId } = useParams<{ tenantId?: string | undefined }>();
   const [searchParams] = useSearchParams();
   const [form] = Form.useForm<InstanceFormValues>();
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<InstanceFormValues>({});
@@ -145,14 +145,14 @@ export const CreateInstance: React.FC = () => {
         form.setFieldsValue(values);
         setFormData((previous) => ({ ...values, ...previous }));
         setAppliedTemplateId(templateId);
-        messageApi?.success(
+        messageApi.success(
           t('tenant.instances.create.templateApplied', 'Template defaults applied')
         );
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         console.error('Failed to load instance template:', err);
-        messageApi?.error(
+        messageApi.error(
           t('tenant.instances.create.templateLoadError', 'Failed to load template defaults')
         );
         setAppliedTemplateId(templateId);
@@ -654,7 +654,7 @@ export const CreateInstance: React.FC = () => {
       .validateFields()
       .then((values: InstanceFormValues) => {
         if (!tenantId) {
-          messageApi?.error(
+          messageApi.error(
             t('tenant.instances.create.missingTenant', 'Tenant context is required')
           );
           throw new Error('missing-tenant-context');
@@ -686,7 +686,7 @@ export const CreateInstance: React.FC = () => {
         return createInstance(finalData);
       })
       .then(() => {
-        messageApi?.success(t('tenant.instances.create.success', 'Instance created successfully'));
+        messageApi.success(t('tenant.instances.create.success', 'Instance created successfully'));
         void navigate('..');
       })
       .catch((err: unknown) => {
@@ -697,7 +697,7 @@ export const CreateInstance: React.FC = () => {
           return;
         }
         console.error('Failed to create instance:', err);
-        messageApi?.error(t('tenant.instances.create.error', 'Failed to create instance'));
+        messageApi.error(t('tenant.instances.create.error', 'Failed to create instance'));
       });
   }, [form, formData, createInstance, navigate, t, parseJsonField, messageApi, tenantId]);
 

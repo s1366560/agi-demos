@@ -11,6 +11,7 @@ import { devtools } from 'zustand/middleware';
 
 import {
   poolService,
+  isPoolForbiddenError,
   type PoolStatus,
   type PoolInstance,
   type MetricsResponse,
@@ -28,6 +29,13 @@ import { logger } from '../utils/logger';
 
 export interface PoolState {
   scope: PoolAuthorityScope;
+
+  /**
+   * True once any pool endpoint answered 403 (global administrator role
+   * required). Pages use this to stop polling and show a permission empty
+   * state instead of retrying a request that can never succeed.
+   */
+  forbidden: boolean;
 
   // Status
   status: PoolStatus | null;
@@ -94,6 +102,7 @@ export interface PoolActions {
 
 const initialState: PoolState = {
   scope: GLOBAL_POOL_SCOPE,
+  forbidden: false,
 
   status: null,
   isStatusLoading: false,
@@ -138,6 +147,7 @@ export const usePoolStore = create<PoolState & PoolActions>()(
           scopeRevision += 1;
           set({
             scope,
+            forbidden: false,
             status: null,
             isStatusLoading: false,
             statusError: null,
@@ -172,6 +182,12 @@ export const usePoolStore = create<PoolState & PoolActions>()(
               return;
             }
             const message = error instanceof Error ? error.message : 'Failed to fetch status';
+            if (isPoolForbiddenError(error)) {
+              // 403 is a stable permission verdict, not a transient failure:
+              // flag it so pages stop polling; poolService already logged once.
+              set({ statusError: message, isStatusLoading: false, forbidden: true });
+              return;
+            }
             set({ statusError: message, isStatusLoading: false });
             logger.error('[PoolStore] Failed to fetch status:', error);
           }
@@ -214,6 +230,10 @@ export const usePoolStore = create<PoolState & PoolActions>()(
               return;
             }
             const message = error instanceof Error ? error.message : 'Failed to fetch instances';
+            if (isPoolForbiddenError(error)) {
+              set({ instancesError: message, isInstancesLoading: false, forbidden: true });
+              return;
+            }
             set({ instancesError: message, isInstancesLoading: false });
             logger.error('[PoolStore] Failed to fetch instances:', error);
           }
@@ -324,6 +344,10 @@ export const usePoolStore = create<PoolState & PoolActions>()(
               return;
             }
             const message = error instanceof Error ? error.message : 'Failed to fetch metrics';
+            if (isPoolForbiddenError(error)) {
+              set({ metricsError: message, isMetricsLoading: false, forbidden: true });
+              return;
+            }
             set({ metricsError: message, isMetricsLoading: false });
             logger.error('[PoolStore] Failed to fetch metrics:', error);
           }

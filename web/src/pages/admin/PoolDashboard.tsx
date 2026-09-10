@@ -136,6 +136,8 @@ const PoolDashboard: React.FC = () => {
     statusError,
     fetchStatus,
     setScope,
+    // Permission verdict (403 from /admin/pool/*)
+    forbidden,
     // Instances
     instances,
     totalInstances,
@@ -204,9 +206,10 @@ const PoolDashboard: React.FC = () => {
     }
   }, [currentPage, tierFilter, searchParams, setSearchParams]);
 
-  // Auto-refresh (skipped while the tab is hidden)
+  // Auto-refresh (skipped while the tab is hidden or after a 403 verdict —
+  // polling an endpoint that always forbids this user only produces noise)
   useEffect(() => {
-    if (autoRefresh) {
+    if (autoRefresh && !forbidden) {
       refreshTimerRef.current = setInterval(() => {
         if (document.visibilityState === 'hidden') return;
         void fetchStatus();
@@ -220,7 +223,7 @@ const PoolDashboard: React.FC = () => {
         clearInterval(refreshTimerRef.current);
       }
     };
-  }, [autoRefresh, refreshInterval, fetchStatus, fetchInstances, fetchMetrics]);
+  }, [autoRefresh, forbidden, refreshInterval, fetchStatus, fetchInstances, fetchMetrics]);
 
   const { t } = useTranslation();
 
@@ -439,15 +442,25 @@ const PoolDashboard: React.FC = () => {
       </div>
 
       {/* Error alerts */}
-      {statusError && (
+      {forbidden ? (
         <Alert
-          title={t('admin.poolDashboard.errors.failedToLoadPoolStatus')}
-          description={statusError}
-          type="error"
+          title={t('admin.poolDashboard.errors.forbiddenTitle')}
+          description={t('admin.poolDashboard.errors.forbiddenDescription')}
+          type="warning"
           showIcon
-          closable
           className="mb-4"
         />
+      ) : (
+        statusError && (
+          <Alert
+            title={t('admin.poolDashboard.errors.failedToLoadPoolStatus')}
+            description={statusError}
+            type="error"
+            showIcon
+            closable
+            className="mb-4"
+          />
+        )
       )}
 
       {/* Status Overview */}
@@ -624,7 +637,7 @@ const PoolDashboard: React.FC = () => {
           </Space>
         }
       >
-        {instancesError && (
+        {instancesError && !forbidden && (
           <Alert
             title={instancesError}
             type="error"

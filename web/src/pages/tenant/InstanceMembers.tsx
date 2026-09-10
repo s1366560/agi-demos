@@ -3,12 +3,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Input, Table } from 'antd';
+import { App, Input, Table } from 'antd';
 import { CheckCircle, Eye, Search as SearchIcon, Shield, UserPlus, Users } from 'lucide-react';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
-  useLazyMessage,
   LazyButton,
   LazyPopconfirm,
   LazySelect,
@@ -43,7 +42,7 @@ const ROLE_OPTIONS = [
 export const InstanceMembers: React.FC = () => {
   const { t } = useTranslation();
   const { instanceId } = useParams<{ instanceId: string }>();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
 
   const members = useInstanceMembers();
   const membersTotal = useInstanceMembersTotal();
@@ -86,7 +85,7 @@ export const InstanceMembers: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      message?.error(error);
+      message.error(error);
     }
   }, [error, message]);
 
@@ -201,7 +200,7 @@ export const InstanceMembers: React.FC = () => {
       if (!instanceId) return;
       try {
         await updateMemberRole(instanceId, member.user_id, { role: newRole });
-        message?.success(t('tenant.instances.members.roleUpdated'));
+        message.success(t('tenant.instances.members.roleUpdated'));
       } catch (err) {
         console.error('Failed to update member role:', err);
       }
@@ -214,7 +213,7 @@ export const InstanceMembers: React.FC = () => {
       if (!instanceId) return;
       try {
         await removeMember(instanceId, member.user_id);
-        message?.success(t('tenant.instances.members.removeSuccess'));
+        message.success(t('tenant.instances.members.removeSuccess'));
         const nextTotal = Math.max(0, membersTotal - 1);
         const nextPage = Math.min(
           currentPage,
@@ -237,7 +236,7 @@ export const InstanceMembers: React.FC = () => {
         user_id: selectedUserId,
         role: selectedRole,
       });
-      message?.success(t('tenant.instances.members.addSuccess'));
+      message.success(t('tenant.instances.members.addSuccess'));
       setIsAddModalOpen(false);
       setSelectedUserId(null);
       setSelectedRole('user');

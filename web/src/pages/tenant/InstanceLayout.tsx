@@ -3,13 +3,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation, Outlet } from 'react-router-dom';
 
-import { Tag, Space, InputNumber, Modal } from 'antd';
+import { App, Tag, Space, InputNumber, Modal } from 'antd';
 import { ArrowLeft, FileText, Network, Users, Dna, Settings, LayoutDashboard } from 'lucide-react';
 
 import { hasUnsavedChanges } from '@/utils/unsavedChanges';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
-import { LazyModal, LazyButton, LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyModal, LazyButton, LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 import { useCurrentInstance, useInstanceLoading, useInstanceActions } from '../../stores/instance';
 
@@ -20,7 +20,7 @@ export const InstanceLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
   const tabListRef = useRef<HTMLDivElement>(null);
 
   const [scaleModalVisible, setScaleModalVisible] = useState(false);
@@ -65,9 +65,9 @@ export const InstanceLayout: React.FC = () => {
     setIsSubmitting(true);
     try {
       await restartInstance(id);
-      messageApi?.success(t('tenant.instances.restartSuccess'));
+      messageApi.success(t('tenant.instances.restartSuccess'));
     } catch {
-      messageApi?.error(t('tenant.instances.restartError'));
+      messageApi.error(t('tenant.instances.restartError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -78,10 +78,10 @@ export const InstanceLayout: React.FC = () => {
     setIsSubmitting(true);
     try {
       await deleteInstance(id);
-      messageApi?.success(t('tenant.instances.deleteSuccess'));
+      messageApi.success(t('tenant.instances.deleteSuccess'));
       void navigate('..');
     } catch {
-      messageApi?.error(t('tenant.instances.deleteError'));
+      messageApi.error(t('tenant.instances.deleteError'));
       setIsSubmitting(false);
     }
   };
@@ -91,10 +91,10 @@ export const InstanceLayout: React.FC = () => {
     setIsSubmitting(true);
     try {
       await scaleInstance(id, newReplicas);
-      messageApi?.success(t('tenant.instances.scaleSuccess'));
+      messageApi.success(t('tenant.instances.scaleSuccess'));
       setScaleModalVisible(false);
     } catch {
-      messageApi?.error(t('tenant.instances.scaleError'));
+      messageApi.error(t('tenant.instances.scaleError'));
     } finally {
       setIsSubmitting(false);
     }

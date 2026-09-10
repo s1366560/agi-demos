@@ -10,6 +10,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { memoryAPI } from '../../../services/api';
 import { render, screen, fireEvent, waitFor } from '../../utils';
 
+import { App } from 'antd';
+
+const appMessageMock = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+  loading: vi.fn(),
+};
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: appMessageMock } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 // Mock react-router-dom
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -31,9 +45,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 // Mock lazyAntd
-vi.mock('@/components/ui/lazyAntd', () => ({
-  useLazyMessage: () => vi.fn(),
-}));
+vi.mock('@/components/ui/lazyAntd', () => ({}));
 
 // Mock useDebounce
 vi.mock('use-debounce', () => ({

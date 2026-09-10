@@ -9,7 +9,7 @@ import React from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { ConfigProvider, theme as antdTheme } from 'antd';
+import { App as AntApp, ConfigProvider, theme as antdTheme } from 'antd';
 import enUS from 'antd/locale/en_US';
 import zhCN from 'antd/locale/zh_CN';
 
@@ -36,7 +36,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ConfigProvider locale={getAntdLocale()} theme={antdThemeConfig}>
-      {children}
+      {/*
+        antd <App> exposes context-aware message/notification/modal instances
+        via App.useApp(). Without it, useApp() falls back to empty placeholder
+        objects and calls throw at runtime. `contents` keeps the wrapper div
+        out of layout (display: contents), and keeps the default `component`
+        so the cssVar dev warning does not fire.
+      */}
+      <AntApp className="contents">{children}</AntApp>
     </ConfigProvider>
   );
 }

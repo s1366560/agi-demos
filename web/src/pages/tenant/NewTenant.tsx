@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 
+import { App } from 'antd';
 import { ArrowRight, Brain, Loader2 } from 'lucide-react';
 
 import {
@@ -10,7 +11,6 @@ import {
   TenantCreateForm,
 } from '@/components/tenant/TenantCreateForm';
 import type { TenantCreateFormValues } from '@/components/tenant/TenantCreateForm';
-import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { useTenantStore } from '../../stores/tenant';
 import { confirmAction } from '../../utils/confirmAction';
@@ -19,7 +19,7 @@ import { logger } from '../../utils/logger';
 export const NewTenant: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const { createTenant, isLoading, error } = useTenantStore();
 
   const [formData, setFormData] = useState<TenantCreateFormValues>(DEFAULT_TENANT_CREATE_VALUES);
@@ -44,7 +44,7 @@ export const NewTenant: React.FC = () => {
         description: values.description,
         plan: values.plan,
       });
-      message?.success(t('tenant.create_page.success', { defaultValue: 'Organization created' }));
+      message.success(t('tenant.create_page.success', { defaultValue: 'Organization created' }));
       void navigate('/tenant');
     } catch (err) {
       logger.error('Failed to create tenant', err);

@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import { Alert, Tag } from 'antd';
+import { App, Alert, Tag } from 'antd';
 import {
   ArrowLeft,
   ChevronRight,
@@ -51,7 +51,7 @@ import {
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { SkillModal } from '@/components/skill/SkillModal';
 import { SkillVersionList } from '@/components/skill/SkillVersionList';
-import { LazyEmpty, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyEmpty } from '@/components/ui/lazyAntd';
 
 import { useMarkdownPlugins } from '../../components/agent/chat/markdownPlugins';
 import { safeMarkdownComponents } from '../../components/agent/chat/safeMarkdownComponents';
@@ -545,7 +545,7 @@ export const SkillDetail: FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams<{ tenantId?: string | undefined; skillId: string }>();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const tenantId = params.tenantId ?? currentTenant?.id ?? null;
   const skillId = params.skillId;
@@ -655,7 +655,7 @@ export const SkillDetail: FC = () => {
         );
       } catch {
         setResourceFiles({});
-        message?.warning(
+        message.warning(
           t('tenant.skills.detail.packageFilesLoadFailed', 'Failed to load package files')
         );
       } finally {
@@ -676,7 +676,7 @@ export const SkillDetail: FC = () => {
         } catch {
           setVersions([]);
           setEvolution(null);
-          message?.error(t('tenant.skills.detail.versionLoadFailed'));
+          message.error(t('tenant.skills.detail.versionLoadFailed'));
         }
       }
     } catch {
@@ -684,7 +684,7 @@ export const SkillDetail: FC = () => {
       setPackageSkillContent('');
       setResourceFiles({});
       setLoadError(t('tenant.skills.detail.loadFailed'));
-      message?.error(t('tenant.skills.detail.loadFailed'));
+      message.error(t('tenant.skills.detail.loadFailed'));
     } finally {
       setIsLoading(false);
       setIsLoadingPackageFiles(false);
@@ -725,9 +725,9 @@ export const SkillDetail: FC = () => {
     }
     try {
       await downloadSkillPackage(skill, tenantId);
-      message?.success(t('tenant.skills.detail.exportSuccess'));
+      message.success(t('tenant.skills.detail.exportSuccess'));
     } catch {
-      message?.error(t('tenant.skills.detail.exportFailed'));
+      message.error(t('tenant.skills.detail.exportFailed'));
     }
   }, [message, skill, tenantId, t]);
 
@@ -737,9 +737,9 @@ export const SkillDetail: FC = () => {
     }
     try {
       await navigator.clipboard.writeText(assessmentReport.text);
-      message?.success(t('tenant.skills.detail.assessment.copySuccess'));
+      message.success(t('tenant.skills.detail.assessment.copySuccess'));
     } catch {
-      message?.error(t('tenant.skills.detail.assessment.copyFailed'));
+      message.error(t('tenant.skills.detail.assessment.copyFailed'));
     }
   }, [assessmentReport, message, t]);
 
@@ -758,7 +758,7 @@ export const SkillDetail: FC = () => {
         return;
       }
       if (!isManagedSkill(skill)) {
-        message?.info(t('tenant.skills.detail.readOnlySource'));
+        message.info(t('tenant.skills.detail.readOnlySource'));
         return;
       }
       void rollback(skill, versionNumber);

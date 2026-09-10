@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, mem
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, NavLink, Link } from 'react-router-dom';
 
+import { App } from 'antd';
 import { Plus, MessageSquare, Trash2, Edit3, Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -50,7 +51,7 @@ import {
   isContextualTopNavItemActive,
 } from '@/components/layout/tenantNavigation';
 import { PluginSlotOutlet } from '@/components/plugins/PluginSlotOutlet';
-import { LazyButton, LazyInput, LazyTooltip, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyButton, LazyInput, LazyTooltip } from '@/components/ui/lazyAntd';
 
 import { Resizer } from '../agent/Resizer';
 
@@ -821,12 +822,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         projectBasePath: contextualProjectBasePath,
         t: (key, fallback) => (fallback ? t(key, fallback) : t(key)),
       }),
-    [
-      contextualProjectBasePath,
-      generationNavigationItems,
-      t,
-      tenantBasePath,
-    ]
+    [contextualProjectBasePath, generationNavigationItems, t, tenantBasePath]
   );
   const contextualNavGroups = useMemo(
     () => groupTenantTopNavItems(contextualNavItems),
@@ -1264,7 +1260,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const [deleteTarget, setDeleteTarget] = useState<ConversationWithProject | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const pendingDeleteUndoRef = useRef<{ cancelled: boolean } | null>(null);
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
 
   const handleDeleteConversation = useCallback(
     (conv: ConversationWithProject, e: React.MouseEvent) => {
@@ -1308,7 +1304,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       restoreConversationLocal(snapshot);
     };
 
-    messageApi?.open({
+    messageApi.open({
       type: 'success',
       content: (
         <span className="ms-2 inline-flex items-center gap-3">
@@ -1334,7 +1330,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         } catch (error) {
           console.error('Failed to delete conversation:', error);
           restoreConversationLocal(snapshot);
-          messageApi?.error(t('agent.sidebar.deleteFailed', 'Failed to delete conversation'));
+          messageApi.error(t('agent.sidebar.deleteFailed', 'Failed to delete conversation'));
         } finally {
           pendingDeleteUndoRef.current = null;
           setIsDeleting(false);
@@ -1383,7 +1379,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       setNewTitle('');
     } catch (error) {
       console.error('Failed to rename conversation:', error);
-      messageApi?.error(t('agent.sidebar.renameFailed', 'Failed to rename conversation'));
+      messageApi.error(t('agent.sidebar.renameFailed', 'Failed to rename conversation'));
     } finally {
       setIsRenaming(false);
     }

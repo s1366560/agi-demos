@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { App as AntApp } from 'antd';
+
 import { DecisionRecords } from '@/pages/tenant/DecisionRecords';
 import { TrustPolicies } from '@/pages/tenant/TrustPolicies';
+import { projectService } from '@/services/projectService';
+import { workspaceService } from '@/services/workspaceService';
 import { useTenantStore } from '@/stores/tenant';
 import { useTrustStore } from '@/stores/trust';
 
@@ -10,6 +15,8 @@ import { fireEvent, render, screen, waitFor } from '../../utils';
 
 import type { DecisionRecord, TrustPolicy } from '@/services/trustService';
 import type { Tenant } from '@/types/memory';
+import type { Project } from '@/types/memory';
+import type { Workspace } from '@/types/workspace';
 
 const trustServiceMocks = vi.hoisted(() => ({
   createPolicy: vi.fn(),
@@ -18,13 +25,20 @@ const trustServiceMocks = vi.hoisted(() => ({
   resolveApproval: vi.fn(),
 }));
 
-const lazyMessageMocks = vi.hoisted(() => ({
-  error: vi.fn(),
-  success: vi.fn(),
-}));
-
 vi.mock('@/services/trustService', () => ({
   trustService: trustServiceMocks,
+}));
+
+vi.mock('@/services/projectService', () => ({
+  projectService: {
+    listProjects: vi.fn(),
+  },
+}));
+
+vi.mock('@/services/workspaceService', () => ({
+  workspaceService: {
+    listByProject: vi.fn(),
+  },
 }));
 
 vi.mock('@/components/ui/lazyAntd', () => ({
@@ -51,8 +65,23 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   LazyModal: ({ children, open }: { children?: React.ReactNode; open?: boolean }) =>
     open ? <div>{children}</div> : null,
   LazyPopconfirm: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-  useLazyMessage: () => lazyMessageMocks,
 }));
+
+function renderWithProviders(ui: React.ReactElement, options?: { route?: string }) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AntApp className="contents">{ui}</AntApp>
+    </QueryClientProvider>,
+    options
+  );
+}
 
 function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
   return {
@@ -63,6 +92,18 @@ function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
     max_projects: 100,
     max_users: 100,
     max_storage: 1000,
+    created_at: '2026-06-17T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
+  return {
+    id: 'workspace-1',
+    tenant_id: 'tenant-1',
+    project_id: 'project-1',
+    name: 'Default Workspace',
+    created_by: 'admin-1',
     created_at: '2026-06-17T00:00:00Z',
     ...overrides,
   };
@@ -111,6 +152,8 @@ describe('trust admin load errors', () => {
     useTrustStore.getState().reset();
     trustServiceMocks.listDecisions.mockResolvedValue({ items: [] });
     trustServiceMocks.listPolicies.mockResolvedValue({ items: [] });
+    vi.mocked(projectService.listProjects).mockResolvedValue([{ id: 'project-1' } as Project]);
+    vi.mocked(workspaceService.listByProject).mockResolvedValue([makeWorkspace()]);
   });
 
   it('shows a retryable decision-record load error instead of an empty state', async () => {
@@ -118,7 +161,7 @@ describe('trust admin load errors', () => {
       .mockRejectedValueOnce(new Error('decision service unavailable'))
       .mockResolvedValueOnce({ items: [makeDecision()] });
 
-    render(<DecisionRecords />);
+    renderWithProviders(<DecisionRecords />);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Failed to load decision records');
@@ -138,7 +181,7 @@ describe('trust admin load errors', () => {
     useTenantStore.setState({ currentTenant: makeTenant({ id: 'tenant-store-old' }) });
     trustServiceMocks.listDecisions.mockResolvedValue({ items: [makeDecision()] });
 
-    render(
+    renderWithProviders(
       <Routes>
         <Route path="/tenant/:tenantId/decision-records" element={<DecisionRecords />} />
       </Routes>,
@@ -148,7 +191,7 @@ describe('trust admin load errors', () => {
     await waitFor(() => {
       expect(trustServiceMocks.listDecisions).toHaveBeenCalledWith(
         'tenant-route-new',
-        expect.objectContaining({ workspace_id: 'default' })
+        expect.objectContaining({ workspace_id: 'workspace-1' })
       );
     });
     expect(trustServiceMocks.listDecisions).not.toHaveBeenCalledWith(
@@ -162,7 +205,7 @@ describe('trust admin load errors', () => {
       .mockRejectedValueOnce(new Error('policy service unavailable'))
       .mockResolvedValueOnce({ items: [makePolicy()] });
 
-    render(<TrustPolicies />);
+    renderWithProviders(<TrustPolicies />);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Failed to load trust policies');
@@ -182,7 +225,7 @@ describe('trust admin load errors', () => {
     useTenantStore.setState({ currentTenant: makeTenant({ id: 'tenant-store-old' }) });
     trustServiceMocks.listPolicies.mockResolvedValue({ items: [makePolicy()] });
 
-    render(
+    renderWithProviders(
       <Routes>
         <Route path="/tenant/:tenantId/trust-policies" element={<TrustPolicies />} />
       </Routes>,
@@ -192,12 +235,39 @@ describe('trust admin load errors', () => {
     await waitFor(() => {
       expect(trustServiceMocks.listPolicies).toHaveBeenCalledWith(
         'tenant-route-new',
-        expect.objectContaining({ workspace_id: 'default' })
+        expect.objectContaining({ workspace_id: 'workspace-1' })
       );
     });
     expect(trustServiceMocks.listPolicies).not.toHaveBeenCalledWith(
       'tenant-store-old',
       expect.anything()
     );
+  });
+
+  it('does not fire doomed requests when the tenant has no workspace', async () => {
+    vi.mocked(workspaceService.listByProject).mockResolvedValue([]);
+
+    renderWithProviders(<TrustPolicies />);
+
+    expect(
+      await screen.findByText(/No workspace is available in this tenant yet/)
+    ).toBeInTheDocument();
+    expect(trustServiceMocks.listPolicies).not.toHaveBeenCalled();
+  });
+
+  it('treats a 404 workspace lookup as an expected empty state', async () => {
+    const { ApiError, ApiErrorType } = await import('@/services/client/ApiError');
+    trustServiceMocks.listDecisions.mockRejectedValue(
+      new ApiError(ApiErrorType.NOT_FOUND, 'NOT_FOUND', 'Workspace not found', 404)
+    );
+
+    renderWithProviders(<DecisionRecords />);
+
+    expect(
+      await screen.findByText(
+        'The selected workspace no longer exists or is not visible to your account.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

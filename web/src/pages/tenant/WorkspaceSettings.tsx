@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
+import { App } from 'antd';
+
 import { useCurrentWorkspace, useWorkspaceActions, useWorkspaceMembers } from '@/stores/workspace';
 
 import { workspaceService } from '@/services/workspaceService';
@@ -19,7 +21,6 @@ import {
 } from '@/utils/workspaceConfig';
 
 import { Spinner } from '@/components/common/Spinner';
-import { useLazyMessage } from '@/components/ui/lazyAntd';
 import { AutonomySection } from '@/components/workspace/settings/AutonomySection';
 import { CodeContextSection } from '@/components/workspace/settings/CodeContextSection';
 import { DangerZoneSection } from '@/components/workspace/settings/DangerZoneSection';
@@ -53,7 +54,7 @@ export const WorkspaceSettingsPanel: React.FC<{
   workspaceId: string;
 }> = ({ tenantId, projectId, workspaceId }) => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const navigate = useNavigate();
 
   const workspace = useCurrentWorkspace();
@@ -229,10 +230,10 @@ export const WorkspaceSettingsPanel: React.FC<{
       });
       setCurrentWorkspace(updated);
       setDraft(syncDraftFromWorkspace(updated));
-      message?.success(t('workspaceSettings.updateSuccess'));
+      message.success(t('workspaceSettings.updateSuccess'));
       setIsDirty(false);
     } catch {
-      message?.error(t('workspaceSettings.updateFailed'));
+      message.error(t('workspaceSettings.updateFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -253,13 +254,13 @@ export const WorkspaceSettingsPanel: React.FC<{
     setIsDeleting(true);
     try {
       await workspaceService.remove(tenantId, projectId, workspaceId);
-      message?.success(t('workspaceSettings.dangerZone.deleteSuccess'));
+      message.success(t('workspaceSettings.dangerZone.deleteSuccess'));
       // Land on the project workspace list: it always matches a route and
       // reloads fresh data, unlike '../..' which resolved to a non-route
       // (/tenant/{t}/project) and left the main area blank.
       void navigate(`/tenant/${tenantId}/project/${projectId}/workspaces`);
     } catch {
-      message?.error(t('workspaceSettings.dangerZone.deleteFailed'));
+      message.error(t('workspaceSettings.dangerZone.deleteFailed'));
     } finally {
       setIsDeleting(false);
     }

@@ -15,6 +15,7 @@
 
 import { logger } from '../utils/logger';
 
+import { ApiError } from './client/ApiError';
 import { httpClient } from './client/httpClient';
 
 // ============================================================================
@@ -211,6 +212,37 @@ function projectPoolPath(tenantId: string, projectId: string, agentMode: string)
 }
 
 /**
+ * True when the backend rejected the call with HTTP 403.
+ *
+ * `/admin/pool/*` endpoints require the global administrator role
+ * (`require_pool_global_admin`), so tenant-scoped admins always get 403.
+ * Callers use this to stop retries/polling and render a permission empty
+ * state instead of treating it as a transient failure.
+ */
+export function isPoolForbiddenError(error: unknown): boolean {
+  return error instanceof ApiError && error.statusCode === 403;
+}
+
+/**
+ * Endpoints that already emitted a 403 warning this session.
+ *
+ * Polling loops would otherwise re-log the same permission failure on every
+ * cycle, so the warning is emitted once per endpoint and suppressed after.
+ */
+const forbiddenWarnedEndpoints = new Set<string>();
+
+function logPoolFailure(context: string, endpoint: string, error: unknown): void {
+  if (isPoolForbiddenError(error)) {
+    if (!forbiddenWarnedEndpoints.has(endpoint)) {
+      forbiddenWarnedEndpoints.add(endpoint);
+      logger.warn(`${context} Global administrator role required; further 403s are suppressed.`);
+    }
+    return;
+  }
+  logger.error(context, error);
+}
+
+/**
  * Agent Pool management service
  */
 export const poolService = {
@@ -224,7 +256,7 @@ export const poolService = {
       });
       return response;
     } catch (error) {
-      logger.error('[PoolService] Failed to get pool status:', error);
+      logPoolFailure('[PoolService] Failed to get pool status:', `${BASE_PATH}/status`, error);
       throw error;
     }
   },
@@ -242,7 +274,7 @@ export const poolService = {
       });
       return response;
     } catch (error) {
-      logger.error('[PoolService] Failed to list instances:', error);
+      logPoolFailure('[PoolService] Failed to list instances:', `${BASE_PATH}/instances`, error);
       throw error;
     }
   },
@@ -261,7 +293,11 @@ export const poolService = {
       );
       return response;
     } catch (error) {
-      logger.error(`[PoolService] Failed to get instance ${instanceKey}:`, error);
+      logPoolFailure(
+        `[PoolService] Failed to get instance ${instanceKey}:`,
+        `${BASE_PATH}/instances/detail`,
+        error
+      );
       throw error;
     }
   },
@@ -343,7 +379,11 @@ export const poolService = {
       });
       return response;
     } catch (error) {
-      logger.error(`[PoolService] Failed to get tier for project ${projectId}:`, error);
+      logPoolFailure(
+        `[PoolService] Failed to get tier for project ${projectId}:`,
+        `${BASE_PATH}/projects/tier`,
+        error
+      );
       throw error;
     }
   },
@@ -379,7 +419,7 @@ export const poolService = {
       });
       return response;
     } catch (error) {
-      logger.error('[PoolService] Failed to get metrics:', error);
+      logPoolFailure('[PoolService] Failed to get metrics:', `${BASE_PATH}/metrics`, error);
       throw error;
     }
   },

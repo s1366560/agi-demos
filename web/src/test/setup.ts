@@ -146,6 +146,20 @@ const commonTranslations: Record<string, string> = {
   'tenant.decisionRecords.refresh': 'Refresh decision records',
   'tenant.decisionRecords.empty': 'No decision records found',
   'tenant.decisionRecords.loadError': 'Failed to load decision records',
+  'tenant.decisionRecords.noWorkspace':
+    'No workspace is available in this tenant yet. Create a workspace to start recording approval decisions.',
+  'tenant.decisionRecords.workspaceNotFound':
+    'The selected workspace no longer exists or is not visible to your account.',
+  'tenant.trustPolicies.noWorkspace':
+    'No workspace is available in this tenant yet. Create a workspace to manage trust policies.',
+  'tenant.trustPolicies.workspaceNotFound':
+    'The selected workspace no longer exists or is not visible to your account.',
+  'tenant.runtimes.errors.poolForbiddenTitle': 'Global administrator role required',
+  'tenant.runtimes.errors.poolForbiddenDescription':
+    'Agent pool data is restricted to global administrators. Tenant-scoped accounts cannot view pool status or instances, so automatic refresh has been paused.',
+  'admin.poolDashboard.errors.forbiddenTitle': 'Global administrator role required',
+  'admin.poolDashboard.errors.forbiddenDescription':
+    'The agent pool is restricted to global administrators. Your account does not have permission to view pool data, so automatic refresh has been paused.',
   'tenant.decisionRecords.filters.workspaceId': 'Filter by Workspace ID',
   'tenant.decisionRecords.filters.agentId': 'Filter by Agent ID',
   'tenant.decisionRecords.filters.decisionType': 'Decision Type',

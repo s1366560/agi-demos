@@ -3,10 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 
-import { Timeline, Badge, Card, Typography, Alert, Collapse, Space, Pagination } from 'antd';
+import { App, Timeline, Badge, Card, Typography, Alert, Collapse, Space, Pagination } from 'antd';
 
 import { Spinner } from '@/components/common/Spinner';
-import { LazyButton, LazyEmpty, LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyButton, LazyEmpty, LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 import {
   useDeploys,
@@ -36,7 +36,7 @@ export const DeployProgress: React.FC = () => {
   const { t } = useTranslation();
   const { instanceId, deployId } = useParams();
   const navigate = useNavigate();
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
 
   const deploysFromStore = useDeploys();
   const deploys = Array.isArray(deploysFromStore) ? deploysFromStore : [];
@@ -56,7 +56,7 @@ export const DeployProgress: React.FC = () => {
     if (deployId) {
       getDeploy(deployId).catch((err: unknown) => {
         console.error('Failed to get deploy:', err);
-        messageApi?.error(t('tenant.deploy.errors.getFailed', 'Failed to fetch deploy details'));
+        messageApi.error(t('tenant.deploy.errors.getFailed', 'Failed to fetch deploy details'));
       });
     } else if (instanceId) {
       listDeploys({
@@ -65,7 +65,7 @@ export const DeployProgress: React.FC = () => {
         page_size: HISTORY_PAGE_SIZE,
       }).catch((err: unknown) => {
         console.error('Failed to list deploys:', err);
-        messageApi?.error(t('tenant.deploy.errors.listFailed', 'Failed to fetch deploy history'));
+        messageApi.error(t('tenant.deploy.errors.listFailed', 'Failed to fetch deploy history'));
       });
     }
   };
@@ -128,7 +128,7 @@ export const DeployProgress: React.FC = () => {
       })
       .catch((err: unknown) => {
         console.error('Failed to create deploy:', err);
-        messageApi?.error(t('tenant.deploy.errors.createFailed', 'Failed to create new deploy'));
+        messageApi.error(t('tenant.deploy.errors.createFailed', 'Failed to create new deploy'));
       });
   };
 
@@ -311,7 +311,7 @@ export const DeployProgress: React.FC = () => {
                 onConfirm={() => {
                   void cancelDeploy(currentDeploy.id).catch((err: unknown) => {
                     console.error('Failed to cancel deploy:', err);
-                    messageApi?.error(
+                    messageApi.error(
                       t('tenant.deploy.errors.cancelFailed', 'Failed to cancel deploy')
                     );
                   });
@@ -332,7 +332,7 @@ export const DeployProgress: React.FC = () => {
                   onConfirm={() => {
                     void markSuccess(currentDeploy.id).catch((err: unknown) => {
                       console.error('Failed to mark deploy as success:', err);
-                      messageApi?.error(
+                      messageApi.error(
                         t(
                           'tenant.deploy.errors.markSuccessFailed',
                           'Failed to update deploy status'
@@ -355,7 +355,7 @@ export const DeployProgress: React.FC = () => {
                   onConfirm={() => {
                     void markFailed(currentDeploy.id).catch((err: unknown) => {
                       console.error('Failed to mark deploy as failed:', err);
-                      messageApi?.error(
+                      messageApi.error(
                         t('tenant.deploy.errors.markFailedFailed', 'Failed to update deploy status')
                       );
                     });

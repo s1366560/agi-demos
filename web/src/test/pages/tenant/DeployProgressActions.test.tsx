@@ -5,6 +5,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DeployProgress } from '@/pages/tenant/DeployProgress';
 
+import { App } from 'antd';
+
+const appMessageMock = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+  loading: vi.fn(),
+};
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: appMessageMock } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const mocks = vi.hoisted(() => ({
   listDeploys: vi.fn().mockResolvedValue(undefined),
   createDeploy: vi.fn().mockResolvedValue({ id: 'deploy-qa' }),
@@ -37,7 +51,6 @@ vi.mock('@/components/ui/lazyAntd', () => ({
     </button>
   ),
   LazyEmpty: ({ description }: { description: ReactNode }) => <div>{description}</div>,
-  useLazyMessage: () => null,
 }));
 
 function show(path: string) {

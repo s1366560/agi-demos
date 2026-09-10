@@ -2,9 +2,10 @@ import { useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { App } from 'antd';
+
 import { confirmAction } from '@/utils/confirmAction';
 
-import { useLazyMessage } from '@/components/ui/lazyAntd';
 import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
 
 import {
@@ -136,7 +137,7 @@ export interface ArrangementActions {
 
 export function useArrangementActions(params: UseArrangementActionsParams): ArrangementActions {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
 
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
@@ -172,7 +173,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         const currentKey =
           hasHex(agent.hex_q) && hasHex(agent.hex_r) ? coordKey(agent.hex_q, agent.hex_r) : null;
         if (occupiedByOther(q, r, currentKey)) {
-          message?.warning(
+          message.warning(
             t(
               'blackboard.arrangement.messages.slotUnavailable',
               'That workstation is already occupied.'
@@ -194,7 +195,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
           params.setSelection({ kind: 'agent', agentId: updatedAgent.id });
           params.setMoveMode(null);
         } catch (error) {
-          message?.error(getErrorMessage(error));
+          message.error(getErrorMessage(error));
         } finally {
           setPendingAction(null);
         }
@@ -209,7 +210,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
       const currentKey =
         hasHex(node.hex_q) && hasHex(node.hex_r) ? coordKey(node.hex_q, node.hex_r) : null;
       if (occupiedByOther(q, r, currentKey)) {
-        message?.warning(
+        message.warning(
           t(
             'blackboard.arrangement.messages.slotUnavailable',
             'That workstation is already occupied.'
@@ -230,7 +231,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         params.setSelection({ kind: 'node', nodeId: updatedNode.id });
         params.setMoveMode(null);
       } catch (error) {
-        message?.error(getErrorMessage(error));
+        message.error(getErrorMessage(error));
       } finally {
         setPendingAction(null);
       }
@@ -300,7 +301,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         });
         params.setSelection({ kind: 'node', nodeId: createdNode.id });
       } catch (error) {
-        message?.error(getErrorMessage(error));
+        message.error(getErrorMessage(error));
       } finally {
         setPendingAction(null);
       }
@@ -326,11 +327,11 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
           }
         );
         params.setSelection({ kind: 'agent', agentId: agent.id });
-        message?.success(
+        message.success(
           t('blackboard.arrangement.messages.agentPlaced', 'Agent placed on the workstation.')
         );
       } catch (error) {
-        message?.error(getErrorMessage(error));
+        message.error(getErrorMessage(error));
       } finally {
         setPendingAction(null);
       }
@@ -356,11 +357,11 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
           params.selectedAgent.id,
           updatePayload
         );
-        message?.success(
+        message.success(
           t('blackboard.arrangement.messages.agentUpdated', 'Agent styling updated.')
         );
       } catch (error) {
-        message?.error(getErrorMessage(error));
+        message.error(getErrorMessage(error));
       } finally {
         setPendingAction(null);
       }
@@ -378,9 +379,9 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
           title: labelDraft.trim() || params.selectedNode.title,
           data: nextData,
         });
-        message?.success(t('blackboard.arrangement.messages.nodeUpdated', 'Seat details updated.'));
+        message.success(t('blackboard.arrangement.messages.nodeUpdated', 'Seat details updated.'));
       } catch (error) {
-        message?.error(getErrorMessage(error));
+        message.error(getErrorMessage(error));
       } finally {
         setPendingAction(null);
       }
@@ -413,11 +414,11 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         );
         params.setSelection(null);
         params.setMoveMode(null);
-        message?.success(
+        message.success(
           t('blackboard.arrangement.messages.agentRemoved', 'Agent removed from the workstation.')
         );
       } catch (error) {
-        message?.error(getErrorMessage(error));
+        message.error(getErrorMessage(error));
       } finally {
         setPendingAction(null);
       }
@@ -444,11 +445,11 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         await params.deleteTopologyNode(params.workspaceId, params.selectedNode.id);
         params.setSelection(null);
         params.setMoveMode(null);
-        message?.success(
+        message.success(
           t('blackboard.arrangement.messages.nodeRemoved', 'Seat removed from the workstation.')
         );
       } catch (error) {
-        message?.error(getErrorMessage(error));
+        message.error(getErrorMessage(error));
       } finally {
         setPendingAction(null);
       }

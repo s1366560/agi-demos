@@ -3,17 +3,11 @@ import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { Table, Input, Tag, Space } from 'antd';
+import { App, Table, Input, Tag, Space } from 'antd';
 import { Plus, RefreshCw, Search as SearchIcon } from 'lucide-react';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
-import {
-  LazyAlert,
-  LazyButton,
-  LazyPopconfirm,
-  LazySelect,
-  useLazyMessage,
-} from '@/components/ui/lazyAntd';
+import { LazyAlert, LazyButton, LazyPopconfirm, LazySelect } from '@/components/ui/lazyAntd';
 
 import { useDebounce } from '../../hooks/useDebounce';
 import {
@@ -37,7 +31,7 @@ export const InstanceList: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
   // Restore search/status/page from the URL so shared or reloaded links keep the view
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') ?? 'all');
@@ -114,7 +108,7 @@ export const InstanceList: React.FC = () => {
   useEffect(() => {
     if (error) {
       const displayError = error.length > 200 ? `${error.slice(0, 200)}…` : error;
-      messageApi?.error(displayError);
+      messageApi.error(displayError);
     }
   }, [error, messageApi]);
 
@@ -147,10 +141,10 @@ export const InstanceList: React.FC = () => {
     async (id: string) => {
       try {
         await restartInstance(id);
-        messageApi?.success(t('tenant.instances.restartSuccess'));
+        messageApi.success(t('tenant.instances.restartSuccess'));
       } catch (err) {
         console.error('Failed to restart instance:', err);
-        messageApi?.error(t('tenant.instances.restartError', 'Failed to restart instance'));
+        messageApi.error(t('tenant.instances.restartError', 'Failed to restart instance'));
       }
     },
     [restartInstance, t, messageApi]
@@ -160,10 +154,10 @@ export const InstanceList: React.FC = () => {
     async (id: string) => {
       try {
         await deleteInstance(id);
-        messageApi?.success(t('tenant.instances.deleteSuccess'));
+        messageApi.success(t('tenant.instances.deleteSuccess'));
       } catch (err) {
         console.error('Failed to delete instance:', err);
-        messageApi?.error(t('tenant.instances.deleteError', 'Failed to delete instance'));
+        messageApi.error(t('tenant.instances.deleteError', 'Failed to delete instance'));
       }
     },
     [deleteInstance, t, messageApi]

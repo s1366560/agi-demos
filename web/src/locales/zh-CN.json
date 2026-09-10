@@ -2279,6 +2279,8 @@
       "refresh": "刷新决策记录",
       "empty": "没有找到决策记录",
       "loadError": "决策记录加载失败",
+      "noWorkspace": "该租户下还没有可用的工作空间。请先创建工作空间，再查看审批决策记录。",
+      "workspaceNotFound": "所选工作空间已不存在，或当前账号无权访问。",
       "filters": {
         "workspaceId": "按工作空间 ID 过滤",
         "agentId": "按智能体 ID 过滤",
@@ -2340,6 +2342,8 @@
       "refresh": "刷新信任策略",
       "empty": "没有找到信任策略",
       "loadError": "信任策略加载失败",
+      "noWorkspace": "该租户下还没有可用的工作空间。请先创建工作空间，再管理信任策略。",
+      "workspaceNotFound": "所选工作空间已不存在，或当前账号无权访问。",
       "actions": {
         "createPolicy": "创建策略",
         "viewDetails": "查看详情",
@@ -2353,7 +2357,7 @@
       "filters": {
         "workspaceId": "按工作空间 ID 过滤",
         "agentInstanceId": "按智能体实例 ID 过滤",
-        "defaultWorkspaceHint": "未设置工作空间筛选 — 正在显示默认工作空间的策略。"
+        "defaultWorkspaceHint": "未设置工作空间筛选 — 正在显示工作空间 {{workspace}} 的策略。"
       },
       "columns": {
         "actionType": "操作类型",
@@ -2480,6 +2484,8 @@
       "errors": {
         "poolStatus": "Pool 状态不可用",
         "poolInstances": "Pool 实例不可用",
+        "poolForbiddenTitle": "需要全局管理员权限",
+        "poolForbiddenDescription": "Agent Pool 数据仅对全局管理员开放。租户级账号无法查看 Pool 状态与实例，自动刷新已暂停。",
         "projectSandboxes": "项目沙箱不可用",
         "sandboxMetrics": "沙箱指标部分不可用",
         "sandboxMetricsDescription": "{{count}} 个运行中的沙箱行缺少实时资源指标。"
@@ -8966,7 +8972,9 @@
       "resourceUsage": "资源使用情况",
       "prewarmPool": "预热池",
       "errors": {
-        "failedToLoadPoolStatus": "加载池状态失败"
+        "failedToLoadPoolStatus": "加载池状态失败",
+        "forbiddenTitle": "需要全局管理员权限",
+        "forbiddenDescription": "Agent Pool 仅对全局管理员开放。当前账号无权查看 Pool 数据，自动刷新已暂停。"
       },
       "status": {
         "totalInstances": "总实例数",

@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { DatePicker, Input } from 'antd';
+import { App, DatePicker, Input } from 'antd';
 import {
   Activity,
   BookOpen,
@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 
 import { Spinner } from '@/components/common/Spinner';
-import { LazyDrawer, LazyEmpty, useLazyMessage, LazySelect } from '@/components/ui/lazyAntd';
+import { LazyDrawer, LazyEmpty, LazySelect } from '@/components/ui/lazyAntd';
 
 import { useDebounce } from '../../hooks/useDebounce';
 import {
@@ -293,7 +293,7 @@ const RuntimeHookTimeline: React.FC<RuntimeHookTimelineProps> = ({
 
 export const AuditLogs: React.FC = () => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
   const storeTenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
   const tenantId = routeTenantId ?? storeTenantId;
@@ -545,7 +545,7 @@ export const AuditLogs: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      message?.error(error);
+      message.error(error);
       clearError();
     }
   }, [error, message, clearError]);
@@ -583,7 +583,7 @@ export const AuditLogs: React.FC = () => {
         const params =
           viewMode === 'runtime-hooks' ? buildRuntimeHookParams() : buildGenericParams();
         await exportLogs(tenantId, format, params);
-        message?.success(t('tenant.auditLogs.exportSuccess'));
+        message.success(t('tenant.auditLogs.exportSuccess'));
       } catch {
         // handled by store
       } finally {

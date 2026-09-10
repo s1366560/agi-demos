@@ -8,6 +8,18 @@ import { Blackboard } from '@/pages/project/Blackboard';
 import type { Workspace } from '@/types/workspace';
 import type { ReactNode } from 'react';
 
+import { App } from 'antd';
+
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: {
+    success: vi.fn(),
+    error: mockErrorFn,
+    warning: vi.fn(),
+    info: vi.fn(),
+    loading: vi.fn(),
+  },
+} as unknown as ReturnType<typeof App.useApp>);
+
 const operationAvailability = vi.hoisted(() => ({
   snapshot: { owner: {}, available: true },
   listeners: new Set<() => void>(),
@@ -182,9 +194,7 @@ vi.mock('@/components/blackboard/CentralBlackboardContent', () => ({
   ),
 }));
 
-vi.mock('@/components/ui/lazyAntd', () => ({
-  useLazyMessage: () => ({ error: mockErrorFn }),
-}));
+vi.mock('@/components/ui/lazyAntd', () => ({}));
 
 vi.mock('@/pages/project/blackboardRouteUtils', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/pages/project/blackboardRouteUtils')>();

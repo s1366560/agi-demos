@@ -2,12 +2,24 @@ import { act } from 'react';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { App } from 'antd';
+
 import { TaskBoard } from '@/components/workspace/TaskBoard';
 import { buildTaskCreatePayload } from '@/components/workspace/taskBoardCreateModel';
 import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
 import { render, screen, fireEvent } from '@/test/utils';
 
 import type { WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
+
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    loading: vi.fn(),
+  },
+} as unknown as ReturnType<typeof App.useApp>);
 
 vi.mock('@/stores/workspace', () => ({
   useWorkspaceAgents: vi.fn(),

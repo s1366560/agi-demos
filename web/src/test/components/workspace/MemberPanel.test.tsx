@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { App } from 'antd';
+
 import { MemberPanel } from '@/components/workspace/MemberPanel';
 import { render, screen } from '@/test/utils';
 
@@ -16,11 +18,17 @@ vi.mock('@/stores/workspace', () => ({
 
 vi.mock('@/components/ui/lazyAntd', () => ({
   LazyPopconfirm: ({ children }: { children: ReactNode }) => children,
-  useLazyMessage: () => ({
+}));
+
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: {
     success: vi.fn(),
     error: vi.fn(),
-  }),
-}));
+    warning: vi.fn(),
+    info: vi.fn(),
+    loading: vi.fn(),
+  },
+} as unknown as ReturnType<typeof App.useApp>);
 
 vi.mock('@/components/workspace/AddAgentModal', () => ({
   AddAgentModal: () => null,

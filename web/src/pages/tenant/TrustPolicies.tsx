@@ -3,15 +3,18 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router-dom';
 
-import { Input, Button, Form, Pagination, Select } from 'antd';
+import { App as AntApp, Input, Button, Form, Pagination, Select } from 'antd';
 import { Plus, RefreshCw, Search as SearchIcon } from 'lucide-react';
+
+import { ApiError } from '@/services/client/ApiError';
+
+import { useTenantWorkspaces } from '@/hooks/useTenantWorkspaces';
 
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateTime } from '@/utils/date';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
-  useLazyMessage,
   LazyEmpty,
   LazyDrawer,
   LazyModal,
@@ -37,9 +40,18 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * The backend binds trust records to real tenant workspaces; a 404 from the
+ * trust endpoints means the workspace id no longer resolves (deleted or not
+ * visible) — an expected empty state, not a retryable failure.
+ */
+function isWorkspaceNotFoundError(error: unknown): boolean {
+  return error instanceof ApiError && error.statusCode === 404;
+}
+
 export const TrustPolicies: React.FC = () => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = AntApp.useApp();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
   const storeTenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
   const tenantId = routeTenantId ?? storeTenantId;
@@ -61,6 +73,13 @@ export const TrustPolicies: React.FC = () => {
     return Number.isInteger(p) && p > 0 ? p : 1;
   });
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [workspaceNotFound, setWorkspaceNotFound] = useState(false);
+
+  const workspacesQuery = useTenantWorkspaces(tenantId);
+  // Trust records are bound to real workspaces: an explicit filter wins,
+  // otherwise fall back to the first workspace the user can see. The legacy
+  // 'default' placeholder no longer resolves on the backend (404).
+  const effectiveWorkspaceId = appliedFilters.workspace || workspacesQuery.data?.[0]?.id || '';
 
   // Reflect applied filters/pagination in the URL so views survive reload and sharing
   useEffect(() => {
@@ -94,22 +113,32 @@ export const TrustPolicies: React.FC = () => {
 
   const buildParams = useCallback(() => {
     const params: { workspace_id: string; agent_instance_id?: string } = {
-      workspace_id: appliedFilters.workspace || 'default', // Requires a workspace_id; backend treats empty as the default workspace
+      workspace_id: effectiveWorkspaceId,
     };
     if (appliedFilters.agent) params.agent_instance_id = appliedFilters.agent;
     return params;
-  }, [appliedFilters]);
+  }, [effectiveWorkspaceId, appliedFilters]);
 
   const loadPolicies = useCallback(async () => {
     if (!tenantId) return;
+    if (!effectiveWorkspaceId) {
+      // No resolvable workspace yet — never fire a request doomed to 404.
+      return;
+    }
     try {
       await fetchPolicies(tenantId, buildParams());
       setLoadError(null);
+      setWorkspaceNotFound(false);
     } catch (error) {
-      setLoadError(getErrorMessage(error));
+      if (isWorkspaceNotFoundError(error)) {
+        setWorkspaceNotFound(true);
+        setLoadError(null);
+      } else {
+        setLoadError(getErrorMessage(error));
+      }
       clearError();
     }
-  }, [tenantId, fetchPolicies, buildParams, clearError]);
+  }, [tenantId, effectiveWorkspaceId, fetchPolicies, buildParams, clearError]);
 
   useEffect(() => {
     void loadPolicies();
@@ -118,7 +147,7 @@ export const TrustPolicies: React.FC = () => {
   useEffect(() => {
     if (error) {
       if (error !== loadError) {
-        message?.error(error);
+        message.error(error);
       }
       clearError();
     }
@@ -150,7 +179,7 @@ export const TrustPolicies: React.FC = () => {
     setIsCreating(true);
     try {
       await createPolicy(tenantId, values);
-      message?.success(t('tenant.trustPolicies.messages.created'));
+      message.success(t('tenant.trustPolicies.messages.created'));
       setIsCreateModalOpen(false);
       createForm.resetFields();
     } catch {
@@ -165,12 +194,12 @@ export const TrustPolicies: React.FC = () => {
     setRevokingId(policy.id);
     try {
       await revokePolicy(tenantId, policy.id, policy.workspace_id);
-      message?.success(t('tenant.trustPolicies.messages.revoked', 'Trust policy revoked'));
+      message.success(t('tenant.trustPolicies.messages.revoked', 'Trust policy revoked'));
       setSelectedPolicy((current) =>
         current?.id === policy.id ? { ...current, deleted_at: new Date().toISOString() } : current
       );
     } catch {
-      message?.error(
+      message.error(
         t('tenant.trustPolicies.messages.revokeFailed', 'Failed to revoke trust policy')
       );
     } finally {
@@ -273,9 +302,11 @@ export const TrustPolicies: React.FC = () => {
             />
           </div>
         </div>
-        {!appliedFilters.workspace ? (
+        {!appliedFilters.workspace && effectiveWorkspaceId ? (
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            {t('tenant.trustPolicies.filters.defaultWorkspaceHint')}
+            {t('tenant.trustPolicies.filters.defaultWorkspaceHint', {
+              workspace: effectiveWorkspaceId,
+            })}
           </p>
         ) : null}
       </div>
@@ -300,9 +331,17 @@ export const TrustPolicies: React.FC = () => {
       )}
 
       {/* Table */}
-      {isLoading ? (
+      {isLoading || (!effectiveWorkspaceId && workspacesQuery.isLoading) ? (
         <SkeletonLoader type="table" rows={8} />
-      ) : loadError && policies.length === 0 ? null : policies.length === 0 ? (
+      ) : loadError && policies.length === 0 ? null : workspaceNotFound ? (
+        <div className="flex items-center justify-center py-20">
+          <LazyEmpty description={t('tenant.trustPolicies.workspaceNotFound')} />
+        </div>
+      ) : !effectiveWorkspaceId ? (
+        <div className="flex items-center justify-center py-20">
+          <LazyEmpty description={t('tenant.trustPolicies.noWorkspace')} />
+        </div>
+      ) : policies.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <LazyEmpty description={t('tenant.trustPolicies.empty')} />
         </div>

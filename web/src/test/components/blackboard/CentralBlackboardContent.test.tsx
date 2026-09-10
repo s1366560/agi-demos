@@ -13,6 +13,20 @@ import { render, screen, within } from '@/test/utils';
 import type { CentralBlackboardContentProps } from '@/components/blackboard/CentralBlackboardContent';
 import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
 
+import { App } from 'antd';
+
+const appMessageMock = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+  loading: vi.fn(),
+};
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: appMessageMock } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const workspaceActionsMock = {
   createObjective: vi.fn(),
   deleteObjective: vi.fn(),
@@ -30,11 +44,7 @@ vi.mock('@/stores/workspace', () => ({
     }),
 }));
 
-vi.mock('@/components/ui/lazyAntd', () => ({
-  useLazyMessage: () => ({
-    error: vi.fn(),
-  }),
-}));
+vi.mock('@/components/ui/lazyAntd', () => ({}));
 
 vi.mock('@/pages/tenant/WorkspaceSettings', () => ({
   WorkspaceSettingsPanel: () => <div>Workspace settings</div>,

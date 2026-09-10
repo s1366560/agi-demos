@@ -3,6 +3,8 @@ import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 
+import { App } from 'antd';
+
 import { SkillList } from '@/pages/tenant/SkillList';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
@@ -11,6 +13,16 @@ import { fireEvent, render, screen, waitFor } from '../../utils';
 
 import type { SkillResponse, TenantSkillConfigResponse } from '@/types/agent';
 import type { Project, Tenant } from '@/types/memory';
+
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    loading: vi.fn(),
+  },
+} as unknown as ReturnType<typeof App.useApp>);
 
 const navigateMock = vi.hoisted(() => vi.fn());
 const skillApiMock = vi.hoisted(() => ({

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Button, Input, Select, Switch, Tooltip } from 'antd';
+import { App, Button, Input, Select, Switch, Tooltip } from 'antd';
 import {
   AlertCircle,
   Ban,
@@ -19,7 +19,6 @@ import { workspaceAutonomyService, workspaceTaskService } from '@/services/works
 
 import { getPendingLeaderAdjudicationSummary } from '@/utils/workspaceTaskProjection';
 
-import { useLazyMessage } from '@/components/ui/lazyAntd';
 import {
   formatMetadataLabel,
   getRootGoalDisplayState,
@@ -152,7 +151,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
   showAutonomyAction = true,
 }) => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const agents = useWorkspaceAgents();
 
   const [showArchived, setShowArchived] = useState(false);
@@ -276,7 +275,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
       setBlockerReason('');
       setShowAddForm(false);
     } catch {
-      message?.error(t('workspaceDetail.taskBoard.createFailed'));
+      message.error(t('workspaceDetail.taskBoard.createFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -286,7 +285,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
     try {
       await workspaceTaskService.update(workspaceId, taskId, { status: newStatus });
     } catch {
-      message?.error(t('workspaceDetail.taskBoard.updateStatusFailed'));
+      message.error(t('workspaceDetail.taskBoard.updateStatusFailed'));
     }
   };
 
@@ -324,7 +323,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
         await workspaceTaskService.unassignAgent(workspaceId, taskId);
       }
     } catch {
-      message?.error(t('workspaceDetail.taskBoard.assignFailed'));
+      message.error(t('workspaceDetail.taskBoard.assignFailed'));
     }
   };
 
@@ -343,11 +342,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
       ]);
       setSelectedExperience(summary);
       setSelectedExecutionSession(result.session ?? executionSession);
-      message?.success(
+      message.success(
         t('workspaceDetail.taskExperience.recoveryQueued', 'Recovery action has been recorded.')
       );
     } catch {
-      message?.error(
+      message.error(
         t('workspaceDetail.taskExperience.recoveryFailed', 'Recovery action could not be applied.')
       );
     } finally {
@@ -360,28 +359,28 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
     try {
       const result = await workspaceAutonomyService.tick(workspaceId, { force: true });
       if (result.triggered) {
-        message?.success(
+        message.success(
           t(
             'workspaceDetail.taskBoard.forceAutonomySuccess',
             'Autonomy was forced. The leader will continue scheduling tasks.'
           )
         );
       } else if (result.reason === 'no_open_root') {
-        message?.info(
+        message.info(
           t(
             'workspaceDetail.taskBoard.forceAutonomyNoRoot',
             'This workspace has no open goal to progress.'
           )
         );
       } else if (result.reason === 'no_root_needs_progress') {
-        message?.info(
+        message.info(
           t(
             'workspaceDetail.taskBoard.forceAutonomyStable',
             'All goals are stable. No autonomy tick is needed.'
           )
         );
       } else {
-        message?.warning(
+        message.warning(
           t(
             'workspaceDetail.taskBoard.forceAutonomyNoop',
             'Autonomy was not triggered: {{reason}}',
@@ -390,7 +389,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
         );
       }
     } catch {
-      message?.error(
+      message.error(
         t(
           'workspaceDetail.taskBoard.forceAutonomyFailed',
           'Failed to trigger autonomy. Try again later.'

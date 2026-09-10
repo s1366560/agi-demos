@@ -2,9 +2,9 @@ import { useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { useWorkspaceActions } from '@/stores/workspace';
+import { App } from 'antd';
 
-import { useLazyMessage } from '@/components/ui/lazyAntd';
+import { useWorkspaceActions } from '@/stores/workspace';
 
 interface BlackboardActionDeps {
   tenantId: string | undefined;
@@ -18,7 +18,7 @@ export function useBlackboardPageActions({
   selectedWorkspaceId,
 }: BlackboardActionDeps) {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const {
     createPost,
     updatePost,
@@ -41,7 +41,7 @@ export function useBlackboardPageActions({
         await createPost(tenantId, projectId, selectedWorkspaceId, data);
         return true;
       } catch (_createError) {
-        message?.error(t('blackboard.errors.createPost', 'Failed to create post'));
+        message.error(t('blackboard.errors.createPost', 'Failed to create post'));
         return false;
       }
     },
@@ -58,7 +58,7 @@ export function useBlackboardPageActions({
         await createReply(tenantId, projectId, selectedWorkspaceId, postId, { content });
         return true;
       } catch (_createError) {
-        message?.error(t('blackboard.errors.createReply', 'Failed to create reply'));
+        message.error(t('blackboard.errors.createReply', 'Failed to create reply'));
         return false;
       }
     },
@@ -75,7 +75,7 @@ export function useBlackboardPageActions({
         await updatePost(tenantId, projectId, selectedWorkspaceId, postId, data);
         return true;
       } catch (_updateError) {
-        message?.error(t('blackboard.errors.updatePost', 'Failed to update post'));
+        message.error(t('blackboard.errors.updatePost', 'Failed to update post'));
         return false;
       }
     },
@@ -92,7 +92,7 @@ export function useBlackboardPageActions({
         await updateReply(tenantId, projectId, selectedWorkspaceId, postId, replyId, { content });
         return true;
       } catch (_updateError) {
-        message?.error(t('blackboard.errors.updateReply', 'Failed to update reply'));
+        message.error(t('blackboard.errors.updateReply', 'Failed to update reply'));
         return false;
       }
     },
@@ -109,7 +109,7 @@ export function useBlackboardPageActions({
         await loadReplies(tenantId, projectId, selectedWorkspaceId, postId);
         return true;
       } catch (_loadError) {
-        message?.error(t('blackboard.errors.loadReplies', 'Failed to load replies'));
+        message.error(t('blackboard.errors.loadReplies', 'Failed to load replies'));
         return false;
       }
     },
@@ -126,7 +126,7 @@ export function useBlackboardPageActions({
         await deletePost(tenantId, projectId, selectedWorkspaceId, postId);
         return true;
       } catch (_deleteError) {
-        message?.error(t('blackboard.errors.deletePost', 'Failed to delete post'));
+        message.error(t('blackboard.errors.deletePost', 'Failed to delete post'));
         return false;
       }
     },
@@ -142,7 +142,7 @@ export function useBlackboardPageActions({
       try {
         await pinPost(tenantId, projectId, selectedWorkspaceId, postId);
       } catch (_pinError) {
-        message?.error(t('blackboard.errors.pinPost', 'Failed to pin post'));
+        message.error(t('blackboard.errors.pinPost', 'Failed to pin post'));
         return;
       }
     },
@@ -158,7 +158,7 @@ export function useBlackboardPageActions({
       try {
         await unpinPost(tenantId, projectId, selectedWorkspaceId, postId);
       } catch (_unpinError) {
-        message?.error(t('blackboard.errors.unpinPost', 'Failed to unpin post'));
+        message.error(t('blackboard.errors.unpinPost', 'Failed to unpin post'));
         return;
       }
     },
@@ -174,7 +174,7 @@ export function useBlackboardPageActions({
       try {
         await deleteReply(tenantId, projectId, selectedWorkspaceId, postId, replyId);
       } catch (_deleteError) {
-        message?.error(t('blackboard.errors.deleteReply', 'Failed to delete reply'));
+        message.error(t('blackboard.errors.deleteReply', 'Failed to delete reply'));
         return;
       }
     },

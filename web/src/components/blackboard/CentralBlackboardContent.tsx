@@ -3,14 +3,13 @@ import type { ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Button } from 'antd';
+import { App, Button } from 'antd';
 import { DownloadCloud, Plus } from 'lucide-react';
 
 import { useWorkspaceActions } from '@/stores/workspace';
 
 import { WorkspaceSettingsPanel } from '@/pages/tenant/WorkspaceSettings';
 
-import { useLazyMessage } from '@/components/ui/lazyAntd';
 import { GeneEditorModal, type GenePayload } from '@/components/workspace/genes/GeneEditorModal';
 import { GeneImportModal } from '@/components/workspace/genes/GeneImportModal';
 import { GeneList } from '@/components/workspace/genes/GeneList';
@@ -140,7 +139,7 @@ export function CentralBlackboardContent({
   onDeleteReply,
 }: CentralBlackboardContentProps) {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const workspaceActions = useWorkspaceActions();
   const tabListRef = useRef<HTMLDivElement | null>(null);
   const verticalTabListRef = useRef<HTMLDivElement | null>(null);
@@ -182,7 +181,7 @@ export function CentralBlackboardContent({
             is_active: payload.is_active,
           }
         );
-        message?.success(t('workspaceDetail.genes.updateSuccess', 'Gene updated'));
+        message.success(t('workspaceDetail.genes.updateSuccess', 'Gene updated'));
       } else {
         await workspaceActions.createGene(tenantId, projectId, workspaceId, {
           name: payload.name,
@@ -192,11 +191,11 @@ export function CentralBlackboardContent({
           version: payload.version,
           is_active: payload.is_active,
         });
-        message?.success(t('workspaceDetail.genes.createSuccess', 'Gene created'));
+        message.success(t('workspaceDetail.genes.createSuccess', 'Gene created'));
       }
       closeGeneEditor();
     } catch {
-      message?.error(
+      message.error(
         geneEditorState.mode === 'edit'
           ? t('blackboard.errors.updateGene', 'Failed to update gene')
           : t('blackboard.errors.createGene', 'Failed to create gene')

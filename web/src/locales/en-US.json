@@ -2586,6 +2586,8 @@
       "refresh": "Refresh decision records",
       "empty": "No decision records found",
       "loadError": "Failed to load decision records",
+      "noWorkspace": "No workspace is available in this tenant yet. Create a workspace to start recording approval decisions.",
+      "workspaceNotFound": "The selected workspace no longer exists or is not visible to your account.",
       "filters": {
         "workspaceId": "Filter by Workspace ID",
         "agentId": "Filter by Agent ID",
@@ -2647,6 +2649,8 @@
       "refresh": "Refresh trust policies",
       "empty": "No trust policies found",
       "loadError": "Failed to load trust policies",
+      "noWorkspace": "No workspace is available in this tenant yet. Create a workspace to manage trust policies.",
+      "workspaceNotFound": "The selected workspace no longer exists or is not visible to your account.",
       "actions": {
         "createPolicy": "Create Policy",
         "viewDetails": "View Details",
@@ -2660,7 +2664,7 @@
       "filters": {
         "workspaceId": "Filter by Workspace ID",
         "agentInstanceId": "Filter by Agent Instance ID",
-        "defaultWorkspaceHint": "No workspace filter set — showing policies for the default workspace."
+        "defaultWorkspaceHint": "No workspace filter set — showing policies for workspace {{workspace}}."
       },
       "columns": {
         "actionType": "Action Type",
@@ -4703,6 +4707,8 @@
       "errors": {
         "poolStatus": "Pool status unavailable",
         "poolInstances": "Pool instances unavailable",
+        "poolForbiddenTitle": "Global administrator role required",
+        "poolForbiddenDescription": "Agent pool data is restricted to global administrators. Tenant-scoped accounts cannot view pool status or instances, so automatic refresh has been paused.",
         "projectSandboxes": "Project sandboxes unavailable",
         "sandboxMetrics": "Sandbox metrics partially unavailable",
         "sandboxMetricsDescription": "{{count}} running sandbox row(s) loaded without live resource metrics."
@@ -8945,7 +8951,9 @@
       "resourceUsage": "Resource Usage",
       "prewarmPool": "Prewarm Pool",
       "errors": {
-        "failedToLoadPoolStatus": "Failed to load pool status"
+        "failedToLoadPoolStatus": "Failed to load pool status",
+        "forbiddenTitle": "Global administrator role required",
+        "forbiddenDescription": "The agent pool is restricted to global administrators. Your account does not have permission to view pool data, so automatic refresh has been paused."
       },
       "status": {
         "totalInstances": "Total Instances",

@@ -4,6 +4,7 @@ import type { FC, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
+import { App } from 'antd';
 import {
   Activity,
   AlertTriangle,
@@ -27,7 +28,7 @@ import { formatDateTime } from '@/utils/date';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { EvolutionJobRow } from '@/components/skill/EvolutionJobRow';
-import { LazyEmpty, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyEmpty } from '@/components/ui/lazyAntd';
 
 import type {
   SkillEvolutionConfigResponse,
@@ -473,7 +474,7 @@ export const SkillEvolution: FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const [overview, setOverview] = useState<SkillEvolutionOverviewResponse | null>(null);
@@ -513,7 +514,7 @@ export const SkillEvolution: FC = () => {
     } catch {
       const errorMessage = t('tenant.skillEvolution.loadFailed');
       setLoadError(errorMessage);
-      message?.error(errorMessage);
+      message.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -550,10 +551,10 @@ export const SkillEvolution: FC = () => {
     setIsManualRunLoading(true);
     try {
       await skillAPI.runEvolutionOverview({ tenant_id: tenantId });
-      message?.success(t('tenant.skillEvolution.manualRun.success'));
+      message.success(t('tenant.skillEvolution.manualRun.success'));
       await loadOverview();
     } catch {
-      message?.error(t('tenant.skillEvolution.manualRun.failed'));
+      message.error(t('tenant.skillEvolution.manualRun.failed'));
     } finally {
       setIsManualRunLoading(false);
     }
@@ -568,10 +569,10 @@ export const SkillEvolution: FC = () => {
       const saved = await skillAPI.updateEvolutionConfig(policyDraft, { tenant_id: tenantId });
       setPolicyDraft(saved);
       setSavedPolicy(saved);
-      message?.success(t('tenant.skillEvolution.policy.saveSuccess'));
+      message.success(t('tenant.skillEvolution.policy.saveSuccess'));
       await loadOverview();
     } catch {
-      message?.error(t('tenant.skillEvolution.policy.saveFailed'));
+      message.error(t('tenant.skillEvolution.policy.saveFailed'));
     } finally {
       setIsPolicySaving(false);
     }
@@ -612,10 +613,10 @@ export const SkillEvolution: FC = () => {
       setProcessingJobId(jobId);
       try {
         await skillAPI.applyEvolutionJob(jobId, { tenant_id: tenantId });
-        message?.success(t('tenant.skillEvolution.jobs.applySuccess'));
+        message.success(t('tenant.skillEvolution.jobs.applySuccess'));
         await loadOverview();
       } catch {
-        message?.error(t('tenant.skillEvolution.jobs.applyFailed'));
+        message.error(t('tenant.skillEvolution.jobs.applyFailed'));
       } finally {
         setProcessingJobId(null);
       }
@@ -632,10 +633,10 @@ export const SkillEvolution: FC = () => {
       setProcessingJobId(jobId);
       try {
         await skillAPI.rejectEvolutionJob(jobId, { tenant_id: tenantId });
-        message?.success(t('tenant.skillEvolution.jobs.rejectSuccess'));
+        message.success(t('tenant.skillEvolution.jobs.rejectSuccess'));
         await loadOverview();
       } catch {
-        message?.error(t('tenant.skillEvolution.jobs.rejectFailed'));
+        message.error(t('tenant.skillEvolution.jobs.rejectFailed'));
       } finally {
         setProcessingJobId(null);
       }

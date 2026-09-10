@@ -7,9 +7,9 @@ import { useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { skillAPI } from '@/services/skillService';
+import { App } from 'antd';
 
-import { useLazyMessage } from '@/components/ui/lazyAntd';
+import { skillAPI } from '@/services/skillService';
 
 import type { SkillResponse } from '@/types/agent';
 
@@ -62,7 +62,7 @@ export function useSkillRollback({ tenantId, onRolledBack }: UseSkillRollbackOpt
   rollback: (skill: SkillResponse, versionNumber: number) => Promise<void>;
 } {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
 
   const rollback = useCallback(
@@ -75,10 +75,10 @@ export function useSkillRollback({ tenantId, onRolledBack }: UseSkillRollbackOpt
         const updated = await skillAPI.rollback(skill.id, versionNumber, {
           tenant_id: tenantId,
         });
-        message?.success(t('tenant.skills.versions.rollbackSuccess'));
+        message.success(t('tenant.skills.versions.rollbackSuccess'));
         await onRolledBack?.(updated);
       } catch {
-        message?.error(t('tenant.skills.versions.rollbackFailed'));
+        message.error(t('tenant.skills.versions.rollbackFailed'));
       } finally {
         setRollbackVersion(null);
       }

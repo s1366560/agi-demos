@@ -2,14 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Empty } from 'antd';
+import { App, Empty } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 import { Spinner } from '@/components/common/Spinner';
-import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { ChatMessage } from './ChatMessage';
 import { MentionInput } from './MentionInput';
@@ -22,7 +21,7 @@ export interface ChatPanelProps {
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ tenantId, projectId, workspaceId }) => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const { messages, loading, members, agents, loadMessages, sendMessage } = useWorkspaceStore(
     useShallow((state) => ({
       messages: state.chatMessages,
@@ -87,7 +86,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ tenantId, projectId, works
       await sendMessage(tenantId, projectId, workspaceId, content, mentions);
       return true;
     } catch {
-      message?.error(t('workspaceDetail.chat.sendFailed'));
+      message.error(t('workspaceDetail.chat.sendFailed'));
       return false;
     }
   };

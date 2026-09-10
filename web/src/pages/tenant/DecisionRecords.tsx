@@ -3,11 +3,15 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router-dom';
 
-import { Input, Modal, Pagination, Select } from 'antd';
+import { App as AntApp, Input, Modal, Pagination, Select } from 'antd';
 import { RefreshCw, Search as SearchIcon } from 'lucide-react';
 
+import { ApiError } from '@/services/client/ApiError';
+
+import { useTenantWorkspaces } from '@/hooks/useTenantWorkspaces';
+
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
-import { useLazyMessage, LazyEmpty, LazyDrawer, LazyAlert } from '@/components/ui/lazyAntd';
+import { LazyEmpty, LazyDrawer, LazyAlert } from '@/components/ui/lazyAntd';
 
 import { useDebounce } from '../../hooks/useDebounce';
 import { useTenantStore } from '../../stores/tenant';
@@ -31,9 +35,18 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * The backend binds trust records to real tenant workspaces; a 404 from the
+ * trust endpoints means the workspace id no longer resolves (deleted or not
+ * visible) — an expected empty state, not a retryable failure.
+ */
+function isWorkspaceNotFoundError(error: unknown): boolean {
+  return error instanceof ApiError && error.statusCode === 404;
+}
+
 export const DecisionRecords: React.FC = () => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = AntApp.useApp();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
   const storeTenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
   const tenantId = routeTenantId ?? storeTenantId;
@@ -93,6 +106,14 @@ export const DecisionRecords: React.FC = () => {
 
   const [selectedRecord, setSelectedRecord] = useState<DecisionRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [workspaceNotFound, setWorkspaceNotFound] = useState(false);
+
+  const workspacesQuery = useTenantWorkspaces(tenantId);
+  // Trust records are bound to real workspaces: an explicit filter wins,
+  // otherwise fall back to the first workspace the user can see. The legacy
+  // 'default' placeholder no longer resolves on the backend (404).
+  const effectiveWorkspaceId =
+    debouncedWorkspaceFilter.trim() || workspacesQuery.data?.[0]?.id || '';
 
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [resolvingRecord, setResolvingRecord] = useState<DecisionRecord | null>(null);
@@ -101,23 +122,33 @@ export const DecisionRecords: React.FC = () => {
 
   const buildParams = useCallback(() => {
     const params: { workspace_id: string; agent_id?: string; decision_type?: string } = {
-      workspace_id: debouncedWorkspaceFilter || 'default',
+      workspace_id: effectiveWorkspaceId,
     };
     if (debouncedAgentFilter) params.agent_id = debouncedAgentFilter;
     if (typeFilter) params.decision_type = typeFilter;
     return params;
-  }, [debouncedWorkspaceFilter, debouncedAgentFilter, typeFilter]);
+  }, [effectiveWorkspaceId, debouncedAgentFilter, typeFilter]);
 
   const loadDecisions = useCallback(async () => {
     if (!tenantId) return;
+    if (!effectiveWorkspaceId) {
+      // No resolvable workspace yet — never fire a request doomed to 404.
+      return;
+    }
     try {
       await fetchDecisions(tenantId, buildParams());
       setLoadError(null);
+      setWorkspaceNotFound(false);
     } catch (error) {
-      setLoadError(getErrorMessage(error));
+      if (isWorkspaceNotFoundError(error)) {
+        setWorkspaceNotFound(true);
+        setLoadError(null);
+      } else {
+        setLoadError(getErrorMessage(error));
+      }
       clearError();
     }
-  }, [tenantId, fetchDecisions, buildParams, clearError]);
+  }, [tenantId, effectiveWorkspaceId, fetchDecisions, buildParams, clearError]);
 
   useEffect(() => {
     void loadDecisions();
@@ -126,7 +157,7 @@ export const DecisionRecords: React.FC = () => {
   useEffect(() => {
     if (error) {
       if (error !== loadError) {
-        message?.error(error);
+        message.error(error);
       }
       clearError();
     }
@@ -141,7 +172,7 @@ export const DecisionRecords: React.FC = () => {
     setIsResolving(true);
     try {
       await resolveApproval(tenantId, resolvingRecord.id, { decision: resolveAction });
-      message?.success(t('tenant.decisionRecords.messages.resolved'));
+      message.success(t('tenant.decisionRecords.messages.resolved'));
       setIsResolveModalOpen(false);
       setResolvingRecord(null);
       handleRefresh();
@@ -290,9 +321,17 @@ export const DecisionRecords: React.FC = () => {
         />
       )}
 
-      {isInitialLoading ? (
+      {isInitialLoading || (!effectiveWorkspaceId && workspacesQuery.isLoading) ? (
         <SkeletonLoader type="table" rows={8} />
-      ) : loadError && decisions.length === 0 ? null : decisions.length === 0 ? (
+      ) : loadError && decisions.length === 0 ? null : workspaceNotFound ? (
+        <div className="flex items-center justify-center py-20">
+          <LazyEmpty description={t('tenant.decisionRecords.workspaceNotFound')} />
+        </div>
+      ) : !effectiveWorkspaceId ? (
+        <div className="flex items-center justify-center py-20">
+          <LazyEmpty description={t('tenant.decisionRecords.noWorkspace')} />
+        </div>
+      ) : decisions.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <LazyEmpty description={t('tenant.decisionRecords.empty')} />
         </div>

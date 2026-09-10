@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { App } from 'antd';
 import {
   AlertCircle,
   CheckCircle,
@@ -32,7 +33,7 @@ import { registryService } from '@/services/registryService';
 import { formatDateTime } from '@/utils/date';
 
 import { Spinner } from '@/components/common/Spinner';
-import { useLazyMessage, LazyPopconfirm, LazyModal, LazySelect } from '@/components/ui/lazyAntd';
+import { LazyPopconfirm, LazyModal, LazySelect } from '@/components/ui/lazyAntd';
 
 /**
  * Registry configuration interface
@@ -304,7 +305,7 @@ const RegistryForm: React.FC<RegistryFormProps> = ({
 
 export const OrgRegistry: React.FC = () => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const currentTenant = useTenantStore((s) => s.currentTenant);
 
   const [registries, setRegistries] = useState<RegistryConfig[]>([]);
@@ -327,7 +328,7 @@ export const OrgRegistry: React.FC = () => {
       setLoadError(false);
     } catch {
       setLoadError(true);
-      message?.error(t('common.error'));
+      message.error(t('common.error'));
     } finally {
       setIsLoading(false);
     }
@@ -364,9 +365,9 @@ export const OrgRegistry: React.FC = () => {
       try {
         await registryService.remove(currentTenant.id, registry.id);
         setRegistries((prev) => prev.filter((r) => r.id !== registry.id));
-        message?.success(t('tenant.orgSettings.registry.deleteSuccess'));
+        message.success(t('tenant.orgSettings.registry.deleteSuccess'));
       } catch {
-        message?.error(t('common.error'));
+        message.error(t('common.error'));
       }
     },
     [currentTenant?.id, message, t]
@@ -398,17 +399,17 @@ export const OrgRegistry: React.FC = () => {
               r.id === editingRegistry.id ? (updated as unknown as RegistryConfig) : r
             )
           );
-          message?.success(t('tenant.orgSettings.registry.updateSuccess'));
+          message.success(t('tenant.orgSettings.registry.updateSuccess'));
         } else {
           // Create new
           const created = await registryService.create(currentTenant.id, request);
           setRegistries((prev) => [...prev, created as unknown as RegistryConfig]);
-          message?.success(t('tenant.orgSettings.registry.createSuccess'));
+          message.success(t('tenant.orgSettings.registry.createSuccess'));
         }
 
         setIsModalOpen(false);
       } catch {
-        message?.error(t('common.error'));
+        message.error(t('common.error'));
       } finally {
         setIsSubmitting(false);
       }
@@ -442,15 +443,15 @@ export const OrgRegistry: React.FC = () => {
         );
 
         if (result.success) {
-          message?.success(t('tenant.orgSettings.registry.testSuccess'));
+          message.success(t('tenant.orgSettings.registry.testSuccess'));
         } else {
-          message?.error(result.message || t('tenant.orgSettings.registry.testFailed'));
+          message.error(result.message || t('tenant.orgSettings.registry.testFailed'));
         }
       } catch {
         setRegistries((prev) =>
           prev.map((r) => (r.id === registry.id ? { ...r, status: 'error' as const } : r))
         );
-        message?.error(t('common.error'));
+        message.error(t('common.error'));
       } finally {
         setTestingRegistryId(null);
       }

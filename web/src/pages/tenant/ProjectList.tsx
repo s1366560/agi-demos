@@ -3,6 +3,7 @@ import React, { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
+import { App } from 'antd';
 import {
   Brain,
   ChevronDown,
@@ -27,7 +28,7 @@ import { formatDateOnly } from '@/utils/date';
 import { logger } from '@/utils/logger';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
-import { LazyAlert, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyAlert } from '@/components/ui/lazyAntd';
 
 import { formatStorage } from '../../hooks/useDateFormatter';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -85,7 +86,7 @@ const parsePageParam = (value: string | null, fallback: number): number => {
 const ProjectListInner: React.FC<ProjectListProps> = () => {
   const { t } = useTranslation();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const { listProjects, deleteProject, projects, isLoading, error, total, ownerIds } =
     useProjectStore(
@@ -246,7 +247,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         setActiveMenu(null);
       } catch (error) {
         logger.error('Failed to delete project', error);
-        message?.error(t('tenant.projects.deleteFailed'));
+        message.error(t('tenant.projects.deleteFailed'));
       }
     }
   };

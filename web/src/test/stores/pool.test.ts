@@ -1,7 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ApiError, ApiErrorType } from '@/services/client/ApiError';
 import { poolService, type PoolStatus, type PoolAuthorityScope } from '@/services/poolService';
 import { usePoolStore } from '@/stores/pool';
+import { logger } from '@/utils/logger';
+
+vi.mock('@/utils/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 vi.mock('@/services/poolService', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/services/poolService')>();
@@ -64,5 +75,42 @@ describe('pool store scope authority', () => {
     expect(usePoolStore.getState().status).toBeNull();
     expect(usePoolStore.getState().statusError).toBeNull();
     expect(usePoolStore.getState().isStatusLoading).toBe(false);
+  });
+
+  it('flags 403 as a stable forbidden verdict without error logging', async () => {
+    const forbidden = new ApiError(
+      ApiErrorType.AUTHORIZATION,
+      'FORBIDDEN',
+      'Global administrator role required',
+      403
+    );
+    vi.mocked(poolService.getStatus).mockRejectedValueOnce(forbidden);
+
+    usePoolStore.getState().setScope(tenantScope('tenant-a'));
+    await usePoolStore.getState().fetchStatus();
+
+    const state = usePoolStore.getState();
+    expect(state.forbidden).toBe(true);
+    expect(state.statusError).toBe('Global administrator role required');
+    expect(state.isStatusLoading).toBe(false);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('clears the forbidden flag when the scope changes', async () => {
+    const forbidden = new ApiError(
+      ApiErrorType.AUTHORIZATION,
+      'FORBIDDEN',
+      'Global administrator role required',
+      403
+    );
+    vi.mocked(poolService.getStatus).mockRejectedValueOnce(forbidden);
+
+    usePoolStore.getState().setScope(tenantScope('tenant-a'));
+    await usePoolStore.getState().fetchStatus();
+    expect(usePoolStore.getState().forbidden).toBe(true);
+
+    usePoolStore.getState().setScope(tenantScope('tenant-b'));
+    expect(usePoolStore.getState().forbidden).toBe(false);
+    expect(usePoolStore.getState().statusError).toBeNull();
   });
 });

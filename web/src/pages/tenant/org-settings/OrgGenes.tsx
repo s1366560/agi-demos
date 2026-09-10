@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { App } from 'antd';
 import { Dna, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
@@ -12,7 +13,7 @@ import type { GenePolicyResponse, GenePolicyRequest } from '@/services/genePolic
 import { formatDateTime } from '@/utils/date';
 
 import { Spinner } from '@/components/common/Spinner';
-import { useLazyMessage, LazyPopconfirm } from '@/components/ui/lazyAntd';
+import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 interface EditingPolicy {
   policy_key: string;
@@ -23,7 +24,7 @@ interface EditingPolicy {
 
 export const OrgGenes: React.FC = () => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const currentTenant = useTenantStore((s) => s.currentTenant);
 
   const [policies, setPolicies] = useState<GenePolicyResponse[]>([]);
@@ -42,7 +43,7 @@ export const OrgGenes: React.FC = () => {
       setLoadError(false);
     } catch (_err) {
       setLoadError(true);
-      message?.error(t('tenant.orgSettings.genes.fetchError'));
+      message.error(t('tenant.orgSettings.genes.fetchError'));
     } finally {
       setIsLoading(false);
     }
@@ -78,7 +79,7 @@ export const OrgGenes: React.FC = () => {
     if (!currentTenant || !editing) return;
 
     if (!editing.policy_key.trim()) {
-      message?.error(t('tenant.orgSettings.genes.keyRequired'));
+      message.error(t('tenant.orgSettings.genes.keyRequired'));
       return;
     }
 
@@ -86,7 +87,7 @@ export const OrgGenes: React.FC = () => {
     try {
       parsedValue = JSON.parse(editing.policy_value) as Record<string, unknown>;
     } catch (_err) {
-      message?.error(t('tenant.orgSettings.genes.invalidJson'));
+      message.error(t('tenant.orgSettings.genes.invalidJson'));
       return;
     }
 
@@ -100,9 +101,9 @@ export const OrgGenes: React.FC = () => {
       await genePolicyService.upsert(currentTenant.id, editing.policy_key, data);
       await fetchPolicies();
       setEditing(null);
-      message?.success(t('tenant.orgSettings.genes.saveSuccess'));
+      message.success(t('tenant.orgSettings.genes.saveSuccess'));
     } catch (_err) {
-      message?.error(t('tenant.orgSettings.genes.saveError'));
+      message.error(t('tenant.orgSettings.genes.saveError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -116,9 +117,9 @@ export const OrgGenes: React.FC = () => {
       try {
         await genePolicyService.remove(currentTenant.id, policyKey);
         await fetchPolicies();
-        message?.success(t('tenant.orgSettings.genes.deleteSuccess'));
+        message.success(t('tenant.orgSettings.genes.deleteSuccess'));
       } catch (_err) {
-        message?.error(t('tenant.orgSettings.genes.deleteError'));
+        message.error(t('tenant.orgSettings.genes.deleteError'));
       } finally {
         setDeletingKey(null);
       }
@@ -287,9 +288,7 @@ export const OrgGenes: React.FC = () => {
           <p className="text-slate-500 dark:text-slate-400 mb-2">
             {t('tenant.orgSettings.genes.empty')}
           </p>
-          <p className="text-sm text-content-tertiary">
-            {t('tenant.orgSettings.genes.emptyHint')}
-          </p>
+          <p className="text-sm text-content-tertiary">{t('tenant.orgSettings.genes.emptyHint')}</p>
         </div>
       ) : (
         <div className="space-y-3">

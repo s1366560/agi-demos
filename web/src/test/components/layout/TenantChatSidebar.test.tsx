@@ -144,6 +144,17 @@ vi.mock('@/utils/date', () => ({
 }));
 
 vi.mock('antd', () => ({
+  App: {
+    useApp: () => ({
+      message: {
+        success: vi.fn(),
+        error: vi.fn(),
+        warning: vi.fn(),
+        info: vi.fn(),
+        loading: vi.fn(),
+      },
+    }),
+  },
   Modal: Object.assign(
     ({ children, open }: { children: ReactNode; open?: boolean }) =>
       open ? <div>{children}</div> : null,
@@ -195,7 +206,6 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   ),
   LazyBadge: () => <span>processing</span>,
   LazyDropdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  useLazyMessage: () => null,
   LazySelect: ({
     value,
     onChange,

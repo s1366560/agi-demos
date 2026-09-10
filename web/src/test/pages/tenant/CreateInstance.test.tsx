@@ -5,6 +5,12 @@ import { Route, Routes } from 'react-router-dom';
 import { CreateInstance } from '../../../pages/tenant/CreateInstance';
 import { act, fireEvent, render, screen, waitFor } from '../../utils';
 
+import { App } from 'antd';
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: mocks.message } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const mocks = vi.hoisted(() => ({
   currentTenant: { id: 'tenant-1' } as { id: string } | null,
   currentProject: { id: 'project-1', tenant_id: 'tenant-1' } as {
@@ -66,7 +72,6 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       ))}
     </select>
   ),
-  useLazyMessage: () => mocks.message,
 }));
 
 vi.mock('../../../services/instanceTemplateService', () => ({

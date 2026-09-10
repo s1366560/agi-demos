@@ -25,6 +25,7 @@ import { Alert, Badge, Button, Card, Empty, Space, Table, Tag, Typography } from
 import { RefreshCw } from 'lucide-react';
 
 import {
+  isPoolForbiddenError,
   poolService,
   type PoolAuthorityScope,
   type PoolInstance,
@@ -107,16 +108,24 @@ export function UnifiedRuntimes() {
     () => (tenantId ? { scope: 'tenant', tenant_id: tenantId } : { scope: 'global' }),
     [tenantId]
   );
+  // /admin/pool/* requires the global administrator role; a 403 is a stable
+  // permission verdict, so neither retry nor keep polling after it.
+  const poolQueryGuards = {
+    retry: (failureCount: number, error: Error) => !isPoolForbiddenError(error) && failureCount < 3,
+    refetchInterval: (query: { state: { error: Error | null } }) =>
+      isPoolForbiddenError(query.state.error) ? false : 15_000,
+  };
+
   const poolStatusQuery = useQuery<PoolStatus>({
     queryKey: ['runtimes', 'pool', 'status', tenantId ?? 'global'],
     queryFn: () => poolService.getStatus(poolScope),
-    refetchInterval: 15_000,
+    ...poolQueryGuards,
   });
 
   const poolInstancesQuery = useQuery({
     queryKey: ['runtimes', 'pool', 'instances', tenantId ?? 'global'],
     queryFn: () => poolService.listInstances({ page: 1, page_size: 100 }, poolScope),
-    refetchInterval: 15_000,
+    ...poolQueryGuards,
   });
 
   const sandboxesQuery = useQuery<SandboxRuntimeRecord[]>({
@@ -227,9 +236,7 @@ export function UnifiedRuntimes() {
       title: t('tenant.runtimes.columns.loadMemory'),
       key: 'load',
       render: (_: unknown, row: RuntimeRow) => (
-        <Text className="text-xs tabular-nums">
-          {renderLoad(row)}
-        </Text>
+        <Text className="text-xs tabular-nums">{renderLoad(row)}</Text>
       ),
     },
     {
@@ -256,19 +263,40 @@ export function UnifiedRuntimes() {
           <Alert
             type="warning"
             showIcon
-            title={t('tenant.runtimes.errors.poolStatus')}
-            description={poolStatusQuery.error.message}
+            title={
+              isPoolForbiddenError(poolStatusQuery.error)
+                ? t('tenant.runtimes.errors.poolForbiddenTitle')
+                : t('tenant.runtimes.errors.poolStatus')
+            }
+            description={
+              isPoolForbiddenError(poolStatusQuery.error)
+                ? t('tenant.runtimes.errors.poolForbiddenDescription')
+                : poolStatusQuery.error.message
+            }
           />
         )}
 
-        {poolInstancesQuery.isError && (
-          <Alert
-            type="warning"
-            showIcon
-            title={t('tenant.runtimes.errors.poolInstances')}
-            description={poolInstancesQuery.error.message}
-          />
-        )}
+        {/* Skip the instances alert when the status alert already shows the same 403 verdict. */}
+        {poolInstancesQuery.isError &&
+          !(
+            isPoolForbiddenError(poolInstancesQuery.error) &&
+            isPoolForbiddenError(poolStatusQuery.error)
+          ) && (
+            <Alert
+              type="warning"
+              showIcon
+              title={
+                isPoolForbiddenError(poolInstancesQuery.error)
+                  ? t('tenant.runtimes.errors.poolForbiddenTitle')
+                  : t('tenant.runtimes.errors.poolInstances')
+              }
+              description={
+                isPoolForbiddenError(poolInstancesQuery.error)
+                  ? t('tenant.runtimes.errors.poolForbiddenDescription')
+                  : poolInstancesQuery.error.message
+              }
+            />
+          )}
 
         {sandboxesQuery.isError && (
           <Alert

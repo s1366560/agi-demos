@@ -9,6 +9,12 @@ import { fireEvent, render, screen, waitFor } from '../../utils';
 import type { SkillEvolutionConfigResponse, SkillEvolutionOverviewResponse } from '@/types/agent';
 import type { Tenant } from '@/types/memory';
 
+import { App } from 'antd';
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: lazyMessageMocks } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const skillApiMocks = vi.hoisted(() => ({
   getEvolutionOverview: vi.fn(),
   getEvolutionConfig: vi.fn(),
@@ -29,7 +35,6 @@ vi.mock('@/services/skillService', () => ({
 vi.mock('@/components/ui/lazyAntd', () => ({
   LazyEmpty: ({ description }: { description?: string }) => <div>{description}</div>,
   LazyPopconfirm: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-  useLazyMessage: () => lazyMessageMocks,
 }));
 
 const config: SkillEvolutionConfigResponse = {

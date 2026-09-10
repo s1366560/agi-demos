@@ -42,13 +42,15 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('antd', () => ({
+  App: {
+    useApp: () => ({ message: lazyMessage }),
+  },
   Modal: {
     confirm: modalConfirm,
   },
 }));
 
 vi.mock('@/components/ui/lazyAntd', () => ({
-  useLazyMessage: () => lazyMessage,
   LazySkeleton: () => <div data-testid="lazy-skeleton" />,
   Skeleton: {
     Button: ({ active, block, style }: { active?: boolean; block?: boolean; style?: object }) => (

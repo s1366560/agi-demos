@@ -9,6 +9,12 @@ import { useInstanceStore } from '@/stores/instance';
 
 import type { InstanceMemberResponse, InstanceResponse } from '@/services/instanceService';
 
+import { App } from 'antd';
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: lazyMessageMock } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const lazyMessageMock = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
@@ -57,7 +63,6 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       {children}
     </button>
   ),
-  useLazyMessage: () => lazyMessageMock,
 }));
 
 const mockService = vi.mocked(instanceService);

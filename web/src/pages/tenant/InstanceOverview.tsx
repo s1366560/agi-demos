@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Table, Tag, Card } from 'antd';
+import { App, Table, Tag, Card } from 'antd';
 import {
   Eye,
   EyeOff,
@@ -15,7 +15,7 @@ import {
   Minus,
 } from 'lucide-react';
 
-import { LazyAlert, LazyButton, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyAlert, LazyButton } from '@/components/ui/lazyAntd';
 
 import {
   useCurrentInstance,
@@ -67,7 +67,7 @@ function getErrorMessage(error: unknown): string {
 
 export const InstanceOverview: React.FC = () => {
   const { t } = useTranslation();
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
 
   const [showToken, setShowToken] = useState<boolean>(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -114,8 +114,8 @@ export const InstanceOverview: React.FC = () => {
     if (!instanceId) return;
     setActionLoading('refresh');
     fetchInstance(instanceId)
-      .then(() => messageApi?.success(t('common.refreshed', 'Refreshed')))
-      .catch(() => messageApi?.error(t('common.error', 'Error')))
+      .then(() => messageApi.success(t('common.refreshed', 'Refreshed')))
+      .catch(() => messageApi.error(t('common.error', 'Error')))
       .finally(() => {
         setActionLoading(null);
       });
@@ -124,7 +124,7 @@ export const InstanceOverview: React.FC = () => {
   const handleCopyToken = () => {
     if (instance?.proxy_token) {
       void navigator.clipboard.writeText(instance.proxy_token);
-      messageApi?.success(t('tenant.instances.tokenCopied'));
+      messageApi.success(t('tenant.instances.tokenCopied'));
     }
   };
 

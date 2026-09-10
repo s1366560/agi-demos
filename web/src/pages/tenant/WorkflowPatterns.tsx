@@ -13,10 +13,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Modal } from 'antd';
+import { App, Modal } from 'antd';
 import { AlertCircle, RefreshCw, Search } from 'lucide-react';
 
-import { useLazyMessage, LazySkeleton, Skeleton as AntSkeleton } from '@/components/ui/lazyAntd';
+import { LazySkeleton, Skeleton as AntSkeleton } from '@/components/ui/lazyAntd';
 
 import { PatternInspector } from '../../components/agent/patterns/PatternInspector';
 import {
@@ -63,7 +63,7 @@ function toUIPattern(apiPattern: APIWorkflowPattern): UIWorkflowPattern {
 export function WorkflowPatterns() {
   const { tenantId } = useParams<{ tenantId: string }>();
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
 
   // Data state
   const [patterns, setPatterns] = useState<UIWorkflowPattern[]>([]);
@@ -91,7 +91,7 @@ export function WorkflowPatterns() {
       const errorMessage =
         err instanceof PatternServiceError ? err.message : t('tenant.workflowPatterns.loadError');
       setError(errorMessage);
-      message?.error(errorMessage);
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -147,7 +147,7 @@ export function WorkflowPatterns() {
       onOk: async () => {
         try {
           await patternService.deletePattern(patternId, tenantId);
-          message?.success(t('tenant.workflowPatterns.deleteSuccess'));
+          message.success(t('tenant.workflowPatterns.deleteSuccess'));
 
           // Remove from local state
           setPatterns((prev) => prev.filter((p) => p.id !== patternId));
@@ -161,7 +161,7 @@ export function WorkflowPatterns() {
             err instanceof PatternServiceError
               ? err.message
               : t('tenant.workflowPatterns.deleteError');
-          message?.error(errorMessage);
+          message.error(errorMessage);
         }
       },
     });

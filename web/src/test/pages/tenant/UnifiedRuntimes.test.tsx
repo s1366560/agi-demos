@@ -10,12 +10,16 @@ import { render, screen, waitFor } from '../../utils';
 import type { PoolInstance, PoolStatus } from '../../../services/poolService';
 import type { ProjectSandbox, SandboxStats } from '../../../services/projectSandboxService';
 
-vi.mock('../../../services/poolService', () => ({
-  poolService: {
-    getStatus: vi.fn(),
-    listInstances: vi.fn(),
-  },
-}));
+vi.mock('../../../services/poolService', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../services/poolService')>();
+  return {
+    ...original,
+    poolService: {
+      getStatus: vi.fn(),
+      listInstances: vi.fn(),
+    },
+  };
+});
 
 vi.mock('../../../services/projectSandboxService', () => ({
   projectSandboxService: {
@@ -139,5 +143,29 @@ describe('UnifiedRuntimes', () => {
       expect(projectSandboxService.listProjectSandboxes).toHaveBeenCalledWith({ limit: 100 });
       expect(projectSandboxService.getStats).toHaveBeenCalledWith('project-1');
     });
+  });
+
+  it('stops polling and shows a permission state when pool APIs answer 403', async () => {
+    const { ApiError, ApiErrorType } = await import('../../../services/client/ApiError');
+    const forbidden = new ApiError(
+      ApiErrorType.AUTHORIZATION,
+      'FORBIDDEN',
+      'Global administrator role required',
+      403
+    );
+    vi.mocked(poolService.getStatus).mockRejectedValue(forbidden);
+    vi.mocked(poolService.listInstances).mockRejectedValue(forbidden);
+
+    renderUnifiedRuntimes();
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Global administrator role required').length).toBeGreaterThan(0);
+    });
+
+    // 403 is a stable permission verdict: no react-query retries, and the
+    // 15s refetch interval switches itself off after the failure.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(poolService.getStatus).toHaveBeenCalledTimes(1);
+    expect(poolService.listInstances).toHaveBeenCalledTimes(1);
   });
 });

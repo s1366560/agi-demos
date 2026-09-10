@@ -4,14 +4,13 @@ import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import { Card, Tag, Form, Input, Typography, Space, Pagination } from 'antd';
+import { App, Card, Tag, Form, Input, Typography, Space, Pagination } from 'antd';
 import { Copy, Upload, Trash2, Eye, Plus, Search } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
-  useLazyMessage,
   LazyAlert,
   LazyPopconfirm,
   LazyEmpty,
@@ -62,7 +61,7 @@ const templateStatusToPublished = (status: TemplateStatusFilter): boolean | unde
 export const InstanceTemplateList: FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
 
   const templates = useTemplates();
   const isLoading = useTemplateLoading();
@@ -98,7 +97,7 @@ export const InstanceTemplateList: FC = () => {
   );
 
   useEffect(() => {
-    loadTemplates().catch(() => messageApi?.error(t('tenant.templates.fetchError')));
+    loadTemplates().catch(() => messageApi.error(t('tenant.templates.fetchError')));
   }, [loadTemplates, messageApi, t]);
 
   useEffect(() => {
@@ -138,7 +137,7 @@ export const InstanceTemplateList: FC = () => {
         default_config: defaultConfig,
       });
 
-      messageApi?.success(t('tenant.templates.createSuccess'));
+      messageApi.success(t('tenant.templates.createSuccess'));
       setIsCreateModalVisible(false);
       form.resetFields();
     } catch (err) {
@@ -147,9 +146,9 @@ export const InstanceTemplateList: FC = () => {
         return;
       }
       if (err instanceof SyntaxError) {
-        messageApi?.error(t('tenant.templates.invalidJson'));
+        messageApi.error(t('tenant.templates.invalidJson'));
       } else {
-        messageApi?.error(t('tenant.templates.createError', 'Failed to create template'));
+        messageApi.error(t('tenant.templates.createError', 'Failed to create template'));
       }
     }
   };
@@ -157,7 +156,7 @@ export const InstanceTemplateList: FC = () => {
   const handleStatusFilterChange = (value: TemplateStatusFilter) => {
     setStatusFilter(value);
     loadTemplates({ page: 1, status: value }).catch(() =>
-      messageApi?.error(t('tenant.templates.fetchError'))
+      messageApi.error(t('tenant.templates.fetchError'))
     );
   };
 
@@ -168,30 +167,30 @@ export const InstanceTemplateList: FC = () => {
         defaultValue: 'Copy of {{name}}',
       }).slice(0, 200);
       await cloneTemplate(id, cloneName);
-      messageApi?.success(t('tenant.templates.cloneSuccess'));
+      messageApi.success(t('tenant.templates.cloneSuccess'));
       void loadTemplates({ page });
     } catch {
-      messageApi?.error(t('tenant.templates.cloneError', 'Failed to clone template'));
+      messageApi.error(t('tenant.templates.cloneError', 'Failed to clone template'));
     }
   };
 
   const handlePublish = async (id: string) => {
     try {
       await publishTemplate(id);
-      messageApi?.success(t('tenant.templates.publishSuccess'));
+      messageApi.success(t('tenant.templates.publishSuccess'));
       void loadTemplates({ page });
     } catch {
-      messageApi?.error(t('tenant.templates.publishError', 'Failed to publish template'));
+      messageApi.error(t('tenant.templates.publishError', 'Failed to publish template'));
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteTemplate(id);
-      messageApi?.success(t('tenant.templates.deleteSuccess'));
+      messageApi.success(t('tenant.templates.deleteSuccess'));
       void loadTemplates({ page });
     } catch {
-      messageApi?.error(t('tenant.templates.deleteError', 'Failed to delete template'));
+      messageApi.error(t('tenant.templates.deleteError', 'Failed to delete template'));
     }
   };
 
@@ -263,7 +262,7 @@ export const InstanceTemplateList: FC = () => {
               onClick={() => {
                 clearError();
                 loadTemplates({ page }).catch(() =>
-                  messageApi?.error(t('tenant.templates.fetchError'))
+                  messageApi.error(t('tenant.templates.fetchError'))
                 );
               }}
             >

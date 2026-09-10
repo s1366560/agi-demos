@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Input, Tag, InputNumber, Table, Space } from 'antd';
+import { App, Input, Tag, InputNumber, Table, Space } from 'antd';
 import {
   AlertCircle,
   Link,
@@ -23,7 +23,6 @@ import { instanceChannelService } from '@/services/instanceChannelService';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
-  useLazyMessage,
   LazyAlert,
   LazyButton,
   LazySelect,
@@ -115,7 +114,7 @@ const STATUS_COLORS: Record<ChannelStatus, string> = {
 export const InstanceChannels: React.FC = () => {
   const { t } = useTranslation();
   const { instanceId } = useParams<{ instanceId: string }>();
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -140,7 +139,7 @@ export const InstanceChannels: React.FC = () => {
       setChannels(response.items);
     } catch {
       setLoadError(true);
-      messageApi?.error(t('tenant.instances.channels.fetchError'));
+      messageApi.error(t('tenant.instances.channels.fetchError'));
     } finally {
       setIsLoading(false);
     }
@@ -185,7 +184,7 @@ export const InstanceChannels: React.FC = () => {
     if (!instanceId || !formName.trim()) return;
     const typeOption = CHANNEL_TYPE_OPTIONS.find((o) => o.value === formChannelType);
     if (!editingChannel && typeOption && !typeOption.implemented) {
-      messageApi?.error(
+      messageApi.error(
         t('tenant.instances.channels.typeNotSupported', 'Channel type not supported yet')
       );
       return;
@@ -205,7 +204,7 @@ export const InstanceChannels: React.FC = () => {
         });
       }
 
-      messageApi?.success(
+      messageApi.success(
         editingChannel
           ? t('tenant.instances.channels.updateSuccess')
           : t('tenant.instances.channels.createSuccess')
@@ -213,7 +212,7 @@ export const InstanceChannels: React.FC = () => {
       handleCloseModal();
       void fetchChannels();
     } catch {
-      messageApi?.error(t('tenant.instances.channels.saveError'));
+      messageApi.error(t('tenant.instances.channels.saveError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -235,10 +234,10 @@ export const InstanceChannels: React.FC = () => {
       setIsSubmitting(true);
       try {
         await instanceChannelService.deleteChannel(instanceId, channelId);
-        messageApi?.success(t('tenant.instances.channels.deleteSuccess'));
+        messageApi.success(t('tenant.instances.channels.deleteSuccess'));
         void fetchChannels();
       } catch {
-        messageApi?.error(t('tenant.instances.channels.deleteError'));
+        messageApi.error(t('tenant.instances.channels.deleteError'));
       } finally {
         setIsSubmitting(false);
       }
@@ -253,13 +252,13 @@ export const InstanceChannels: React.FC = () => {
       try {
         const result = await instanceChannelService.testConnection(instanceId, channelId);
         if (result.status === 'ok') {
-          messageApi?.success(result.message || t('tenant.instances.channels.testSuccess'));
+          messageApi.success(result.message || t('tenant.instances.channels.testSuccess'));
         } else {
-          messageApi?.error(result.message || t('tenant.instances.channels.testError'));
+          messageApi.error(result.message || t('tenant.instances.channels.testError'));
         }
         void fetchChannels();
       } catch {
-        messageApi?.error(t('tenant.instances.channels.testError'));
+        messageApi.error(t('tenant.instances.channels.testError'));
       } finally {
         setTestingChannelId(null);
       }

@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { App } from 'antd';
 import {
   Database,
   Download,
@@ -26,7 +27,6 @@ import { formatDateOnly, formatDateTime } from '@/utils/date';
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { EditMemoryModal } from '@/components/project/EditMemoryModal';
 import { DeleteConfirmationModal } from '@/components/shared/modals/DeleteConfirmationModal';
-import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { TaskList } from '../../components/tasks/TaskList';
 import { subscribeToTask, TaskStatus } from '../../hooks/useTaskSSE';
@@ -63,7 +63,7 @@ function getProcessingStatusClass(status: Memory['processing_status']): string {
 
 export const MemoryDetail: React.FC = () => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const { projectId, memoryId } = useParams();
   const navigate = useNavigate();
   const { projectBasePath } = useProjectBasePath();
@@ -232,7 +232,7 @@ export const MemoryDetail: React.FC = () => {
       void navigate(`${projectBasePath}/memories`);
     } catch (error) {
       logger.error('[MemoryDetail] Failed to delete memory:', error);
-      message?.error(t('project.memories.detail.delete_failed'));
+      message.error(t('project.memories.detail.delete_failed'));
       setIsDeleting(false);
       setDeleteModalOpen(false);
     }
@@ -253,7 +253,7 @@ export const MemoryDetail: React.FC = () => {
       }
     } catch (error) {
       logger.error('[MemoryDetail] Failed to reprocess:', error);
-      message?.error(
+      message.error(
         t(
           'project.memories.errors.reprocessFailed',
           'Failed to start processing. Please try again.'
@@ -267,10 +267,10 @@ export const MemoryDetail: React.FC = () => {
   const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
-      message?.success(t('memory.detail.linkCopied'));
+      message.success(t('memory.detail.linkCopied'));
     } catch (error) {
       console.error('Failed to copy memory link:', error);
-      message?.error(t('memory.detail.linkCopyFailed'));
+      message.error(t('memory.detail.linkCopyFailed'));
     }
   };
 
@@ -287,10 +287,10 @@ export const MemoryDetail: React.FC = () => {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      message?.success(t('memory.detail.exportSuccess', { defaultValue: 'Memory exported' }));
+      message.success(t('memory.detail.exportSuccess', { defaultValue: 'Memory exported' }));
     } catch (error) {
       logger.error('[MemoryDetail] Failed to export memory:', error);
-      message?.error(t('memory.detail.exportFailed', { defaultValue: 'Failed to export memory' }));
+      message.error(t('memory.detail.exportFailed', { defaultValue: 'Failed to export memory' }));
     }
   };
 

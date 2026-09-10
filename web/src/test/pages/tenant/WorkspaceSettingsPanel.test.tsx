@@ -6,6 +6,20 @@ import { WorkspaceSettingsPanel } from '@/pages/tenant/WorkspaceSettings';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
 import type { Workspace, WorkspaceMember } from '@/types/workspace';
 
+import { App } from 'antd';
+
+const appMessageMock = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+  loading: vi.fn(),
+};
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: appMessageMock } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const mockState = vi.hoisted(() => ({
   workspace: null as Workspace | null,
   members: [] as WorkspaceMember[],
@@ -70,10 +84,6 @@ vi.mock('@/services/workspaceService', () => ({
 
 vi.mock('@/components/ui/lazyAntd', () => ({
   LazyPopconfirm: ({ children }: { children: ReactNode }) => children,
-  useLazyMessage: () => ({
-    success: vi.fn(),
-    error: vi.fn(),
-  }),
 }));
 
 vi.mock('react-router-dom', async () => {

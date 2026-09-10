@@ -6,6 +6,20 @@ import { render, screen } from '@/test/utils';
 
 import type { TopologyEdge, TopologyNode, WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
 
+import { App } from 'antd';
+
+const appMessageMock = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+  loading: vi.fn(),
+};
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: appMessageMock } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -26,13 +40,7 @@ vi.mock('@/stores/workspace', () => ({
   useWorkspaceActions: () => mockActions,
 }));
 
-vi.mock('@/components/ui/lazyAntd', () => ({
-  useLazyMessage: () => ({
-    error: vi.fn(),
-    success: vi.fn(),
-    warning: vi.fn(),
-  }),
-}));
+vi.mock('@/components/ui/lazyAntd', () => ({}));
 
 vi.mock('@/components/workspace/AddAgentModal', () => ({
   AddAgentModal: ({ open }: { open: boolean }) =>

@@ -7,6 +7,12 @@ import { memoryAPI } from '../../../services/api';
 
 import type { Memory } from '../../../types/memory';
 
+import { App } from 'antd';
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: messageMocks } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const messageMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
@@ -30,9 +36,7 @@ vi.mock('../../../hooks/useTaskSSE', () => ({
   },
 }));
 
-vi.mock('@/components/ui/lazyAntd', () => ({
-  useLazyMessage: () => messageMocks,
-}));
+vi.mock('@/components/ui/lazyAntd', () => ({}));
 
 const memory: Memory = {
   id: 'memory-1',

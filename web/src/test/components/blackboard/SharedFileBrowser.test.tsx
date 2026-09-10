@@ -1,6 +1,8 @@
 import { act, fireEvent, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { App } from 'antd';
+
 import { SharedFileBrowser } from '@/components/blackboard/tabs/SharedFileBrowser';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { render, screen } from '@/test/utils';
@@ -62,10 +64,6 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       </button>
     </span>
   ),
-  useLazyMessage: () => ({
-    success: messageSuccessMock,
-    error: messageErrorMock,
-  }),
 }));
 
 function makeFile(overrides: Partial<BlackboardFileItem> = {}): BlackboardFileItem {
@@ -89,6 +87,9 @@ describe('SharedFileBrowser', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: { success: messageSuccessMock, error: messageErrorMock },
+    } as unknown as ReturnType<typeof App.useApp>);
     listFilesMock.mockResolvedValue([]);
     createDirectoryMock.mockResolvedValue(makeFile({ id: 'dir-1', is_directory: true }));
     uploadFileMock.mockResolvedValue(makeFile());

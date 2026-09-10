@@ -3,13 +3,13 @@ import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Button } from 'antd';
+import { App, Button } from 'antd';
 import { Plus, Trash2 } from 'lucide-react';
 
 import { useWorkspaceAgents, useWorkspaceMembers, useWorkspaceActions } from '@/stores/workspace';
 
 import { HostedProjectionBadge } from '@/components/blackboard/HostedProjectionBadge';
-import { LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 import { AddAgentModal } from './AddAgentModal';
 
@@ -21,7 +21,7 @@ export interface MemberPanelProps {
 
 export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspaceId }) => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const members = useWorkspaceMembers();
   const agents = useWorkspaceAgents();
   const { bindAgent, unbindAgent } = useWorkspaceActions();
@@ -39,9 +39,9 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
     async (workspaceAgentId: string) => {
       try {
         await unbindAgent(tenantId, projectId, workspaceId, workspaceAgentId);
-        message?.success(t('workspaceDetail.members.agentRemoved'));
+        message.success(t('workspaceDetail.members.agentRemoved'));
       } catch {
-        message?.error(t('workspaceDetail.members.removeAgentFailed'));
+        message.error(t('workspaceDetail.members.removeAgentFailed'));
       }
     },
     [unbindAgent, tenantId, projectId, workspaceId, message, t]

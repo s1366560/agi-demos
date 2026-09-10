@@ -11,6 +11,12 @@ import { useInstanceStore } from '@/stores/instance';
 import type { InstanceLlmConfigResponse, InstanceResponse } from '@/services/instanceService';
 import type { ProviderConfig, ProviderType } from '@/types/memory';
 
+import { App } from 'antd';
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: lazyMessageMock } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const routerState = vi.hoisted(() => ({
   instanceId: 'instance-old',
   navigate: vi.fn(),
@@ -114,7 +120,6 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       ))}
     </select>
   ),
-  useLazyMessage: () => lazyMessageMock,
 }));
 
 const mockProviderAPI = vi.mocked(providerAPI);

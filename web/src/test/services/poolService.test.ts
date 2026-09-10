@@ -1,13 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ApiError, ApiErrorType } from '../../services/client/ApiError';
 import { httpClient } from '../../services/client/httpClient';
-import { poolService } from '../../services/poolService';
+import { isPoolForbiddenError, poolService } from '../../services/poolService';
+import { logger } from '../../utils/logger';
 
 vi.mock('../../services/client/httpClient', () => ({
   httpClient: {
     get: vi.fn(),
     post: vi.fn(),
     delete: vi.fn(),
+  },
+}));
+
+vi.mock('../../utils/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -70,5 +81,36 @@ describe('poolService authority binding', () => {
     expect(httpClient.post).toHaveBeenNthCalledWith(1, `${path}/pause`);
     expect(httpClient.post).toHaveBeenNthCalledWith(2, `${path}/resume`);
     expect(httpClient.delete).toHaveBeenCalledWith(path);
+  });
+
+  it('flags 403 responses and warns once per endpoint instead of error-spamming', async () => {
+    const forbidden = new ApiError(
+      ApiErrorType.AUTHORIZATION,
+      'FORBIDDEN',
+      'Global administrator role required',
+      403
+    );
+    vi.mocked(httpClient.get).mockRejectedValue(forbidden);
+
+    expect(isPoolForbiddenError(forbidden)).toBe(true);
+    expect(isPoolForbiddenError(new Error('boom'))).toBe(false);
+
+    await expect(poolService.getStatus()).rejects.toBe(forbidden);
+    await expect(poolService.getStatus()).rejects.toBe(forbidden);
+    await expect(poolService.getStatus()).rejects.toBe(forbidden);
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('still logs non-403 failures as errors on every occurrence', async () => {
+    const serverError = new ApiError(ApiErrorType.SERVER, 'INTERNAL_ERROR', 'pool exploded', 500);
+    vi.mocked(httpClient.get).mockRejectedValue(serverError);
+
+    await expect(poolService.getMetrics()).rejects.toBe(serverError);
+    await expect(poolService.getMetrics()).rejects.toBe(serverError);
+
+    expect(logger.error).toHaveBeenCalledTimes(2);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,7 @@ import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { Input, Modal, Pagination, Switch } from 'antd';
+import { App, Input, Modal, Pagination, Switch } from 'antd';
 import {
   Ban,
   Download,
@@ -51,7 +51,7 @@ import {
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { SkillModal } from '@/components/skill/SkillModal';
 import { SkillVersionList } from '@/components/skill/SkillVersionList';
-import { useLazyMessage, LazyPopconfirm, LazySelect, LazyEmpty } from '@/components/ui/lazyAntd';
+import { LazyPopconfirm, LazySelect, LazyEmpty } from '@/components/ui/lazyAntd';
 
 import { getSystemSkillConfigAction } from './skillListModel';
 
@@ -194,7 +194,7 @@ export const SkillList: FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
@@ -395,7 +395,7 @@ export const SkillList: FC = () => {
     }
 
     void listProjects(tenantId, { page_size: 100 }).catch(() => {
-      message?.error(t('tenant.skills.projectsLoadFailed'));
+      message.error(t('tenant.skills.projectsLoadFailed'));
     });
   }, [tenantId, listProjects, message, t]);
 
@@ -409,7 +409,7 @@ export const SkillList: FC = () => {
   // Show error message
   useEffect(() => {
     if (error) {
-      message?.error(error);
+      message.error(error);
     }
   }, [error, message]);
 
@@ -447,11 +447,11 @@ export const SkillList: FC = () => {
       return;
     }
     if (!importFile && !importContent.trim()) {
-      message?.error(t('tenant.skills.import.empty'));
+      message.error(t('tenant.skills.import.empty'));
       return;
     }
     if (importScope === 'project' && !importProjectId) {
-      message?.error(t('tenant.skills.import.projectRequired'));
+      message.error(t('tenant.skills.import.projectRequired'));
       return;
     }
     setIsImporting(true);
@@ -478,12 +478,12 @@ export const SkillList: FC = () => {
           { tenant_id: tenantId }
         );
       }
-      message?.success(t('tenant.skills.import.success'));
+      message.success(t('tenant.skills.import.success'));
       resetImportState();
       setIsImportOpen(false);
       void listSkills(buildListParams({ page: 1 }));
     } catch {
-      message?.error(t('tenant.skills.import.failed'));
+      message.error(t('tenant.skills.import.failed'));
     } finally {
       setIsImporting(false);
     }
@@ -522,7 +522,7 @@ export const SkillList: FC = () => {
 
       try {
         await deleteSkill(id, { tenant_id: tenantId });
-        message?.success(t('tenant.skills.deleteSuccess'));
+        message.success(t('tenant.skills.deleteSuccess'));
       } catch {
         // Error handled by store
       }
@@ -538,10 +538,10 @@ export const SkillList: FC = () => {
 
       try {
         await disableSystemSkill(skillName, { tenant_id: tenantId });
-        message?.success(t('tenant.skills.systemConfig.disableSuccess'));
+        message.success(t('tenant.skills.systemConfig.disableSuccess'));
         void listSkills(buildListParams({ page: 1 }));
       } catch {
-        message?.error(t('tenant.skills.systemConfig.disableFailed'));
+        message.error(t('tenant.skills.systemConfig.disableFailed'));
       }
     },
     [buildListParams, disableSystemSkill, listSkills, message, tenantId, t]
@@ -555,10 +555,10 @@ export const SkillList: FC = () => {
 
       try {
         await enableSystemSkill(skillName, { tenant_id: tenantId });
-        message?.success(t('tenant.skills.systemConfig.restoreSuccess'));
+        message.success(t('tenant.skills.systemConfig.restoreSuccess'));
         void listSkills(buildListParams({ page: 1 }));
       } catch {
-        message?.error(t('tenant.skills.systemConfig.restoreFailed'));
+        message.error(t('tenant.skills.systemConfig.restoreFailed'));
       }
     },
     [buildListParams, enableSystemSkill, listSkills, message, tenantId, t]
@@ -572,9 +572,9 @@ export const SkillList: FC = () => {
 
       try {
         await downloadSkillPackage(skill, tenantId);
-        message?.success(t('tenant.skills.export.success'));
+        message.success(t('tenant.skills.export.success'));
       } catch {
-        message?.error(t('tenant.skills.export.failed'));
+        message.error(t('tenant.skills.export.failed'));
       }
     },
     [message, tenantId, t]
@@ -592,7 +592,7 @@ export const SkillList: FC = () => {
         setVersionRows(result.versions);
       } catch {
         setVersionRows([]);
-        message?.error(t('tenant.skills.versions.loadFailed'));
+        message.error(t('tenant.skills.versions.loadFailed'));
       } finally {
         setIsLoadingVersions(false);
       }

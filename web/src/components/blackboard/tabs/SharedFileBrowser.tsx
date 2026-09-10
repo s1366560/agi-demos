@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { App } from 'antd';
 import {
   ChevronRight,
   Copy,
@@ -29,7 +30,7 @@ import { parseError } from '@/services/client/ApiError';
 import { formatFileSize } from '@/utils/format';
 
 import { AppModal } from '@/components/common';
-import { LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 import { OwnedSurfaceBadge } from '../OwnedSurfaceBadge';
 
@@ -94,7 +95,7 @@ function fileIcon(item: BlackboardFileItem) {
 
 export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFileBrowserProps) {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const fileRefreshCounter = useWorkspaceStore(
     (state) => state.fileRefreshCounters[workspaceId] ?? 0
   );
@@ -214,7 +215,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         'Name cannot be empty or contain slashes.'
       );
       setErrorMessage(errorText);
-      void message?.error(errorText);
+      void message.error(errorText);
       return;
     }
 
@@ -228,7 +229,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
           pendingAction.item.id,
           name
         );
-        void message?.success(t('blackboard.files.renamed', 'Renamed {{name}}', { name }));
+        void message.success(t('blackboard.files.renamed', 'Renamed {{name}}', { name }));
       } else if (pendingAction.kind === 'move') {
         const parentPath = normalizedActionPath();
         await blackboardFileService.moveFile(
@@ -238,7 +239,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
           pendingAction.item.id,
           parentPath
         );
-        void message?.success(
+        void message.success(
           t('blackboard.files.moved', 'Moved {{name}}', { name: pendingAction.item.name })
         );
       } else {
@@ -251,7 +252,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
           parentPath,
           name
         );
-        void message?.success(t('blackboard.files.copied', 'Copied {{name}}', { name }));
+        void message.success(t('blackboard.files.copied', 'Copied {{name}}', { name }));
       }
       setPendingAction(null);
       setActionName('');
@@ -264,7 +265,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         t('blackboard.files.errors.action', 'Failed to update file')
       );
       setErrorMessage(errorText);
-      void message?.error(errorText);
+      void message.error(errorText);
     } finally {
       setActionSubmitting(false);
     }
@@ -277,7 +278,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         'Folder name cannot contain slashes.'
       );
       setErrorMessage(errorText);
-      void message?.error(errorText);
+      void message.error(errorText);
       return;
     }
     setCreating(true);
@@ -292,7 +293,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
       setNewDirName('');
       setShowMkdir(false);
       setErrorMessage(null);
-      void message?.success(t('blackboard.files.folderCreated', 'Folder created'));
+      void message.success(t('blackboard.files.folderCreated', 'Folder created'));
       await fetchFiles();
     } catch (err) {
       const errorText = getErrorMessage(
@@ -300,7 +301,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         t('blackboard.files.errors.createFolder', 'Failed to create folder')
       );
       setErrorMessage(errorText);
-      void message?.error(errorText);
+      void message.error(errorText);
     } finally {
       setCreating(false);
     }
@@ -314,7 +315,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         await blackboardFileService.uploadFile(tenantId, projectId, workspaceId, currentPath, file);
       }
       setErrorMessage(null);
-      void message?.success(
+      void message.success(
         t('blackboard.files.uploaded', 'Uploaded {{count}} file(s)', {
           count: selectedFiles.length,
         })
@@ -326,7 +327,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         t('blackboard.files.errors.upload', 'Failed to upload file')
       );
       setErrorMessage(errorText);
-      void message?.error(errorText);
+      void message.error(errorText);
     } finally {
       setUploading(false);
     }
@@ -363,7 +364,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         t('blackboard.files.errors.download', 'Failed to download file')
       );
       setErrorMessage(errorText);
-      void message?.error(errorText);
+      void message.error(errorText);
     }
   };
 
@@ -378,7 +379,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         item.is_directory
       );
       setErrorMessage(null);
-      void message?.success(t('blackboard.files.deleted', 'Deleted {{name}}', { name: item.name }));
+      void message.success(t('blackboard.files.deleted', 'Deleted {{name}}', { name: item.name }));
       await fetchFiles();
     } catch (err) {
       const errorText = getErrorMessage(
@@ -386,7 +387,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         t('blackboard.files.errors.delete', 'Failed to delete file')
       );
       setErrorMessage(errorText);
-      void message?.error(errorText);
+      void message.error(errorText);
     } finally {
       setDeletingId(null);
     }
@@ -418,7 +419,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         t('blackboard.files.errors.preview', 'Failed to load preview')
       );
       setErrorMessage(errorText);
-      void message?.error(errorText);
+      void message.error(errorText);
     } finally {
       setPreviewLoading(false);
     }
@@ -477,7 +478,9 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
             disabled={loading}
             className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-error/25 bg-surface-light px-3 text-sm font-medium transition hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/5"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+            <RefreshCw
+              className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`}
+            />
             {t('common.retry', 'Retry')}
           </button>
         </div>
@@ -654,7 +657,9 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
               disabled={actionSubmitting}
               className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-slate-50 transition hover:bg-primary/90 disabled:opacity-50"
             >
-              {actionSubmitting && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
+              {actionSubmitting && (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+              )}
               {pendingAction.kind === 'rename'
                 ? t('blackboard.files.rename', 'Rename')
                 : pendingAction.kind === 'move'

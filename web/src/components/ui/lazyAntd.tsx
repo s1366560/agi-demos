@@ -381,23 +381,6 @@ export type {
 // ============================================================================
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function useLazyMessage() {
-  const [messageApi, setMessageApi] = useState<typeof import('antd').message | null>(null);
-
-  useEffect(() => {
-    void import('antd')
-      .then((m) => {
-        setMessageApi(() => m.message);
-      })
-      .catch((error: unknown) => {
-        console.error('Failed to load Ant Design message API:', error);
-      });
-  }, []);
-
-  return messageApi;
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
 export function useLazyNotification() {
   const [notificationApi, setNotificationApi] = useState<typeof import('antd').notification | null>(
     null

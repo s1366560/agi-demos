@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Input, Select } from 'antd';
+import { App, Input, Select } from 'antd';
 import { Loader2, UserMinus, Users } from 'lucide-react';
 
 import { useWorkspaceActions, useWorkspaceMembers } from '@/stores/workspace';
@@ -13,7 +13,7 @@ import { workspaceService } from '@/services/workspaceService';
 import { ROLE_OPTIONS } from '@/pages/tenant/workspaceSettingsModel';
 import { SettingsSection } from '@/pages/tenant/WorkspaceSettingsPrimitives';
 
-import { LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 import type { WorkspaceMember, WorkspaceMemberRole } from '@/types/workspace';
 
@@ -29,7 +29,7 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
   workspaceId,
 }) => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
 
   const members = useWorkspaceMembers();
   const { loadWorkspaceSurface } = useWorkspaceActions();
@@ -46,12 +46,12 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
         user_id: newMemberUserId.trim(),
         role: newMemberRole,
       });
-      message?.success(t('workspaceSettings.members.addSuccess'));
+      message.success(t('workspaceSettings.members.addSuccess'));
       setNewMemberUserId('');
       setNewMemberRole('viewer');
       void loadWorkspaceSurface(tenantId, projectId, workspaceId);
     } catch {
-      message?.error(t('workspaceSettings.members.addFailed'));
+      message.error(t('workspaceSettings.members.addFailed'));
     } finally {
       setIsAddingMember(false);
     }
@@ -71,10 +71,10 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
       if (!tenantId || !projectId || !workspaceId) return;
       try {
         await workspaceService.removeMember(tenantId, projectId, workspaceId, memberId);
-        message?.success(t('workspaceSettings.members.removeSuccess'));
+        message.success(t('workspaceSettings.members.removeSuccess'));
         void loadWorkspaceSurface(tenantId, projectId, workspaceId);
       } catch {
-        message?.error(t('workspaceSettings.members.removeFailed'));
+        message.error(t('workspaceSettings.members.removeFailed'));
       }
     },
     [tenantId, projectId, workspaceId, message, t, loadWorkspaceSurface]
@@ -85,10 +85,10 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
       if (!tenantId || !projectId || !workspaceId) return;
       try {
         await workspaceService.updateMemberRole(tenantId, projectId, workspaceId, memberId, role);
-        message?.success(t('workspaceSettings.members.roleUpdateSuccess'));
+        message.success(t('workspaceSettings.members.roleUpdateSuccess'));
         void loadWorkspaceSurface(tenantId, projectId, workspaceId);
       } catch {
-        message?.error(t('workspaceSettings.members.roleUpdateFailed'));
+        message.error(t('workspaceSettings.members.roleUpdateFailed'));
       }
     },
     [tenantId, projectId, workspaceId, message, t, loadWorkspaceSurface]

@@ -29,13 +29,7 @@ import {
 import { instanceFileService } from '@/services/instanceFileService';
 
 import { Spinner } from '@/components/common/Spinner';
-import {
-  useLazyMessage,
-  LazyAlert,
-  LazyEmpty,
-  LazyModal,
-  LazyButton,
-} from '@/components/ui/lazyAntd';
+import { LazyAlert, LazyEmpty, LazyModal, LazyButton } from '@/components/ui/lazyAntd';
 
 import { formatDate } from './utils/instanceUtils';
 
@@ -94,8 +88,7 @@ const countTreeNodes = (nodes: FileNode[], type: FileNode['type']): number =>
 export const InstanceFiles: React.FC = () => {
   const { t } = useTranslation();
   const { instanceId } = useParams<{ instanceId: string }>();
-  const messageApi = useLazyMessage();
-  const { modal } = App.useApp();
+  const { message: messageApi, modal } = App.useApp();
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -124,7 +117,7 @@ export const InstanceFiles: React.FC = () => {
       setFileTree(response.tree);
     } catch {
       setLoadError(true);
-      messageApi?.error(t('tenant.instances.files.fetchError'));
+      messageApi.error(t('tenant.instances.files.fetchError'));
     } finally {
       setIsLoading(false);
     }
@@ -243,7 +236,7 @@ export const InstanceFiles: React.FC = () => {
         setPreviewContent(response.content);
       } catch {
         setPreviewError(true);
-        messageApi?.error(t('tenant.instances.files.previewError'));
+        messageApi.error(t('tenant.instances.files.previewError'));
       } finally {
         setIsPreviewLoading(false);
       }
@@ -265,9 +258,9 @@ export const InstanceFiles: React.FC = () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        messageApi?.success(t('tenant.instances.files.downloadSuccess'));
+        messageApi.success(t('tenant.instances.files.downloadSuccess'));
       } catch {
-        messageApi?.error(t('tenant.instances.files.downloadError'));
+        messageApi.error(t('tenant.instances.files.downloadError'));
       }
     },
     [instanceId, messageApi, t]
@@ -280,11 +273,11 @@ export const InstanceFiles: React.FC = () => {
       setIsSubmitting(true);
       try {
         await instanceFileService.deleteFile(instanceId, node.key);
-        messageApi?.success(t('tenant.instances.files.deleteSuccess'));
+        messageApi.success(t('tenant.instances.files.deleteSuccess'));
         setSelectedNode(null);
         void fetchFileTree();
       } catch {
-        messageApi?.error(t('tenant.instances.files.deleteError'));
+        messageApi.error(t('tenant.instances.files.deleteError'));
       } finally {
         setIsSubmitting(false);
       }
@@ -302,7 +295,7 @@ export const InstanceFiles: React.FC = () => {
         createParentPath ? `${createParentPath}/${createName}` : createName,
         createType
       );
-      messageApi?.success(
+      messageApi.success(
         createType === 'folder'
           ? t('tenant.instances.files.createFolderSuccess')
           : t('tenant.instances.files.createFileSuccess')
@@ -312,7 +305,7 @@ export const InstanceFiles: React.FC = () => {
       setCreateParentPath('');
       void fetchFileTree();
     } catch {
-      messageApi?.error(t('tenant.instances.files.createError'));
+      messageApi.error(t('tenant.instances.files.createError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -330,11 +323,11 @@ export const InstanceFiles: React.FC = () => {
       try {
         const directory = selectedNode?.type === 'folder' ? selectedNode.key : '';
         await instanceFileService.uploadFile(instanceId, file, directory);
-        messageApi?.success(t('tenant.instances.files.uploadSuccess'));
+        messageApi.success(t('tenant.instances.files.uploadSuccess'));
         void fetchFileTree();
       } catch {
         setUploadError(true);
-        messageApi?.error(t('tenant.instances.files.uploadError'));
+        messageApi.error(t('tenant.instances.files.uploadError'));
       } finally {
         setIsUploading(false);
       }

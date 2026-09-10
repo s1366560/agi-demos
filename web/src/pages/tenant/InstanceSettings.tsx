@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Input } from 'antd';
+import { App, Input } from 'antd';
 import { Trash2 } from 'lucide-react';
 
 import { providerAPI } from '@/services/api';
@@ -19,13 +19,7 @@ import type { InstanceLlmConfigUpdate } from '@/services/instanceService';
 import { setUnsavedChanges } from '@/utils/unsavedChanges';
 
 import { Spinner } from '@/components/common/Spinner';
-import {
-  useLazyMessage,
-  LazyPopconfirm,
-  LazyButton,
-  LazySelect,
-  LazyAlert,
-} from '@/components/ui/lazyAntd';
+import { LazyPopconfirm, LazyButton, LazySelect, LazyAlert } from '@/components/ui/lazyAntd';
 
 import {
   useCurrentInstance,
@@ -41,7 +35,7 @@ const { TextArea } = Input;
 
 export const InstanceSettings: React.FC = () => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const { instanceId } = useParams<{ instanceId: string }>();
 
@@ -116,7 +110,7 @@ export const InstanceSettings: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      message?.error(error);
+      message.error(error);
       clearError();
     }
   }, [error, message, clearError]);
@@ -184,7 +178,7 @@ export const InstanceSettings: React.FC = () => {
         if (llmConfigRequestId.current !== requestId) return;
 
         console.error('Failed to get LLM config:', err);
-        message?.error(t('tenant.instances.settings.llmConfigLoadError'));
+        message.error(t('tenant.instances.settings.llmConfigLoadError'));
       })
       .finally(() => {
         if (llmConfigRequestId.current !== requestId) return;
@@ -244,7 +238,7 @@ export const InstanceSettings: React.FC = () => {
     if (!instanceId || !isDirty) return;
     try {
       await updateInstance(instanceId, { name, description });
-      message?.success(t('tenant.instances.settings.updateSuccess'));
+      message.success(t('tenant.instances.settings.updateSuccess'));
       setIsDirty(false);
     } catch (err) {
       console.error('Failed to update instance:', err);
@@ -255,7 +249,7 @@ export const InstanceSettings: React.FC = () => {
     if (!instanceId) return;
     try {
       await deleteInstance(instanceId);
-      message?.success(t('tenant.instances.settings.deleteSuccess'));
+      message.success(t('tenant.instances.settings.deleteSuccess'));
       void navigate('../..');
     } catch (err) {
       console.error('Failed to delete instance:', err);
@@ -282,10 +276,10 @@ export const InstanceSettings: React.FC = () => {
         const result = await instanceService.updateLlmConfig(instanceId, payload);
         setHasApiKeyOverride(result.has_api_key_override);
         setLlmApiKeyOverride('');
-        message?.success(t('tenant.instances.settings.llmConfigUpdateSuccess'));
+        message.success(t('tenant.instances.settings.llmConfigUpdateSuccess'));
       } catch (err) {
         console.error('Failed to update LLM config:', err);
-        message?.error(t('common.error'));
+        message.error(t('common.error'));
       } finally {
         setLlmConfigSaving(false);
       }

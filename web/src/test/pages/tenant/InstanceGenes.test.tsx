@@ -13,6 +13,12 @@ import type {
   InstanceGeneResponse,
 } from '@/services/geneMarketService';
 
+import { App } from 'antd';
+
+vi.spyOn(App, 'useApp').mockReturnValue({ message: lazyMessageMock } as unknown as ReturnType<
+  typeof App.useApp
+>);
+
 const navigateMock = vi.hoisted(() => vi.fn());
 const lazyMessageMock = vi.hoisted(() => ({
   error: vi.fn(),
@@ -87,7 +93,6 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       </div>
     ) : null,
   LazyPopconfirm: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  useLazyMessage: () => lazyMessageMock,
 }));
 
 const mockService = vi.mocked(geneMarketService);

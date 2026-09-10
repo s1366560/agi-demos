@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Input, Pagination, Tag, Table } from 'antd';
+import { App, Input, Pagination, Tag, Table } from 'antd';
 import {
   BarChart,
   CheckCircle,
@@ -21,7 +21,6 @@ import { useDebounce } from '@/hooks/useDebounce';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
-  useLazyMessage,
   LazyAlert,
   LazyButton,
   LazyPopconfirm,
@@ -54,7 +53,7 @@ export const InstanceGenes: React.FC = () => {
   const { t } = useTranslation();
   const { tenantId, instanceId } = useParams<{ tenantId: string; instanceId: string }>();
   const navigate = useNavigate();
-  const messageApi = useLazyMessage();
+  const { message: messageApi } = App.useApp();
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -103,7 +102,7 @@ export const InstanceGenes: React.FC = () => {
         if (!isLatestRequest()) return;
         console.error('Failed to fetch instance genes:', err);
         setLoadError(true);
-        messageApi?.error(t('tenant.instances.genes.fetchError'));
+        messageApi.error(t('tenant.instances.genes.fetchError'));
       } finally {
         if (isLatestRequest()) {
           setIsLoading(false);
@@ -141,7 +140,7 @@ export const InstanceGenes: React.FC = () => {
         setAvailableGenes([]);
         setAvailableGenesTotal(0);
         setAvailableGenesError(t('tenant.instances.genes.availableGenesError'));
-        messageApi?.error(t('tenant.instances.genes.availableGenesError'));
+        messageApi.error(t('tenant.instances.genes.availableGenesError'));
       } finally {
         if (isLatestRequest()) {
           setIsGenesLoading(false);
@@ -175,13 +174,13 @@ export const InstanceGenes: React.FC = () => {
         { tenant_id: tenantId }
       );
       // Feedback copy matches the shared InstallEntityModal used by GeneDetail
-      messageApi?.success(t('tenant.genes.installSuccess', 'Gene installed successfully'));
+      messageApi.success(t('tenant.genes.installSuccess', 'Gene installed successfully'));
       setIsAddModalOpen(false);
       setSelectedGeneId(null);
       void fetchInstanceGenes(1);
     } catch (err) {
       console.error('Failed to install gene:', err);
-      messageApi?.error(t('tenant.genes.installError', 'Failed to install gene'));
+      messageApi.error(t('tenant.genes.installError', 'Failed to install gene'));
     } finally {
       setIsSubmitting(false);
     }
@@ -195,13 +194,13 @@ export const InstanceGenes: React.FC = () => {
         await geneMarketService.uninstallGene(instanceId, instanceGeneId, {
           tenant_id: tenantId,
         });
-        messageApi?.success(t('tenant.instances.genes.uninstallSuccess'));
+        messageApi.success(t('tenant.instances.genes.uninstallSuccess'));
         const nextPage =
           instanceGenes.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
         void fetchInstanceGenes(nextPage);
       } catch (err) {
         console.error('Failed to uninstall gene:', err);
-        messageApi?.error(t('tenant.instances.genes.uninstallError'));
+        messageApi.error(t('tenant.instances.genes.uninstallError'));
       } finally {
         setIsSubmitting(false);
       }

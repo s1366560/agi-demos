@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { App } from 'antd';
 import { Eye, EyeOff, Loader2, Mail, MailCheck, RefreshCcw, Send, Trash2 } from 'lucide-react';
 
 import { useSmtpConfig, useSmtpLoading, useSmtpActions } from '@/stores/smtp';
@@ -11,11 +12,11 @@ import { smtpService } from '@/services/smtpService';
 import type { SmtpConfigCreate } from '@/services/smtpService';
 
 import { Spinner } from '@/components/common/Spinner';
-import { useLazyMessage, LazyPopconfirm } from '@/components/ui/lazyAntd';
+import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 export const OrgSmtp: React.FC = () => {
   const { t } = useTranslation();
-  const message = useLazyMessage();
+  const { message } = App.useApp();
   const currentTenant = useTenantStore((s) => s.currentTenant);
 
   const config = useSmtpConfig();
@@ -65,12 +66,12 @@ export const OrgSmtp: React.FC = () => {
   const handleSave = useCallback(async () => {
     if (!currentTenant) return;
     if (!host || !port || !username || !fromEmail) {
-      message?.error(t('common.requiredFields', 'Please fill all required fields'));
+      message.error(t('common.requiredFields', 'Please fill all required fields'));
       return;
     }
 
     if (!config && !password) {
-      message?.error(
+      message.error(
         t('tenant.orgSettings.smtp.passwordRequired', 'Password is required for new config')
       );
       return;
@@ -91,11 +92,11 @@ export const OrgSmtp: React.FC = () => {
       await smtpService.upsertConfig(currentTenant.id, data);
       await fetchConfig(currentTenant.id);
       setPassword('');
-      message?.success(
+      message.success(
         t('tenant.orgSettings.smtp.saveSuccess', 'SMTP configuration saved successfully')
       );
     } catch (_err) {
-      message?.error(t('tenant.orgSettings.smtp.saveError', 'Failed to save SMTP configuration'));
+      message.error(t('tenant.orgSettings.smtp.saveError', 'Failed to save SMTP configuration'));
     } finally {
       setIsSubmitting(false);
     }
@@ -117,7 +118,7 @@ export const OrgSmtp: React.FC = () => {
   const handleTest = useCallback(async () => {
     if (!currentTenant) return;
     if (!recipientEmail) {
-      message?.error(
+      message.error(
         t('tenant.orgSettings.smtp.recipientRequired', 'Recipient email is required for testing')
       );
       return;
@@ -126,10 +127,10 @@ export const OrgSmtp: React.FC = () => {
     setIsTesting(true);
     try {
       await smtpService.testSmtp(currentTenant.id, { recipient_email: recipientEmail });
-      message?.success(t('tenant.orgSettings.smtp.testSuccess', 'Test email sent successfully'));
+      message.success(t('tenant.orgSettings.smtp.testSuccess', 'Test email sent successfully'));
       setRecipientEmail('');
     } catch (_err) {
-      message?.error(t('tenant.orgSettings.smtp.testError', 'Failed to send test email'));
+      message.error(t('tenant.orgSettings.smtp.testError', 'Failed to send test email'));
     } finally {
       setIsTesting(false);
     }
@@ -142,11 +143,11 @@ export const OrgSmtp: React.FC = () => {
     try {
       await smtpService.deleteConfig(currentTenant.id);
       await fetchConfig(currentTenant.id);
-      message?.success(
+      message.success(
         t('tenant.orgSettings.smtp.deleteSuccess', 'SMTP configuration deleted successfully')
       );
     } catch (_err) {
-      message?.error(
+      message.error(
         t('tenant.orgSettings.smtp.deleteError', 'Failed to delete SMTP configuration')
       );
     } finally {
