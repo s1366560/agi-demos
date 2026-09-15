@@ -1,0 +1,17 @@
+[
+  {
+    "path": "/api/v1/tenants/",
+    "status": 200,
+    "redirect": null
+  },
+  {
+    "path": "/api/v1/projects/?tenant_id=02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "status": 200,
+    "redirect": null
+  },
+  {
+    "path": "/api/v1/projects?tenant_id=02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "status": 404,
+    "redirect": null
+  }
+]

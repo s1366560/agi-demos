@@ -1,0 +1,48 @@
+{
+  "target_digest": "sha256:0577993e255866662231b36e6524bb194b233a57cc379038eb6882a7b3098014",
+  "applied": true,
+  "scopes": [
+    {
+      "kind": "root",
+      "session_id": null,
+      "before_revision": 15,
+      "before_digest": "sha256:d2c6ae541b6547e809528616ea15f8a9f76e8bc860a4baea30f33021e1eaffa4",
+      "after_revision": 16,
+      "profile_source_preserved": true
+    },
+    {
+      "kind": "session",
+      "session_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+      "before_revision": 6,
+      "before_digest": "sha256:d2c6ae541b6547e809528616ea15f8a9f76e8bc860a4baea30f33021e1eaffa4",
+      "after_revision": 7,
+      "profile_source_preserved": true
+    },
+    {
+      "kind": "session",
+      "session_id": "c0d589a0-9f67-5c20-871e-f00c8bc756e2",
+      "before_revision": 5,
+      "before_digest": "sha256:d2c6ae541b6547e809528616ea15f8a9f76e8bc860a4baea30f33021e1eaffa4",
+      "after_revision": 6,
+      "profile_source_preserved": true
+    },
+    {
+      "kind": "session",
+      "session_id": "6032f5fb-4941-549f-ae2f-b87e5b34fa3c",
+      "before_revision": 5,
+      "before_digest": "sha256:d2c6ae541b6547e809528616ea15f8a9f76e8bc860a4baea30f33021e1eaffa4",
+      "after_revision": 6,
+      "profile_source_preserved": true
+    },
+    {
+      "kind": "session",
+      "session_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "before_revision": 3,
+      "before_digest": "sha256:d2c6ae541b6547e809528616ea15f8a9f76e8bc860a4baea30f33021e1eaffa4",
+      "after_revision": 4,
+      "profile_source_preserved": true
+    }
+  ],
+  "actor_id": "2d0e6146-6c8c-4054-92d1-df0dcd916987",
+  "temporary_identity_deactivated": true
+}

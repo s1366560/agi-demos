@@ -1,0 +1,10 @@
+{
+  "message": "Scoped chat configuration was rejected",
+  "code": "staging_failed",
+  "message_id": "fb2412a9-5790-5944-b88f-c517abf2d8a3",
+  "event_time_us": 1789359716510318,
+  "event_counter": 0,
+  "run_id": "fb2412a9-5790-5944-b88f-c517abf2d8a3",
+  "run_revision": 2,
+  "status": "failed"
+}

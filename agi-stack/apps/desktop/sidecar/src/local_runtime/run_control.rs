@@ -142,26 +142,36 @@ pub(super) async fn resume_run(
             "status": "restart_requested",
             "run": run,
         });
+        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+        let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
+            authenticated.clone(),
+            plugin_generation.clone(),
+            &conversation,
+            &run.message_id,
+            Some(&run.id),
+        );
         let runtime = Arc::clone(&state);
         let conversation_id = conversation.id;
         let project_id = conversation.project_id;
         let message = run.request_message;
         let message_id = run.message_id;
         let run_id = run.id;
-        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
         tokio::spawn(async move {
-            runtime
-                .run_agent_message_for_role_with_generation(
-                    conversation_id,
-                    project_id,
-                    message,
-                    message_id,
-                    None,
-                    Some(run_id),
-                    Some(control),
-                    plugin_generation,
-                )
-                .await;
+            super::knowledge_authority_v2::agent_access::scope(native_authorization, async move {
+                runtime
+                    .run_agent_message_for_role_with_generation(
+                        conversation_id,
+                        project_id,
+                        message,
+                        message_id,
+                        None,
+                        Some(run_id),
+                        Some(control),
+                        plugin_generation,
+                        None,
+                    )
+                    .await;
+            }).await;
         });
         return Ok(Json(response));
     }
@@ -212,17 +222,26 @@ pub(super) async fn resume_run(
     let goal = accepted.goal;
     let runtime = Arc::clone(&state);
     let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+    let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
+        authenticated.clone(),
+        plugin_generation.clone(),
+        &conversation,
+        &message_id,
+        Some(&running.id),
+    );
     tokio::spawn(async move {
-        runtime
-            .continue_after_hitl_with_generation(
-                conversation,
-                message_id,
-                goal,
-                Some(running),
-                control,
-                plugin_generation,
-            )
-            .await;
+        super::knowledge_authority_v2::agent_access::scope(native_authorization, async move {
+            runtime
+                .continue_after_hitl_with_generation(
+                    conversation,
+                    message_id,
+                    goal,
+                    Some(running),
+                    control,
+                    plugin_generation,
+                )
+                .await;
+        }).await;
     });
     Ok(Json(response))
 }
@@ -601,17 +620,26 @@ pub(super) async fn fork_recovery_run(
     let running_for_task = running.clone();
     let message_id = running.message_id.clone();
     let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+    let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
+        authenticated.clone(),
+        plugin_generation.clone(),
+        &conversation,
+        &message_id,
+        Some(&running.id),
+    );
     tokio::spawn(async move {
-        runtime
-            .continue_after_hitl_with_generation(
-                conversation,
-                message_id,
-                goal,
-                Some(running_for_task),
-                control,
-                plugin_generation,
-            )
-            .await;
+        super::knowledge_authority_v2::agent_access::scope(native_authorization, async move {
+            runtime
+                .continue_after_hitl_with_generation(
+                    conversation,
+                    message_id,
+                    goal,
+                    Some(running_for_task),
+                    control,
+                    plugin_generation,
+                )
+                .await;
+        }).await;
     });
     Ok(Json(json!({
         "accepted": true,
@@ -894,17 +922,26 @@ pub(super) async fn review_run(
             let message_id = running.message_id.clone();
             let runtime = Arc::clone(&state);
             let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+            let native_authorization = super::knowledge_authority_v2::agent_access::RunAuthorization::capture(
+                authenticated.clone(),
+                plugin_generation.clone(),
+                &conversation,
+                &message_id,
+                Some(&running.id),
+            );
             tokio::spawn(async move {
-                runtime
-                    .continue_after_hitl_with_generation(
-                        conversation,
-                        message_id,
-                        goal,
-                        Some(running),
-                        control,
-                        plugin_generation,
-                    )
-                    .await;
+                super::knowledge_authority_v2::agent_access::scope(native_authorization, async move {
+                    runtime
+                        .continue_after_hitl_with_generation(
+                            conversation,
+                            message_id,
+                            goal,
+                            Some(running),
+                            control,
+                            plugin_generation,
+                        )
+                        .await;
+                }).await;
             });
             Ok(Json(response))
         }

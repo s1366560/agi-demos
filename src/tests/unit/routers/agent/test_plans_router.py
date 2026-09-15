@@ -322,6 +322,7 @@ async def test_approve_plan_persists_server_resolved_environment_and_reuses_it_o
             tenant_id=test_project_db.tenant_id,
             user_id=test_user.id,
             title="Approved environment",
+            current_mode="plan",
         )
     )
     await test_db.commit()
@@ -330,14 +331,25 @@ async def test_approve_plan_persists_server_resolved_environment_and_reuses_it_o
         conversation_id=conversation_id,
         version=1,
         status="draft",
-        tasks_json=[],
+        tasks_json=[
+            {
+                "id": "approved-task",
+                "conversation_id": conversation_id,
+                "content": "Implement the approved plan",
+                "status": "pending",
+                "priority": "medium",
+                "order_index": 0,
+                "created_at": "2026-07-28T10:00:00+00:00",
+                "updated_at": None,
+            }
+        ],
     )
     test_db.add(plan)
     await test_db.commit()
 
     environment = {
         "id": "sandbox-authoritative",
-        "kind": "worktree",
+        "kind": "local",
         "label": "sandbox-authoritative",
         "workspace_path": "/workspace",
         "repository_root": None,
@@ -356,11 +368,11 @@ async def test_approve_plan_persists_server_resolved_environment_and_reuses_it_o
         project_id=test_project_db.id,
         plan_version_id=plan.id,
         expected_plan_version=1,
-        permission_profile="full_access",
+        permission_profile="read_only",
         message="Implement the approved plan",
         message_id="message-approved-environment",
         idempotency_key="approve-environment-1",
-        environment={"kind": "worktree"},
+        environment={"kind": "local"},
     )
     request = SimpleNamespace(
         app=SimpleNamespace(state=SimpleNamespace(container=object())),
@@ -378,6 +390,9 @@ async def test_approve_plan_persists_server_resolved_environment_and_reuses_it_o
     assert run is not None
     assert run.authorization_snapshot["environment"] == environment
     assert response["run"]["environment"] == environment
+    assert response["plan_version"]["status"] == "approved"
+    assert response["run"]["status"] == "queued"
+    assert response["conversation"]["current_mode"] == "build"
     resolve_environment.assert_awaited_once()
 
     resolve_environment.reset_mock()
@@ -473,7 +488,8 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
     assert received["canonical_run_id"] == "plan-run-1"
     resolve_turn_service.assert_awaited_once_with()
     session.refresh.assert_awaited_once_with(run)
-    publish_run_status.assert_awaited_once_with(run=run)
+    assert publish_run_status.await_count == 2
+    publish_run_status.assert_awaited_with(run=run)
     assert lifecycle.index("status-publish") < lifecycle.index("operation-generation-release")
     assert run.status == "ready_review"
     assert run.revision == 2
@@ -758,7 +774,8 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
     assert run.status == "failed"
     assert run.revision == 2
     settle.assert_awaited_once()
-    publish_run_status.assert_awaited_once_with(run=run)
+    assert publish_run_status.await_count == 2
+    publish_run_status.assert_awaited_with(run=run)
     assert lifecycle.index("status-publish") < lifecycle.index("operation-generation-release")
 
 
@@ -829,6 +846,8 @@ async def test_execute_approved_plan_closes_stream_before_boundary_release_on_ca
         AsyncMock(return_value=Service()),
     )
     monkeypatch.setattr(plans_router, "pin_agent_turn_operation_v2", operation_context)
+
+    monkeypatch.setattr(plans_router, "_publish_plan_run_status", AsyncMock())
 
     task = asyncio.create_task(
         plans_router._execute_approved_plan(

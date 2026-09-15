@@ -1,5 +1,10 @@
+import { authorizeCloudChildControlEndpoint } from './cloudChildControlEndpointPolicy';
+import { authorizeCloudSubagentTraceEndpoint } from './cloudSubagentTraceEndpointPolicy';
+import { authorizeCloudJourneyReadEndpoint } from './cloudJourneyReadEndpointPolicy';
+import { authorizeCloudCapabilityProbeEndpoint } from './cloudCapabilityProbeEndpointPolicy';
 import { authorizeWorkspaceCollaborationMutation } from './cloudWorkspaceCollaborationMutationPolicy';
 import { authorizeCloudMemoryEndpoint } from './cloudMemoryEndpointPolicy';
+import { authorizeCloudSettingsResourceEndpoint } from './cloudSettingsResourceEndpointPolicy';
 
 export type CloudProductRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -8,6 +13,9 @@ export type CloudProductEndpoint = Readonly<{
   tenantId: string | null;
   projectId: string | null;
   workspaceId: string | null;
+  mcpServerId?: string;
+  conversationId?: string;
+  catalogProjectId?: string;
 }>;
 
 type EndpointRequest = Readonly<{
@@ -154,6 +162,48 @@ export function authorizeCloudProductEndpoint(
   if (privilegedTransfer) return privilegedTransfer;
   if (request.form !== undefined || request.response !== undefined) return null;
 
+  const childControl = authorizeCloudChildControlEndpoint(request, target);
+  const childTrace = authorizeCloudSubagentTraceEndpoint(request, target);
+  if (childTrace) return childTrace;
+  if (childControl) return childControl;
+
+  const journeyRead = authorizeCloudJourneyReadEndpoint(request, target);
+  if (journeyRead) return journeyRead;
+
+  const capabilityProbe = authorizeCloudCapabilityProbeEndpoint(request, target);
+  if (capabilityProbe) return capabilityProbe;
+
+  const identity = authorizeIdentityCatalog(request, target, segments);
+  if (identity) return identity;
+
+  const settingsResource = authorizeCloudSettingsResourceEndpoint(request, target);
+  if (settingsResource) return settingsResource;
+
+  if (segments[3] === 'plugin-marketplace') {
+    if (
+      target.pathname === '/api/v1/plugin-marketplace/packages' &&
+      request.method === 'GET' && request.body === undefined &&
+      request.mutation === undefined &&
+      [...target.searchParams].length === 1 &&
+      target.searchParams.get('include_revoked') === 'true'
+    ) {
+      return endpoint('identity-catalog', null, null, null);
+    }
+    if (
+      segments.length === 7 && segments[4] === 'packages' &&
+      segments[6] === 'uninstall' && request.method === 'POST' &&
+      request.mutation === undefined && noQuery(target) &&
+      exactBodyKeys(request.body, new Set(['tenant_id', 'version'])) &&
+      typeof request.body.tenant_id === 'string' &&
+      typeof request.body.version === 'string'
+    ) {
+      requiredIdentifier(segments[5]);
+      requiredIdentifier(request.body.version);
+      return endpoint('tenant-admin', requiredIdentifier(request.body.tenant_id), null, null);
+    }
+    return null;
+  }
+
   const desktopCloudClient = authorizeDesktopCloudClientCohort(request, target, segments);
   if (desktopCloudClient) return desktopCloudClient;
 
@@ -171,9 +221,6 @@ export function authorizeCloudProductEndpoint(
 
   const projectKnowledge = authorizeProjectKnowledgeCohort(request, target, segments);
   if (projectKnowledge) return projectKnowledge;
-
-  const identity = authorizeIdentityCatalog(request, target, segments);
-  if (identity) return identity;
 
   const workspace = authorizeWorkspaceHierarchy(request, target, segments);
   if (workspace) return workspace;
@@ -1944,7 +1991,9 @@ function authorizeIdentityCatalog(
   target: URL,
   segments: readonly string[],
 ): CloudProductEndpoint | null {
-  if (request.method !== 'GET' || segments.length !== 4) return null;
+  const isCollection = segments.length === 4 ||
+    (segments.length === 5 && segments[4] === '');
+  if (request.method !== 'GET' || !isCollection) return null;
   if (
     segments[3] === 'tenants' &&
     exactCatalogQuery(target.searchParams, TENANT_COLLECTION_QUERY, false)

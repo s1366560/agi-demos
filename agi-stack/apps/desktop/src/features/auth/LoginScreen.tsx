@@ -28,6 +28,7 @@ import './LoginScreen.css';
 
 type LoginScreenProps = {
   auth: AuthState;
+  onRetrySavedSession?: () => void;
   mode: RuntimeMode;
   localReady: boolean;
   localModeAvailable?: boolean;
@@ -80,6 +81,7 @@ function verificationAddress(authorizationUrl: string): string {
 
 export function LoginScreen({
   auth,
+  onRetrySavedSession,
   mode,
   localReady,
   localModeAvailable = true,
@@ -366,6 +368,18 @@ export function LoginScreen({
             <div className="desktop-login-error" role="alert">
               {visibleError}
             </div>
+          ) : null}
+
+          {onRetrySavedSession ? (
+            <button
+              className="desktop-login-submit"
+              type="button"
+              disabled={busy}
+              onClick={onRetrySavedSession}
+            >
+              {t('login.retryRestore')}
+              <ReloadIcon />
+            </button>
           ) : null}
 
           {effectiveMode === 'cloud' ? (

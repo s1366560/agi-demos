@@ -902,6 +902,11 @@ export type ApprovePlanAndStartRequest = {
 };
 
 export type AgentConversation = {
+  execution_selection?: {
+    agent_id: string | null;
+    forced_skill_id: string | null;
+    subagent_id: string | null;
+  };
   id: string;
   project_id: string;
   tenant_id: string;
@@ -1676,6 +1681,8 @@ export type PaginatedConversationsResponse = {
 };
 
 export type AgentTimelineItem = {
+  /** Independent project notifications cannot define conversation pagination boundaries. */
+  cursorSource?: 'conversation' | 'project_lifecycle';
   id: string;
   type: string;
   eventTimeUs: number;
@@ -1925,6 +1932,8 @@ export type ConversationMessagesResponse = {
 };
 
 export type ConversationTimelineState = {
+  approvalAuthorityLoading?: boolean;
+  subagentTraceError?: string | null;
   conversationId: string | null;
   items: AgentTimelineItem[];
   approvalRequests: DesktopApprovalRequest[];

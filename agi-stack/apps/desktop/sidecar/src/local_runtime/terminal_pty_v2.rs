@@ -42,6 +42,21 @@ impl TerminalPtyV2 {
         cwd: PathBuf,
         generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
     ) -> Result<Self, String> {
+        Self::start_internal(
+            cwd,
+            generation,
+            #[cfg(unix)]
+            None,
+        )
+    }
+
+    // Private command injection keeps lifecycle tests independent of user shell
+    // startup scripts without changing the native terminal's default shell.
+    fn start_internal(
+        cwd: PathBuf,
+        generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+        #[cfg(unix)] shell: Option<PathBuf>,
+    ) -> Result<Self, String> {
         let (commands, command_rx) = mpsc::sync_channel(COMMAND_CAPACITY);
         let (output_tx, output) = async_mpsc::channel(32);
         let (ready_tx, ready) = oneshot::channel();
@@ -53,7 +68,17 @@ impl TerminalPtyV2 {
         tokio::task::spawn_blocking(move || {
             let owner = std::thread::Builder::new()
                 .name("terminal-pty-v2".to_owned())
-                .spawn(move || platform::run(cwd, owner_shutdown, command_rx, output_tx, ready_tx));
+                .spawn(move || {
+                    platform::run(
+                        cwd,
+                        owner_shutdown,
+                        command_rx,
+                        output_tx,
+                        ready_tx,
+                        #[cfg(unix)]
+                        shell,
+                    )
+                });
             let result = match owner {
                 Ok(owner) => owner
                     .join()
@@ -315,6 +340,7 @@ mod platform {
         commands: Receiver<TerminalPtyCommandV2>,
         output: mpsc::Sender<String>,
         ready: oneshot::Sender<DrainResult>,
+        shell: Option<PathBuf>,
     ) -> DrainResult {
         let mut resources = Resources {
             child: None,
@@ -322,7 +348,7 @@ mod platform {
             reader: None,
             writer: None,
         };
-        let initialized = initialize(&mut resources, cwd, &shutdown);
+        let initialized = initialize(&mut resources, cwd, &shutdown, shell);
         if let Err(error) = initialized {
             let _ = ready.send(Err(error.clone()));
             let cleanup = resources.close();
@@ -342,7 +368,12 @@ mod platform {
         }
     }
 
-    fn initialize(resources: &mut Resources, cwd: PathBuf, shutdown: &AtomicBool) -> DrainResult {
+    fn initialize(
+        resources: &mut Resources,
+        cwd: PathBuf,
+        shutdown: &AtomicBool,
+        shell: Option<PathBuf>,
+    ) -> DrainResult {
         if shutdown.load(Ordering::Acquire) {
             return Err("terminal initialization cancelled".to_owned());
         }
@@ -383,8 +414,11 @@ mod platform {
         if shutdown.load(Ordering::Acquire) {
             return Err("terminal initialization cancelled".to_owned());
         }
-        let mut command =
-            CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned()));
+        let mut command = CommandBuilder::new(shell.unwrap_or_else(|| {
+            std::env::var("SHELL")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("/bin/sh"))
+        }));
         command.cwd(cwd);
         resources.child = Some(
             pair.slave

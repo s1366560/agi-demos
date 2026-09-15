@@ -221,3 +221,14 @@ test('preload ingest accepts only exact attachment batches and compact-copies re
     );
   }
 });
+
+test('plugin preload independently bounds and narrows the signed package result', () => {
+  assert.deepEqual(validateNativeFileOpenRequest({ purpose: 'plugin_package' }), { purpose: 'plugin_package' });
+  assert.throws(() => validateNativeFileOpenRequest({ purpose: 'plugin_package', path: '/tmp/arbitrary' }), /invalid/);
+  const bytes = new Uint8Array(17 * 1_048_576);
+  const result = { status: 'selected', files: [{ filename: 'plugin.mspkg', mimeType: 'application/octet-stream', bytes }] };
+  assert.equal(compactNativeFileOpenResult(result, 'plugin_package').files[0].bytes.length, bytes.length);
+  assert.throws(() => compactNativeFileOpenResult(result, 'attachment'), /limit/);
+  assert.throws(() => compactNativeFileOpenResult({ ...result, files: [{ ...result.files[0], filename: 'plugin.zip' }] }, 'plugin_package'), /invalid/);
+  assert.throws(() => compactNativeFileOpenResult({ ...result, files: [{ ...result.files[0], bytes: new Uint8Array(64 * 1_048_576 + 1) }] }, 'plugin_package'), /limit/);
+});

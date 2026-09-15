@@ -219,3 +219,14 @@ test('renderer dropped-file ingest rejects oversized or over-count batches befor
   );
   assert.equal(calls, 0);
 });
+
+test('renderer permits the plugin package limit without widening attachment imports', async () => {
+  const bytes = new Uint8Array(17 * 1_048_576);
+  globalThis.window = { __MEMSTACK_DESKTOP__: { files: { async open(request) {
+    assert.ok(['plugin_package', 'attachment'].includes(request.purpose));
+    return { status: 'selected', files: [{ filename: 'plugin.mspkg', mimeType: 'application/octet-stream', bytes }] };
+  } } } };
+  const result = await openFilesWithDesktopDialog('plugin_package');
+  assert.equal(result.files[0].size, bytes.byteLength);
+  await assert.rejects(openFilesWithDesktopDialog('attachment'), /limit_exceeded/);
+});

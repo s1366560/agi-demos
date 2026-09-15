@@ -248,6 +248,7 @@ async fn reconcile_loop(
                 Some(command)
             }
             _ = tokio::time::sleep(next_interval) => None,
+            _ = state.local_plugin_changes.notified() => None,
         };
 
         let (expected_selection, response) = match requested_selection {
@@ -337,7 +338,7 @@ fn desktop_reconciler(state: &LocalRuntimeState) -> PluginSnapshotReconcilerV2 {
     )
 }
 
-fn desktop_loader(
+pub(super) fn desktop_loader(
     app_data_dir: Option<std::path::PathBuf>,
     local_acceptance: Option<crate::local_knowledge_acceptance::LocalKnowledgeAcceptance>,
 ) -> LoaderV2 {
@@ -355,9 +356,15 @@ fn desktop_loader(
 struct LocalBootstrapSnapshotV2 {
     snapshot: ProfileSnapshotV2,
     snapshot_wire: Value,
+    archives: Vec<agistack_plugin_host::protocol_v2::signed_archive::VerifiedBundleArchiveV2>,
+    activation_error: Option<String>,
 }
 
-fn local_bootstrap_snapshot(state: &LocalRuntimeState) -> Result<LocalBootstrapSnapshotV2, String> {
+pub(super) fn local_base_snapshot(state: &LocalRuntimeState) -> Result<ProfileSnapshotV2, String> {
+    parse_profile_snapshot_v2(local_base_source(state)?).map_err(|error| error.to_string())
+}
+
+fn local_base_source(state: &LocalRuntimeState) -> Result<&str, String> {
     let source = if let Some(qualification) = &state.local_knowledge_acceptance {
         qualification.require_current(
             state
@@ -373,12 +380,100 @@ fn local_bootstrap_snapshot(state: &LocalRuntimeState) -> Result<LocalBootstrapS
     } else {
         LOCAL_BOOTSTRAP_PROFILE_V2
     };
+    Ok(source)
+}
+
+fn local_bootstrap_snapshot(state: &LocalRuntimeState) -> Result<LocalBootstrapSnapshotV2, String> {
+    let source = local_base_source(state)?;
     let snapshot = parse_profile_snapshot_v2(source).map_err(|error| error.to_string())?;
     let snapshot_wire = serde_json::from_str(source).map_err(|error| error.to_string())?;
+    let connection = state.session_store.connection()?;
+    let revision = crate::local_plugin_installations_v2::revision(&connection)?;
+    if revision == 0 {
+        return Ok(LocalBootstrapSnapshotV2 {
+            snapshot,
+            snapshot_wire,
+            archives: vec![],
+            activation_error: None,
+        });
+    }
+    let keys = if crate::local_plugin_installations_v2::has_enabled(&connection)? {
+        state.local_plugin_signing_keys.clone()?
+    } else {
+        vec![]
+    };
+    let installations = crate::local_plugin_installations_v2::load_enabled(&connection, &keys)?;
+    drop(connection);
+    let (snapshot, snapshot_wire, archives) =
+        crate::local_plugin_packages_v2::compose(&snapshot, installations, revision)?;
     Ok(LocalBootstrapSnapshotV2 {
         snapshot,
         snapshot_wire,
+        archives,
+        activation_error: None,
     })
+}
+
+async fn stage_local_candidate(
+    state: &LocalRuntimeState,
+) -> Result<
+    (
+        LocalBootstrapSnapshotV2,
+        Arc<agistack_plugin_host::RuntimeGenerationV2>,
+    ),
+    String,
+> {
+    let candidate = async {
+        let mut baseline = local_bootstrap_snapshot(state)?;
+        let archives = std::mem::take(&mut baseline.archives);
+        let generation = desktop_loader(
+            state.app_data_dir.clone(),
+            state.local_knowledge_acceptance.clone(),
+        )
+        .with_verified_archives(archives)
+        .stage(baseline.snapshot.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+        Ok::<_, String>((baseline, generation))
+    }
+    .await;
+    match candidate {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            *state
+                .local_plugin_activation_error
+                .lock()
+                .map_err(|_| "local plugin activation state unavailable")? = Some(error.clone());
+            // Preserve a live Local generation. First boot or an explicit Cloud->Local switch
+            // still admits the independently validated builtins so package removal remains usable.
+            if state
+                .platform_plugin_authority_v2
+                .acquire_generation()
+                .is_ok_and(|lease| lease.descriptor().publication_version.is_none())
+            {
+                return Err(error);
+            }
+            let source = local_base_source(state)?;
+            let snapshot = parse_profile_snapshot_v2(source).map_err(|error| error.to_string())?;
+            let snapshot_wire = serde_json::from_str(source).map_err(|error| error.to_string())?;
+            let generation = desktop_loader(
+                state.app_data_dir.clone(),
+                state.local_knowledge_acceptance.clone(),
+            )
+            .stage(snapshot.clone())
+            .await
+            .map_err(|error| error.to_string())?;
+            Ok((
+                LocalBootstrapSnapshotV2 {
+                    snapshot,
+                    snapshot_wire,
+                    archives: vec![],
+                    activation_error: Some(error),
+                },
+                generation,
+            ))
+        }
+    }
 }
 
 async fn activate_authority_source(
@@ -407,15 +502,16 @@ async fn activate_authority_source(
             );
         }
         DesktopAuthoritySourceV2::Local => {
-            let baseline = local_bootstrap_snapshot(state)?;
-            let generation = reconciler
-                .stage_snapshot(baseline.snapshot.clone())
-                .await
-                .map_err(|error| error.to_string())?;
+            let (baseline, generation) = stage_local_candidate(state).await?;
             state
                 .platform_plugin_authority_v2
                 .publish_local_baseline(&baseline.snapshot, &baseline.snapshot_wire, generation)
                 .await;
+            *state
+                .local_plugin_activation_error
+                .lock()
+                .map_err(|_| "local plugin activation state unavailable")? =
+                baseline.activation_error;
             reconciler.reset_publication_ordering();
         }
     }
@@ -455,7 +551,22 @@ async fn reconcile_selected_authority(
         }
     };
     if *active_authority == desired_authority {
-        return Ok(SelectionReconcileOutcomeV2::Applied);
+        let unchanged = if desired_authority == Some(DesktopAuthoritySourceV2::Local) {
+            let baseline = local_bootstrap_snapshot(state).inspect_err(|error| {
+                if let Ok(mut current) = state.local_plugin_activation_error.lock() {
+                    *current = Some(error.clone());
+                }
+            })?;
+            state
+                .platform_plugin_authority_v2
+                .acquire_generation()
+                .is_ok_and(|generation| generation.descriptor().digest == baseline.snapshot.digest)
+        } else {
+            true
+        };
+        if unchanged {
+            return Ok(SelectionReconcileOutcomeV2::Applied);
+        }
     }
 
     let outcome = match desired_authority.as_ref() {
@@ -471,6 +582,11 @@ async fn reconcile_selected_authority(
             {
                 Ok(outcome) => outcome,
                 Err(error) => {
+                    if *active_authority == Some(DesktopAuthoritySourceV2::Local)
+                        && matches!(source, DesktopAuthoritySourceV2::Local)
+                    {
+                        return Err(error);
+                    }
                     let outcome =
                         deactivate_for_selection(state, selection, expected_selection).await?;
                     if outcome == SelectionReconcileOutcomeV2::Applied {
@@ -538,11 +654,7 @@ async fn activate_authority_source_for_selection(
             );
         }
         DesktopAuthoritySourceV2::Local => {
-            let baseline = local_bootstrap_snapshot(state)?;
-            let generation = reconciler
-                .stage_snapshot(baseline.snapshot.clone())
-                .await
-                .map_err(|error| error.to_string())?;
+            let (baseline, generation) = stage_local_candidate(state).await?;
             let retirement = begin_selected_publication(selection, expected_selection, || {
                 state.platform_plugin_authority_v2.replace_local_baseline(
                     &baseline.snapshot,
@@ -563,6 +675,11 @@ async fn activate_authority_source_for_selection(
             };
             drop(generation);
             retirement.dispose().await;
+            *state
+                .local_plugin_activation_error
+                .lock()
+                .map_err(|_| "local plugin activation state unavailable")? =
+                baseline.activation_error;
             reconciler.reset_publication_ordering();
         }
     }
@@ -2132,3 +2249,7 @@ mod tests {
         reconciler.close().await;
     }
 }
+
+#[cfg(test)]
+#[path = "local_plugin_runtime_v2_tests.rs"]
+mod local_plugin_runtime_tests;

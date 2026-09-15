@@ -6,7 +6,7 @@ All request/response models for the Agent API endpoints.
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from src.domain.model.agent import Conversation
 
@@ -723,7 +723,7 @@ class SubAgentRunResponse(BaseModel):
     error: str | None = None
     execution_time_ms: int | None = None
     tokens_used: int | None = None
-    metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
     frozen_result_text: str | None = None
     frozen_at: str | None = None
     trace_id: str | None = None

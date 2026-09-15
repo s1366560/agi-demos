@@ -1,0 +1,11 @@
+{
+  "before": {
+    "run_id": "d20fc5bf-a2ec-5a12-8861-c871e4ef057b",
+    "status": "running",
+    "revision": 1
+  },
+  "http_status": 503,
+  "response": {
+    "detail": "Run cancellation delivery unavailable; retry"
+  }
+}

@@ -108,10 +108,15 @@
   height: 29px;
   place-items: center;
   justify-self: end;
-  color: var(--desktop-gray-12);
-  background: transparent;
-  border: 1px solid var(--desktop-border-20);
-  border-radius: 5px;
+  color: var(--desktop-muted);
+  background: var(--desktop-surface-14);
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+}
+
+.settings-window-titlebar > button:hover {
+  color: var(--desktop-white);
+  border-color: var(--desktop-border-strong);
 }
 
 .settings-window-body {
@@ -139,7 +144,7 @@
 
 .settings-rail-group > span {
   padding: 12px 9px 6px;
-  color: var(--desktop-muted);
+  color: var(--desktop-gray-15);
   font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -147,7 +152,7 @@
 
 .settings-rail-group button {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
   min-height: 43px;
   gap: 8px;
   align-items: center;
@@ -159,10 +164,15 @@
   border-radius: 7px;
 }
 
+.settings-rail-group button:hover {
+  color: var(--desktop-gray-30);
+  background: var(--desktop-surface-15);
+}
+
 .settings-rail-group button.active {
   color: var(--desktop-cyan);
-  background: var(--desktop-surface-cyan-3);
-  border-color: var(--desktop-border-cyan-6);
+  background: var(--desktop-rail-active-bg);
+  border-color: var(--desktop-rail-active-border);
   box-shadow: inset 2px 0 var(--desktop-cyan);
 }
 
@@ -171,7 +181,7 @@
 }
 
 .settings-rail-group button.active small {
-  color: var(--desktop-muted);
+  color: var(--desktop-gray-11);
 }
 
 .settings-rail-group button > span {
@@ -196,14 +206,19 @@
 
 .settings-rail-group button > em {
   display: grid;
-  width: 20px;
-  height: 20px;
+  min-width: 17px;
+  height: 17px;
   place-items: center;
-  color: var(--cyan-11);
+  color: var(--desktop-gray-6);
   font-size: 7px;
   font-style: normal;
-  background: var(--cyan-3);
-  border-radius: 10px;
+  background: var(--desktop-surface-29);
+  border-radius: 8px;
+}
+
+.settings-rail-group button.active > em {
+  color: var(--desktop-cyan);
+  background: var(--desktop-rail-badge-active-bg);
 }
 
 .settings-search-empty {
@@ -222,19 +237,31 @@
 
 .settings-window-scope {
   display: grid;
-  grid-template-columns: 27px minmax(0, 1fr);
+  grid-template-columns: 27px minmax(0, 1fr) 14px;
   gap: 7px;
+  align-items: center;
   padding: 8px;
   margin: auto 4px 4px;
   color: var(--desktop-gray-7);
   background: var(--desktop-surface-14);
-  border: 1px solid var(--desktop-border-15);
+  border: 1px solid var(--desktop-border-16);
+  border-radius: 6px;
+}
+
+.settings-window-scope > .settings-window-scope-avatar {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  color: var(--desktop-cyan);
+  background: var(--desktop-surface-cyan);
+  border: 1px solid var(--desktop-border-cyan);
   border-radius: 6px;
 }
 
 .settings-window-scope > svg {
   flex: 0 0 auto;
-  color: var(--cyan-10);
+  color: var(--desktop-gray-6);
 }
 
 .settings-window-scope strong {

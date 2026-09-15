@@ -82,6 +82,10 @@ class _OperationToolAdapterV2:
         return self.definition.permission
 
     @property
+    def permission_resolver(self) -> Callable[[dict[str, Any]], str | None] | None:
+        return self.definition.permission_resolver
+
+    @property
     def aliases(self) -> tuple[str, ...]:
         return self.definition.aliases
 
@@ -376,6 +380,7 @@ def _operation_tool_set_v2(
                 parameters=dict(definition.parameters),
                 execute=adapter.execute,
                 permission=definition.permission,
+                permission_resolver=definition.permission_resolver,
                 aliases=definition.aliases,
                 _tool_instance=adapter,
             )

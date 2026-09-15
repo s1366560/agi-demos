@@ -272,6 +272,8 @@ pub struct LoaderV2 {
     target: DataPlaneTargetV2,
     catalog_json: String,
     expected_catalog_digest: Option<String>,
+    #[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
+    verified_archives: Vec<super::signed_archive::VerifiedBundleArchiveV2>,
 }
 
 impl LoaderV2 {
@@ -291,6 +293,8 @@ impl LoaderV2 {
             target,
             catalog_json: PLUGIN_MODULE_CATALOG_V2_JSON.to_owned(),
             expected_catalog_digest: Some(PLUGIN_MODULE_CATALOG_DIGEST_V2.to_owned()),
+            #[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
+            verified_archives: Vec::new(),
         }
     }
 
@@ -307,7 +311,18 @@ impl LoaderV2 {
             target,
             catalog_json: catalog_json.into(),
             expected_catalog_digest: None,
+            #[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
+            verified_archives: Vec::new(),
         }
+    }
+
+    #[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
+    pub fn with_verified_archives(
+        mut self,
+        archives: Vec<super::signed_archive::VerifiedBundleArchiveV2>,
+    ) -> Self {
+        self.verified_archives = archives;
+        self
     }
 
     pub fn register_module(
@@ -330,6 +345,21 @@ impl LoaderV2 {
     ) -> Result<Arc<RuntimeGenerationV2>, RuntimeV2Error> {
         let catalog =
             parse_target_catalog(&self.catalog_json, self.expected_catalog_digest.as_deref())?;
+        #[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
+        if !self.verified_archives.is_empty() && self.expected_catalog_digest.is_none() {
+            return Err(RuntimeV2Error::InvalidTargetCatalog(
+                "external archives require the generated builtin catalog".into(),
+            ));
+        }
+        let registered = &self.definitions;
+        #[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
+        let (catalog, registered) = super::wasm_runtime::admit_external_definitions(
+            &snapshot,
+            &self.target,
+            catalog,
+            registered,
+            &self.verified_archives,
+        )?;
         let mut modules_by_key = BTreeMap::new();
         for manifest in &snapshot.manifests {
             for module in &manifest.modules {
@@ -389,8 +419,7 @@ impl LoaderV2 {
         let mut definitions = BTreeMap::new();
         let mut modules = BTreeMap::new();
         for entry in entries.values() {
-            let definition = self
-                .definitions
+            let definition = registered
                 .get(&entry.module_ref)
                 .ok_or_else(|| RuntimeV2Error::MissingModuleDefinition(entry.module_ref.clone()))?;
             let module = modules_by_key

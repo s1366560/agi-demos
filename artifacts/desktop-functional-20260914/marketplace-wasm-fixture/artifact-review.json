@@ -1,0 +1,11 @@
+{
+  "review_method": "Exact source-to-byte comparison and Wasmtime export/import validation",
+  "artifact_sha256": "efc79f6a71ebe6d1a648a9fa448df29e4abf8a61b0d00dfa834ab19a85b78ddc",
+  "source_equals_constant_score_module": true,
+  "imports": 0,
+  "exports": [
+    "score(i32)->i32"
+  ],
+  "memory_or_network_imports": false,
+  "scope": "Only this immutable constant-score QA WASM artifact"
+}

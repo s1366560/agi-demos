@@ -84,6 +84,7 @@ class ToolInfo:
     aliases: tuple[str, ...] = ()
     sandbox_id: str | None = None
     _sandbox_id: str | None = None
+    permission_resolver: Callable[[dict[str, Any]], str | None] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +138,7 @@ def tool_define(
     parameters: dict[str, Any],
     *,
     permission: str | None = None,
+    permission_resolver: Callable[[dict[str, Any]], str | None] | None = None,
     category: str = "general",
     model_filter: Callable[[str], bool] | None = None,
     tags: frozenset[str] | None = None,
@@ -176,6 +178,7 @@ def tool_define(
             parameters=parameters,
             execute=fn,
             permission=permission,
+            permission_resolver=permission_resolver,
             category=category,
             model_filter=model_filter,
             tags=tags if tags is not None else frozenset(),

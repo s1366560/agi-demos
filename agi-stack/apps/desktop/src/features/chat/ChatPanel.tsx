@@ -37,6 +37,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { isExecutionContext, mergeExecutionSelectionItems, useConversationExecutionSelection } from './useConversationExecutionSelection';
 import {
   agentSteerMessageOutcome,
   socketEventsSince,
@@ -2144,6 +2145,20 @@ function ChatComposer({
     conversations.find(
       (conversation) => conversation.id === activeConversationId,
     ) ?? null;
+  const applyExecutionSelection = useCallback((items: ComposerContextItem[]) => {
+    setContextItems((current) => mergeExecutionSelectionItems(current, items));
+  }, []);
+  const executionBinding = useConversationExecutionSelection({
+    api, conversation: promptTemplateConversation,
+    enabled: voiceTranscriptionConfig?.mode === 'local' && Boolean(activeConversationId),
+    sending, onResolved: applyExecutionSelection,
+  });
+  useEffect(() => { setContextItems([]); }, [activeConversationId]);
+  const removeContextItem = useCallback(async (item: ComposerContextItem) => {
+    if (await executionBinding.remove(item)) {
+      setContextItems((current) => current.filter((candidate) => candidate !== item));
+    }
+  }, [executionBinding.remove]);
   const voiceConnection = useMemo<VoiceTranscriptionConnection>(
     () =>
       voiceTranscriptionConfig
@@ -2257,13 +2272,14 @@ function ChatComposer({
   const composeAheadQueueEligibility = composeAheadEligibility({
     content: input,
     streaming: composeAheadEnabled && responseStreaming,
-    disabled,
+    disabled: disabled || !executionBinding.ready || executionBinding.pending,
     uploading: uploadingAttachments,
     contextItems,
     referenceCount: references.length,
   });
   const canSendNow =
     !disabled &&
+    executionBinding.ready && !executionBinding.pending &&
     !sending &&
     !(composeAheadEnabled && responseStreaming) &&
     !uploadingAttachments &&
@@ -2315,7 +2331,7 @@ function ChatComposer({
       });
     onSend(content, contextItems, () => {
       setInput('');
-      setContextItems([]);
+      setContextItems((current) => voiceTranscriptionConfig?.mode === 'local' ? current.filter(isExecutionContext) : []);
     });
   }, [
     canSendNow,
@@ -2328,6 +2344,7 @@ function ChatComposer({
     onSend,
     t,
     voice.stop,
+    voiceTranscriptionConfig?.mode,
   ]);
   const setComposeAheadDefaultIntent = useCallback(
     (intent: ComposeAheadIntent) => {
@@ -2338,21 +2355,24 @@ function ChatComposer({
   );
   const handleStopAndSend = useCallback(() => {
     const content = input.trim();
-    if (!content || disabled || sending) return;
+    if (!content || disabled || sending || !executionBinding.ready || executionBinding.pending) return;
     voice.stop();
     onStopResponse();
     onSend(content, contextItems, () => {
       setInput('');
-      setContextItems([]);
+      setContextItems((current) => voiceTranscriptionConfig?.mode === 'local' ? current.filter(isExecutionContext) : []);
     });
   }, [
     contextItems,
     disabled,
+    executionBinding.ready,
+    executionBinding.pending,
     input,
     onSend,
     onStopResponse,
     sending,
     voice.stop,
+    voiceTranscriptionConfig?.mode,
   ]);
   const handleSteerFallback = useCallback(
     (scope: string, promptId: string) => {
@@ -2734,6 +2754,12 @@ function ChatComposer({
             {t(voiceTranscriptionFailureKey(voice.errorCode))}
           </div>
         ) : null}
+        {executionBinding.error ? (
+          <div role="alert">
+            {t('composer.executionSelectionFailed', { error: executionBinding.error })}
+            <button type="button" onClick={() => void executionBinding.refresh()}>{t('common.retry')}</button>
+          </div>
+        ) : !executionBinding.ready ? <div role="status">{t('common.loading')}</div> : null}
         {contextItems.length ? (
           <div
             className="composer-context-chips"
@@ -2746,11 +2772,8 @@ function ChatComposer({
                 aria-label={t('composer.removeContext', {
                   context: item.label,
                 })}
-                onClick={() =>
-                  setContextItems((current) =>
-                    current.filter((candidate) => candidate !== item),
-                  )
-                }
+                disabled={executionBinding.pending}
+                onClick={() => void removeContextItem(item)}
               >
                 {item.label}
                 <Cross2Icon aria-hidden="true" />

@@ -119,7 +119,7 @@ export function createAgentWorkspaceJourneyAuthorityClient(
         }
         const tenants = await optionalRequest(
           request,
-          runtimeConfig.mode === "local" ? "/api/v1/tenants" : "/api/v1/tenants/",
+          runtimeConfig.mode === "local" ? "/api/v1/tenants" : "/api/v1/tenants/?page=1&page_size=100",
           signal,
         );
         if (hasScopedItem(tenants, "tenants", tenantId)) {
@@ -127,7 +127,7 @@ export function createAgentWorkspaceJourneyAuthorityClient(
         }
         const projects = await optionalRequest(
           request,
-          runtimeConfig.mode === "local" ? "/api/v1/projects" : "/api/v1/projects/",
+          runtimeConfig.mode === "local" ? "/api/v1/projects" : `/api/v1/projects/?page=1&page_size=100&tenant_id=${encodeURIComponent(tenantId)}`,
           signal,
         );
         if (hasScopedProject(projects, tenantId, projectId)) {
@@ -296,16 +296,7 @@ async function probeConversationJourneys(
   let localSession: unknown = null;
   let activeRun: RunReference | null = null;
   let latestRun: RunReference | null = null;
-  if (mode === "cloud") {
-    const detail = await optionalRequest(
-      request,
-      `${conversationPath}?project_id=${encodeURIComponent(scope.projectId)}`,
-      signal,
-    );
-    if (validConversation(detail, scope, conversation)) {
-      actions["conversation-lifecycle"].push("get-conversation");
-    }
-  } else {
+  {
     const sessionParameters = new URLSearchParams({
       tenant_id: scope.tenantId,
       project_id: scope.projectId,
@@ -318,7 +309,7 @@ async function probeConversationJourneys(
       `${conversationPath}/session?${sessionParameters.toString()}`,
       signal,
     );
-    if (validSessionProjection(localSession, scope, conversation)) {
+    if (validSessionProjection(localSession, scope, conversation, mode)) {
       actions["conversation-lifecycle"].push("get-conversation");
       activeRun = sessionRunReference(
         localSession,
@@ -333,7 +324,8 @@ async function probeConversationJourneys(
         scope,
         conversation.id,
       );
-      if (activeRun) {
+      const currentRunStatus = recordField(recordField(mode === "cloud" ? recordField(localSession, "execution") : localSession, "current_run"), "status");
+      if (activeRun && (mode === "local" || ["queued", "running"].includes(String(currentRunStatus)))) {
         actions["stream-and-run-control"].push("get-active-run");
       }
       if (latestRun) {
@@ -342,47 +334,15 @@ async function probeConversationJourneys(
       if (hasSessionPendingSurface(localSession, conversation.id)) {
         actions["hitl-and-a2ui"].push("render-surface");
       }
-      if (hasArrayField(localSession, "artifact_versions")) {
+      if (mode === "local" && hasArrayField(localSession, "artifact_versions")) {
         actions["content-and-export"].push("list-artifacts");
       }
     }
   }
-  const historyPath = `${conversationPath}/messages?project_id=${encodeURIComponent(scope.projectId)}`;
+  const historyPath = `${conversationPath}/messages?project_id=${encodeURIComponent(scope.projectId)}${mode === "cloud" ? "&limit=100" : ""}`;
   const history = await optionalRequest(request, historyPath, signal);
   if (validHistory(history, conversation.id)) {
     actions["conversation-lifecycle"].push("load-history");
-  }
-  if (mode === "cloud") {
-    const active = await optionalRequest(
-      request,
-      `${conversationPath}/active-run`,
-      signal,
-    );
-    activeRun = runReferenceFromEnvelope(
-      active,
-      "active_run",
-      mode,
-      scope,
-      conversation.id,
-    );
-    if (activeRun) {
-      actions["stream-and-run-control"].push("get-active-run");
-    }
-    const latest = await optionalRequest(
-      request,
-      `${conversationPath}/latest-run`,
-      signal,
-    );
-    latestRun = runReferenceFromEnvelope(
-      latest,
-      "latest_run",
-      mode,
-      scope,
-      conversation.id,
-    );
-    if (latestRun) {
-      actions["stream-and-run-control"].push("get-latest-run");
-    }
   }
   const runs =
     mode === "local"
@@ -401,21 +361,11 @@ async function probeConversationJourneys(
     }
   }
   if (mode === "cloud") {
-    const pending = await optionalRequest(
-      request,
-      `/api/v1/agent/hitl/conversations/${encodeURIComponent(conversation.id)}/pending`,
-      signal,
-    );
-    if (hasPendingSurface(pending, conversation.id)) {
-      actions["hitl-and-a2ui"].push("render-surface");
-    }
-    const participants = await optionalRequest(
-      request,
-      `${conversationPath}/participants`,
-      signal,
-    );
-    if (validRoster(participants, conversation.id)) {
-      actions["roster-and-subagents"].push("list-participants");
+    if (validSessionProjection(localSession, scope, conversation, mode)) {
+      const participants = recordField(recordField(localSession, "conversation"), "participant_agents");
+      if (Array.isArray(participants) && participants.every((id) => identifier(id) !== null)) {
+        actions["roster-and-subagents"].push("list-participants");
+      }
     }
   } else if (
     hasHistorySurface(history, conversation.id) &&
@@ -825,18 +775,6 @@ function hasHistorySurface(value: unknown, conversationId: string): boolean {
   );
 }
 
-function runReferenceFromEnvelope(
-  value: unknown,
-  key: string,
-  mode: "cloud" | "local",
-  scope: Scope,
-  conversationId: string,
-): RunReference | null {
-  return isRecord(value)
-    ? runReference(value[key], mode, scope, conversationId)
-    : null;
-}
-
 function validRun(
   value: unknown,
   mode: "cloud" | "local",
@@ -891,16 +829,20 @@ function validSessionProjection(
   value: unknown,
   scope: Scope,
   conversation: Conversation,
+  mode: "cloud" | "local",
 ): boolean {
-  return (
-    isRecord(value) &&
-    value.schema_version === 1 &&
-    validConversation(value.conversation, scope, conversation) &&
-    identifier(value.snapshot_revision) !== null &&
-    Array.isArray(value.run_history) &&
-    Array.isArray(value.pending_hitl) &&
-    Array.isArray(value.artifact_versions)
-  );
+  if (!isRecord(value) || !validConversation(value.conversation, scope, conversation) ||
+      identifier(value.snapshot_revision) === null || !Array.isArray(value.pending_hitl)) return false;
+  if (mode === "local") {
+    return value.schema_version === 1 && Array.isArray(value.run_history) && Array.isArray(value.artifact_versions);
+  }
+  return value.schema_version === 2 && value.projection_kind === "workspace_session" &&
+    (value.authority_kind === "workspace_attempt" || value.authority_kind === "conversation_record") &&
+    identifier(value.authority_id) !== null && isRecord(value.execution) &&
+    Array.isArray(value.execution.run_history) && Array.isArray(value.artifact_records) &&
+    (value.authority_kind === "conversation_record"
+      ? value.authority_id === conversation.id
+      : isRecord(value.execution.current_attempt) && value.authority_id === value.execution.current_attempt.id);
 }
 
 function sessionRunReference(
@@ -910,8 +852,9 @@ function sessionRunReference(
   scope: Scope,
   conversationId: string,
 ): RunReference | null {
-  return isRecord(value)
-    ? runReference(value[key], mode, scope, conversationId)
+  const execution = mode === "cloud" ? recordField(value, "execution") : value;
+  return isRecord(execution)
+    ? runReference(execution[key], mode, scope, conversationId)
     : null;
 }
 
@@ -921,8 +864,9 @@ function firstSessionRunReference(
   scope: Scope,
   conversationId: string,
 ): RunReference | null {
-  if (!isRecord(value) || !Array.isArray(value.run_history)) return null;
-  return runReference(value.run_history[0], mode, scope, conversationId);
+  const execution = mode === "cloud" ? recordField(value, "execution") : value;
+  if (!isRecord(execution) || !Array.isArray(execution.run_history)) return null;
+  return runReference(execution.run_history[0], mode, scope, conversationId);
 }
 
 function hasSessionPendingSurface(
@@ -938,28 +882,6 @@ function hasSessionPendingSurface(
         item.conversation_id === conversationId &&
         item.status === "pending",
     )
-  );
-}
-
-function hasPendingSurface(value: unknown, conversationId: string): boolean {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.requests) &&
-    value.requests.some(
-      (item) =>
-        isRecord(item) &&
-        item.conversation_id === conversationId &&
-        item.status === "pending",
-    )
-  );
-}
-
-function validRoster(value: unknown, conversationId: string): boolean {
-  return (
-    isRecord(value) &&
-    value.conversation_id === conversationId &&
-    Array.isArray(value.participant_agents) &&
-    Array.isArray(value.participant_bindings)
   );
 }
 

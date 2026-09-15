@@ -44,7 +44,7 @@ export function validateNativeFileOpenRequest(value: unknown): NativeFileOpenReq
   if (
     !isRecord(value) ||
     !hasExactKeys(value, ['purpose']) ||
-    (value.purpose !== 'attachment' && value.purpose !== 'skill_package')
+    (value.purpose !== 'attachment' && value.purpose !== 'skill_package' && value.purpose !== 'plugin_package')
   ) {
     throw new Error('native file open request is invalid');
   }
@@ -87,10 +87,11 @@ export function compactNativeFileOpenResult(
     value.files,
     purpose === 'attachment' ? MAX_PRELOAD_NATIVE_FILE_COUNT : 1,
     'native file open result',
+    purpose === 'plugin_package' ? 64 * 1_048_576 : MAX_PRELOAD_NATIVE_FILE_BYTES,
   );
   if (
-    purpose === 'skill_package' &&
-    (files.length !== 1 || !files[0]?.filename.toLowerCase().endsWith('.zip'))
+    (purpose === 'skill_package' || purpose === 'plugin_package') &&
+    (files.length !== 1 || !files[0]?.filename.toLowerCase().endsWith(purpose === 'plugin_package' ? '.mspkg' : '.zip'))
   ) {
     throw new Error('native file open result is invalid');
   }
@@ -144,6 +145,7 @@ function compactNativeFilePayloads(
   value: unknown,
   maxFiles: number,
   label: string,
+  maxBytes = MAX_PRELOAD_NATIVE_FILE_BYTES,
 ): readonly NativeFilePayload[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > maxFiles) {
     throw new Error(`${label} is invalid`);
@@ -162,8 +164,8 @@ function compactNativeFilePayloads(
     }
     totalBytes += file.bytes.byteLength;
     if (
-      file.bytes.byteLength > MAX_PRELOAD_NATIVE_FILE_BYTES ||
-      totalBytes > MAX_PRELOAD_NATIVE_FILE_BYTES
+      file.bytes.byteLength > maxBytes ||
+      totalBytes > maxBytes
     ) {
       throw new Error(`${label} exceeds the preload limit`);
     }

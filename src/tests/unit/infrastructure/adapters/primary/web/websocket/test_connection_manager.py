@@ -200,7 +200,7 @@ async def test_try_start_bridge_task_replaces_stale_message_bridge() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_try_start_bridge_task_keeps_compatible_message_bridge() -> None:
+async def test_try_start_bridge_task_starts_independent_bridge_for_reconnected_session() -> None:
     manager = ConnectionManager()
     manager.active_connections["session-new"] = object()  # type: ignore[assignment]
     manager.subscriptions["session-new"] = {"conv-1"}
@@ -215,9 +215,9 @@ async def test_try_start_bridge_task_keeps_compatible_message_bridge() -> None:
         task_factory=_task_factory(new_task),
     )
 
-    assert started is False
+    assert started is True
     assert existing_task.cancelled is False
-    assert "session-new" not in manager.bridge_tasks
+    assert manager.bridge_tasks["session-new"]["conv-1"] is new_task
 
 
 @pytest.mark.unit

@@ -116,6 +116,7 @@ def adapt_plugin_tool(
         parameters=parameters,
         execute=execute,
         permission=getattr(tool_impl, "permission", None),
+        permission_resolver=getattr(tool_impl, "permission_resolver", None),
         category="plugin",
         tags=frozenset({"plugin", plugin_name}),
     )

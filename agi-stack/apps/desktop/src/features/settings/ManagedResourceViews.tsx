@@ -25,6 +25,7 @@ import {
   managedResourceAction,
   managedResourceCapabilityGroups,
   managedResourceFacts,
+  managedResourceFactValueKey,
   managedResourceView,
   resourceIsImmutable,
 } from './managedResourceModel';
@@ -402,7 +403,11 @@ function ResourceDetail({
   const notice = resourceIsImmutable(section, item, mode)
     ? t('settings.immutableResource')
     : !canManage
-      ? t('settings.resourceReadOnly')
+      ? t(
+          section === 'plugins' && mode === 'cloud'
+            ? 'settings.platformPluginReadOnly'
+            : 'settings.resourceReadOnly',
+        )
       : section === 'plugins'
         ? null
       : !action
@@ -536,7 +541,9 @@ function ResourceDetail({
           </section>
         </section>
 
-        <div className="managed-resource-overview-label">{t('settings.overview')}</div>
+        <div className="managed-resource-overview-label">
+          <span>{t('settings.overview')}</span>
+        </div>
         <div className="managed-resource-overview">
           {actionError ? (
             <div className="managed-resource-action-error" role="alert">
@@ -670,6 +677,8 @@ function formatFactValue(
   locale: string,
   t: (key: string) => string
 ): string {
+  const valueKey = managedResourceFactValueKey(key, value);
+  if (valueKey) return t(valueKey);
   if (!value) return t('settings.notAvailable');
   if (key === 'discovery') return t(`settings.discovery.${value}`);
   if (key !== 'updatedAt') return value;

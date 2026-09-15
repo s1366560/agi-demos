@@ -959,3 +959,32 @@ async def test_activity_read_state_rejects_stale_expected_authority_revision(
 
     assert stale.status_code == status.HTTP_409_CONFLICT
     assert stale.json()["detail"] == "Activity read-state revision conflict"
+
+
+async def test_http_cancel_uses_the_generation_owned_worker_redis(
+    authenticated_async_client, test_db, test_project_db, test_user, test_app
+) -> None:
+    """Exercise the real V2 HTTP boundary without mocking the worker service lookup."""
+    run = await _add_run(test_db, test_project_db, test_user)
+    redis_client = test_app.state.container._redis_client
+    redis_client.set.return_value = True
+    redis_client.set.reset_mock()
+    response = await authenticated_async_client.post(
+        f"/api/v1/agent/runs/{run.id}/cancel", json={"expected_revision": run.revision}
+    )
+    assert response.status_code == 200, response.json()
+    assert response.json()["status"] == "cancel_requested"
+    matching = [
+        call
+        for call in redis_client.set.await_args_list
+        if call.args and call.args[0] == f"agent:run-cancellation:{run.id}"
+    ]
+    assert len(matching) == 1
+    import json
+
+    assert json.loads(matching[0].args[1]) == {
+        "tenant_id": test_project_db.tenant_id,
+        "project_id": test_project_db.id,
+        "conversation_id": run.conversation_id,
+        "run_id": run.id,
+    }

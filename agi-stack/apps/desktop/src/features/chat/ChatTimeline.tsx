@@ -59,6 +59,7 @@ import type {
 } from './chatTimelineModel';
 import { agentLifecyclePresentation } from './agentLifecyclePresentationModel';
 import { groupSubAgentTimelineItems } from './subagentTimelineGroupModel';
+import { SubagentToolActivityList } from './SubagentToolActivityList';
 import type { SubAgentTimelineGroup } from './subagentTimelineGroupModel';
 import type { SubAgentControlAuthority } from './subagentControlAuthorityModel';
 import type {
@@ -251,9 +252,11 @@ export function AgentTimeline({
   const narrative = useMemo(
     () =>
       annotateTimelineGroups(
-        groupNarrativeActivity(buildSessionNarrative(displayItems)),
+        groupNarrativeActivity(
+          buildSessionNarrative(displayItems, state.conversationId ?? undefined),
+        ),
       ),
-    [displayItems],
+    [displayItems, state.conversationId],
   );
   const lastToolGroupIndex = useMemo(() => {
     for (let index = narrative.length - 1; index >= 0; index -= 1) {
@@ -335,6 +338,14 @@ export function AgentTimeline({
       className="agent-timeline"
       aria-label={t('session.conversationTimeline')}
     >
+      {state.subagentTraceError ? (
+        <div className="timeline-error" role="alert">
+          <Text size="2" color="red">{t('session.subagentTraceUnavailable', { error: state.subagentTraceError })}</Text>
+          <Button type="button" size="1" variant="surface" onClick={onRetry}>
+            <ReloadIcon aria-hidden="true" />{t('common.retry')}
+          </Button>
+        </div>
+      ) : null}
       {state.error ? (
         <div className="timeline-error" role="alert" aria-live="assertive">
           <Text size="2" color="red">
@@ -699,6 +710,7 @@ export function AgentTimeline({
                   requestId && respondableHitlRequestIdSet.has(requestId),
                 )}
                 a2uiActionView={a2uiActionViews.get(item.id)}
+                approvalAuthorityLoading={state.approvalAuthorityLoading}
                 approvalRequest={state.approvalRequests.find(
                   (request) => request.id === requestId,
                 )}
@@ -1015,6 +1027,7 @@ function TimelineItemView({
   canRespondToHitl,
   a2uiActionView,
   approvalRequest,
+  approvalAuthorityLoading,
   onReplyMessage,
   onEditMessage,
   onDeleteMessage,
@@ -1031,6 +1044,7 @@ function TimelineItemView({
   canRespondToHitl: boolean;
   a2uiActionView?: A2UIActionView;
   approvalRequest?: DesktopApprovalRequest;
+  approvalAuthorityLoading?: boolean;
   onReplyMessage?: (item: AgentTimelineItem) => void;
   onEditMessage?: (item: AgentTimelineItem) => void;
   onDeleteMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
@@ -1128,6 +1142,7 @@ function TimelineItemView({
           canRespondToHitl={canRespondToHitl}
           a2uiActionView={a2uiActionView}
           approvalRequest={approvalRequest}
+          approvalAuthorityLoading={approvalAuthorityLoading}
         />
       </NarrativeMessageFrame>
     );
@@ -1173,6 +1188,7 @@ function TimelineItemView({
             canRespondToHitl={canRespondToHitl}
             a2uiActionView={a2uiActionView}
             approvalRequest={approvalRequest}
+            approvalAuthorityLoading={approvalAuthorityLoading}
           />
         ) : null}
       </div>
@@ -1198,6 +1214,7 @@ function TimelineItemBody({
   canRespondToHitl,
   a2uiActionView,
   approvalRequest,
+  approvalAuthorityLoading,
 }: {
   item: AgentTimelineItem;
   kind: TimelineKind;
@@ -1205,6 +1222,7 @@ function TimelineItemBody({
   canRespondToHitl: boolean;
   a2uiActionView?: A2UIActionView;
   approvalRequest?: DesktopApprovalRequest;
+  approvalAuthorityLoading?: boolean;
 }) {
   const { t } = useI18n();
   const hitlType = timelineHitlType(item);
@@ -1217,6 +1235,7 @@ function TimelineItemBody({
         canRespond={canRespondToHitl}
         a2uiActionView={a2uiActionView}
         approvalRequest={approvalRequest}
+        approvalAuthorityLoading={approvalAuthorityLoading}
       />
     );
   }
@@ -1649,7 +1668,11 @@ function SubAgentGroupView({
             emphasis
           />
           <SubAgentDetail
-            label={t('chat.subagentFailure')}
+            label={t(
+              group.status === 'killed'
+                ? 'chat.subagentTerminationReason'
+                : 'chat.subagentFailure',
+            )}
             value={group.error}
             error
           />
@@ -1665,6 +1688,7 @@ function SubAgentGroupView({
               ) : null}
             </div>
           ) : null}
+          <SubagentToolActivityList items={group.toolActivity} />
           {controlAuthority && onControl ? (
             <SubAgentControlPanel
               group={group}

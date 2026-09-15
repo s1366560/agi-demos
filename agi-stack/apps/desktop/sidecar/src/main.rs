@@ -5,6 +5,8 @@ mod control;
 mod data_migration;
 mod local_knowledge_acceptance;
 mod local_runtime;
+mod local_plugin_installations_v2;
+mod local_plugin_packages_v2;
 mod native_host;
 mod oauth_pending_attempt;
 mod plugin_data_plane_credential_v2;

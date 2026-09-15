@@ -1,0 +1,14 @@
+{
+  "run_id": "7d09189f-bdfa-5545-a390-ce6e709121f5",
+  "status": "completed",
+  "input_tokens": null,
+  "output_tokens": null,
+  "model_breakdown": [],
+  "assistant_summary": {
+    "step_count": 2,
+    "artifact_count": 0,
+    "call_count": 0,
+    "has_total_tokens": false
+  },
+  "finding": "Injected LLM client request construction omitted stream_options.include_usage; regression reproduced before repair. No provider usage was observed for this run; provider support cannot be concluded from absent usage. No new model request was made."
+}

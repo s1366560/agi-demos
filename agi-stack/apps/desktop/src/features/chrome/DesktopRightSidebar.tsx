@@ -23,7 +23,12 @@ export type DesktopRightSidebarCanvasV2 =
   | Readonly<{ kind: 'unavailable' }>;
 
 const RIGHT_SIDEBAR_WIDTH_STORAGE_KEY = 'agistack.desktop.rightSidebarWidth';
-const RIGHT_SIDEBAR_WIDTH_CONSTRAINTS = { min: 220, max: 520, default: 280 } as const;
+// prototype mission-control refactor 2026-09 (phase 5a): the default matches
+// the prototype context-rail width (248px); focus mode lifts the max so the
+// canvas can expand across the thread column (prototype layout-focus).
+const RIGHT_SIDEBAR_WIDTH_CONSTRAINTS = { min: 220, max: 520, default: 248 } as const;
+const RIGHT_SIDEBAR_FOCUS_MAX_WIDTH = 2000;
+const RIGHT_SIDEBAR_ACTIVITY_BAR_WIDTH = 40;
 
 type DesktopRightSidebarProps = {
   activePanel: DesktopRightPanel;
@@ -41,8 +46,8 @@ type DesktopRightSidebarProps = {
  * Orca-style right sidebar: a 40px vertical activity bar on the outer edge
  * plus a resizable panel hosting the session context rail or the review
  * canvas. Canvas layout mapping: the old split/focus surfaces become panel
- * widths here — 'focus' widens the panel to the max constraint, 'split'
- * returns it to the default width.
+ * widths here — 'focus' expands the panel across the thread column (the
+ * prototype's layout-focus), 'split' returns it to the default width.
  */
 export function DesktopRightSidebar({
   activePanel,
@@ -56,17 +61,51 @@ export function DesktopRightSidebar({
   onClose,
 }: DesktopRightSidebarProps) {
   const { t } = useI18n();
+  const [canvasLayout, setCanvasLayout] = useState<'split' | 'focus'>('split');
+  const hostRef = useRef<HTMLElement | null>(null);
+  // Focus mode needs a wider clamp than the split panel; the hook re-reads the
+  // constraints every render, so widening the max while focused is enough.
+  const widthConstraints =
+    canvasLayout === 'focus'
+      ? { ...RIGHT_SIDEBAR_WIDTH_CONSTRAINTS, max: RIGHT_SIDEBAR_FOCUS_MAX_WIDTH }
+      : RIGHT_SIDEBAR_WIDTH_CONSTRAINTS;
   const panelWidth = useResizablePanelWidth(
     RIGHT_SIDEBAR_WIDTH_STORAGE_KEY,
-    RIGHT_SIDEBAR_WIDTH_CONSTRAINTS,
+    widthConstraints,
   );
-  const [canvasLayout, setCanvasLayout] = useState<'split' | 'focus'>('split');
   const canvasTriggerRef = useRef<string | null>(null);
 
   // The context rail and review canvas are session-scoped; without a session
   // the browser panel is the only surface that can render.
   const effectivePanel: DesktopRightPanel =
     viewModel === null ? 'browser' : activePanel;
+
+  // Panel width at which the thread column (minmax(0, 1fr)) collapses: the
+  // whole shell row left of the activity bar. Measured from the live grid so
+  // the left sidebar's user-resized width is honored.
+  const measureFocusPanelWidth = () => {
+    if (typeof window === 'undefined') return RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max;
+    const shell = hostRef.current?.closest('.app-shell');
+    if (!(shell instanceof HTMLElement)) return RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max;
+    const sidebarColumn = Number.parseFloat(
+      window.getComputedStyle(shell).gridTemplateColumns.split(' ')[0] ?? '',
+    );
+    if (!Number.isFinite(sidebarColumn)) return RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max;
+    return Math.max(
+      RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max,
+      Math.round(shell.clientWidth - sidebarColumn - RIGHT_SIDEBAR_ACTIVITY_BAR_WIDTH),
+    );
+  };
+
+  // Keep the focused canvas pinned to the full body width across window
+  // resizes; in split mode the user's chosen width persists untouched.
+  useEffect(() => {
+    if (canvasLayout !== 'focus') return;
+    const refocus = () => panelWidth.resize(measureFocusPanelWidth());
+    window.addEventListener('resize', refocus);
+    return () => window.removeEventListener('resize', refocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasLayout]);
 
   // Capture the canvas trigger that opened the panel so closing the canvas
   // can return focus to it, wherever it lives (thread pane or context rail).
@@ -82,7 +121,7 @@ export function DesktopRightSidebar({
     layout: canvasLayout,
     onLayoutChange: (layout) => {
       setCanvasLayout(layout);
-      if (layout === 'focus') panelWidth.resize(RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max);
+      if (layout === 'focus') panelWidth.resize(measureFocusPanelWidth());
       else panelWidth.reset();
     },
     onClose: () => {
@@ -116,7 +155,7 @@ export function DesktopRightSidebar({
         : t('rightbar.context');
 
   return (
-    <aside className="desktop-right-sidebar" aria-label={panelTitle}>
+    <aside className="desktop-right-sidebar" aria-label={panelTitle} ref={hostRef}>
       <div
         className="desktop-right-sidebar-panel"
         style={{ width: `${Math.round(panelWidth.width)}px` }}
@@ -124,7 +163,7 @@ export function DesktopRightSidebar({
         <ResizeHandle
           side="leading"
           width={panelWidth.width}
-          constraints={RIGHT_SIDEBAR_WIDTH_CONSTRAINTS}
+          constraints={widthConstraints}
           label={t('rightbar.resize')}
           onResize={panelWidth.resize}
           onReset={panelWidth.reset}

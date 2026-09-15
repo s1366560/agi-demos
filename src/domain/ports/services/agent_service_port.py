@@ -51,6 +51,7 @@ class AgentServicePort(ABC):
         api_auth_token: str | None = None,
         execution_message_id: str | None = None,
         canonical_run_id: str | None = None,
+        display_content: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using self-developed ReAct core.

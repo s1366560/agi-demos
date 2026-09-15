@@ -164,7 +164,14 @@ class ProcessorFactory:
                 "__override_max_tokens": _reasoning_cfg.override_max_tokens,
             }
 
+        from src.application.services.approved_run_tool_permission_v2 import (
+            current_approved_run_guard_v2,
+        )
+        from src.application.services.chat_run_tool_permission_v2 import current_chat_run_guard_v2
+
         config = ProcessorConfig(
+            chat_run_required=current_chat_run_guard_v2() is not None,
+            approved_run_required=current_approved_run_guard_v2() is not None,
             model=model,
             api_key=self.base_api_key,
             base_url=self.base_url,
@@ -178,6 +185,7 @@ class ProcessorFactory:
             message_bus=self.message_bus,
             control_channel=self.control_channel,
             run_id=run_id,
+            subagent_owner_required=run_id is not None,
             provider_id=model_route.provider_id,
             loop_resolver=_default_loop_resolver(),
         )

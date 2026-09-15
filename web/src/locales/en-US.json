@@ -7884,6 +7884,8 @@
       "clearAll": "Clear all",
       "clearAllConfirmTitle": "Clear all execution records?",
       "kill": "Stop execution",
+      "cancelPending": "Cancellation requested; waiting for execution to stop.",
+      "cancelFailed": "Cancellation failed. Please retry or refresh the execution status.",
       "killConfirmTitle": "Stop this execution?",
       "killConfirmDescription": "The running task will be terminated.",
       "cancel": "Cancel",

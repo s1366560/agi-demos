@@ -9,8 +9,12 @@ Optionally injects relevant memories from the knowledge graph.
 """
 
 import logging
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
+
+from .context_message_projection import condense_model_messages
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +39,7 @@ class SubAgentContext:
 
     task_description: str
     system_prompt: str
-    context_messages: list[dict[str, str]] = field(default_factory=list)
+    context_messages: list[dict[str, Any]] = field(default_factory=list)
     token_budget: int = 60000
     metadata: dict[str, Any] = field(default_factory=dict)
     memory_context: str = ""
@@ -64,7 +68,7 @@ class ContextBridge:
         self,
         user_message: str,
         subagent_system_prompt: str,
-        conversation_context: list[dict[str, str]] | None = None,
+        conversation_context: Sequence[Mapping[str, Any]] | None = None,
         main_token_budget: int = 200000,
         project_id: str = "",
         tenant_id: str = "",
@@ -130,13 +134,7 @@ class ContextBridge:
         )
 
         # Condensed conversation context (if any)
-        for msg in context.context_messages:
-            messages.append(
-                {
-                    "role": msg.get("role", "user"),
-                    "content": msg.get("content", ""),
-                }
-            )
+        messages.extend(deepcopy(context.context_messages))
 
         # Memory context from knowledge graph (if available)
         if context.memory_context:
@@ -159,8 +157,8 @@ class ContextBridge:
 
     def _condense_context(
         self,
-        conversation_context: list[dict[str, str]] | None,
-    ) -> list[dict[str, str]]:
+        conversation_context: Sequence[Mapping[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
         """Condense conversation context to fit SubAgent budget.
 
         Takes the most recent messages up to limits, truncating
@@ -178,21 +176,4 @@ class ContextBridge:
         # Take the most recent N messages
         recent = conversation_context[-self._max_context_messages :]
 
-        condensed: list[dict[str, str]] = []
-        total_chars = 0
-
-        for msg in recent:
-            content = msg.get("content", "")
-            role = msg.get("role", "user")
-
-            remaining_budget = self._max_context_chars - total_chars
-            if remaining_budget <= 0:
-                break
-
-            if len(content) > remaining_budget:
-                content = content[:remaining_budget] + "... [truncated]"
-
-            condensed.append({"role": role, "content": content})
-            total_chars += len(content)
-
-        return condensed
+        return condense_model_messages(recent, self._max_context_chars)

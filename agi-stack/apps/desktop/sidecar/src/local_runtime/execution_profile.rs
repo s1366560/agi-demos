@@ -34,6 +34,7 @@ impl ExecutionProfile {
         ensure_available(agent, "agent", true)?;
         let agent_resource = resource_identity(agent, agent_id, "agent")?;
         let mut tools = required_string_set(agent, "allowed_tools", "agent")?;
+        let mut explicitly_toolless = tools.is_empty();
         let mut skills = required_string_set(agent, "allowed_skills", "agent")?;
         let mut mcp_servers = required_string_set(agent, "allowed_mcp_servers", "agent")?;
         let mut instruction_sections = Vec::new();
@@ -50,6 +51,7 @@ impl ExecutionProfile {
                 return Err(format!("skill is not allowed by agent: {}", identity.id));
             }
             let skill_tools = required_string_set(skill, "tools", "skill")?;
+            explicitly_toolless |= skill_tools.is_empty();
             tools = intersect_authority(&tools, &skill_tools);
             push_instruction(
                 &mut instruction_sections,
@@ -83,10 +85,9 @@ impl ExecutionProfile {
                     identity.id
                 ));
             }
-            tools = intersect_authority(
-                &tools,
-                &required_string_set(subagent, "allowed_tools", "Sub Agent")?,
-            );
+            let subagent_tools = required_string_set(subagent, "allowed_tools", "Sub Agent")?;
+            explicitly_toolless |= subagent_tools.is_empty();
+            tools = intersect_authority(&tools, &subagent_tools);
             skills = intersect_authority(
                 &skills,
                 &required_string_set(subagent, "allowed_skills", "Sub Agent")?,
@@ -110,7 +111,9 @@ impl ExecutionProfile {
             None
         };
 
-        if tools.is_empty() {
+        // An explicit empty roster means text-only execution. Empty intersections
+        // between non-empty rosters still report incompatible tool authority.
+        if tools.is_empty() && !explicitly_toolless {
             return Err("selected Agent, Skill, and Sub Agent have no shared tools".to_string());
         }
 
@@ -367,6 +370,126 @@ mod tests {
             ExecutionProfile::resolve("builtin:all-access", &agent, None, None).unwrap_err();
 
         assert!(error.contains("allowed_tools"));
+    }
+
+    #[tokio::test]
+    async fn explicit_empty_tool_profiles_persist_and_complete_without_tool_authority() {
+        use agistack_adapters_mem::{FixedClock, InMemoryCheckpointStore};
+        use agistack_core::agent::{react::ReActEngine, types::SessionStatus};
+
+        use crate::local_runtime::{
+            resource_registry::{
+                ManagedResourceKind, ManagedResourceMutationCommand,
+                ManagedResourceMutationOperation,
+            },
+            DesktopSessionStore,
+        };
+
+        for empty_resource in ["agent", "skill", "subagent"] {
+            let store = DesktopSessionStore::in_memory().expect("resource store");
+            let persist = |kind, id: &str, value| {
+                store
+                    .mutate_managed_resource(ManagedResourceMutationCommand {
+                        actor_id: "test-user".into(),
+                        kind,
+                        scope_kind: "project".into(),
+                        scope_id: "test-project".into(),
+                        resource_id: id.into(),
+                        operation: ManagedResourceMutationOperation::Create,
+                        expected_revision: 0,
+                        idempotency_key: id.into(),
+                        payload_hash: id.into(),
+                        status: "active".into(),
+                        value: Some(value),
+                        target_revision: None,
+                        vault_refs: vec![],
+                        now_ms: 1_000,
+                    })
+                    .expect("empty arrays are accepted by resource creation");
+                store
+                    .managed_resource(kind, "project", "test-project", id)
+                    .expect("load resource")
+                    .expect("persisted resource")
+            };
+            let mut agent = all_access_agent();
+            agent["id"] = json!("text-agent");
+            if empty_resource == "agent" {
+                agent["allowed_tools"] = json!([]);
+            }
+            let agent = persist(ManagedResourceKind::Agent, "text-agent", agent);
+            let skill = persist(
+                ManagedResourceKind::Skill,
+                "text-skill",
+                json!({
+                    "name": "text-skill", "status": "active",
+                    "tools": if empty_resource == "skill" { json!([]) } else { json!(["*"]) },
+                    "full_content": "Answer using the supplied text only."
+                }),
+            );
+            let subagent = persist(
+                ManagedResourceKind::SubAgent,
+                "text-subagent",
+                json!({
+                    "name": "text-subagent", "status": "active", "enabled": true,
+                    "allowed_tools": if empty_resource == "subagent" { json!([]) } else { json!(["*"]) },
+                    "allowed_skills": ["*"], "allowed_mcp_servers": ["*"]
+                }),
+            );
+            let profile =
+                ExecutionProfile::resolve("text-agent", &agent, Some(&skill), Some(&subagent))
+                    .expect("explicit empty tools permit a text-only profile");
+            assert!(profile.allowed_tools.is_empty());
+            let host = Arc::new(ProfiledToolHost::new(Arc::new(StubToolHost), &profile));
+            assert!(host.list_tools().is_empty());
+            assert!(host.tool_definitions().unwrap().is_empty());
+            for tool in ["read", "write", "subagent", "mcp__legacy", "unknown"] {
+                assert!(!host.can_dispatch(tool));
+                assert!(host.call(tool, "{}").await.is_err());
+            }
+            let llm = Arc::new(RecordingLlm {
+                goal: std::sync::Mutex::new(None),
+            });
+            let engine = ReActEngine::new(
+                Arc::new(ProfiledLlm::new(llm.clone(), &profile)),
+                host,
+                Arc::new(InMemoryCheckpointStore::new()),
+                Arc::new(FixedClock(1_000)),
+            );
+            let result = engine
+                .run("text-session", "Say hello", Some("test-project"))
+                .await
+                .expect("text-only engine completes");
+            assert_eq!(result.status, SessionStatus::Finished);
+            assert_eq!(result.answer.as_deref(), Some("done"));
+            assert!(llm
+                .goal
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .contains("Answer using the supplied text only."));
+        }
+    }
+
+    #[test]
+    fn explicit_empty_tools_do_not_relax_missing_required_authority_fields() {
+        let mut agent = all_access_agent();
+        agent["allowed_tools"] = json!([]);
+        for field in ["allowed_skills", "allowed_mcp_servers"] {
+            let mut missing = agent.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(
+                ExecutionProfile::resolve("builtin:all-access", &missing, None, None)
+                    .unwrap_err()
+                    .contains(field)
+            );
+        }
+        let skill = json!({"id": "text-skill", "name": "text-skill", "status": "active"});
+        assert!(
+            ExecutionProfile::resolve("builtin:all-access", &agent, Some(&skill), None)
+                .unwrap_err()
+                .contains("skill tools is required")
+        );
     }
 
     #[test]

@@ -4,13 +4,34 @@
 use super::*;
 use std::time::Duration;
 
+fn lifecycle_terminal(cwd: std::path::PathBuf) -> TerminalPtyV2 {
+    TerminalPtyV2::start_internal(cwd, None, Some("/bin/sh".into())).expect("start owner")
+}
+
 async fn ready_terminal() -> TerminalPtyV2 {
-    let mut terminal = TerminalPtyV2::start(std::env::temp_dir(), None).expect("start owner");
+    let mut terminal = lifecycle_terminal(std::env::temp_dir());
     tokio::time::timeout(Duration::from_secs(5), terminal.ready())
         .await
         .expect("initialization deadline")
         .expect("PTY ready");
     terminal
+}
+
+#[tokio::test]
+async fn configured_default_shell_starts_and_closes() {
+    let started = std::time::Instant::now();
+    let mut terminal =
+        TerminalPtyV2::start(std::env::temp_dir(), None).expect("default shell owner");
+    tokio::time::timeout(Duration::from_secs(5), terminal.ready())
+        .await
+        .expect("default shell initialization deadline")
+        .expect("default shell ready");
+    let ready_ms = started.elapsed().as_millis();
+    drain_terminal(&terminal).await;
+    eprintln!(
+        "PTY default shell ready_ms={ready_ms} drained_ms={}",
+        started.elapsed().as_millis()
+    );
 }
 
 async fn drain_terminal(terminal: &TerminalPtyV2) {
@@ -80,7 +101,7 @@ async fn unix_drop_handle_still_reaps_worker_with_child_holding_slave() {
 
 #[tokio::test]
 async fn unix_cancel_before_readiness_drains_even_if_init_has_started() {
-    let terminal = TerminalPtyV2::start(std::env::temp_dir(), None).expect("start owner");
+    let terminal = lifecycle_terminal(std::env::temp_dir());
     terminal.shutdown();
     let result = tokio::time::timeout(Duration::from_secs(5), terminal.drain())
         .await
@@ -92,11 +113,9 @@ async fn unix_cancel_before_readiness_drains_even_if_init_has_started() {
 
 #[tokio::test]
 async fn unix_bad_working_directory_init_failure_still_finishes_cleanup() {
-    let mut terminal = TerminalPtyV2::start(
+    let mut terminal = lifecycle_terminal(
         std::env::temp_dir().join(format!("absent-terminal-{}", uuid::Uuid::new_v4())),
-        None,
-    )
-    .expect("start owner");
+    );
     assert!(terminal.ready().await.is_err());
     assert!(
         tokio::time::timeout(Duration::from_secs(5), terminal.drain())
@@ -190,7 +209,7 @@ fn unix_failed_kill_and_wait_keep_child_owned_until_exit_is_confirmed() {
 async fn unix_file_working_directory_is_rejected_before_spawn() {
     let file = std::env::temp_dir().join(format!("terminal-cwd-file-{}", uuid::Uuid::new_v4()));
     std::fs::write(&file, b"not a directory").expect("create fixture file");
-    let mut terminal = TerminalPtyV2::start(file.clone(), None).expect("start owner");
+    let mut terminal = lifecycle_terminal(file.clone());
     assert!(terminal
         .ready()
         .await
@@ -220,7 +239,7 @@ fn dropping_a_queued_owner_cancels_before_pty_initialization() {
     });
     entered_rx.recv().expect("pool occupied");
     runtime.block_on(async {
-        let terminal = TerminalPtyV2::start(std::env::temp_dir(), None).expect("queue owner");
+        let terminal = lifecycle_terminal(std::env::temp_dir());
         let mut completion = terminal.completion.clone();
         drop(terminal);
         unblock_tx.send(()).expect("release pool");
@@ -301,16 +320,23 @@ async fn concurrent_real_unix_pty_shutdown_reaps_idle_and_short_lived_foreground
 
 #[tokio::test]
 async fn real_unix_shell_natural_exit_is_reaped_without_signalling_its_dead_group() {
-    for _ in 0..8 {
+    for iteration in 0..8 {
+        let started = std::time::Instant::now();
         let mut terminal = ready_terminal().await;
+        let ready_ms = started.elapsed().as_millis();
         terminal
             .try_input(b"exit\n".to_vec())
             .expect("request ordinary shell exit");
-        tokio::time::timeout(Duration::from_secs(5), async {
+        let eof = tokio::time::timeout(Duration::from_secs(5), async {
             while terminal.output().await.is_some() {}
         })
-        .await
-        .expect("natural EOF reaches output consumer");
+        .await;
+        eprintln!(
+            "PTY natural exit iteration={iteration} ready_ms={ready_ms} eof_ms={} eof_received={}",
+            started.elapsed().as_millis(),
+            eof.is_ok()
+        );
+        eof.expect("natural EOF reaches output consumer");
         drain_terminal(&terminal).await;
     }
 }

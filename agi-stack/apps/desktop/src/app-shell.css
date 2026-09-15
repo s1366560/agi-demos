@@ -193,6 +193,11 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 7): canvas tab bar
+   aligned to the prototype `.session-canvas-tabs` anatomy — compact 44px
+   strip, muted inactive tabs, active = full-opacity text + 2px cyan
+   underline (same vocabulary as the phase-6 management tabs), count badges
+   as small neutral chips. */
 .review-tabs {
   position: relative;
   z-index: 6;
@@ -200,7 +205,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   min-width: 0;
-  min-height: 40px;
+  min-height: 44px;
   overflow: visible;
   border-bottom: 1px solid var(--desktop-border-soft);
   background: var(--desktop-surface-8);
@@ -227,13 +232,13 @@
   flex: 0 0 auto;
   gap: 6px;
   min-width: max-content;
-  height: 40px;
-  padding: 0 11px;
+  height: 44px;
+  padding: 0 12px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--desktop-muted);
-  font-size: 12px;
+  color: var(--desktop-faint);
+  font-size: 11px;
 }
 
 .review-tab svg {
@@ -251,17 +256,21 @@
 }
 
 .review-tab em {
-  color: var(--desktop-faint);
+  padding: 1px 6px;
+  border-radius: 7px;
+  background: var(--desktop-nav-badge-bg);
+  color: var(--desktop-muted);
   font-style: normal;
+  font-size: 10px;
 }
 
-.review-tab:hover,
-.review-tab.selected {
+.review-tab:hover {
   color: var(--desktop-text);
   background: rgba(var(--desktop-slate-rgb), 0.07);
 }
 
 .review-tab.selected {
+  color: var(--desktop-text);
   border-bottom-color: var(--desktop-cyan);
 }
 
@@ -270,7 +279,7 @@
   align-items: center;
   gap: 2px;
   min-width: max-content;
-  height: 40px;
+  height: 44px;
   padding: 0 7px;
   border-left: 1px solid var(--desktop-border-soft);
   background: var(--desktop-surface-8);

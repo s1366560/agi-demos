@@ -169,6 +169,22 @@ async def _run_recovery_stream_v2(
         )
         resolver = _agent_recovery_stream_resolver_v2(operation)
         agent_service = await resolver.resolve(operation)
+
+        async def authorize_delivery() -> None:
+            try:
+                async with stream_context.fresh_db_context() as delivery_context:
+                    await authorize_existing_scoped_session_v2(
+                        delivery_context,
+                        conversation_id=conversation_id,
+                        project_id=operation.context.scope.project_id or "",
+                    )
+            except RuntimeV2Error:
+                await stream_context.connection_manager.unsubscribe(
+                    stream_context.session_id,
+                    conversation_id,
+                )
+                raise
+
         await stream_hitl_response_to_websocket(
             agent_service=agent_service,
             session_id=stream_context.session_id,
@@ -177,6 +193,7 @@ async def _run_recovery_stream_v2(
             replay_from_db=replay_from_db,
             from_time_us=cursor_time_us,
             from_counter=cursor_counter,
+            authorize_delivery=authorize_delivery,
         )
 
 
@@ -190,6 +207,7 @@ async def _start_recovery_bridge_task_v2(
     cursor_counter: int | None,
     operation_kind: str,
     hitl_request_id: str | None = None,
+    replace_existing: bool = False,
 ) -> bool:
     fork = await fork_current_agent_operation_v2()
     task_started = False
@@ -237,6 +255,7 @@ async def _start_recovery_bridge_task_v2(
             conversation_id=conversation_id,
             bridge_message_id=message_id,
             task_factory=create_recovery_task,
+            **({"replace_existing": True} if replace_existing else {}),
         )
     except BaseException:
         if created_task is None:
@@ -320,6 +339,7 @@ async def _maybe_start_recovery_bridge(
                 cursor_time_us=cursor_time_us,
                 cursor_counter=cursor_counter,
                 operation_kind="agent-subscription-recovery-stream",
+                replace_existing=from_time_us is not None,
             )
             if started:
                 logger.info(

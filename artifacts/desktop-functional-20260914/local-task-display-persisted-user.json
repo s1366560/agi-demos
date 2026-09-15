@@ -1,0 +1,40 @@
+[
+  {
+    "content": "Work in Plan mode. Analyze the objective without changing files or executing the solution.\n\nInspect only the context needed to make the plan concrete.\n\nPublish the final plan through the available structured task-list tool.\n\nOn MemStack cloud use todowrite with action=\"replace\". In the local desktop runtime call submit_plan with JSON input {\"tasks\":[{\"content\":\"actionable step\",\"priority\":\"high|medium|low\"}]}.\n\nEvery task must be actionable, ordered, and independently reviewable by a human.\n\nDo not start implementation until the human explicitly approves the plan.\n\nTask title: 原生任务显示验收20260914\n\nObjective: 原生任务展示验收：请提出一个只读验证计划，计划目标是检查对话消息是否只展示这段中文任务说明。此轮不要读取文件、不要调用外部工具、不要执行计划。计划中保留标记 NATIVE_DISPLAY_CONTENT_20260914。\n\nRequested planning context (abstract source categories, not file or directory paths): project_memory, project_files\n\nNever pass category labels such as project_memory, project_files, or web_research to file-reading tools.\n\nOnly call file-reading tools with a concrete path explicitly supplied by the user or discovered within the configured workspace root.",
+    "conversation_id": "1cc05786-72be-5efe-9d0e-a4536a367dce",
+    "counter": 1,
+    "data": {
+      "content": "Work in Plan mode. Analyze the objective without changing files or executing the solution.\n\nInspect only the context needed to make the plan concrete.\n\nPublish the final plan through the available structured task-list tool.\n\nOn MemStack cloud use todowrite with action=\"replace\". In the local desktop runtime call submit_plan with JSON input {\"tasks\":[{\"content\":\"actionable step\",\"priority\":\"high|medium|low\"}]}.\n\nEvery task must be actionable, ordered, and independently reviewable by a human.\n\nDo not start implementation until the human explicitly approves the plan.\n\nTask title: 原生任务显示验收20260914\n\nObjective: 原生任务展示验收：请提出一个只读验证计划，计划目标是检查对话消息是否只展示这段中文任务说明。此轮不要读取文件、不要调用外部工具、不要执行计划。计划中保留标记 NATIVE_DISPLAY_CONTENT_20260914。\n\nRequested planning context (abstract source categories, not file or directory paths): project_memory, project_files\n\nNever pass category labels such as project_memory, project_files, or web_research to file-reading tools.\n\nOnly call file-reading tools with a concrete path explicitly supplied by the user or discovered within the configured workspace root.",
+      "display_content": "原生任务展示验收：请提出一个只读验证计划，计划目标是检查对话消息是否只展示这段中文任务说明。此轮不要读取文件、不要调用外部工具、不要执行计划。计划中保留标记 NATIVE_DISPLAY_CONTENT_20260914。",
+      "plugin_generation": {
+        "digest": "457bb21096fbcef181238666928e63d8c271431c49df3bf8cf71209b963103dd",
+        "generation": 7,
+        "profile_id": "memstack-local-knowledge-acceptance-v2",
+        "publication_version": null,
+        "target": "desktop-sidecar"
+      },
+      "role": "user"
+    },
+    "eventCounter": 1,
+    "eventTimeUs": 1789374953135228,
+    "event_counter": 1,
+    "event_time_us": 1789374953135228,
+    "event_type": "user_message",
+    "id": "user_message-1789374953135228-1",
+    "message_id": "desktop-plan-2881c432-7d3d-434d-a337-5465b697fc1a",
+    "payload": {
+      "display_content": "原生任务展示验收：请提出一个只读验证计划，计划目标是检查对话消息是否只展示这段中文任务说明。此轮不要读取文件、不要调用外部工具、不要执行计划。计划中保留标记 NATIVE_DISPLAY_CONTENT_20260914。",
+      "plugin_generation": {
+        "digest": "457bb21096fbcef181238666928e63d8c271431c49df3bf8cf71209b963103dd",
+        "generation": 7,
+        "profile_id": "memstack-local-knowledge-acceptance-v2",
+        "publication_version": null,
+        "target": "desktop-sidecar"
+      }
+    },
+    "role": "user",
+    "time_us": 1789374953135228,
+    "timestamp": 1789374953135,
+    "type": "user_message"
+  }
+]

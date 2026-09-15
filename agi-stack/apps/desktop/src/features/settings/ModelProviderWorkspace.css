@@ -62,7 +62,7 @@
 .provider-list-copy { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 4px; }
 .provider-list-copy b { max-width: 100%; overflow: hidden; color: var(--desktop-text-soft); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
 .provider-list-copy small { max-width: 100%; overflow: hidden; color: var(--desktop-gray-7); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
-.provider-status { display: inline-flex; min-height: 18px; align-items: center; gap: 4px; padding: 0 6px; color: var(--desktop-gray-27); font-size: 10.5px; font-style: normal; white-space: nowrap; background: var(--desktop-surface-30); border: 1px solid var(--desktop-border-6); border-radius: 9px; }
+.provider-status { display: inline-flex; min-height: 18px; align-items: center; gap: 4px; padding: 0 6px; color: var(--desktop-gray-27); font-size: 7px; font-style: normal; white-space: nowrap; background: var(--desktop-surface-30); border: 1px solid var(--desktop-pill-neutral-border); border-radius: 9px; }
 .provider-status i { width: 5px; height: 5px; background: currentcolor; border-radius: 50%; }
 .provider-status.connected { color: var(--green); background: var(--desktop-surface-green-2); border-color: var(--desktop-border-green-2); }
 .provider-status.attention { color: var(--amber); background: var(--desktop-surface-amber-2); border-color: var(--desktop-border-amber); }
@@ -92,8 +92,8 @@
 .provider-identity > section small { color: var(--desktop-gray-19); font-size: 10.5px; }
 .provider-identity > section b { max-width: 175px; margin: 6px 0 4px; overflow: hidden; color: var(--desktop-gray-34); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .provider-identity > section span { color: var(--desktop-gray-19); font-size: 10.5px; }
-.provider-tabs { display: flex; height: 42px; gap: 3px; padding: 0 20px; background: var(--desktop-surface-12); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.provider-tabs button { position: relative; padding: 0 11px; color: var(--desktop-gray-23); font-size: 11px; background: transparent; border: 0; }
+.provider-tabs { display: flex; height: 38px; gap: 3px; padding: 0 20px; background: var(--desktop-surface-12); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.provider-tabs button { position: relative; padding: 0 11px; color: var(--desktop-gray-23); font-size: 8px; background: transparent; border: 0; }
 .provider-tabs button.active { color: var(--desktop-white); }
 .provider-tabs button.active::after { position: absolute; right: 8px; bottom: 0; left: 8px; height: 2px; background: var(--cyan); content: ''; }
 .provider-tab-content { padding: 16px 20px 32px; }

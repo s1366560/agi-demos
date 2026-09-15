@@ -1,0 +1,14 @@
+{
+  "role": "assistant",
+  "content": null,
+  "tool_calls": [
+    {
+      "id": "call_103a668f66ef4469928107",
+      "type": "function",
+      "function": {
+        "name": "sessions_spawn",
+        "arguments": "{\"subagent_name\": \"qa_owner_20260914\", \"task\": \"\\u4e0d\\u8c03\\u7528\\u4efb\\u4f55\\u5de5\\u5177\\uff0c\\u7528\\u4e2d\\u6587\\u8be6\\u7ec6\\u89e3\\u91ca\\u5206\\u5e03\\u5f0f\\u7cfb\\u7edf\\u4e00\\u81f4\\u6027\\uff0c\\u81f3\\u5c11\\u4e94\\u5343\\u5b57\\u3002\", \"run_timeout_seconds\": 60, \"mode\": \"run\"}"
+      }
+    }
+  ]
+}

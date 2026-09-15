@@ -5,11 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from src.configuration.config import get_settings
-from src.infrastructure.agent.subagent.run_registry import (
-    SubAgentRunRegistry,
-    get_shared_subagent_run_registry,
+from src.infrastructure.agent.subagent.production_run_registry_v2 import (
+    production_subagent_run_registry_v2,
 )
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 
 from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error, generated_contract_digest_v2
 
@@ -24,15 +23,7 @@ type SubAgentRunRegistryFactoryV2 = Callable[[dict[str, Any]], SubAgentRunRegist
 def create_subagent_run_registry_v2(config: Mapping[str, Any]) -> SubAgentRunRegistry:
     """Resolve the process-shared registry from deployment settings once per generation."""
     _validate_config_v2(config)
-    settings = get_settings()
-    return get_shared_subagent_run_registry(
-        persistence_path=settings.agent_subagent_run_registry_path,
-        postgres_persistence_dsn=settings.agent_subagent_run_postgres_dsn,
-        sqlite_persistence_path=settings.agent_subagent_run_sqlite_path,
-        redis_cache_url=settings.agent_subagent_run_redis_cache_url,
-        redis_cache_ttl_seconds=settings.agent_subagent_run_redis_cache_ttl_seconds,
-        terminal_retention_seconds=settings.agent_subagent_terminal_retention_seconds,
-    )
+    return production_subagent_run_registry_v2()
 
 
 def subagent_run_registry_definition_v2(

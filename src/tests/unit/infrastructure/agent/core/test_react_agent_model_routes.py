@@ -201,3 +201,41 @@ class TestBindProcessorModelRoute:
         assert config.model == "claude-3-7-sonnet"
         assert config.base_url == "https://anthropic.example.test"
         assert config.llm_client is new_client
+
+
+@pytest.mark.unit
+async def test_exact_provider_config_id_selects_one_of_two_same_vendor_accounts():
+    first = TestExactProviderConfigResolution._provider("openai", name="account-a")
+    selected = TestExactProviderConfigResolution._provider("openai", name="account-b")
+    repository = SimpleNamespace(
+        find_tenant_provider=AsyncMock(return_value=first),
+        find_default_provider=AsyncMock(return_value=first),
+        list_active=AsyncMock(return_value=[first, selected]),
+    )
+    with patch(
+        "src.application.services.provider_resolution_service.get_provider_resolution_service",
+        return_value=SimpleNamespace(repository=repository),
+    ):
+        resolved = await _resolve_exact_provider_config_for_route(
+            tenant_id="tenant-1",
+            route=ModelRouteRef(provider_id="account-b", model_id="gpt-4.1-mini"),
+        )
+    assert resolved is selected
+
+
+@pytest.mark.unit
+async def test_replayed_explicit_route_revalidates_disabled_provider():
+    config = ProcessorConfig(model="model", provider_id="selected-account", llm_client=MagicMock())
+    route = ModelRouteRef(provider_id="selected-account", model_id="model")
+    with (
+        patch(
+            "src.infrastructure.agent.core.react_agent_stream_mixin._resolve_exact_provider_config_for_route",
+            new=AsyncMock(
+                side_effect=RuntimeV2Error("model_route_provider_unavailable", "Provider disabled")
+            ),
+        ),
+        pytest.raises(RuntimeV2Error, match="Provider disabled"),
+    ):
+        await _bind_processor_model_route(
+            config=config, route=route, tenant_id="tenant-1", revalidate=True
+        )

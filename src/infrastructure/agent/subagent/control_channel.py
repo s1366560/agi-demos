@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Awaitable, Mapping
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.model.agent.tool_policy import ControlMessageType
@@ -50,6 +51,7 @@ def _serialize_message(msg: ControlMessage) -> dict[str, str]:
         "idempotency_key": msg.idempotency_key,
         "target_agent_id": msg.target_agent_id,
         "target_agent_name": msg.target_agent_name,
+        "conversation_id": msg.conversation_id,
     }
 
 
@@ -77,6 +79,7 @@ def _deserialize_message(data: Mapping[Any, Any]) -> ControlMessage:
         idempotency_key=raw.get("idempotency_key", ""),
         target_agent_id=raw.get("target_agent_id", ""),
         target_agent_name=raw.get("target_agent_name", ""),
+        conversation_id=raw.get("conversation_id", ""),
     )
 
 
@@ -102,6 +105,36 @@ class RedisControlChannel:
                 message.message_type.value,
                 exc,
             )
+            return False
+
+    async def send_control_once(self, message: ControlMessage) -> bool:
+        """Atomically append once across retries after a lost delivery response."""
+        if not message.idempotency_key or message.message_type is not ControlMessageType.STEER:
+            raise ValueError("Idempotent stream delivery requires a keyed STEER command")
+        fields = _serialize_message(message)
+        marker = f"agent:control:receipts:{message.run_id}"
+        request_key = sha256(message.idempotency_key.encode()).hexdigest()
+        script = """
+        if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1 then return 0 end
+        redis.call('XADD', KEYS[2], '*', unpack(ARGV, 2))
+        redis.call('HSET', KEYS[1], ARGV[1], '1')
+        return 1
+        """
+        try:
+            await cast(
+                Awaitable[object],
+                self._redis.eval(
+                    script,
+                    2,
+                    marker,
+                    _stream_key(message.run_id),
+                    request_key,
+                    *[part for item in fields.items() for part in item],
+                ),
+            )
+            return True
+        except Exception:
+            logger.warning("Idempotent child control delivery failed", exc_info=False)
             return False
 
     async def check_control(self, run_id: str) -> ControlMessage | None:
@@ -179,6 +212,7 @@ class RedisControlChannel:
             pipeline = self._redis.pipeline()
             pipeline.delete(_kill_key(run_id))
             pipeline.delete(_stream_key(run_id))
+            pipeline.delete(f"agent:control:receipts:{run_id}")
             await pipeline.execute()
         except Exception as exc:
             logger.warning("cleanup failed for run_id=%s: %s", run_id, exc)

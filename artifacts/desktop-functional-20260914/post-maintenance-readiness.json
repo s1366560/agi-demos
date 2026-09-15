@@ -1,0 +1,37 @@
+{
+  "root_publication": {
+    "id": "8ab1dfae-428e-4e29-90aa-a9f82dbad837",
+    "generation": 11,
+    "status": "ready",
+    "required_planes": [
+      "python-api-v2",
+      "desktop-sidecar-v2",
+      "desktop-renderer-v2"
+    ]
+  },
+  "receipts": [
+    {
+      "plane": "python-api-v2",
+      "status": "ack",
+      "matches_requested": true,
+      "error_code": null
+    },
+    {
+      "plane": "desktop-renderer-v2",
+      "status": "ack",
+      "matches_requested": true,
+      "error_code": null
+    },
+    {
+      "plane": "desktop-sidecar-v2",
+      "status": "ack",
+      "matches_requested": true,
+      "error_code": null
+    }
+  ],
+  "stopped_run": {
+    "id": "41e65048-1f0d-50e8-b602-c9cd50c86304",
+    "status": "cancelled",
+    "completed_at": "2026-09-14T04:06:32.591596+00:00"
+  }
+}

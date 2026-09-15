@@ -82,7 +82,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
     // Review-panel comment sends carry their own deduplicated anchors; the
     // composer's selected references otherwise stay the default.
     const outgoingReferences = structuredClone(referencesOverride ?? runInputReferences);
-    const execution = composerAgentExecutionContext(content, contextItems);
+    const execution = composerAgentExecutionContext(content, contextItems, config.mode);
     const mentions = execution.mentions;
     const canSendConversationMessage = Boolean(
       sessionProjection?.capabilities.canSendMessage &&

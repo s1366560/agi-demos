@@ -42,6 +42,10 @@ import {
   type WorkspaceCollaborationTranslate as Translate,
 } from './WorkspaceCollaborationSurfacePrimitives';
 import { workspaceCollaborationFailureReason } from './workspaceCollaborationFailureReason';
+import {
+  WorkspaceDiscussionReplies,
+  workspaceDiscussionAuthor,
+} from './WorkspaceDiscussionReplies';
 import './WorkspaceCollaborationCanvas.css';
 
 export type WorkspaceCollaborationCanvasProps = {
@@ -582,7 +586,7 @@ function DiscussionSurface({ data, busy, onMutate, t }: SurfaceProps) {
                       t('workspaceCollaboration.discussion.untitled')}
                   </strong>
                   <small>
-                    {text(post, 'author_name', 'author') ??
+                    {workspaceDiscussionAuthor(post) ??
                       t('workspaceCollaboration.unknown')}
                   </small>
                 </div>
@@ -601,7 +605,10 @@ function DiscussionSurface({ data, busy, onMutate, t }: SurfaceProps) {
                 </button>
               </header>
               <p>{text(post, 'content', 'body', 'summary') ?? t('workspaceCollaboration.empty')}</p>
-              <Collection items={rows(post, 'replies')} t={t} compact />
+              <WorkspaceDiscussionReplies
+                replies={rows(post, 'replies')}
+                unknownAuthor={t('workspaceCollaboration.unknown')}
+              />
               {replyTo === id ? (
                 <form
                   className="workspace-collaboration-reply"

@@ -29,7 +29,9 @@ pytestmark = pytest.mark.unit
 
 
 @asynccontextmanager
-async def _noop_agent_turn_operation(_reservation: object, **_kwargs: object) -> AsyncIterator[None]:
+async def _noop_agent_turn_operation(
+    _reservation: object, **_kwargs: object
+) -> AsyncIterator[None]:
     yield None
 
 
@@ -343,12 +345,15 @@ async def test_stream_agent_to_websocket_passes_preferred_language(
         context=context,  # type: ignore[arg-type]
         conversation_id="conv-1",
         user_message="你好",
+        display_content="原始目标",
         project_id="project-1",
         preferred_language="zh-CN",
     )
 
     assert agent_service.stream_kwargs is not None
     assert agent_service.stream_kwargs["preferred_language"] == "zh-CN"
+    assert agent_service.stream_kwargs["display_content"] == "原始目标"
+    assert agent_service.stream_kwargs["user_message"] == "你好"
     assert agent_service.stream_kwargs["api_auth_token"] == context.api_key
     assert context.connection_manager.broadcasts[0][0] == "conv-1"
 
@@ -556,3 +561,30 @@ def test_stop_session_conversation_lookup_has_no_static_sql_fallback() -> None:
 
     assert "conversation_access_application_authority_v2" in source
     assert "SqlConversationRepository" not in source
+
+
+async def test_display_content_survives_fresh_scoped_and_pinned_stream_without_replacing_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = FakeAgentService()
+    scoped = FakeMessageContext()
+
+    @asynccontextmanager
+    async def fresh() -> AsyncIterator[FakeMessageContext]:
+        yield scoped
+
+    monkeypatch.setattr(
+        chat_handler_module, "current_agent_turn_service_v2", AsyncMock(return_value=service)
+    )
+    await chat_handler_module.stream_agent_to_websocket_with_fresh_session(
+        context=SimpleNamespace(fresh_db_context=fresh),
+        conversation_id="conv-1",
+        user_message="Plan wrapper\nModel must read the full contract.",
+        project_id="project-1",
+        display_content="用户原始目标",
+    )
+    assert service.stream_kwargs is not None
+    assert service.stream_kwargs["display_content"] == "用户原始目标"
+    assert (
+        service.stream_kwargs["user_message"] == "Plan wrapper\nModel must read the full contract."
+    )

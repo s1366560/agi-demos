@@ -1,0 +1,117 @@
+{
+  "started_at_utc": "2026-09-14T02:59:56.707219+00:00",
+  "published": true,
+  "bootstrap_identity_deactivated": true,
+  "post_restart_preflight_passed": true,
+  "bootstrap_user_id": "79115940-00ed-4cff-aba6-5adff0644f11",
+  "bootstrap_id": "2c12392a-4290-4bbe-81ac-336d310ddd1d",
+  "publish_http_status": 200,
+  "publication": {
+    "publication_id": "c3c7a832-f618-4077-86be-6ab65262ada9",
+    "generation": 10,
+    "requested_version": 10,
+    "snapshot_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+    "nonce": "c537caa7-079a-4217-a82f-fc54281ffb2d",
+    "republished_from_nonce": "e124304f-cd3b-4522-88ed-f1df45a7279e",
+    "required_data_plane_ids": [
+      "python-api-v2",
+      "desktop-sidecar-v2",
+      "desktop-renderer-v2"
+    ],
+    "status": "reconciling",
+    "ready_at": null,
+    "ack_deadline_at": "2026-09-14T03:01:58.531611Z",
+    "data_planes": [
+      {
+        "data_plane_id": "python-api-v2",
+        "status": "ack",
+        "requested_version": 10,
+        "requested_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+        "applied_version": 10,
+        "applied_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+        "error_code": null
+      },
+      {
+        "data_plane_id": "desktop-sidecar-v2",
+        "status": null,
+        "requested_version": null,
+        "requested_digest": null,
+        "applied_version": null,
+        "applied_digest": null,
+        "error_code": null
+      },
+      {
+        "data_plane_id": "desktop-renderer-v2",
+        "status": null,
+        "requested_version": null,
+        "requested_digest": null,
+        "applied_version": null,
+        "applied_digest": null,
+        "error_code": null
+      }
+    ]
+  },
+  "error_type": "ProgrammingError",
+  "failed": true,
+  "finished_at_utc": "2026-09-14T03:00:09.298754+00:00",
+  "content_checks": {
+    "entries_equal": true,
+    "manifests_equal": true,
+    "bundle_refs_equal": true,
+    "profile_source_equal": true,
+    "three_plane_roster": true,
+    "republished_from_expected_root": true
+  },
+  "verification_identity": {
+    "user_id": "fd5dceda-1734-4d24-95ae-298642f56ad2",
+    "bootstrap_id": "008300fb-2157-4dbb-811c-abbc32664ccc",
+    "deactivated": true
+  },
+  "final_readiness": {
+    "publication_id": "c3c7a832-f618-4077-86be-6ab65262ada9",
+    "generation": 10,
+    "requested_version": 10,
+    "snapshot_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+    "nonce": "c537caa7-079a-4217-a82f-fc54281ffb2d",
+    "required_data_plane_ids": [
+      "python-api-v2",
+      "desktop-sidecar-v2",
+      "desktop-renderer-v2"
+    ],
+    "status": "ready",
+    "ready_at": "2026-09-14T03:00:49.172998Z",
+    "ack_deadline_at": "2026-09-14T03:01:58.531611Z",
+    "data_planes": [
+      {
+        "data_plane_id": "python-api-v2",
+        "status": "ack",
+        "requested_version": 10,
+        "requested_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+        "applied_version": 10,
+        "applied_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+        "error_code": null
+      },
+      {
+        "data_plane_id": "desktop-sidecar-v2",
+        "status": "ack",
+        "requested_version": 10,
+        "requested_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+        "applied_version": 10,
+        "applied_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+        "error_code": null
+      },
+      {
+        "data_plane_id": "desktop-renderer-v2",
+        "status": "ack",
+        "requested_version": 10,
+        "requested_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+        "applied_version": 10,
+        "applied_digest": "baf7a006555ae48f32030d7ad2af0e8619db3e4c876ad6f9b9c4675dc236d6fe",
+        "error_code": null
+      }
+    ]
+  },
+  "three_plane_ack_ready": true,
+  "verification_recovered": true,
+  "verification_finished_at_utc": "2026-09-14T03:01:14.929925+00:00"
+}

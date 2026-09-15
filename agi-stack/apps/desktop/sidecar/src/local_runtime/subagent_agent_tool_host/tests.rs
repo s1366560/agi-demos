@@ -251,6 +251,48 @@ fn authorization_fails_closed_for_missing_or_malformed_spawn_policy() {
 }
 
 #[tokio::test]
+async fn subagent_model_contract_declares_authorized_selectors_and_executable_task() {
+    let host = SubagentAgentToolHost::new(vec![target(subagent(
+        "qa-path-reader",
+        json!("local-project"),
+        "active",
+        true,
+    ))])
+    .expect("SubAgent host");
+    let contracts = host.tool_definitions().expect("model contracts");
+    assert_eq!(contracts.len(), 1);
+    let schema = contracts[0]
+        .input_schema
+        .as_ref()
+        .expect("SubAgent input schema");
+    assert_eq!(schema["required"], json!(["task"]));
+    assert_eq!(
+        schema["properties"]["subagent_id"]["enum"],
+        json!(["qa-path-reader"])
+    );
+    assert_eq!(schema["properties"]["task"]["type"], "string");
+    assert_eq!(schema["additionalProperties"], false);
+    assert_eq!(
+        schema["anyOf"],
+        json!([{"required": ["subagent_id"]}, {"required": ["subagent_name"]}])
+    );
+    let output = authorized_call(
+        &host,
+        "schema-invocation",
+        1,
+        &json!({
+            "subagent_id": schema["properties"]["subagent_id"]["enum"][0],
+            "task": "Inspect README.md",
+        })
+        .to_string(),
+    )
+    .await
+    .expect("advertised input executes");
+    assert!(output.contains("README evidence verified"));
+    assert!(host.tool_definition("unavailable").is_none());
+}
+
+#[tokio::test]
 async fn structured_subagent_tool_runs_the_exact_authorized_target() {
     let host = SubagentAgentToolHost::new(vec![target(subagent(
         "qa-path-reader",
@@ -383,6 +425,17 @@ async fn lifecycle_observer_never_receives_raw_task_or_child_answer() {
     .expect("authorized delegation");
 
     assert!(output.contains("child-answer-secret"));
+    let result: Value = serde_json::from_str(&output).expect("structured result");
+    assert_eq!(result["run_id"], "run-qa-read");
+    assert_eq!(result["run_revision"], 1);
+    assert_eq!(
+        result["execution_id"],
+        lifecycle.started.lock().expect("started lifecycle")[0].execution_id
+    );
+    assert_eq!(
+        result["execution_id"],
+        lifecycle.completed.lock().expect("completed lifecycle")[0].execution_id
+    );
     let lifecycle_payload = format!(
         "{:?}{:?}",
         lifecycle.started.lock().expect("started lifecycle"),
@@ -533,4 +586,48 @@ async fn run_revisions_do_not_share_child_checkpoint() {
 
     assert!(first.contains("revision one"));
     assert!(second.contains("revision two"));
+}
+
+#[tokio::test]
+async fn cancelled_checkpoint_reports_completed_calls_without_claiming_success() {
+    use agistack_core::{
+        agent::types::{CompletedCall, SessionState},
+        ports::CheckpointStore,
+    };
+    let checkpoints = Arc::new(InMemoryCheckpointStore::new());
+    let mut state = SessionState::new("cancelled-child", "private-task", Some("local-project"));
+    state.status = SessionStatus::Cancelled;
+    state.completed_tool_calls = (0..7)
+        .map(|round| CompletedCall {
+            round,
+            tool: "read".into(),
+            input_json: "private-input".into(),
+            output_json: "private-output".into(),
+            failed: round == 6,
+        })
+        .collect();
+    checkpoints.save(&state).await.unwrap();
+    let target = target_with_runtime(
+        subagent("child", json!("local-project"), "active", true),
+        Arc::new(ScriptedLlm::new(vec![])),
+        checkpoints,
+    );
+    let invocation = authorized_tool_host::AuthorizedInvocationContext {
+        invocation_id: "cancelled-invocation".into(),
+        run_id: "run-qa-read".into(),
+        run_revision: 1,
+    };
+    let error = target
+        .run("private-task", &invocation, "cancelled-child", None)
+        .await
+        .expect_err("cancelled remains failure");
+    let CoreError::Tool(payload) = error else {
+        panic!("tool error required")
+    };
+    let payload: Value = serde_json::from_str(&payload).expect("structured cancellation evidence");
+    assert_eq!(payload["status"], "cancelled");
+    assert_eq!(payload["completed_tool_calls_count"], 7);
+    assert_eq!(payload["failed_tool_calls_count"], 1);
+    assert_eq!(payload["success"], false);
+    assert!(!payload.to_string().contains("private-"));
 }

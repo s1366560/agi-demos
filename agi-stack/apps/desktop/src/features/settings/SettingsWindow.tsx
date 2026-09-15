@@ -1,3 +1,4 @@
+import { LocalPluginSettings } from './LocalPluginSettings';
 import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
 import {
   createDesktopBrowserIntegrationClientV2,
@@ -13,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { Theme } from '@radix-ui/themes';
 import {
   Cross2Icon,
+  CubeIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
 } from '@radix-ui/react-icons';
@@ -67,6 +69,10 @@ import { SettingsManagementDialogs } from './SettingsManagementDialogs';
 import { ShortcutSettingsPage } from './ShortcutSettingsPage';
 import { UpdateSettingsPage } from './UpdateSettingsPage';
 import { PlatformPluginUiSlots } from './PlatformPluginUiSlots';
+import {
+  loadPluginMarketplaceSettings,
+  pluginMarketplaceSettingsAvailable,
+} from './pluginMarketplaceSettingsModel';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
@@ -246,6 +252,8 @@ export function SettingsWindow({
     canManageAgentDefinitions ||
     (config.mode === 'cloud' && normalizedRoles.has('member') && Boolean(config.projectId));
   const canManagePluginControlPlane = canManageAgentDefinitions;
+  const canManageMarketplacePackages =
+    config.mode === 'local' ? canManagePluginControlPlane : auth.user?.is_superuser === true;
   const settingsDialogRef = useModalDialog({
     active: open,
     initialFocusRef: searchInputRef,
@@ -298,7 +306,7 @@ export function SettingsWindow({
           resourceSection === 'skills'
             ? await tenantSkillDefinitionsClientV2.listManagedSkills(signal)
             : resourceSection === 'plugins'
-              ? await pluginMarketplaceOperationsV2.listMarketplacePlugins(config, signal)
+              ? await loadPluginMarketplaceSettings(config, pluginMarketplaceOperationsV2, signal)
               : resourceSection === 'agents'
                 ? await tenantAgentDefinitionsClientV2.listManagedAgents(signal)
                 : await tenantSubAgentDefinitionsClientV2.listManagedSubAgents(signal);
@@ -308,7 +316,10 @@ export function SettingsWindow({
         setLoadedResourceContextKey(resourceContextKey);
         setResourceCounts((current) => ({
           ...current,
-          [resourceSection]: items.length < 100 ? items.length : null,
+          [resourceSection]:
+            resourceSection === 'plugins' && !pluginMarketplaceSettingsAvailable(config.mode)
+              ? null
+              : items.length < 100 ? items.length : null,
         }));
         setSelectedResourceId((current) => {
           const target = preferredSelectionId || current;
@@ -344,7 +355,7 @@ export function SettingsWindow({
     config,
     pluginMarketplaceOperationsV2,
     contextKey: resourceContextKey,
-    canManage: canManagePluginControlPlane,
+    canManage: canManageMarketplacePackages,
     onReload: reloadPluginResources,
     onUninstalled: clearPluginSelection,
   });
@@ -551,7 +562,8 @@ export function SettingsWindow({
       config.mode,
       auth.user?.roles ?? [],
       section,
-      item
+      item,
+      auth.user?.is_superuser === true,
     );
     const action = managedResourceAction(section, item, canManageResource, config.mode);
     if (!action) return;
@@ -692,7 +704,9 @@ export function SettingsWindow({
                 </div>
               ) : null}
               <div className="settings-window-scope">
-                <LockClosedIcon />
+                <span className="settings-window-scope-avatar">
+                  <CubeIcon />
+                </span>
                 <span>
                   <strong>
                     {selectedTenant?.name || config.tenantId || t('settings.noTenantSelected')}
@@ -701,6 +715,7 @@ export function SettingsWindow({
                     {selectedProject?.name || config.projectId || t('settings.noProjectSelected')}
                   </small>
                 </span>
+                <LockClosedIcon />
               </div>
             </aside>
 
@@ -798,6 +813,9 @@ export function SettingsWindow({
                       loading={platformPluginUiSlots.loading}
                     />
                   ) : null}
+                  {section === 'plugins' && !pluginMarketplaceSettingsAvailable(config.mode) ? (
+                    <LocalPluginSettings config={config} canManage={canManagePluginControlPlane} />
+                  ) : (
                   <ManagedResourceWorkspace
                   section={section}
                   items={filteredItems}
@@ -836,7 +854,8 @@ export function SettingsWindow({
                           config.mode,
                           auth.user?.roles ?? [],
                           section,
-                          selectedResource
+                          selectedResource,
+                          auth.user?.is_superuser === true,
                         )
                       : false
                   }
@@ -891,6 +910,7 @@ export function SettingsWindow({
                     }
                   }}
                   />
+                  )}
                 </>
               ) : null}
             </main>

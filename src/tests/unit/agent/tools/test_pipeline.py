@@ -129,7 +129,7 @@ class TestToolPipeline:
         assert len(events) == 1
         assert events[0].type == "denied"
 
-    async def test_prehook_ask_uses_permission_manager(self) -> None:
+    async def test_prehook_ask_without_authority_is_denied(self) -> None:
         hooks = ToolHookRegistry()
 
         async def ask_hook(tn: str, args: dict, ctx: ToolContext) -> HookResult:
@@ -145,13 +145,8 @@ class TestToolPipeline:
 
         events = await _collect_events(pipeline, tool, {"path": "a.txt"}, ctx)
 
-        assert [event.type for event in events][:2] == ["permission_asked", "started"]
-        pm.ask.assert_awaited_once_with(
-            permission="edit",
-            patterns=["write_file"],
-            session_id="s",
-            metadata={"tool": "write_file", "input": {"path": "a.txt"}, "source": "pre_hook"},
-        )
+        assert [event.type for event in events] == ["permission_asked", "denied"]
+        pm.ask.assert_not_awaited()
         ctx.ask.assert_not_awaited()
 
     async def test_doom_loop_detection(self) -> None:

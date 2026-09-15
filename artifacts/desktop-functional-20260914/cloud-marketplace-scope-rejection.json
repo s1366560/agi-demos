@@ -1,0 +1,13 @@
+{
+  "conversation_id": "6032f5fb-4941-549f-ae2f-b87e5b34fa3c",
+  "run_id": "fb2412a9-5790-5944-b88f-c517abf2d8a3",
+  "run_status": "queued",
+  "receipts": [
+    {
+      "plane": "python-api-v2",
+      "status": "nack",
+      "error_code": "staging_failed",
+      "error_message": "snapshot staging failed: RuntimeV2Error: external module requires verified archives"
+    }
+  ]
+}

@@ -369,7 +369,7 @@ function createDesktopTenantProjectsAuthorityV2(
         ...projectIds.map((projectId) =>
           requestJsonV2(
             operationConfig,
-            `/api/v1/projects/${encodeURIComponent(projectId)}/members`,
+            `/api/v1/projects/${encodeURIComponent(projectId)}/members?${new URLSearchParams({ tenant_id: operationScope.tenantId })}`,
             { method: 'GET', signal },
           ),
         ),

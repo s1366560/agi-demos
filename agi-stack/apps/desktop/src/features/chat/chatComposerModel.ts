@@ -127,6 +127,7 @@ export function appendComposerContextItem(
 export function composerAgentExecutionContext(
   rawMessage: string,
   contextItems: readonly ComposerContextItem[],
+  mode: 'cloud' | 'local' = 'cloud',
 ): ComposerAgentExecutionContext {
   const agentId = lastExecutionMetadata(contextItems, 'agent', 'execution_agent_id');
   const forcedSkillName = lastExecutionMetadata(
@@ -145,6 +146,17 @@ export function composerAgentExecutionContext(
       (item) =>
         item.kind !== 'attachment' && item.kind !== 'command' && item.resource_id.trim(),
     )
+    // Local execution loads these resources through the authoritative selector
+    // fields below. Sending them again as cloud app context rejects valid turns.
+    .filter((item) => {
+      if (mode !== 'local') return true;
+      const slot = metadataText(item, 'execution_slot');
+      return !(
+        (slot === 'agent' && metadataText(item, 'execution_agent_id')) ||
+        (slot === 'skill' && metadataText(item, 'execution_skill_name')) ||
+        slot === 'subagent'
+      );
+    })
     .map((item) => ({ kind: item.kind, resource_id: item.resource_id.trim() }));
   return {
     message,

@@ -34,6 +34,9 @@ from src.infrastructure.adapters.primary.web.dependencies.plugin_data_plane_auth
 from src.infrastructure.adapters.primary.web.dependencies.plugin_desired_source_auth_v2 import (
     authorize_desired_profile_source_v2,
 )
+from src.infrastructure.adapters.primary.web.dependencies.plugin_scope_auth_v2 import (
+    resolve_plugin_publication_scope_v2,
+)
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     plugin_publication_policy_v2_from_app,
 )
@@ -153,12 +156,26 @@ async def get_current_desired_bundle_set_v2(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginDesiredBundleSetResponseV2:
-    """Return the latest exact desired-set revision for one scope."""
-    _require_platform_admin(current_user)
+    """Read one exact desired head using its existing publication write authority."""
     try:
         scope = _parse_scope_query_v2(scope_kind, tenant_id, project_id, session_id)
     except PluginProtocolV2Error as exc:
         _raise_protocol_error(exc)
+    if scope.kind is ScopeKindV2.ROOT:
+        _require_platform_admin(current_user)
+    else:
+        try:
+            scope = await resolve_plugin_publication_scope_v2(
+                db, current_user=current_user, requested_scope=scope
+            )
+        except RuntimeV2Error as exc:
+            raise HTTPException(
+                status_code=404 if exc.code == "scope_resource_unavailable" else 403,
+                detail={
+                    "code": exc.code,
+                    "message": _("Scoped desired configuration is unavailable"),
+                },
+            ) from exc
     record = await PlatformPluginDesiredBundleSetRepositoryV2(db).current_desired_set(scope)
     if record is None:
         raise HTTPException(

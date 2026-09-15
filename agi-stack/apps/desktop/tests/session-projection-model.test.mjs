@@ -434,6 +434,7 @@ test('session projection decoder accepts one scoped schema-v1 authority snapshot
   assert.equal(projection?.conversation.id, 'conversation-1');
   assert.equal(projection?.currentRun?.status, 'running');
   assert.equal(projection?.currentPlan?.id, 'plan-1');
+  assert.deepEqual(projection?.capabilities.environmentKinds, ['local', 'worktree']);
   assert.equal(projection?.tasks[0]?.id, 'task-1');
   assert.deepEqual(projection?.capabilities.runActions, ['pause', 'cancel']);
   assert.deepEqual(projection?.capabilities.allowedActions, [
@@ -443,6 +444,21 @@ test('session projection decoder accepts one scoped schema-v1 authority snapshot
     'cancel',
   ]);
   assert.match(projection?.snapshotRevision ?? '', /^[a-f0-9]{64}$/);
+});
+
+test('cloud environment capabilities never inherit local worktree defaults', () => {
+  const payload = validCloudProjection();
+  assert.deepEqual(
+    decodeConversationSessionProjection(payload, 'conversation-1')?.capabilities.environmentKinds,
+    [],
+  );
+  payload.capabilities.environment_kinds = ['local'];
+  assert.deepEqual(
+    decodeConversationSessionProjection(payload, 'conversation-1')?.capabilities.environmentKinds,
+    ['local'],
+  );
+  payload.capabilities.environment_kinds = ['unknown'];
+  assert.equal(decodeConversationSessionProjection(payload, 'conversation-1'), null);
 });
 
 test('session projection decoder accepts a scoped cloud workspace authority without desktop facts', () => {
@@ -1125,4 +1141,94 @@ test('send message authority ack invalidates only its exact conversation project
     ),
     false,
   );
+});
+
+test('cloud versioned approval is decoded only for an idle scoped draft', () => {
+  const payload = validCloudProjection();
+  payload.conversation.current_mode = 'plan';
+  payload.execution.current_attempt = null;
+  payload.execution.attempt_history = [];
+  payload.evidence_summary.candidate_artifact_ref_count = 0;
+  payload.evidence_summary.candidate_verification_ref_count = 0;
+  payload.authority_kind = 'conversation_record';
+  payload.authority_id = 'conversation-1';
+  payload.pending_hitl = [];
+  payload.capabilities.can_respond_to_hitl = false;
+  payload.capabilities.can_send_message = true;
+  payload.capabilities.can_approve_plan = true;
+  payload.capabilities.allowed_actions = ['send_message', 'approve_plan_and_start'];
+  const decoded = decodeConversationSessionProjection(payload, 'conversation-1');
+  assert.ok(decoded);
+  assert.equal(decoded.capabilities.canApprovePlan, true);
+  assert.equal(decoded.planAuthority.currentPlan.id, payload.current_plan.id);
+  assert.equal(decoded.planAuthority.kind, 'agent_task_list');
+  const run = {
+    id: 'finished-planning-run', conversation_id: 'conversation-1', project_id: 'project-1',
+    plan_version_id: null, idempotency_key: 'planning', message_id: 'planning',
+    request_message: 'Plan', status: 'completed', revision: 1,
+    created_at: '2026-07-14T00:00:00Z', updated_at: '2026-07-14T00:01:00Z',
+    started_at: null, completed_at: '2026-07-14T00:01:00Z', last_heartbeat_at: null,
+    error: null, environment: null, permission_profile: 'read_only',
+    authorization_snapshot: {
+      conversation_id: 'conversation-1', project_id: 'project-1', plan_version_id: null,
+      permission_profile: 'read_only', environment: null,
+    },
+  };
+  payload.execution.current_run = run;
+  payload.execution.run_history = [run];
+  assert.ok(decodeConversationSessionProjection(payload, 'conversation-1'));
+  for (const change of [
+    (p) => { p.execution.current_run.status = 'queued'; },
+    (p) => { p.execution.current_run.status = 'running'; },
+    (p) => { p.conversation.current_mode = 'build'; },
+    (p) => { p.current_plan = null; p.plan_history = []; },
+    (p) => { p.current_plan.tasks = []; },
+    (p) => { p.current_plan.conversation_id = 'another-conversation'; },
+    (p) => { p.current_plan = { ...p.current_plan, version: 1 }; },
+  ]) {
+    const invalid = structuredClone(payload);
+    change(invalid);
+    assert.equal(decodeConversationSessionProjection(invalid, 'conversation-1'), null);
+  }
+});
+
+test('cancelled terminal invalidates only its conversation authority', () => {
+  const event = { type: 'cancelled', conversation_id: 'conversation-1', data: { run_id: 'run-1' } };
+  assert.equal(socketEventInvalidatesSessionProjection(event), true);
+  assert.equal(socketEventInvalidatesSessionProjectionForScope(event, { conversationId: 'conversation-1', workspaceId: null }), true);
+  assert.equal(socketEventInvalidatesSessionProjectionForScope(event, { conversationId: 'other', workspaceId: null }), false);
+});
+
+test('cloud cancellation capability requires an active scoped run and an exact action', () => {
+  const payload = validCloudProjection();
+  payload.execution.current_attempt = null;
+  payload.execution.attempt_history = [];
+  payload.evidence_summary.candidate_artifact_ref_count = 0;
+  payload.evidence_summary.candidate_verification_ref_count = 0;
+  payload.authority_kind = 'conversation_record';
+  payload.authority_id = 'conversation-1';
+  payload.pending_hitl = [];
+  payload.capabilities.can_respond_to_hitl = false;
+  payload.capabilities.can_control_execution = true;
+  payload.capabilities.allowed_actions = ['cancel'];
+  const run = { ...validProjection().current_run, plan_version_id: null, environment: null,
+    authorization_snapshot: { conversation_id: 'conversation-1', project_id: 'project-1',
+      plan_version_id: null, environment: null, permission_profile: 'workspace_write' } };
+  payload.execution.current_run = run;
+  payload.execution.run_history = [run];
+  for (const status of ['queued', 'running']) {
+    run.status = status;
+    const decoded = decodeConversationSessionProjection(payload, 'conversation-1');
+    assert.ok(decoded);
+    assert.deepEqual(decoded.capabilities.runActions, ['cancel']);
+  }
+  for (const mutate of [
+    (p) => { p.execution.current_run.status = 'completed'; },
+    (p) => { p.execution.current_run.project_id = 'other'; },
+    (p) => { p.capabilities.allowed_actions = []; },
+    (p) => { p.capabilities.can_control_execution = false; },
+  ]) {
+    const invalid = structuredClone(payload); mutate(invalid);
+    assert.equal(decodeConversationSessionProjection(invalid, 'conversation-1'), null);
+  }
 });

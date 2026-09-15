@@ -1,0 +1,453 @@
+{
+  "artifact_deliveries": [],
+  "artifact_versions": [],
+  "capabilities": {
+    "allowed_actions": [
+      "request_changes",
+      "approve"
+    ],
+    "can_approve_plan": false,
+    "can_deliver_artifacts": false,
+    "can_queue_next": false,
+    "can_respond_to_hitl": false,
+    "can_review_artifacts": false,
+    "can_send_message": false,
+    "can_steer_now": false,
+    "run_actions": [
+      "request_changes",
+      "approve"
+    ]
+  },
+  "conversation": {
+    "agent_config": {
+      "capability_mode": "work",
+      "llm_model_override": null,
+      "llm_route_override": null,
+      "selected_agent_id": "builtin:all-access"
+    },
+    "conversation_mode": "workspace",
+    "coordinator_agent_id": "builtin:all-access",
+    "created_at": "2026-09-14T06:20:21.009603+00:00",
+    "current_mode": "build",
+    "focused_agent_id": "builtin:all-access",
+    "id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+    "linked_workspace_task_id": null,
+    "message_count": 27,
+    "metadata": {
+      "capability_mode": "work",
+      "environment": {
+        "branch": null,
+        "created_at": "2026-09-14T06:21:43.328754+00:00",
+        "id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+        "kind": "local",
+        "label": "Local workspace",
+        "repository_root": null,
+        "source_run_id": null,
+        "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+      },
+      "run": {
+        "authorization_snapshot": {
+          "approved_at": "2026-09-14T06:21:43.355360+00:00",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "environment": {
+            "branch": null,
+            "created_at": "2026-09-14T06:21:43.328754+00:00",
+            "id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+            "kind": "local",
+            "label": "Local workspace",
+            "repository_root": null,
+            "source_run_id": null,
+            "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+          },
+          "mode": "build",
+          "permission_profile": "read_only",
+          "plan_version_id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+          "project_id": "desktop-client"
+        },
+        "completed_at": null,
+        "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+        "created_at": "2026-09-14T06:21:43.355360+00:00",
+        "environment": {
+          "branch": null,
+          "created_at": "2026-09-14T06:21:43.328754+00:00",
+          "id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+          "kind": "local",
+          "label": "Local workspace",
+          "repository_root": null,
+          "source_run_id": null,
+          "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+        },
+        "error": null,
+        "id": "local-run-44b050ed-590f-4cfb-83fe-1371ce8b5c13",
+        "idempotency_key": "desktop-plan-approval-bc1d4881-edc0-428d-ab35-3bb428a4e7ac",
+        "last_heartbeat_at": "2026-09-14T06:30:29.678001+00:00",
+        "message_id": "desktop-build-bc1d4881-edc0-428d-ab35-3bb428a4e7ac",
+        "permission_profile": "read_only",
+        "plan_version_id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+        "project_id": "desktop-client",
+        "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"移除原第1步的文件检查：插件是已验签安装并激活的宿主工具，不是工作区文件，禁止通过 list/glob/read 等工具查找。\",\"priority\":\"high\"},{\"content\":\"检查本轮真实可用工具列表中是否存在子智能体委派工具；若不存在，在最终报告中明确说明并停止，不得假定其可用。\",\"priority\":\"high\"},{\"content\":\"若委派工具存在，使用它创建一个只读子任务，要求子智能体从真实工具目录调用 plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e 并返回 score。\",\"priority\":\"medium\"},{\"content\":\"汇总子任务执行结果（或委派工具不可用说明），形成最终报告并提交审批。\",\"priority\":\"medium\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+        "revision": 5,
+        "started_at": "2026-09-14T06:21:43.356900+00:00",
+        "status": "ready_review",
+        "updated_at": "2026-09-14T06:30:29.678001+00:00"
+      },
+      "runtime": "local"
+    },
+    "participant_agents": [
+      "builtin:all-access"
+    ],
+    "project_id": "desktop-client",
+    "status": "active",
+    "summary": null,
+    "tenant_id": "northstar",
+    "title": "本地子智能体插件验收。请先提出待批准计划：批准后用当前真实可用的子智能体委派工具创建一个只读子任务，让子智能体实际调用当前项目已批准激活的 qa_marketplace_marker 插件（目",
+    "updated_at": "2026-09-14T06:21:43.355360+00:00",
+    "user_id": "local-user",
+    "workspace_id": null,
+    "workspace_name": null
+  },
+  "current_plan": {
+    "approved_at": "2026-09-14T06:21:43.355360+00:00",
+    "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+    "created_at": "2026-09-14T06:21:22.608196+00:00",
+    "id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+    "status": "approved",
+    "tasks": [
+      {
+        "content": "移除原第1步的文件检查：插件是已验签安装并激活的宿主工具，不是工作区文件，禁止通过 list/glob/read 等工具查找。",
+        "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+        "created_at": "2026-09-14T06:21:22.608196+00:00",
+        "id": "local-plan-task-bf06ad26-eaa5-40ad-9de1-d9d6d4eb9754",
+        "order_index": 0,
+        "priority": "high",
+        "status": "pending",
+        "updated_at": "2026-09-14T06:21:22.608196+00:00"
+      },
+      {
+        "content": "检查本轮真实可用工具列表中是否存在子智能体委派工具；若不存在，在最终报告中明确说明并停止，不得假定其可用。",
+        "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+        "created_at": "2026-09-14T06:21:22.608196+00:00",
+        "id": "local-plan-task-00674f66-f83f-4237-8af6-10afba5d049a",
+        "order_index": 1,
+        "priority": "high",
+        "status": "pending",
+        "updated_at": "2026-09-14T06:21:22.608196+00:00"
+      },
+      {
+        "content": "若委派工具存在，使用它创建一个只读子任务，要求子智能体从真实工具目录调用 plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e 并返回 score。",
+        "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+        "created_at": "2026-09-14T06:21:22.608196+00:00",
+        "id": "local-plan-task-8b1bfb37-6118-49e2-91cf-a2e06decc525",
+        "order_index": 2,
+        "priority": "medium",
+        "status": "pending",
+        "updated_at": "2026-09-14T06:21:22.608196+00:00"
+      },
+      {
+        "content": "汇总子任务执行结果（或委派工具不可用说明），形成最终报告并提交审批。",
+        "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+        "created_at": "2026-09-14T06:21:22.608196+00:00",
+        "id": "local-plan-task-0947faaf-6f4c-4ba6-96e7-4d2965cb8316",
+        "order_index": 3,
+        "priority": "medium",
+        "status": "pending",
+        "updated_at": "2026-09-14T06:21:22.608196+00:00"
+      }
+    ],
+    "version": 2
+  },
+  "current_run": {
+    "authorization_snapshot": {
+      "approved_at": "2026-09-14T06:21:43.355360+00:00",
+      "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+      "environment": {
+        "branch": null,
+        "created_at": "2026-09-14T06:21:43.328754+00:00",
+        "id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+        "kind": "local",
+        "label": "Local workspace",
+        "repository_root": null,
+        "source_run_id": null,
+        "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+      },
+      "mode": "build",
+      "permission_profile": "read_only",
+      "plan_version_id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+      "project_id": "desktop-client"
+    },
+    "completed_at": null,
+    "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+    "created_at": "2026-09-14T06:21:43.355360+00:00",
+    "environment": {
+      "branch": null,
+      "created_at": "2026-09-14T06:21:43.328754+00:00",
+      "id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+      "kind": "local",
+      "label": "Local workspace",
+      "repository_root": null,
+      "source_run_id": null,
+      "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+    },
+    "error": null,
+    "id": "local-run-44b050ed-590f-4cfb-83fe-1371ce8b5c13",
+    "idempotency_key": "desktop-plan-approval-bc1d4881-edc0-428d-ab35-3bb428a4e7ac",
+    "last_heartbeat_at": "2026-09-14T06:30:29.678001+00:00",
+    "message_id": "desktop-build-bc1d4881-edc0-428d-ab35-3bb428a4e7ac",
+    "permission_profile": "read_only",
+    "plan_version_id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+    "project_id": "desktop-client",
+    "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"移除原第1步的文件检查：插件是已验签安装并激活的宿主工具，不是工作区文件，禁止通过 list/glob/read 等工具查找。\",\"priority\":\"high\"},{\"content\":\"检查本轮真实可用工具列表中是否存在子智能体委派工具；若不存在，在最终报告中明确说明并停止，不得假定其可用。\",\"priority\":\"high\"},{\"content\":\"若委派工具存在，使用它创建一个只读子任务，要求子智能体从真实工具目录调用 plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e 并返回 score。\",\"priority\":\"medium\"},{\"content\":\"汇总子任务执行结果（或委派工具不可用说明），形成最终报告并提交审批。\",\"priority\":\"medium\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+    "revision": 5,
+    "started_at": "2026-09-14T06:21:43.356900+00:00",
+    "status": "ready_review",
+    "updated_at": "2026-09-14T06:30:29.678001+00:00"
+  },
+  "evidence_summary": {
+    "artifact_delivery_count": 0,
+    "artifact_source_count": 0,
+    "artifact_version_count": 0,
+    "changes": null,
+    "checks": null,
+    "tool_invocation_count": 2,
+    "unknown_outcome_count": 0
+  },
+  "pending_hitl": [],
+  "plan_history": [
+    {
+      "approved_at": "2026-09-14T06:21:43.355360+00:00",
+      "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+      "created_at": "2026-09-14T06:21:22.608196+00:00",
+      "id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+      "status": "approved",
+      "tasks": [
+        {
+          "content": "移除原第1步的文件检查：插件是已验签安装并激活的宿主工具，不是工作区文件，禁止通过 list/glob/read 等工具查找。",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "created_at": "2026-09-14T06:21:22.608196+00:00",
+          "id": "local-plan-task-bf06ad26-eaa5-40ad-9de1-d9d6d4eb9754",
+          "order_index": 0,
+          "priority": "high",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:21:22.608196+00:00"
+        },
+        {
+          "content": "检查本轮真实可用工具列表中是否存在子智能体委派工具；若不存在，在最终报告中明确说明并停止，不得假定其可用。",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "created_at": "2026-09-14T06:21:22.608196+00:00",
+          "id": "local-plan-task-00674f66-f83f-4237-8af6-10afba5d049a",
+          "order_index": 1,
+          "priority": "high",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:21:22.608196+00:00"
+        },
+        {
+          "content": "若委派工具存在，使用它创建一个只读子任务，要求子智能体从真实工具目录调用 plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e 并返回 score。",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "created_at": "2026-09-14T06:21:22.608196+00:00",
+          "id": "local-plan-task-8b1bfb37-6118-49e2-91cf-a2e06decc525",
+          "order_index": 2,
+          "priority": "medium",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:21:22.608196+00:00"
+        },
+        {
+          "content": "汇总子任务执行结果（或委派工具不可用说明），形成最终报告并提交审批。",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "created_at": "2026-09-14T06:21:22.608196+00:00",
+          "id": "local-plan-task-0947faaf-6f4c-4ba6-96e7-4d2965cb8316",
+          "order_index": 3,
+          "priority": "medium",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:21:22.608196+00:00"
+        }
+      ],
+      "version": 2
+    },
+    {
+      "approved_at": null,
+      "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+      "created_at": "2026-09-14T06:20:27.883951+00:00",
+      "id": "local-plan-version-86e7d569-b189-4c6e-abc6-bccc92fbde22",
+      "status": "draft",
+      "tasks": [
+        {
+          "content": "确认当前项目已批准激活的 qa_marketplace_marker 插件（工具名 plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e）可用且处于激活状态：通过 list/glob/read 等只读工具检查插件目录与激活元数据，禁止修改任何文件。",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "created_at": "2026-09-14T06:20:27.883951+00:00",
+          "id": "local-plan-task-1bfbe4d1-2328-4938-bdb6-b2e4ecb760ba",
+          "order_index": 0,
+          "priority": "high",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:20:27.883951+00:00"
+        },
+        {
+          "content": "使用当前真实可用的子智能体委派工具创建一个只读子任务：要求子智能体实际调用 qa_marketplace_marker 插件，输入 JSON 字符串 \"NATIVE_LOCAL_SUBAGENT_PLUGIN\"，并返回插件的真实 score 以及子任务执行标识；子任务必须只读，禁止子智能体修改文件或由主智能体代为调用。",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "created_at": "2026-09-14T06:20:27.883951+00:00",
+          "id": "local-plan-task-f869ab0a-7c95-478b-82fb-5f7272e53287",
+          "order_index": 1,
+          "priority": "high",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:20:27.883951+00:00"
+        },
+        {
+          "content": "主智能体等待子智能体完成，收集并记录其返回的子任务执行标识与真实 score，确保结果来自子智能体的实际插件调用而非伪造。",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "created_at": "2026-09-14T06:20:27.883951+00:00",
+          "id": "local-plan-task-fde29fe9-63a7-43d3-8ecd-4e2c75cf73bb",
+          "order_index": 2,
+          "priority": "high",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:20:27.883951+00:00"
+        },
+        {
+          "content": "向用户报告子智能体执行标识和 qa_marketplace_marker 插件返回的真实 score，不添加、不修改、不伪造任何结果。",
+          "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+          "created_at": "2026-09-14T06:20:27.883951+00:00",
+          "id": "local-plan-task-7a8eafbe-26b6-413c-939f-a3d3aec4b6e6",
+          "order_index": 3,
+          "priority": "high",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:20:27.883951+00:00"
+        }
+      ],
+      "version": 1
+    }
+  ],
+  "run_history": [
+    {
+      "authorization_snapshot": {
+        "approved_at": "2026-09-14T06:21:43.355360+00:00",
+        "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+        "environment": {
+          "branch": null,
+          "created_at": "2026-09-14T06:21:43.328754+00:00",
+          "id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+          "kind": "local",
+          "label": "Local workspace",
+          "repository_root": null,
+          "source_run_id": null,
+          "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+        },
+        "mode": "build",
+        "permission_profile": "read_only",
+        "plan_version_id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+        "project_id": "desktop-client"
+      },
+      "completed_at": null,
+      "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+      "created_at": "2026-09-14T06:21:43.355360+00:00",
+      "environment": {
+        "branch": null,
+        "created_at": "2026-09-14T06:21:43.328754+00:00",
+        "id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+        "kind": "local",
+        "label": "Local workspace",
+        "repository_root": null,
+        "source_run_id": null,
+        "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+      },
+      "error": null,
+      "id": "local-run-44b050ed-590f-4cfb-83fe-1371ce8b5c13",
+      "idempotency_key": "desktop-plan-approval-bc1d4881-edc0-428d-ab35-3bb428a4e7ac",
+      "last_heartbeat_at": "2026-09-14T06:30:29.678001+00:00",
+      "message_id": "desktop-build-bc1d4881-edc0-428d-ab35-3bb428a4e7ac",
+      "permission_profile": "read_only",
+      "plan_version_id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+      "project_id": "desktop-client",
+      "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"移除原第1步的文件检查：插件是已验签安装并激活的宿主工具，不是工作区文件，禁止通过 list/glob/read 等工具查找。\",\"priority\":\"high\"},{\"content\":\"检查本轮真实可用工具列表中是否存在子智能体委派工具；若不存在，在最终报告中明确说明并停止，不得假定其可用。\",\"priority\":\"high\"},{\"content\":\"若委派工具存在，使用它创建一个只读子任务，要求子智能体从真实工具目录调用 plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e 并返回 score。\",\"priority\":\"medium\"},{\"content\":\"汇总子任务执行结果（或委派工具不可用说明），形成最终报告并提交审批。\",\"priority\":\"medium\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+      "revision": 5,
+      "started_at": "2026-09-14T06:21:43.356900+00:00",
+      "status": "ready_review",
+      "updated_at": "2026-09-14T06:30:29.678001+00:00"
+    }
+  ],
+  "schema_version": 1,
+  "snapshot_revision": "e71d99be2c984d8e8d38d9e0b590f52d012c3e198e7ec15bc344d4afc680e0f0",
+  "tasks": [
+    {
+      "content": "移除原第1步的文件检查：插件是已验签安装并激活的宿主工具，不是工作区文件，禁止通过 list/glob/read 等工具查找。",
+      "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+      "created_at": "2026-09-14T06:21:22.608196+00:00",
+      "id": "local-plan-task-bf06ad26-eaa5-40ad-9de1-d9d6d4eb9754",
+      "order_index": 0,
+      "priority": "high",
+      "status": "pending",
+      "updated_at": "2026-09-14T06:21:22.608196+00:00"
+    },
+    {
+      "content": "检查本轮真实可用工具列表中是否存在子智能体委派工具；若不存在，在最终报告中明确说明并停止，不得假定其可用。",
+      "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+      "created_at": "2026-09-14T06:21:22.608196+00:00",
+      "id": "local-plan-task-00674f66-f83f-4237-8af6-10afba5d049a",
+      "order_index": 1,
+      "priority": "high",
+      "status": "pending",
+      "updated_at": "2026-09-14T06:21:22.608196+00:00"
+    },
+    {
+      "content": "若委派工具存在，使用它创建一个只读子任务，要求子智能体从真实工具目录调用 plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e 并返回 score。",
+      "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+      "created_at": "2026-09-14T06:21:22.608196+00:00",
+      "id": "local-plan-task-8b1bfb37-6118-49e2-91cf-a2e06decc525",
+      "order_index": 2,
+      "priority": "medium",
+      "status": "pending",
+      "updated_at": "2026-09-14T06:21:22.608196+00:00"
+    },
+    {
+      "content": "汇总子任务执行结果（或委派工具不可用说明），形成最终报告并提交审批。",
+      "conversation_id": "local-conversation-1d6cc086-ee12-4b63-9b32-53de0335c166",
+      "created_at": "2026-09-14T06:21:22.608196+00:00",
+      "id": "local-plan-task-0947faaf-6f4c-4ba6-96e7-4d2965cb8316",
+      "order_index": 3,
+      "priority": "medium",
+      "status": "pending",
+      "updated_at": "2026-09-14T06:21:22.608196+00:00"
+    }
+  ],
+  "tool_invocations": [
+    {
+      "effect": "read",
+      "environment_id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+      "finished_at_ms": 1789367422455,
+      "input_digest": "04525d538f670b7dee5c0e6c6575ff95a6ec843dff9b869e7b3cfd5fad024a23",
+      "invocation_id": "local-invocation-6e89fb650b7d81eb8e47e28ea5264298e545fb3d9302bcceae4e9d3d76c77a65",
+      "plan_version_id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+      "prepared_at_ms": 1789367418374,
+      "redacted_input": {
+        "subagent_id": "[REDACTED]",
+        "task": "[REDACTED]"
+      },
+      "run_id": "local-run-44b050ed-590f-4cfb-83fe-1371ce8b5c13",
+      "run_revision": 4,
+      "started_at_ms": 1789367418374,
+      "status": "completed",
+      "target": {
+        "input_digest": "04525d538f670b7dee5c0e6c6575ff95a6ec843dff9b869e7b3cfd5fad024a23"
+      },
+      "tool_name": "subagent"
+    },
+    {
+      "effect": "read",
+      "environment_id": "local-environment-a3f421be-1260-43e5-9d79-8265c154464a",
+      "finished_at_ms": 1789367420412,
+      "input_digest": "d6cdc3cf0a6bfa5958eaec7dfc390ea95f17a5011eef69693fe5c73517b2becf",
+      "invocation_id": "local-invocation-51b2d02beb59e37de502929406e55a838e34a7293952eb4b5cd8b6fb310779f4",
+      "plan_version_id": "local-plan-version-e56f7a77-b3a4-422f-9aa9-235fdf6f802a",
+      "prepared_at_ms": 1789367420301,
+      "redacted_input": {
+        "input": "NATIVE_LOCAL_SUBAGENT_PLUGIN"
+      },
+      "run_id": "local-run-44b050ed-590f-4cfb-83fe-1371ce8b5c13",
+      "run_revision": 4,
+      "started_at_ms": 1789367420301,
+      "status": "completed",
+      "target": {
+        "input_digest": "d6cdc3cf0a6bfa5958eaec7dfc390ea95f17a5011eef69693fe5c73517b2becf"
+      },
+      "tool_name": "plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e"
+    }
+  ],
+  "updated_at": "2026-09-14T06:30:29.678001+00:00"
+}

@@ -46,6 +46,7 @@ class ControlMessage:
     idempotency_key: str = ""
     target_agent_id: str = ""
     target_agent_name: str = ""
+    conversation_id: str = ""
 
 
 @runtime_checkable

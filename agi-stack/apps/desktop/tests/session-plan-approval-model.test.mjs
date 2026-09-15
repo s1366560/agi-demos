@@ -24,6 +24,7 @@ const draftPlan = {
 };
 
 const approvalCapabilities = {
+  environmentKinds: ['local', 'worktree'],
   canSendMessage: true,
   canApprovePlan: true,
   canRespondToHitl: false,
@@ -63,7 +64,7 @@ test('session plan defaults preserve the safe work and isolated code boundaries'
     environmentKind: 'local',
     permissionProfile: 'read_only',
   });
-  assert.deepEqual(defaultSessionPlanApprovalSelection('code'), {
+  assert.deepEqual(defaultSessionPlanApprovalSelection('code', ['local', 'worktree']), {
     environmentKind: 'worktree',
     permissionProfile: 'workspace_write',
   });
@@ -71,6 +72,16 @@ test('session plan defaults preserve the safe work and isolated code boundaries'
     environmentKind: 'local',
     permissionProfile: 'read_only',
   });
+});
+
+test('cloud code defaults and approval follow the declared environment set', () => {
+  assert.equal(defaultSessionPlanApprovalSelection('code', ['local']).environmentKind, 'local');
+  assert.equal(canApproveSessionPlan(draftPlan, {
+    ...approvalCapabilities, environmentKinds: ['local'],
+  }, 'worktree'), false);
+  assert.equal(canApproveSessionPlan(draftPlan, {
+    ...approvalCapabilities, environmentKinds: [],
+  }, 'local'), false);
 });
 
 test('approval request binds the exact previewed version and retry identity', () => {

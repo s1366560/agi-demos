@@ -16,6 +16,28 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/chat/appTimelineEventModel.js'
 );
 
+test('independent lifecycle items never define conversation pagination cursors', () => {
+  const lifecycle = (time) => timelineItemFromSocketEvent({
+    type: 'subagent_started', event_time_us: time,
+    timeline_cursor_source: 'project_lifecycle', lifecycle_event_id: `event-${time}`,
+    data: { run_id: 'child', execution_id: 'child' },
+  });
+  const first = { id: 'first', type: 'thought', eventTimeUs: 10, eventCounter: 2 };
+  const last = { id: 'last', type: 'observe', eventTimeUs: 20, eventCounter: 3 };
+  const before = lifecycle(1), after = lifecycle(100);
+  assert.equal(before.cursorSource, 'project_lifecycle');
+  for (const items of [[before, first, last, after], [first, after], [before, first]]) {
+    assert.deepEqual(timelineCursorFromFirst(items), { timeUs: 10, counter: 2 });
+    assert.deepEqual(timelineCursorFromLast(items), items.includes(last)
+      ? { timeUs: 20, counter: 3 } : { timeUs: 10, counter: 2 });
+  }
+  assert.equal(timelineCursorFromFirst([before, after]), null);
+  assert.equal(timelineCursorFromLast([before, after]), null);
+  // ID spelling is irrelevant: legacy conversation records remain compatible.
+  assert.deepEqual(timelineCursorFromLast([{ ...last, id: 'subagent-lifecycle:legacy' }]),
+    { timeUs: 20, counter: 3 });
+});
+
 test('agent task update maps send_message acknowledgements', () => {
   const update = agentTaskUpdateFromSocketEvent({
     type: 'ack',
@@ -136,4 +158,25 @@ test('timeline cursors derive from the boundary items only', () => {
   ];
   assert.deepEqual(timelineCursorFromFirst(items), { timeUs: 10, counter: 1 });
   assert.deepEqual(timelineCursorFromLast(items), { timeUs: 20, counter: 2 });
+});
+
+test('signed plugin events preserve authorized JSON output without fabricating withheld values', () => {
+  const { pairToolCallItems, toolCallPairStatus } = require('/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js');
+  const tool = 'plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e';
+  const input = JSON.stringify({score: 20260914, api_key: '[REDACTED]'});
+  for (const output of [JSON.stringify({score: 20260914}), '[UNAVAILABLE]']) {
+    let items = mergeLiveTimelineEvent([], {
+      type:'act',conversation_id:'plugin-conversation',message_id:'plugin-message',counter:1,time_us:1000,
+      data:{tool_name:tool,tool_input:input,call_id:'plugin-call',tool_execution_id:'plugin-execution'},
+    });
+    items = mergeLiveTimelineEvent(items, {
+      type:'observe',conversation_id:'plugin-conversation',message_id:'plugin-message',counter:2,time_us:2000,
+      data:{tool_name:tool,tool_output:output,call_id:'plugin-call',tool_execution_id:'plugin-execution',is_error:false},
+    });
+    const pairs=pairToolCallItems(items);
+    assert.equal(pairs.length,1);
+    assert.equal(pairs[0].call.toolInput,input);
+    assert.equal(pairs[0].result.toolOutput,output);
+    assert.equal(toolCallPairStatus(pairs[0]),'complete');
+  }
 });

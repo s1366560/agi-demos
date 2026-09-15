@@ -1,6 +1,7 @@
 """Generation admission tests for persisted HITL crash recovery."""
 
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
@@ -37,7 +38,12 @@ def _state(
 class _RecordingAdmission:
     instances: ClassVar[list["_RecordingAdmission"]] = []
 
-    def __init__(self, _definitions: object) -> None:
+    def __init__(self, _definitions: object, *, archive_loader: object) -> None:
+        from src.application.services.publication_archive_loader_v2 import (
+            load_agent_generation_archives_v2,
+        )
+
+        assert archive_loader is load_agent_generation_archives_v2
         self.admit_kwargs: dict[str, Any] | None = None
         self.active = False
         self.closed = False
@@ -48,7 +54,9 @@ class _RecordingAdmission:
         self.admit_kwargs = kwargs
         self.active = True
         try:
-            yield object()
+            yield SimpleNamespace(
+                generation=SimpleNamespace(snapshot=SimpleNamespace(manifests=()))
+            )
         finally:
             self.active = False
 

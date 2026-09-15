@@ -6,11 +6,12 @@ import { basename, dirname, extname, isAbsolute, join } from 'node:path';
 import { RENDERER_PROTOCOL_HOST, RENDERER_PROTOCOL_SCHEME } from './rendererProtocol';
 
 export const MAX_NATIVE_FILE_BYTES = 16 * 1_048_576;
+export const MAX_NATIVE_PLUGIN_PACKAGE_BYTES = 64 * 1_048_576;
 export const MAX_NATIVE_FILE_COUNT = 10;
 export const MAX_NATIVE_FILE_WRITE_BYTES = MAX_NATIVE_FILE_BYTES;
 export const MAX_NATIVE_FILE_IMPORT_BYTES = MAX_NATIVE_FILE_BYTES;
 
-export type NativeFileOpenPurpose = 'attachment' | 'skill_package';
+export type NativeFileOpenPurpose = 'attachment' | 'skill_package' | 'plugin_package';
 
 export type NativeFilePayload = Readonly<{
   filename: string;
@@ -181,6 +182,7 @@ const OPEN_EXTENSIONS = Object.freeze({
     'zip',
   ]),
   skill_package: Object.freeze(['zip']),
+  plugin_package: Object.freeze(['mspkg']),
 } satisfies Record<NativeFileOpenPurpose, readonly string[]>);
 
 const MIME_BY_EXTENSION: Readonly<Record<string, string>> = Object.freeze({
@@ -264,7 +266,7 @@ export function nativeFileOpenDialogFilters(
   if (!extensions) throw new Error('native file open request is invalid');
   return Object.freeze([
     Object.freeze({
-      name: purpose === 'skill_package' ? 'Skill ZIP packages' : 'Attachment files',
+      name: purpose === 'plugin_package' ? 'Signed plugin packages' : purpose === 'skill_package' ? 'Skill ZIP packages' : 'Attachment files',
       extensions,
     }),
   ]);
@@ -321,13 +323,13 @@ export async function openNativeFileWithDialog(
       throw new Error('selected import file extension is not allowed');
     }
 
-    const remainingBytes = MAX_NATIVE_FILE_IMPORT_BYTES - totalBytes;
+    const remainingBytes = (purpose === 'plugin_package' ? MAX_NATIVE_PLUGIN_PACKAGE_BYTES : MAX_NATIVE_FILE_IMPORT_BYTES) - totalBytes;
     const bytes = await authority.readFileNoFollow(selectedTarget, remainingBytes);
     if (!(bytes instanceof Uint8Array) || bytes.byteLength > remainingBytes) {
       throw new Error('file exceeds the native import limit');
     }
-    if (purpose === 'skill_package' && !hasZipFileSignature(bytes)) {
-      throw new Error('selected Skill package is not a ZIP archive');
+    if ((purpose === 'skill_package' || purpose === 'plugin_package') && !hasZipFileSignature(bytes)) {
+      throw new Error(purpose === 'skill_package' ? 'selected Skill package is not a ZIP archive' : 'selected plugin package is not a ZIP archive');
     }
     totalBytes += bytes.byteLength;
     files.push(
@@ -577,7 +579,7 @@ function validateOpenRequest(value: unknown): NativeFileOpenPurpose {
   if (
     !isRecord(value) ||
     !hasExactKeys(value, ['purpose']) ||
-    (value.purpose !== 'attachment' && value.purpose !== 'skill_package')
+    (value.purpose !== 'attachment' && value.purpose !== 'skill_package' && value.purpose !== 'plugin_package')
   ) {
     throw new Error('native file open request is invalid');
   }

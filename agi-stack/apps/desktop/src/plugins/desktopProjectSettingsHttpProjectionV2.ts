@@ -51,7 +51,9 @@ export function createDesktopProjectSettingsHttpAuthorityV2(
       });
       const basePath = `/api/v1/projects/${encodeURIComponent(currentScope.projectId)}`;
       const [projectPayload, sandboxPayload, statsPayload] = await Promise.all([
-        requestProjectAdministrationJson(runtimeConfig, basePath, { signal }),
+        requestProjectAdministrationJson(runtimeConfig, basePath, {
+          signal, query: { tenant_id: currentScope.tenantId },
+        }),
         optionalAuthorityV2(() =>
           requestProjectAdministrationJson(runtimeConfig, `${basePath}/sandbox`, { signal }),
         ),

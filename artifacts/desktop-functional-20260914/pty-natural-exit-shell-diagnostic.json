@@ -1,0 +1,71 @@
+{
+  "test": "local_runtime::terminal_pty_v2::tests::real_unix_shell_natural_exit_is_reaped_without_signalling_its_dead_group",
+  "cases": [
+    {
+      "shell_case": "configured-zsh",
+      "iteration": 0,
+      "seconds": 2.909,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    },
+    {
+      "shell_case": "configured-zsh",
+      "iteration": 1,
+      "seconds": 2.251,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    },
+    {
+      "shell_case": "configured-zsh",
+      "iteration": 2,
+      "seconds": 2.242,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    },
+    {
+      "shell_case": "isolated-zsh",
+      "iteration": 0,
+      "seconds": 0.945,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    },
+    {
+      "shell_case": "isolated-zsh",
+      "iteration": 1,
+      "seconds": 0.259,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    },
+    {
+      "shell_case": "isolated-zsh",
+      "iteration": 2,
+      "seconds": 0.246,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    },
+    {
+      "shell_case": "system-sh",
+      "iteration": 0,
+      "seconds": 0.195,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    },
+    {
+      "shell_case": "system-sh",
+      "iteration": 1,
+      "seconds": 0.206,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    },
+    {
+      "shell_case": "system-sh",
+      "iteration": 2,
+      "seconds": 0.205,
+      "exit_code": 0,
+      "natural_eof_timeout": false
+    }
+  ],
+  "raw_shell_output_saved": false,
+  "user_shell_configuration_inspected": false,
+  "production_source_changed": false
+}

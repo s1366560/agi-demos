@@ -1,0 +1,32 @@
+[
+  {
+    "call_id": "call_01a09f87136273d1a8deadaf",
+    "declared_permission": "workspace_task_write",
+    "guard_denied": true,
+    "actual_tool_status": "failed"
+  },
+  {
+    "call_id": "call_01a09f87de0b7e60bc206b49",
+    "declared_permission": "workspace_task_write",
+    "guard_denied": true,
+    "actual_tool_status": "failed"
+  },
+  {
+    "call_id": "call_01a09f87ebbf7f2383c3e1a0",
+    "declared_permission": "conversation_progress",
+    "guard_denied": false,
+    "actual_tool_status": "failed"
+  },
+  {
+    "call_id": "call_01a09f8805fc79028ac5d4df",
+    "declared_permission": "conversation_progress",
+    "guard_denied": false,
+    "actual_tool_status": "failed"
+  },
+  {
+    "call_id": "call_01a09f88214f7cb0857090fd",
+    "declared_permission": "conversation_progress",
+    "guard_denied": false,
+    "actual_tool_status": "success"
+  }
+]

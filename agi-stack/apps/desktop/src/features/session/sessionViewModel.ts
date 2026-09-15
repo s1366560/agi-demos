@@ -10,6 +10,7 @@ import type {
   ConversationSessionProjection,
   SessionRunAction,
 } from './sessionProjectionTypes';
+import { pairToolCallItems, toolCallPairStatus } from '../chat/chatTimelineModel';
 
 export type { SessionRunAction } from './sessionProjectionTypes';
 
@@ -49,6 +50,8 @@ export type SessionDetailViewModel = {
   verificationCount: number | null;
   toolActivityCount: number | null;
   failedToolActivityCount: number | null;
+  observedToolActivityCount: number | null;
+  observedFailedToolActivityCount: number | null;
   runId: string | null;
   runRevision: number | null;
   attemptNumber: number | null;
@@ -281,6 +284,14 @@ export function buildSessionDetailViewModel({
     projection?.activityAuthority.kind === 'desktop_tool_invocations'
       ? projection.activityAuthority.invocations.filter((item) => item.status === 'failed').length
       : null;
+  const observedToolPairs =
+    timeline.conversationId === conversation.id &&
+    timeline.conversationId === authorityConversation.id &&
+    !(timeline.items.length === 0 && (timeline.loading || timeline.error))
+      ? pairToolCallItems(
+          timeline.items.filter((item) => item.type === 'act' || item.type === 'observe'),
+        )
+      : null;
 
   return {
     id: authorityConversation.id,
@@ -332,6 +343,9 @@ export function buildSessionDetailViewModel({
       desktopEvidence?.toolInvocationCount ?? cloudEvidence?.toolExecutionRecordCount ?? null,
     failedToolActivityCount:
       failedDesktopActivityCount ?? cloudEvidence?.failedToolExecutionCount ?? null,
+    observedToolActivityCount: observedToolPairs?.length ?? null,
+    observedFailedToolActivityCount:
+      observedToolPairs?.filter((pair) => toolCallPairStatus(pair) === 'failed').length ?? null,
     runId: run?.id ?? null,
     runRevision: run?.revision ?? null,
     attemptNumber: attempt?.attemptNumber ?? null,

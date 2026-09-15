@@ -1,0 +1,207 @@
+[
+  {
+    "type": "ack",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+    "run_id": "9612c8a1-48f5-4391-b764-8b84cd685446"
+  },
+  {
+    "type": "message",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "user_message",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "execution_path_decided",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "lifecycle_state_change",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "context_status",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "selection_trace",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "policy_filtered",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "start",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "act_delta",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+    "tool_name": "sessions_spawn",
+    "status": "preparing"
+  },
+  {
+    "type": "act_delta",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+    "tool_name": "sessions_spawn",
+    "status": "preparing"
+  },
+  {
+    "type": "act",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+    "tool_name": "sessions_spawn",
+    "status": "running"
+  },
+  {
+    "type": "cost_update",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "context_status",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "model_message_committed",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "subagent_lifecycle",
+    "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+    "data": {
+      "type": "subagent_spawning",
+      "data": {
+        "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+        "subagent_name": "qa_owner_20260914",
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "model_override": null,
+        "thinking_override": null
+      },
+      "timestamp": "2026-09-14T16:14:42.517640",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef"
+    },
+    "timestamp": "2026-09-14T08:14:42.517672+00:00",
+    "event_id": "evt_05d6d7e60cf9",
+    "lifecycle_sequence_id": "1789373682542-0"
+  },
+  {
+    "type": "observe",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+    "tool_name": "sessions_spawn",
+    "status": "completed"
+  },
+  {
+    "type": "model_message_committed",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "subagent_lifecycle",
+    "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+    "data": {
+      "type": "subagent_spawned",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "subagent_name": "qa_owner_20260914",
+      "spawn_mode": "run",
+      "thread_requested": false,
+      "cleanup": "keep"
+    },
+    "timestamp": "2026-09-14T08:14:42.544338+00:00",
+    "event_id": "evt_2bd63a5066e0",
+    "lifecycle_sequence_id": "1789373682562-0"
+  },
+  {
+    "type": "context_status",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "subagent_lifecycle",
+    "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+    "data": {
+      "type": "subagent_killed",
+      "data": {
+        "execution_id": null,
+        "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+        "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "subagent_id": "43821768-32c0-4d1f-a1b3-90998facb590",
+        "subagent_name": "QA Owner 20260914",
+        "kill_reason": "Cancelled by control"
+      },
+      "timestamp": "2026-09-14T16:14:43.803491",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef"
+    },
+    "timestamp": "2026-09-14T08:14:43.803590+00:00",
+    "event_id": "evt_9bea2c5a887b",
+    "lifecycle_sequence_id": "1789373683822-0"
+  },
+  {
+    "type": "subagent_lifecycle",
+    "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+    "data": {
+      "type": "subagent_ended",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "subagent_name": "qa_owner_20260914",
+      "status": "cancelled",
+      "summary": "",
+      "error": "Cancelled by control tool",
+      "spawn_mode": "run",
+      "thread_requested": false,
+      "cleanup": "keep"
+    },
+    "timestamp": "2026-09-14T08:14:43.854474+00:00",
+    "event_id": "evt_b6f65ef0bc9f",
+    "lifecycle_sequence_id": "1789373683875-0"
+  },
+  {
+    "type": "text_start",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "text_end",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "cost_update",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "context_status",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "model_message_committed",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "context_status",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "status",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+    "status": "goal_achieved:llm_task_reconciliation"
+  },
+  {
+    "type": "suggestions",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  },
+  {
+    "type": "complete",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+  }
+]

@@ -184,24 +184,15 @@ class TestSteerWithRestartSendsKill:
 
         ctx = _make_tool_context()
         run = _make_subagent_run()
+        from src.domain.model.agent.subagent_run import SubAgentRunStatus
+
+        run.status = SubAgentRunStatus.RUNNING
         channel = AsyncMock()
         channel.send_control = AsyncMock(return_value=True)
 
         registry = MagicMock()
-        cancelled_run = MagicMock()
-        cancelled_run.to_event_data.return_value = {"run_id": "run-1"}
-        registry.mark_cancelled.return_value = cancelled_run
-
-        replacement_run = MagicMock()
-        replacement_run.run_id = "run-2"
-        replacement_run.to_event_data.return_value = {"run_id": "run-2"}
-        registry.create_run.return_value = replacement_run
-
-        running_run = MagicMock()
-        running_run.to_event_data.return_value = {"run_id": "run-2"}
-        registry.mark_running.return_value = running_run
-
-        cancel_cb = AsyncMock(return_value=True)
+        registry.get_run.return_value = run
+        registry.attach_metadata.return_value = run
         restart_cb = AsyncMock(return_value="run-2")
 
         call_order: list[str] = []
@@ -225,7 +216,10 @@ class TestSteerWithRestartSendsKill:
         )
         result = await _ctrl_steer_with_restart(ctx, run, "new direction")
 
-        assert not result.is_error
+        assert result.is_error
+        assert "terminal acknowledgement" in result.output
+        restart_cb.assert_not_awaited()
+        registry.mark_cancelled.assert_not_called()
         assert call_order == ["send_control", "cancel_callback"]
         sent: ControlMessage = channel.send_control.call_args[0][0]
         assert sent.message_type == ControlMessageType.KILL
@@ -269,7 +263,8 @@ class TestExecCancellationsSendsKill:
         )
         count = await _ctrl_exec_cancellations(ctx, {"run-a": "run-root"}, "target")
 
-        assert count == 1
+        assert count == (0, 1)
+        registry.mark_cancelled.assert_not_called()
         channel.send_control.assert_awaited_once()
         sent: ControlMessage = channel.send_control.call_args[0][0]
         assert sent.message_type == ControlMessageType.KILL
@@ -314,3 +309,31 @@ class TestAgentContainerControlChannel:
         )
         with pytest.raises(AssertionError, match="redis_client"):
             container.control_channel()
+
+
+@pytest.mark.unit
+async def test_acknowledged_restart_does_not_inherit_cancel_intent():
+    from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+    from src.infrastructure.agent.tools.subagent_sessions import _ctrl_steer_with_restart
+
+    registry = SubAgentRunRegistry(sync_across_processes=False, recover_inflight_on_boot=False)
+    run = registry.create_run("conv-1", "test-agent", "task", metadata={"cancel_requested": True})
+    run = registry.mark_running("conv-1", run.run_id)
+    restarted = []
+
+    async def acknowledge(run_id):
+        registry.mark_cancelled("conv-1", run_id, reason="owner acknowledged")
+        return True
+
+    async def restart(_name, _task, run_id):
+        restarted.append(registry.get_run("conv-1", run_id))
+        return run_id
+
+    _configure_control_runtime(
+        registry=registry, cancel_callback=acknowledge, restart_callback=restart
+    )
+    result = await _ctrl_steer_with_restart(_make_tool_context(), run, "continue")
+    assert not result.is_error
+    assert len(restarted) == 1
+    assert restarted[0].metadata.get("cancel_requested") is not True
+    assert restarted[0].run_id != run.run_id

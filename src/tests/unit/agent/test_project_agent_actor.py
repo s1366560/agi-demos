@@ -181,6 +181,7 @@ class TestProjectAgentActor:
             lease_active = True
             return SimpleNamespace(
                 descriptor=PluginGenerationDescriptorV2.from_payload(generation),
+                generation=SimpleNamespace(snapshot=SimpleNamespace(manifests=())),
             )
 
         async def _exit_admission(*_args: object) -> bool:

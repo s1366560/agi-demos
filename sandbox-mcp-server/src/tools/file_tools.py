@@ -18,6 +18,7 @@ from typing import Any, Dict, Optional
 import aiofiles
 
 from src.server.websocket_server import MCPTool
+from src.tools.confined_workspace_write import CONTRACT, supported, write_workspace_file
 
 logger = logging.getLogger(__name__)
 
@@ -762,13 +763,22 @@ async def write_file(
         path_metadata = _path_metadata(resolved, _workspace_dir)
         encoded_size = len(content.encode("utf-8"))
 
-        # Create parent directories
-        resolved.parent.mkdir(parents=True, exist_ok=True)
-
-        if write_mode == "append":
-            await asyncio.to_thread(_append_text_sync, resolved, content)
+        if kwargs.get("_workspace_write_contract") not in {None, CONTRACT}:
+            raise ValueError("Unsupported workspace write contract")
+        if kwargs.get("_workspace_write_contract") == CONTRACT and not supported():
+            raise ValueError("Workspace write contract is unavailable")
+        if supported():
+            await asyncio.to_thread(
+                write_workspace_file, _workspace_dir, requested_path, content, write_mode,
+                kwargs.get("_workspace_write_contract") == CONTRACT,
+            )
         else:
-            await _atomic_write_text(resolved, content)
+            # No confinement capability is advertised on unsupported platforms.
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            if write_mode == "append":
+                await asyncio.to_thread(_append_text_sync, resolved, content)
+            else:
+                await _atomic_write_text(resolved, content)
         _reset_edit_failure(resolved)
 
         return _success_result(
@@ -800,6 +810,7 @@ def create_write_tool() -> MCPTool:
     """Create the write file tool."""
     return MCPTool(
         name="write",
+        workspace_write_contract=CONTRACT if supported() else None,
         description=(
             "Write content to a file. Creates the file if it doesn't exist. "
             "Defaults to atomic overwrite; use mode='append' for chunked large files."

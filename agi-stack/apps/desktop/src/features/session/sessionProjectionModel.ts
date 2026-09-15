@@ -624,7 +624,13 @@ function readCapabilities(value: unknown): SessionProjectionCapabilities | null 
   const runActions = readEnumArray(capabilities.run_actions, runActionValues);
   const allowedActions = readEnumArray(capabilities.allowed_actions, allowedActionValues);
   if (!runActions || !allowedActions) return null;
+  const environmentKinds =
+    capabilities.environment_kinds === undefined
+      ? (['local', 'worktree'] as const)
+      : readEnumArray(capabilities.environment_kinds, new Set(['local', 'worktree'] as const));
+  if (!environmentKinds) return null;
   return {
+    environmentKinds: [...environmentKinds],
     canSendMessage: capabilities.can_send_message as boolean,
     canApprovePlan: capabilities.can_approve_plan as boolean,
     canRespondToHitl: capabilities.can_respond_to_hitl as boolean,

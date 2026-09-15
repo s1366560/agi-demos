@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlertDialog, Badge, Button } from '@radix-ui/themes';
+import { AlertDialog, Button } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
   CheckCircledIcon,
@@ -10,6 +10,7 @@ import {
   DesktopIcon,
   DotsHorizontalIcon,
   ExclamationTriangleIcon,
+  GlobeIcon,
   LockClosedIcon,
   PauseIcon,
   Pencil1Icon,
@@ -147,9 +148,12 @@ export function SessionWorkspace({
           </span>
           <div>
             <h1>{viewModel.title || t('session.untitled')}</h1>
-            <Badge color={statusColor(viewModel.status)} variant="soft">
+            {/* prototype mission-control refactor 2026-09: pill badge with a status
+                dot replaces the Radix Badge (amber input / cyan running / green ready). */}
+            <span className={`session-status-badge tone-${statusColor(viewModel.status)}`}>
+              <i aria-hidden />
               {statusLabel(viewModel.status, t)}
-            </Badge>
+            </span>
           </div>
         </div>
 
@@ -157,9 +161,22 @@ export function SessionWorkspace({
           <div className="session-workspace-stages" aria-label={t('session.progress')}>
             {stageLabels.map((stage, index) => {
               const state = stageState(viewModel.stage, stage.id);
+              // prototype mission-control refactor 2026-09: an attention status pauses
+              // the active stage (amber) instead of leaving it running-cyan.
+              const displayState =
+                state === 'active' &&
+                (viewModel.status === 'needs_input' || viewModel.status === 'needs_approval')
+                  ? 'paused'
+                  : state;
               return (
-                <div className={state} key={stage.id}>
-                  {state === 'complete' ? <CheckCircledIcon /> : <ClockIcon />}
+                <div className={displayState} key={stage.id}>
+                  {displayState === 'complete' ? (
+                    <CheckCircledIcon />
+                  ) : displayState === 'active' ? (
+                    <ActivityLogIcon />
+                  ) : (
+                    <ClockIcon />
+                  )}
                   <span>
                     <small>0{index + 1}</small>
                     <strong>{t(stage.label)}</strong>
@@ -172,9 +189,14 @@ export function SessionWorkspace({
 
         <div className="session-workspace-actions">
           <div className="session-workspace-header-runtime">
+            {viewModel.modelLabel ? (
+              <span title={viewModel.modelLabel}>
+                <DesktopIcon /> {viewModel.modelLabel}
+              </span>
+            ) : null}
             {viewModel.environmentLabel ? (
               <span title={viewModel.environmentLabel}>
-                <DesktopIcon /> {viewModel.environmentLabel}
+                <GlobeIcon /> {viewModel.environmentLabel}
               </span>
             ) : null}
             {viewModel.branchLabel ? (
@@ -547,8 +569,14 @@ export function statusLabel(status: string, t: (key: string) => string): string 
   return t(labels[normalized] ?? 'session.notAvailable');
 }
 
-function statusColor(status: string): 'green' | 'amber' | 'gray' | 'red' {
-  if (status === 'active' || status === 'running' || status === 'accepted') return 'green';
+// prototype mission-control refactor 2026-09: the status pill maps running to
+// cyan, attention to amber, ready/completed to green (prototype StatusBadge
+// vocabulary) instead of the previous all-green active mapping.
+function statusColor(status: string): 'cyan' | 'green' | 'amber' | 'gray' | 'red' {
+  if (status === 'active' || status === 'running') return 'cyan';
+  if (status === 'accepted' || status === 'completed' || status === 'ready_review') {
+    return 'green';
+  }
   if (
     status === 'blocked' ||
     status === 'needs_input' ||
@@ -558,7 +586,6 @@ function statusColor(status: string): 'green' | 'amber' | 'gray' | 'red' {
     return 'amber';
   }
   if (status === 'paused') return 'amber';
-  if (status === 'ready_review') return 'green';
   if (
     status === 'failed' ||
     status === 'error' ||

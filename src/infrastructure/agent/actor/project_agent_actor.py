@@ -13,6 +13,7 @@ from typing import Any
 
 import ray
 
+from src.application.services.publication_archive_loader_v2 import load_agent_generation_archives_v2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.agent.actor.execution import (
@@ -29,6 +30,9 @@ from src.infrastructure.agent.core.project_react_agent import (
     ProjectReActAgent,
 )
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
+from src.infrastructure.plugins.v2.agent_worker_lifecycle_transport_v2 import (
+    AgentWorkerLifecycleTransportV2,
+)
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     agent_worker_graph_runtime_factory_v2,
     agent_worker_redis_runtime_factory_v2,
@@ -72,11 +76,13 @@ class ProjectAgentActor:
         self._shutdown_task: asyncio.Task[None] | None = None
         self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
             builtin_runtime_definitions_v2(
+                agent_lifecycle_connection_manager=AgentWorkerLifecycleTransportV2(),
                 graph_runtime_factory=self._create_graph_runtime_v2,
                 redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
                 sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
                 workspace_core_runtime_factory=agent_worker_workspace_core_runtime_factory_v2,
-            )
+            ),
+            archive_loader=load_agent_generation_archives_v2,
         )
         self._agent_generation_descriptor_v2: PluginGenerationDescriptorV2 | None = None
         self._agent_runtime_entries_v2: dict[
@@ -527,6 +533,11 @@ class ProjectAgentActor:
                     return
 
                 async with self._admit_plugin_turn(request) as operation:
+                    from src.application.services.wasm_operation_authority_v2 import (
+                        prepare_agent_wasm_tools_v2,
+                    )
+
+                    await prepare_agent_wasm_tools_v2(operation)
                     await self._ensure_agent_orchestrator_v2()
                     async with self._lease_agent_runtime_v2(operation) as agent:
                         distribution = self._plugin_admission_v2.host.distribution_for_generation(
@@ -699,6 +710,11 @@ class ProjectAgentActor:
                         },
                     },
                 ) as operation:
+                    from src.application.services.wasm_operation_authority_v2 import (
+                        prepare_agent_wasm_tools_v2,
+                    )
+
+                    await prepare_agent_wasm_tools_v2(operation)
                     await self._ensure_agent_orchestrator_v2()
                     async with self._lease_agent_runtime_v2(
                         operation,
@@ -840,25 +856,23 @@ class ProjectAgentActor:
                     return descriptor, distribution
 
                 async def _spawn_executor(request: SpawnExecutionRequest) -> None:
-                    generation, distribution = _pinned_distribution()
-                    conversation = await AgentRuntimeBootstrapper.ensure_spawned_agent_conversation(
-                        child_session_id=request.child_session_id,
-                        parent_session_id=request.parent_session_id,
-                        project_id=request.project_id,
-                        tenant_id=request.tenant_id,
-                        user_id=request.user_id,
-                        parent_agent_id=request.parent_agent_id,
-                        child_agent_id=request.child_agent_id,
-                        child_agent_name=request.child_agent_name,
-                        mode=request.mode.value,
+                    from src.application.services.peer_chat_permission_v2 import (
+                        resolve_peer_execution_v2,
                     )
+
+                    generation, distribution = _pinned_distribution()
+                    admission = await resolve_peer_execution_v2(request, spawn=True)
+                    if not admission.created:
+                        return
+                    conversation = admission.conversation
                     tenant_agent_config = await AgentRuntimeBootstrapper._load_tenant_agent_config(
                         conversation.tenant_id
                     )
                     await self.chat(
                         ProjectChatRequest(
                             conversation_id=conversation.id,
-                            message_id=str(uuid.uuid4()),
+                            message_id=admission.run_id,
+                            canonical_run_id=admission.run_id,
                             user_message=request.message,
                             user_id=conversation.user_id,
                             conversation_context=[],
@@ -874,19 +888,23 @@ class ProjectAgentActor:
                 async def _session_turn_executor(
                     request: SessionTurnExecutionRequest,
                 ) -> None:
-                    generation, distribution = _pinned_distribution()
-                    conversation = await AgentRuntimeBootstrapper.load_spawned_agent_conversation(
-                        child_session_id=request.child_session_id,
-                        project_id=request.project_id,
-                        tenant_id=request.tenant_id,
+                    from src.application.services.peer_chat_permission_v2 import (
+                        resolve_peer_execution_v2,
                     )
+
+                    generation, distribution = _pinned_distribution()
+                    admission = await resolve_peer_execution_v2(request, spawn=False)
+                    if not admission.created:
+                        return
+                    conversation = admission.conversation
                     tenant_agent_config = await AgentRuntimeBootstrapper._load_tenant_agent_config(
                         conversation.tenant_id
                     )
                     await self.chat(
                         ProjectChatRequest(
                             conversation_id=conversation.id,
-                            message_id=str(uuid.uuid4()),
+                            message_id=admission.run_id,
+                            canonical_run_id=admission.run_id,
                             user_message=request.message,
                             user_id=conversation.user_id,
                             conversation_context=[],

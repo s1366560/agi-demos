@@ -83,7 +83,7 @@ pub trait ReActObserver: Send + Sync {
     }
 }
 
-/// A structural host command sampled only at durable ReAct round boundaries.
+/// A structural host command sampled at round and pre-dispatch boundaries.
 ///
 /// The core deliberately does not abort an in-flight tool call: a pause or
 /// cancellation becomes authoritative only after the current boundary is
@@ -307,45 +307,12 @@ impl ReActEngine {
         });
 
         while state.status == SessionStatus::Running {
-            if let Some(control) = control.as_deref() {
-                match control.directive(session_id, state.round).await? {
-                    RunDirective::Continue => {}
-                    RunDirective::Pause => {
-                        state.status = SessionStatus::Paused;
-                        self.checkpoints.save(&state).await?;
-                        break;
-                    }
-                    RunDirective::Cancel => {
-                        state.status = SessionStatus::Cancelled;
-                        self.checkpoints.save(&state).await?;
-                        break;
-                    }
-                    RunDirective::Steer(instruction) => {
-                        let already_applied = state
-                            .applied_steering_ids
-                            .iter()
-                            .any(|id| id == &instruction.id);
-                        if !already_applied {
-                            state.push_unique(TranscriptEntry::new(
-                                state.round,
-                                Role::Human,
-                                instruction.content,
-                            ));
-                            state.applied_steering_ids.push(instruction.id.clone());
-                            self.checkpoints.save(&state).await?;
-                        }
-                        control
-                            .acknowledge_steering(session_id, &instruction.id, state.round)
-                            .await?;
-                    }
-                }
+            if self.apply_control(&mut state, control.as_deref()).await? {
+                continue;
             }
 
-            // Crash-safe HITL replay: if this round suspended on a human request that
-            // has since been answered (resume, or recovery after a crash), feed the
-            // recorded answer as this round's observation and advance without
-            // re-querying the planner. This is the HITL analog of reusing a
-            // completed tool call (ADR-0005).
+            // Replay a persisted HITL answer without asking the planner again,
+            // just as completed tool outputs are reused after a crash (ADR-0005).
             if let Some(req) = state.pending_hitl.clone() {
                 match state.hitl_answer(&req.id).map(|a| a.to_string()) {
                     Some(answer) => {
@@ -386,7 +353,12 @@ impl ReActEngine {
             let action = self
                 .llm
                 .decide_with_tools(&decision_goal, state.round, &state.transcript, &available)
-                .await?;
+                .await;
+            // A decision made before new control input must never be dispatched.
+            if self.apply_control(&mut state, control.as_deref()).await? {
+                continue;
+            }
+            let action = action?;
 
             match action {
                 AgentAction::Finish { answer } => {
@@ -402,6 +374,19 @@ impl ReActEngine {
                     state.status = SessionStatus::Finished;
                 }
                 AgentAction::CallTool { tool, input_json } => {
+                    if let Some(observer) = observer.as_deref() {
+                        observer
+                            .on_tool_call(session_id, state.round, &tool, &input_json)
+                            .await?;
+                        if self.apply_control(&mut state, control.as_deref()).await? {
+                            let error =
+                                CoreError::Tool("tool dispatch superseded by run control".into());
+                            let _ = observer
+                                .on_tool_error(session_id, state.round, &tool, &input_json, &error)
+                                .await;
+                            continue;
+                        }
+                    }
                     let action_key = format!("{tool} {input_json}");
                     state.push_unique(TranscriptEntry::new(
                         state.round,
@@ -417,14 +402,7 @@ impl ReActEngine {
                         c.record_tool_call();
                     }
 
-                    if let Some(observer) = observer.as_deref() {
-                        observer
-                            .on_tool_call(session_id, state.round, &tool, &input_json)
-                            .await?;
-                    }
-
-                    // Crash recovery: if this exact call already completed in
-                    // this round, reuse its output — do NOT re-invoke the tool.
+                    // Reuse completed calls in this round; never repeat their side effects.
                     let (output, tool_failed) = match state
                         .completed_call(state.round, &tool, &input_json)
                         .map(|call| (call.output_json.clone(), call.failed))
@@ -445,18 +423,9 @@ impl ReActEngine {
                                             )
                                             .await;
                                     }
-                                    // Agent-First recovery (ADR-0005): a tool
-                                    // failure is structural evidence, not a
-                                    // verdict. Feed it back as this round's
-                                    // observation so the planner judges the
-                                    // recovery path; the run still stops only
-                                    // through the structural circuit breakers
-                                    // (doom loop, cost ceiling, round budget)
-                                    // or the planner itself. The failure text
-                                    // doubles as the recorded output so a
-                                    // crash + resume replays the same
-                                    // observation instead of re-invoking a
-                                    // tool whose side-effect state is unknown.
+                                    // Let the planner judge recovery from the failure.
+                                    // Persist it too: replay must not repeat calls with
+                                    // unknown side effects. Structural budgets still apply.
                                     (error.to_string(), true)
                                 }
                             };
@@ -573,6 +542,40 @@ impl ReActEngine {
         }
 
         Ok(state)
+    }
+
+    /// Returns true when the loop must stop or discard a superseded decision.
+    async fn apply_control(
+        &self,
+        state: &mut SessionState,
+        control: Option<&dyn ReActControl>,
+    ) -> CoreResult<bool> {
+        let Some(control) = control else {
+            return Ok(false);
+        };
+        match control.directive(&state.session_id, state.round).await? {
+            RunDirective::Continue => return Ok(false),
+            RunDirective::Pause => state.status = SessionStatus::Paused,
+            RunDirective::Cancel => state.status = SessionStatus::Cancelled,
+            RunDirective::Steer(instruction) => {
+                let applied = !state.applied_steering_ids.contains(&instruction.id);
+                if applied {
+                    state.push_unique(TranscriptEntry::new(
+                        state.round,
+                        Role::Human,
+                        instruction.content,
+                    ));
+                    state.applied_steering_ids.push(instruction.id.clone());
+                    self.checkpoints.save(state).await?;
+                }
+                control
+                    .acknowledge_steering(&state.session_id, &instruction.id, state.round)
+                    .await?;
+                return Ok(applied);
+            }
+        }
+        self.checkpoints.save(state).await?;
+        Ok(true)
     }
 
     /// Move a paused checkpoint back to Running without driving the loop.

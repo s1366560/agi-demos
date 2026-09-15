@@ -55,9 +55,9 @@
   gap: 10px;
   min-width: 0;
   padding: 10px;
-  border: 1px solid var(--desktop-border-soft);
-  border-radius: 8px;
-  background: rgba(var(--desktop-surface-34-rgb), 0.68);
+  border: 1px solid var(--desktop-plan-card-border);
+  border-radius: 10px;
+  background: var(--desktop-plan-card-bg);
 }
 
 .session-plan-task-index {
@@ -95,13 +95,15 @@
   color: var(--desktop-green);
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 7): approval card takes
+   the prototype plan-card palette (border/bg/radius + icon tile tokens). */
 .session-plan-approval-card {
   display: grid;
   gap: 12px;
   padding: 13px;
-  border: 1px solid rgba(var(--desktop-cyan-alt-rgb), 0.28);
-  border-radius: 9px;
-  background: rgba(var(--desktop-cyan-tint-rgb), 0.42);
+  border: 1px solid var(--desktop-plan-card-border);
+  border-radius: 10px;
+  background: var(--desktop-plan-card-bg);
 }
 
 .session-plan-approval-card > header {
@@ -116,9 +118,9 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(var(--desktop-cyan-alt-rgb), 0.3);
-  border-radius: 7px;
-  background: rgba(var(--desktop-cyan-alt-rgb), 0.08);
+  border: 1px solid var(--desktop-plan-icon-border);
+  border-radius: 8px;
+  background: var(--desktop-plan-icon-bg);
   color: var(--desktop-cyan);
 }
 

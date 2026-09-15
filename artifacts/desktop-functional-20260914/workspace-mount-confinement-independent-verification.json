@@ -1,0 +1,10 @@
+{
+  "root_write_ok": true,
+  "nested_rejected": true,
+  "nested_error": "Write directory crosses the workspace mount boundary",
+  "plain_rejected": true,
+  "plain_error": "Workspace write requires an independent Linux mount root",
+  "rename_is_exdev": true,
+  "race_write_stayed_inside": true,
+  "production_source_readonly": true
+}

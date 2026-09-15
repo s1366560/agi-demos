@@ -1,0 +1,7 @@
+{
+  "registry": "http://127.0.0.1:64212",
+  "repository": "qa/marker",
+  "manifest_sha256": "60d883da00b927a2ddd42b27b7949f43074a55b7a4c82e8749287e2e2fa01717",
+  "artifact_sha256": "72c0cb07813e4b4b4cdc8077ab718f4ecb9059042fa0321ca5feeca11a65d7bc",
+  "artifact_bytes": 2391
+}

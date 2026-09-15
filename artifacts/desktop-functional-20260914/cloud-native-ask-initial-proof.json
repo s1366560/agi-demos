@@ -1,0 +1,778 @@
+{
+  "messages": {
+    "status": 422,
+    "body": {
+      "detail": [
+        {
+          "type": "missing",
+          "loc": [
+            "query",
+            "project_id"
+          ],
+          "msg": "Field required",
+          "input": null
+        }
+      ]
+    }
+  },
+  "summary": {
+    "status": 200,
+    "body": {
+      "run_id": "8c01aa0c-d71e-5d18-90aa-624f50fb7533",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+      "status": "completed",
+      "revision": 1,
+      "summary_state": "recorded",
+      "reason_code": null,
+      "started_at": "2026-09-14T10:34:36.900028Z",
+      "completed_at": "2026-09-14T10:34:46.556698Z",
+      "duration_ms": 9656,
+      "input_tokens": 30166,
+      "output_tokens": 75,
+      "cost_usd": 0.0045699,
+      "model_breakdown": [],
+      "completion_summary": "工具调用因权限被拒绝：本次请求未获得执行授权，未进行任何重试，也未调用其他工具或创建计划/子任务。最终结果：拒绝，未生成 `/workspace/qa-native-ask-deny-20260914.txt`。",
+      "artifact_count": 0,
+      "checks_passed": null,
+      "checks_failed": null,
+      "files_changed": null,
+      "lines_added": null,
+      "lines_deleted": null,
+      "evidence_references": []
+    }
+  },
+  "session": {
+    "status": 200,
+    "body": {
+      "schema_version": 2,
+      "projection_kind": "workspace_session",
+      "authority_kind": "conversation_record",
+      "authority_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+      "conversation": {
+        "id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "workspace_id": "b30bf32d-36f0-4832-bcca-252a8df18b15",
+        "linked_workspace_task_id": null,
+        "workspace_name": "QA Web Workspace 20260907",
+        "user_id": "bf922bb7-290d-4252-8891-f82b97aa14b2",
+        "title": "这是授权后的原生桌面云端连通性测试。不要调用工具，只回复 NATIVE_CLOUD_AUTH_20260914_OK。",
+        "summary": null,
+        "status": "active",
+        "current_mode": "build",
+        "conversation_mode": "workspace",
+        "capability_mode": "work",
+        "message_count": 26,
+        "participant_agents": [],
+        "coordinator_agent_id": null,
+        "focused_agent_id": null,
+        "created_at": "2026-09-14T02:51:31.825571Z",
+        "updated_at": "2026-09-14T10:34:46.478449Z"
+      },
+      "execution": {
+        "current_run": {
+          "id": "8c01aa0c-d71e-5d18-90aa-624f50fb7533",
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "plan_version_id": null,
+          "idempotency_key": "client-message:55383429-473b-53e7-8c04-dc113be0625a",
+          "message_id": "8c01aa0c-d71e-5d18-90aa-624f50fb7533",
+          "request_message": "这是原生权限拒绝回归 QA_NATIVE_ASK_DENY_20260914。请只调用一次 write，将文本 QA_NATIVE_ASK_DENY_20260914 写入 /workspace/qa-native-ask-deny-20260914.txt。等待界面的权限确认；如果被拒绝，立即停止，不重试、不调用其他工具，最后如实报告拒绝结果。不要创建计划或子任务。",
+          "status": "completed",
+          "revision": 1,
+          "created_at": "2026-09-14T10:34:28.492162Z",
+          "updated_at": "2026-09-14T10:34:46.556698Z",
+          "started_at": "2026-09-14T10:34:36.900028Z",
+          "completed_at": "2026-09-14T10:34:46.556698Z",
+          "last_heartbeat_at": null,
+          "error": null,
+          "environment": null,
+          "permission_profile": "read_only",
+          "authorization_snapshot": {
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "permission_profile": "read_only",
+            "environment": null
+          }
+        },
+        "run_history": [
+          {
+            "id": "8c01aa0c-d71e-5d18-90aa-624f50fb7533",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:55383429-473b-53e7-8c04-dc113be0625a",
+            "message_id": "8c01aa0c-d71e-5d18-90aa-624f50fb7533",
+            "request_message": "这是原生权限拒绝回归 QA_NATIVE_ASK_DENY_20260914。请只调用一次 write，将文本 QA_NATIVE_ASK_DENY_20260914 写入 /workspace/qa-native-ask-deny-20260914.txt。等待界面的权限确认；如果被拒绝，立即停止，不重试、不调用其他工具，最后如实报告拒绝结果。不要创建计划或子任务。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T10:34:28.492162Z",
+            "updated_at": "2026-09-14T10:34:46.556698Z",
+            "started_at": "2026-09-14T10:34:36.900028Z",
+            "completed_at": "2026-09-14T10:34:46.556698Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "5dc03497-2b14-5abf-a052-5ed70793088b",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:7b7bfa72-89c0-5cd9-ae8e-ff776bd44679",
+            "message_id": "5dc03497-2b14-5abf-a052-5ed70793088b",
+            "request_message": "原生子执行控制验收，新批次 6f77ed05-d760-4ec3-baca-0ab8e7a8ac55。这是已授权只读测试。请严格只实际调用一次 sessions_spawn，subagent_name=qa_owner_20260914，task=不调用任何工具，用中文写一篇不少于五千字的分布式数据库一致性技术说明；如果执行期间收到新的引导指令，以新的指令为准。，run_timeout_seconds=120。不要创建计划，不用 agent_spawn 或其他工具。取得真实 run_id 后仅回复 run_id，子任务由桌面原生控制按钮测试。不得引用历史 run_id。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T08:10:15.924728Z",
+            "updated_at": "2026-09-14T08:10:34.969643Z",
+            "started_at": "2026-09-14T08:10:24.135464Z",
+            "completed_at": "2026-09-14T08:10:34.969643Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "b19c12d3-5e9f-5303-b851-9969e915b5ee",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:83e5a590-9271-53ed-9497-fb2d1eb6349b",
+            "message_id": "b19c12d3-5e9f-5303-b851-9969e915b5ee",
+            "request_message": "修复后的负向工具回归：仅调用一次 todowrite，action=update，todo_id=qa-missing-task-20260914，todos=[{\"status\":\"completed\"}]。该任务专门不存在，预期失败；不要重试、不要修改其他任务。收到失败后仅回复 NATIVE_TOOL_ERROR_FIXED_OK 并简述失败。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T05:25:13.152883Z",
+            "updated_at": "2026-09-14T05:25:30.845971Z",
+            "started_at": "2026-09-14T05:25:22.310790Z",
+            "completed_at": "2026-09-14T05:25:30.845971Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "3e3f8bd2-cdaf-5cf1-a680-edc7fde3cb38",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:79040463-1698-542f-8662-f5759eb90258",
+            "message_id": "3e3f8bd2-cdaf-5cf1-a680-edc7fde3cb38",
+            "request_message": "负向任务工具验收：请仅调用一次 todowrite，action=update，todo_id=qa-missing-task-20260914，todos=[{\"status\":\"completed\"}]。这个ID是专门不存在的测试ID，预期应失败；不要重试、不要修改其他任务。收到工具失败后仅回复 NATIVE_EXPECTED_TOOL_ERROR_OK 并简述该失败。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T05:06:41.191903Z",
+            "updated_at": "2026-09-14T05:06:52.489665Z",
+            "started_at": "2026-09-14T05:06:45.469621Z",
+            "completed_at": "2026-09-14T05:06:52.489665Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "03d77d56-fcc5-5e7e-bbd4-a94409a5b599",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:344afb2e-793b-44cc-a146-3fce5cbbd1ed",
+            "message_id": "03d77d56-fcc5-5e7e-bbd4-a94409a5b599",
+            "request_message": "精确取消最终回归。只写一篇约3000字的虚构海岛游记，不使用工具；测试程序会取消本次生成。",
+            "status": "cancelled",
+            "revision": 2,
+            "created_at": "2026-09-14T04:40:14.184037Z",
+            "updated_at": "2026-09-14T04:40:19.326453Z",
+            "started_at": "2026-09-14T04:40:18.973971Z",
+            "completed_at": "2026-09-14T04:40:19.326453Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "aa313649-94ab-509a-9c3c-bbf701b4cf2b",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:1afa030e-2063-4c34-8e94-23c1fb309ab9",
+            "message_id": "aa313649-94ab-509a-9c3c-bbf701b4cf2b",
+            "request_message": "精确运行取消修复回归。请只写一篇约3000字的虚构海岛游记，不使用工具；测试程序会在生成期间取消。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T04:39:06.915309Z",
+            "updated_at": "2026-09-14T04:39:33.418099Z",
+            "started_at": "2026-09-14T04:39:15.124573Z",
+            "completed_at": "2026-09-14T04:39:33.418099Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "d20fc5bf-a2ec-5a12-8861-c871e4ef057b",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:1eb7ce1e-f049-525c-a694-7ba1d411504b",
+            "message_id": "d20fc5bf-a2ec-5a12-8861-c871e4ef057b",
+            "request_message": "精确运行取消接口验收。请继续创作约3000字的虚构海岛游记，不调用工具，不修改任务或文件；测试程序会主动取消本次运行。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T04:34:46.644369Z",
+            "updated_at": "2026-09-14T04:35:16.616247Z",
+            "started_at": "2026-09-14T04:34:51.623149Z",
+            "completed_at": "2026-09-14T04:35:16.616247Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "90349e3f-7241-527a-a195-8159cf439c34",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:dd8ad9d3-78fd-5803-a4cb-52754246d43b",
+            "message_id": "90349e3f-7241-527a-a195-8159cf439c34",
+            "request_message": "原生运行取消验收。请只生成一篇约3000字的虚构海岛游记，不调用工具，不修改任务或文件；我会在生成期间使用取消按钮。",
+            "status": "cancelled",
+            "revision": 1,
+            "created_at": "2026-09-14T04:32:50.732089Z",
+            "updated_at": "2026-09-14T04:33:01.672640Z",
+            "started_at": "2026-09-14T04:32:58.653616Z",
+            "completed_at": "2026-09-14T04:33:01.672640Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "d4800ad0-8b51-522a-8e55-10455d83d0b6",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:3ffcb46a-4194-5375-818a-ca7a18e080e2",
+            "message_id": "d4800ad0-8b51-522a-8e55-10455d83d0b6",
+            "request_message": "继续完成已经批准的第3版计划：只需回复 NATIVE_PLAN_APPROVED_20260914_OK，并把对应的已批准任务标记完成。不要读取文件或调用其他外部工具。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T04:15:10.504063Z",
+            "updated_at": "2026-09-14T04:15:36.514793Z",
+            "started_at": "2026-09-14T04:15:18.842846Z",
+            "completed_at": "2026-09-14T04:15:36.514793Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "bdb4d9ad-698a-4596-8743-c7fe4900de44",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+            "idempotency_key": "desktop-plan-approval-8fd2f69e-36bd-498e-93a6-cc90a77e1188",
+            "message_id": "desktop-build-8fd2f69e-36bd-498e-93a6-cc90a77e1188",
+            "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"批准后回复 NATIVE_PLAN_APPROVED_20260914_OK\",\"priority\":\"high\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+            "status": "ready_review",
+            "revision": 2,
+            "created_at": "2026-09-14T03:41:15.205890Z",
+            "updated_at": "2026-09-14T03:42:21.528037Z",
+            "started_at": "2026-09-14T03:41:20.395051Z",
+            "completed_at": "2026-09-14T03:42:21.528037Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": {
+              "id": "mcp-sandbox-653501ed6a06",
+              "kind": "local",
+              "label": "mcp-sandbox-653501ed6a06",
+              "workspace_path": "/workspace",
+              "repository_root": null,
+              "branch": null,
+              "base_commit": null,
+              "source_run_id": null,
+              "created_at": "2026-09-14T03:07:48.665808Z"
+            },
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+              "permission_profile": "read_only",
+              "environment": {
+                "id": "mcp-sandbox-653501ed6a06",
+                "kind": "local",
+                "label": "mcp-sandbox-653501ed6a06",
+                "workspace_path": "/workspace",
+                "repository_root": null,
+                "branch": null,
+                "base_commit": null,
+                "source_run_id": null,
+                "created_at": "2026-09-14T03:07:48.665808Z"
+              }
+            }
+          },
+          {
+            "id": "7d09189f-bdfa-5545-a390-ce6e709121f5",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:e80f976b-b465-53c0-bc0d-ad1f658b9bd4",
+            "message_id": "7d09189f-bdfa-5545-a390-ce6e709121f5",
+            "request_message": "新一轮审批边界测试：请先通过 todowrite replace 发布一个 pending 任务：在批准后回复 NATIVE_PLAN_APPROVED_20260914_OK。当前只完成规划，并以“计划已就绪，等待批准”结束；不要把任务标记进行中或完成，我还没有批准执行。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T03:22:01.066397Z",
+            "updated_at": "2026-09-14T03:23:08.429043Z",
+            "started_at": "2026-09-14T03:22:05.436400Z",
+            "completed_at": "2026-09-14T03:23:08.429043Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "9becbe4e-f0fc-5d4b-afe8-61762c5cb682",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:1a178224-3def-5a28-ae1c-bf7887ef652c",
+            "message_id": "9becbe4e-f0fc-5d4b-afe8-61762c5cb682",
+            "request_message": "继续本次授权测试。请按计划流程发布仅含一个步骤的计划：批准后回复 NATIVE_CLOUD_AUTH_20260914_OK。不需要读取文件或使用其他外部工具。",
+            "status": "completed",
+            "revision": 1,
+            "created_at": "2026-09-14T03:07:43.833709Z",
+            "updated_at": "2026-09-14T03:09:10.203241Z",
+            "started_at": "2026-09-14T03:07:54.861891Z",
+            "completed_at": "2026-09-14T03:09:10.203241Z",
+            "last_heartbeat_at": null,
+            "error": null,
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          },
+          {
+            "id": "e913f089-76ad-5951-b09b-94afbf141192",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+            "plan_version_id": null,
+            "idempotency_key": "client-message:desktop-plan-20cf4701-6410-4d44-843b-caa0b182172d",
+            "message_id": "e913f089-76ad-5951-b09b-94afbf141192",
+            "request_message": "Work in Plan mode. Analyze the objective without changing files or executing the solution.\n\nInspect only the context needed to make the plan concrete.\n\nPublish the final plan through the available structured task-list tool.\n\nOn MemStack cloud use todowrite with action=\"replace\". In the local desktop runtime call submit_plan with JSON input {\"tasks\":[{\"content\":\"actionable step\",\"priority\":\"high|medium|low\"}]}.\n\nEvery task must be actionable, ordered, and independently reviewable by a human.\n\nDo not start implementation until the human explicitly approves the plan.\n\nTask title: 这是授权后的原生桌面云端连通性测试。不要调用工具，只回复 NATIVE_CLOUD_AUTH_20260914_OK。\n\nObjective: 这是授权后的原生桌面云端连通性测试。不要调用工具，只回复 NATIVE_CLOUD_AUTH_20260914_OK。\n\nRequested planning context (abstract source categories, not file or directory paths): project_memory, project_files\n\nNever pass category labels such as project_memory, project_files, or web_research to file-reading tools.\n\nOnly call file-reading tools with a concrete path explicitly supplied by the user or discovered within the configured workspace root.",
+            "status": "failed",
+            "revision": 1,
+            "created_at": "2026-09-14T02:51:31.861295Z",
+            "updated_at": "2026-09-14T03:05:03.776464Z",
+            "started_at": null,
+            "completed_at": "2026-09-14T03:05:03.776464Z",
+            "last_heartbeat_at": null,
+            "error": "Agent execution failed: snapshot staging failed: RuntimeV2Error: enabled Workspace Core runtime has no data-plane factory",
+            "environment": null,
+            "permission_profile": "read_only",
+            "authorization_snapshot": {
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+              "plan_version_id": null,
+              "permission_profile": "read_only",
+              "environment": null
+            }
+          }
+        ],
+        "current_attempt": null,
+        "attempt_history": []
+      },
+      "current_plan": {
+        "id": "83145f80-91f4-4bdb-bf67-5140406800f4",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "version": 4,
+        "status": "draft",
+        "tasks": [
+          {
+            "id": "eb2eeba1-719a-4639-af6c-0e4bcbf5b0b9",
+            "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+            "content": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+            "title": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+            "description": null,
+            "estimated_duration_seconds": null,
+            "started_at": null,
+            "completed_at": null,
+            "result_summary": null,
+            "evidence_refs": [],
+            "status": "completed",
+            "priority": "medium",
+            "order_index": 0,
+            "created_at": "2026-09-14T03:41:51.427814+00:00",
+            "updated_at": "2026-09-14T03:41:51.427817+00:00"
+          }
+        ],
+        "created_at": "2026-09-14T03:41:51.429100Z",
+        "approved_at": null
+      },
+      "plan_history": [
+        {
+          "id": "83145f80-91f4-4bdb-bf67-5140406800f4",
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "version": 4,
+          "status": "draft",
+          "tasks": [
+            {
+              "id": "eb2eeba1-719a-4639-af6c-0e4bcbf5b0b9",
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "content": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+              "title": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+              "description": null,
+              "estimated_duration_seconds": null,
+              "started_at": null,
+              "completed_at": null,
+              "result_summary": null,
+              "evidence_refs": [],
+              "status": "completed",
+              "priority": "medium",
+              "order_index": 0,
+              "created_at": "2026-09-14T03:41:51.427814+00:00",
+              "updated_at": "2026-09-14T03:41:51.427817+00:00"
+            }
+          ],
+          "created_at": "2026-09-14T03:41:51.429100Z",
+          "approved_at": null
+        },
+        {
+          "id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "version": 3,
+          "status": "approved",
+          "tasks": [
+            {
+              "id": "3f4ed377-de3b-43bb-a992-5060598f603e",
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "content": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+              "title": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+              "description": null,
+              "estimated_duration_seconds": null,
+              "started_at": null,
+              "completed_at": null,
+              "result_summary": null,
+              "evidence_refs": [],
+              "status": "pending",
+              "priority": "high",
+              "order_index": 0,
+              "created_at": "2026-09-14T03:22:39.860534+00:00",
+              "updated_at": "2026-09-14T03:22:39.860535+00:00"
+            }
+          ],
+          "created_at": "2026-09-14T03:22:39.860269Z",
+          "approved_at": "2026-09-14T03:41:15.205890Z"
+        },
+        {
+          "id": "57e683a6-9151-400d-a820-3195d98acc2d",
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "version": 2,
+          "status": "draft",
+          "tasks": [
+            {
+              "id": "b51a0ac3-aefa-4986-a398-819f4bd67c11",
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "content": "批准后回复 NATIVE_CLOUD_AUTH_20260914_OK",
+              "title": "批准后回复 NATIVE_CLOUD_AUTH_20260914_OK",
+              "description": null,
+              "estimated_duration_seconds": null,
+              "started_at": null,
+              "completed_at": null,
+              "result_summary": null,
+              "evidence_refs": [],
+              "status": "completed",
+              "priority": "high",
+              "order_index": 0,
+              "created_at": "2026-09-14T03:08:08.395428+00:00",
+              "updated_at": "2026-09-14T03:09:05.402255+00:00"
+            }
+          ],
+          "created_at": "2026-09-14T03:09:05.399717Z",
+          "approved_at": null
+        },
+        {
+          "id": "f43a15c2-fe3c-472c-9f9b-1e9107afca19",
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "version": 1,
+          "status": "draft",
+          "tasks": [
+            {
+              "id": "b51a0ac3-aefa-4986-a398-819f4bd67c11",
+              "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+              "content": "批准后回复 NATIVE_CLOUD_AUTH_20260914_OK",
+              "title": "批准后回复 NATIVE_CLOUD_AUTH_20260914_OK",
+              "description": null,
+              "estimated_duration_seconds": null,
+              "started_at": null,
+              "completed_at": null,
+              "result_summary": null,
+              "evidence_refs": [],
+              "status": "pending",
+              "priority": "high",
+              "order_index": 0,
+              "created_at": "2026-09-14T03:08:08.393957+00:00",
+              "updated_at": "2026-09-14T03:08:08.393959+00:00"
+            }
+          ],
+          "created_at": "2026-09-14T03:08:08.395428Z",
+          "approved_at": null
+        }
+      ],
+      "conversation_tasks": [
+        {
+          "id": "eb2eeba1-719a-4639-af6c-0e4bcbf5b0b9",
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "content": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+          "status": "completed",
+          "priority": "medium",
+          "order_index": 0,
+          "created_at": "2026-09-14T03:41:51.429100Z",
+          "updated_at": null
+        }
+      ],
+      "workspace_plan_context": null,
+      "pending_hitl": [],
+      "artifact_records": [],
+      "tool_execution_records": {
+        "items": [
+          {
+            "id": "exec_885b856b9e6b",
+            "message_id": "5dc03497-2b14-5abf-a052-5ed70793088b",
+            "call_id": "call_d3d335de947846ea810cfa",
+            "tool_name": "sessions_spawn",
+            "status": "success",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T08:10:29.070454Z",
+            "completed_at": "2026-09-14T08:10:29.205542Z",
+            "duration_ms": 105
+          },
+          {
+            "id": "exec_f3ae440ffbaf",
+            "message_id": "b19c12d3-5e9f-5303-b851-9969e915b5ee",
+            "call_id": "call_01a09e609a0b7ba18b2272ff",
+            "tool_name": "todowrite",
+            "status": "failed",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T05:25:26.198020Z",
+            "completed_at": "2026-09-14T05:25:26.228024Z",
+            "duration_ms": 3
+          },
+          {
+            "id": "exec_99e35ee10801",
+            "message_id": "3e3f8bd2-cdaf-5cf1-a680-edc7fde3cb38",
+            "call_id": "call_01a09e4f8a9a70e19768d21a",
+            "tool_name": "todowrite",
+            "status": "success",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T05:06:48.129323Z",
+            "completed_at": "2026-09-14T05:06:48.155342Z",
+            "duration_ms": 3
+          },
+          {
+            "id": "exec_5b1a81cae333",
+            "message_id": "d4800ad0-8b51-522a-8e55-10455d83d0b6",
+            "call_id": "call_01a09e208df97a4398f3697e",
+            "tool_name": "todowrite",
+            "status": "success",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T04:15:28.912633Z",
+            "completed_at": "2026-09-14T04:15:28.935902Z",
+            "duration_ms": 3
+          },
+          {
+            "id": "exec_5574f814dad7",
+            "message_id": "desktop-build-8fd2f69e-36bd-498e-93a6-cc90a77e1188",
+            "call_id": "call_01a09e01cfe97e40a2f94ad1",
+            "tool_name": "todoread",
+            "status": "failed",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T03:41:54.680721Z",
+            "completed_at": "2026-09-14T03:41:55.161315Z",
+            "duration_ms": 480
+          },
+          {
+            "id": "exec_ead83e47f0eb",
+            "message_id": "desktop-build-8fd2f69e-36bd-498e-93a6-cc90a77e1188",
+            "call_id": "call_function_3ah2kmsxl1ut_1",
+            "tool_name": "todowrite",
+            "status": "failed",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T03:41:51.399307Z",
+            "completed_at": "2026-09-14T03:41:51.442054Z",
+            "duration_ms": 42
+          },
+          {
+            "id": "exec_4e61b9e70f68",
+            "message_id": "7d09189f-bdfa-5545-a390-ce6e709121f5",
+            "call_id": "call_function_tmpqjbfoofwq_1",
+            "tool_name": "todowrite",
+            "status": "success",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T03:22:39.844007Z",
+            "completed_at": "2026-09-14T03:22:39.870373Z",
+            "duration_ms": 9
+          },
+          {
+            "id": "exec_42ac81744cb4",
+            "message_id": "9becbe4e-f0fc-5d4b-afe8-61762c5cb682",
+            "call_id": "call_function_eec5elkocifb_1",
+            "tool_name": "todowrite",
+            "status": "success",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T03:09:05.374572Z",
+            "completed_at": "2026-09-14T03:09:05.412107Z",
+            "duration_ms": 13
+          },
+          {
+            "id": "exec_bfb41bd02958",
+            "message_id": "9becbe4e-f0fc-5d4b-afe8-61762c5cb682",
+            "call_id": "call_function_dz2jo7p6qwc0_1",
+            "tool_name": "todoread",
+            "status": "success",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T03:08:58.275712Z",
+            "completed_at": "2026-09-14T03:08:58.300027Z",
+            "duration_ms": 4
+          },
+          {
+            "id": "exec_fd3f5bd6e4bd",
+            "message_id": "9becbe4e-f0fc-5d4b-afe8-61762c5cb682",
+            "call_id": "call_function_6r1tywczxcg7_1",
+            "tool_name": "todowrite",
+            "status": "success",
+            "error": null,
+            "step_number": null,
+            "sequence_number": 0,
+            "started_at": "2026-09-14T03:08:08.365984Z",
+            "completed_at": "2026-09-14T03:08:08.405893Z",
+            "duration_ms": 12
+          }
+        ],
+        "total": 10,
+        "truncated": false
+      },
+      "evidence_summary": {
+        "candidate_artifact_ref_count": 0,
+        "candidate_verification_ref_count": 0,
+        "artifact_record_count": 0,
+        "tool_execution_record_count": 10,
+        "failed_tool_execution_count": 3
+      },
+      "capabilities": {
+        "environment_kinds": [
+          "local"
+        ],
+        "can_send_message": true,
+        "can_respond_to_hitl": false,
+        "can_approve_plan": false,
+        "can_control_execution": false,
+        "can_review_artifacts": false,
+        "can_deliver_artifacts": false,
+        "allowed_actions": [
+          "send_message"
+        ]
+      },
+      "snapshot_revision": "53def942f36c784568e96034e1a3a0da388a83c2072fbd010113f72a4175832a",
+      "updated_at": "2026-09-14T10:34:46.556698Z"
+    }
+  },
+  "owner_auth_revoked": true
+}

@@ -470,7 +470,7 @@ class TestProcessorGoalCompletion:
         )
 
         assert result.achieved is False
-        assert result.should_stop is False
+        assert result.should_stop is True
         assert result.source == "agent_judge"
 
     @pytest.mark.asyncio

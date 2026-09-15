@@ -395,3 +395,27 @@ class TestRequestScopedConfigSeamForwarding:
             )
 
         assert error.value.code == "invalid_agent_runtime_dispatcher"
+
+
+@pytest.mark.parametrize("mode", ["plan", "build"])
+def test_processor_copies_resolved_turn_mode_over_stale_runtime_context(mode):
+    from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+    from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+        PinnedAgentRuntimeDispatcherV2,
+    )
+
+    agent = ReActAgent(model="test-model", tools={})
+    agent.config.runtime_context = {"effective_mode": "stale", "selected_agent_id": "keep"}
+    operation = SimpleNamespace(require=lambda service: PinnedAgentRuntimeDispatcherV2())
+    with patch(
+        "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+        return_value=operation,
+    ):
+        config = agent._stream_create_processor_config(
+            agent.config,
+            ToolSelectionContext(metadata={"effective_mode": mode}),
+            tool_set=_EMPTY_TOOL_SET,
+        )
+    assert config.runtime_context["effective_mode"] == mode
+    assert config.runtime_context["selected_agent_id"] == "keep"
+    assert agent.config.runtime_context["effective_mode"] == "stale"

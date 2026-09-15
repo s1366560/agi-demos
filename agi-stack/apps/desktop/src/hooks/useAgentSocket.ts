@@ -1,3 +1,4 @@
+import { validMessageDisplayContent } from '../features/chat/messageDisplayModel';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { desktopApiCredential, DesktopApiClient } from "../api/client";
@@ -16,6 +17,12 @@ import {
   acquireAgentSocketGenerationLeaseV2,
   type AgentSocketGenerationLeaseFactoryV2,
 } from "./agentSocketGenerationLeaseV2";
+
+import {
+  prependAgentSocketEvents,
+  scheduleAgentSocketEventFlush,
+} from "./agentSocketEventFlush";
+import { normalizeSubagentLifecycleEnvelope } from "./subagentLifecycleEnvelope";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const WATCHDOG_INTERVAL_MS = 10_000;
@@ -71,6 +78,7 @@ export type AgentSocketConversationTransition = {
 };
 
 export type AgentRunMessage = {
+  displayContent?: string;
   conversationId: string;
   projectId: string;
   message: string;
@@ -86,6 +94,7 @@ export type AgentRunMessage = {
 };
 
 export type AgentRunSocketMessage = {
+  display_content?: string;
   type: "send_message";
   conversation_id: string;
   project_id: string;
@@ -128,7 +137,8 @@ export type SubAgentControlCommand = {
   action: SubAgentControlAction;
   conversationId: string;
   runId: string;
-  expectedRunRevision: number;
+  expectedRunRevision: number | null;
+  expectedControlRevision?: number;
   idempotencyKey: string;
   instruction?: string;
   cascade?: boolean;
@@ -209,6 +219,7 @@ function agentRunSocketMessage(
   const projectId = message.projectId.trim();
   const content = message.message.trim();
   if (!conversationId || !projectId || !content) return null;
+  if (message.displayContent !== undefined && !validMessageDisplayContent(message.displayContent)) return null;
   const messageId =
     message.messageId?.trim() ||
     `desktop-agent-${Date.now()}-${(pendingAgentMessageSequence += 1)}`;
@@ -224,6 +235,7 @@ function agentRunSocketMessage(
     conversation_id: conversationId,
     project_id: projectId,
     message: content,
+    ...(message.displayContent === undefined ? {} : { display_content: message.displayContent }),
     message_id: messageId,
     ...(agentId ? { agent_id: agentId } : {}),
     ...(forcedSkillName ? { forced_skill_name: forcedSkillName } : {}),
@@ -340,6 +352,7 @@ export function subAgentControlSocketMessage(
     !conversationId ||
     !runId ||
     !idempotencyKey ||
+    typeof command.expectedRunRevision !== "number" ||
     !Number.isInteger(command.expectedRunRevision) ||
     command.expectedRunRevision < 1
   ) {
@@ -675,19 +688,13 @@ export function useAgentSocket(
     if (!pending.length) return;
     pendingEventsRef.current = [];
     setEvents((current) =>
-      [...pending.reverse(), ...current].slice(0, MAX_SOCKET_EVENTS),
+      prependAgentSocketEvents(current, pending, MAX_SOCKET_EVENTS),
     );
   }, []);
 
   const scheduleEventsFlush = useCallback(() => {
     if (eventsFlushCancelRef.current) return;
-    if (typeof requestAnimationFrame === "function") {
-      const frame = requestAnimationFrame(flushPendingEvents);
-      eventsFlushCancelRef.current = () => cancelAnimationFrame(frame);
-    } else {
-      const timer = setTimeout(flushPendingEvents, 16);
-      eventsFlushCancelRef.current = () => clearTimeout(timer);
-    }
+    eventsFlushCancelRef.current = scheduleAgentSocketEventFlush(flushPendingEvents);
   }, [flushPendingEvents]);
 
   useEffect(() => {
@@ -848,7 +855,8 @@ export function useAgentSocket(
       socket.onmessage = (message) => {
         if (disposed || socketRef.current !== socket) return;
         lastMessageAt = Date.now();
-        const event = parseEvent(message.data);
+        const event = normalizeSubagentLifecycleEnvelope(parseEvent(message.data), config);
+        if (!event) return;
         const controlReceiptKey = nestedStringField(event, [
           "idempotency_key",
           "idempotencyKey",

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from src.domain.model.agent.agent_mode import AgentMode  # stays in agent/
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
@@ -104,6 +104,9 @@ class Conversation(Entity):
     # decide completion, and in G4 by the participant-roster validator.
     workspace_id: str | None = None
     linked_workspace_task_id: str | None = None
+    # The task-session creation protocol shares the persisted mode column, but
+    # this marker is not a collaboration mode or an agent Plan/Build mode.
+    task_session_mode: Literal["workspace"] | None = None
 
     # Domain events pending dispatch to infrastructure (Redis stream, SSE).
     # Not persisted; consumed once by the application/repository layer.
@@ -384,6 +387,13 @@ class Conversation(Entity):
         self._pending_events.clear()
         return events
 
+    @property
+    def persisted_conversation_mode(self) -> str | None:
+        """Preserve the task-session marker unless an explicit collaboration mode replaces it."""
+        if self.conversation_mode is not None:
+            return self.conversation_mode.value
+        return "workspace" if self.task_session_mode == "workspace" else None
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary for caching."""
         return {
@@ -401,9 +411,7 @@ class Conversation(Entity):
             "fork_context_snapshot": self.fork_context_snapshot,
             "merge_strategy": self.merge_strategy.value,
             "participant_agents": list(self.participant_agents),
-            "conversation_mode": (
-                self.conversation_mode.value if self.conversation_mode is not None else None
-            ),
+            "conversation_mode": self.persisted_conversation_mode,
             "coordinator_agent_id": self.coordinator_agent_id,
             "focused_agent_id": self.focused_agent_id,
             "workspace_id": self.workspace_id,
@@ -418,7 +426,9 @@ class Conversation(Entity):
             MergeStrategy(merge_strategy_raw) if merge_strategy_raw else MergeStrategy.RESULT_ONLY
         )
         mode_raw = data.get("conversation_mode")
-        conversation_mode = ConversationMode(mode_raw) if mode_raw else None
+        conversation_mode = (
+            ConversationMode(mode_raw) if mode_raw and mode_raw != "workspace" else None
+        )
         return cls(
             id=data["id"],
             project_id=data["project_id"],
@@ -437,6 +447,7 @@ class Conversation(Entity):
             merge_strategy=merge_strategy,
             participant_agents=list(data.get("participant_agents") or []),
             conversation_mode=conversation_mode,
+            task_session_mode="workspace" if mode_raw == "workspace" else None,
             coordinator_agent_id=data.get("coordinator_agent_id"),
             focused_agent_id=data.get("focused_agent_id"),
             workspace_id=data.get("workspace_id"),

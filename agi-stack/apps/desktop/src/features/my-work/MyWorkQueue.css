@@ -1,12 +1,14 @@
+/* prototype mission-control refactor 2026-09: inbox page padding, full-width
+   layout, heading scale, group headers, and card grid per codex-02 oracle */
 .my-work-inbox {
   width: 100%; height: 100%; min-width: 0; min-height: 0; overflow-y: auto;
-  padding: 48px clamp(24px, 5vw, 76px) 64px; background: var(--desktop-bg); color: var(--desktop-text);
+  padding: 30px clamp(22px, 4vw, 54px) 48px; background: var(--desktop-bg); color: var(--desktop-text);
 }
-.my-work-inbox-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; max-width: 1120px; margin: 0 auto 38px; }
+.my-work-inbox-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin: 0 0 24px; }
 .my-work-inbox-heading > div:first-child { max-width: 680px; }
-.my-work-inbox-heading span { color: var(--desktop-gray-23); font-size: 9px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
-.my-work-inbox-heading h1 { margin: 8px 0 7px; font-size: 30px; letter-spacing: -.045em; }
-.my-work-inbox-heading p { margin: 0; color: var(--desktop-gray-11); font-size: 12px; line-height: 1.55; }
+.my-work-inbox-heading span { color: var(--desktop-gray-23); font-size: 8px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.my-work-inbox-heading h1 { margin: 8px 0 6px; font-size: 22px; letter-spacing: -.03em; }
+.my-work-inbox-heading p { margin: 0; color: var(--desktop-gray-11); font-size: 10px; line-height: 1.55; }
 .my-work-inbox-actions { display: flex; align-items: center; gap: 8px; }
 .my-work-inbox-actions label { display: flex; width: 220px; height: 34px; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--desktop-border); border-radius: 7px; background: var(--desktop-surface-12); color: var(--desktop-gray-19); }
 .my-work-inbox-actions label:focus-within { border-color: var(--desktop-border-cyan-5); }
@@ -14,16 +16,16 @@
 .my-work-inbox-actions input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--desktop-text); font: inherit; font-size: 10px; }
 .my-work-inbox-actions button { display: inline-flex; height: 34px; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid var(--desktop-border); border-radius: 7px; background: var(--desktop-surface-14); color: var(--desktop-gray-30); cursor: pointer; font-size: 9px; }
 .my-work-inbox-actions button:disabled { cursor: wait; opacity: .6; }
-.my-work-inbox-groups { display: grid; max-width: 1120px; margin: 0 auto; gap: 26px; }
-.my-work-inbox-group > header { display: grid; grid-template-columns: 16px auto 1fr; align-items: center; gap: 8px; margin-bottom: 11px; color: var(--desktop-gray-11); }
-.my-work-inbox-group > header svg { width: 14px; height: 14px; }
+.my-work-inbox-groups { display: grid; gap: 26px; }
+.my-work-inbox-group > header { display: grid; grid-template-columns: 16px auto 1fr; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--desktop-gray-11); }
+.my-work-inbox-group > header svg { width: 13px; height: 13px; }
 .my-work-inbox-group.needs_input > header svg { color: var(--amber-9); }
 .my-work-inbox-group.running > header svg { color: var(--cyan-9); }
 .my-work-inbox-group.ready_review > header svg { color: var(--green-9); }
-.my-work-inbox-group h2 { margin: 0; color: var(--desktop-text-pale); font-size: 11px; letter-spacing: .02em; }
+.my-work-inbox-group h2 { margin: 0; color: var(--desktop-text-pale); font-size: 12px; letter-spacing: -.01em; }
 .my-work-inbox-group > header span { justify-self: start; color: var(--desktop-gray-16); font-size: 9px; }
-.my-work-inbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 365px)); gap: 10px; }
-.my-work-inbox-card { display: grid; min-width: 0; min-height: 104px; padding: 12px 14px 10px; border: 1px solid var(--desktop-border); border-radius: 9px; background: var(--desktop-surface-12); color: inherit; cursor: pointer; text-align: left; transition: border-color 130ms ease, background 130ms ease, transform 130ms ease; }
+.my-work-inbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 9px; }
+.my-work-inbox-card { display: grid; min-width: 0; min-height: 104px; padding: 12px 13px; border: 1px solid var(--desktop-border); border-radius: 9px; background: var(--desktop-surface-12); color: inherit; cursor: pointer; text-align: left; transition: border-color 130ms ease, background 130ms ease, transform 130ms ease; }
 .my-work-inbox-card:hover, .my-work-inbox-card:focus-visible { border-color: var(--desktop-border-cyan-6); background: var(--desktop-surface-15); }
 @media (hover: hover) and (pointer: fine) { .my-work-inbox-card:hover, .my-work-inbox-card:focus-visible { transform: translateY(-1px); } }
 @keyframes my-work-card-enter { from { opacity: 0; transform: translateY(4px); } }
@@ -40,7 +42,7 @@
 .my-work-inbox-card > header i.status-ready_review { color: var(--green-9); }
 .my-work-inbox-card > header svg { width: 12px; height: 12px; }
 .my-work-inbox-card > header time { justify-self: end; color: var(--desktop-gray-1); }
-.my-work-inbox-card > strong { margin: 8px 0 3px; overflow: hidden; color: var(--desktop-text-frost); font-size: 13px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.my-work-inbox-card > strong { margin: 8px 0 3px; overflow: hidden; color: var(--desktop-text-frost); font-size: 13px; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .my-work-inbox-card > p { display: -webkit-box; margin: 0; overflow: hidden; color: var(--desktop-gray-12); font-size: 10px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .my-work-inbox-card > p.my-work-inbox-outcome { display: flex; align-items: baseline; gap: 6px; margin: 5px 0 0; overflow: hidden; font-size: 9px; -webkit-line-clamp: 1; }
 .my-work-inbox-outcome strong { flex: 0 0 auto; font-size: 9px; }
@@ -48,8 +50,8 @@
 .my-work-inbox-outcome.tone-success, .my-work-inbox-outcome.tone-success strong { color: var(--green-9); }
 .my-work-inbox-outcome.tone-danger, .my-work-inbox-outcome.tone-danger strong { color: var(--red-9); }
 .my-work-inbox-outcome.tone-warning, .my-work-inbox-outcome.tone-warning strong { color: var(--amber-9); }
-.my-work-inbox-card > footer { display: grid; grid-template-columns: 90px auto 1fr 13px; align-items: center; gap: 8px; margin-top: auto; padding-top: 8px; color: var(--desktop-gray-5); }
-.my-work-inbox-progress { height: 3px; overflow: hidden; border-radius: 999px; background: var(--desktop-border-2); }
+.my-work-inbox-card > footer { display: grid; grid-template-columns: 72px auto 1fr 13px; align-items: center; gap: 8px; margin-top: auto; padding-top: 8px; color: var(--desktop-gray-5); }
+.my-work-inbox-progress { height: 3px; overflow: hidden; border-radius: 2px; background: var(--desktop-border-2); }
 .my-work-inbox-progress i { display: block; height: 100%; border-radius: inherit; background: var(--desktop-cyan); }
 .my-work-inbox-progress.indeterminate i { width: 38%; opacity: .45; animation: my-work-progress-slide 1.2s linear infinite; }
 @keyframes my-work-progress-slide { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
@@ -57,12 +59,11 @@
 .my-work-inbox-card footer em { overflow: hidden; font-size: 7px; font-style: normal; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .my-work-inbox-card footer svg { width: 12px; height: 12px; }
 .my-work-inbox-empty { margin: 0; padding: 14px; border: 1px dashed var(--desktop-border-1); border-radius: 8px; color: var(--desktop-gray-1); font-size: 9px; }
-.my-work-inbox-state { display: flex; max-width: 1120px; align-items: flex-start; gap: 10px; margin: 0 auto 24px; padding: 16px; border: 1px solid var(--desktop-border); border-radius: 9px; background: var(--desktop-surface-12); color: var(--desktop-gray-25); }
+.my-work-inbox-state { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 24px; padding: 16px; border: 1px solid var(--desktop-border); border-radius: 9px; background: var(--desktop-surface-12); color: var(--desktop-gray-25); }
 .my-work-inbox-state.error { border-color: var(--desktop-border-red-4); background: var(--desktop-surface-red); color: var(--red-9); }
 .my-work-inbox-state strong { color: var(--desktop-text-soft); font-size: 11px; }
 .my-work-inbox-state p { margin: 4px 0 0; font-size: 9px; }
 .my-work-inbox .spinning { animation: my-work-spin var(--spin-duration) linear infinite; }
 @keyframes my-work-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .my-work-inbox .spinning { animation: none; } .my-work-inbox-progress.indeterminate i { animation: none; } .my-work-inbox-card { animation: none; } .my-work-inbox-card:hover, .my-work-inbox-card:focus-visible { transform: none; } }
-@media (max-width: 1180px) { .my-work-inbox { padding: 34px 28px 48px; } .my-work-inbox-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 900px) { .my-work-inbox-heading { align-items: stretch; flex-direction: column; } .my-work-inbox-actions label { width: min(100%, 320px); } .my-work-inbox-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .my-work-inbox-heading { align-items: stretch; flex-direction: column; } .my-work-inbox-actions label { width: min(100%, 320px); } }

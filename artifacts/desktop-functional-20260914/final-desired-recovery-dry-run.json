@@ -1,0 +1,367 @@
+{
+  "applied": false,
+  "target_digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+  "scopes": [
+    {
+      "scope": {
+        "kind": "root"
+      },
+      "before": {
+        "schema_version": 2,
+        "desired_set_id": "memstack-default-v2",
+        "revision": 17,
+        "bundles": [
+          {
+            "bundle_id": "memstack-platform-base",
+            "version": "2.0.0",
+            "digest": "sha256:0577993e255866662231b36e6524bb194b233a57cc379038eb6882a7b3098014",
+            "source": "builtin://memstack-platform-base/2.0.0"
+          }
+        ],
+        "profile_source": {
+          "source_id": "memstack-root-initialized-profile-source-v2",
+          "revision": 1,
+          "digest": "sha256:bd4cb197577b7c9d97d0690cadb942d94cd25c79d2ed9996b2597eb8a49f830b"
+        },
+        "digest": "sha256:2f25e38fb5e74e1c2b158923487c1f612591a1ad96f4b4716207068966ec9b0e"
+      },
+      "fixture_removed": false,
+      "profile_source_preserved": true,
+      "put_body": {
+        "schema_version": 2,
+        "scope": {
+          "kind": "root"
+        },
+        "expected_revision": 17,
+        "desired_bundle_set": {
+          "schema_version": 2,
+          "desired_set_id": "memstack-default-v2",
+          "revision": 18,
+          "bundles": [
+            {
+              "bundle_id": "memstack-platform-base",
+              "version": "2.0.0",
+              "digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+              "source": "builtin://memstack-platform-base/2.0.0"
+            }
+          ],
+          "profile_source": {
+            "source_id": "memstack-root-initialized-profile-source-v2",
+            "revision": 1,
+            "digest": "sha256:bd4cb197577b7c9d97d0690cadb942d94cd25c79d2ed9996b2597eb8a49f830b"
+          },
+          "digest": "sha256:d070a86d529699c232c6bd04ea7fa1d260d7c602788b3b7151c0eb1144427f0d"
+        }
+      }
+    },
+    {
+      "scope": {
+        "kind": "session",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "session_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb"
+      },
+      "before": {
+        "schema_version": 2,
+        "desired_set_id": "initialized-desired-baade7d3f39ff104aae3d09017f16d5d58754c357920195e19fe9247e6d54168",
+        "revision": 7,
+        "bundles": [
+          {
+            "bundle_id": "memstack-platform-base",
+            "version": "2.0.0",
+            "digest": "sha256:0577993e255866662231b36e6524bb194b233a57cc379038eb6882a7b3098014",
+            "source": "builtin://memstack-platform-base/2.0.0"
+          }
+        ],
+        "profile_source": {
+          "source_id": "initialized-source-baade7d3f39ff104aae3d09017f16d5d58754c357920195e19fe9247e6d54168",
+          "revision": 1,
+          "digest": "sha256:43e66c304dc69a04ee4e435fcb3a399335940bd5eb4faed66e70a6f666bbd4ba"
+        },
+        "digest": "sha256:12fddcb48fc9242b577df1c7f5c627e59ae4624732a9e60043b2fb0a0ae61201"
+      },
+      "fixture_removed": false,
+      "profile_source_preserved": true,
+      "put_body": {
+        "schema_version": 2,
+        "scope": {
+          "kind": "session",
+          "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "session_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb"
+        },
+        "expected_revision": 7,
+        "desired_bundle_set": {
+          "schema_version": 2,
+          "desired_set_id": "initialized-desired-baade7d3f39ff104aae3d09017f16d5d58754c357920195e19fe9247e6d54168",
+          "revision": 8,
+          "bundles": [
+            {
+              "bundle_id": "memstack-platform-base",
+              "version": "2.0.0",
+              "digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+              "source": "builtin://memstack-platform-base/2.0.0"
+            }
+          ],
+          "profile_source": {
+            "source_id": "initialized-source-baade7d3f39ff104aae3d09017f16d5d58754c357920195e19fe9247e6d54168",
+            "revision": 1,
+            "digest": "sha256:43e66c304dc69a04ee4e435fcb3a399335940bd5eb4faed66e70a6f666bbd4ba"
+          },
+          "digest": "sha256:c31db6e1d147a2cefccf4572aab98deccfeeb077786879f8c1e01901b870d5bd"
+        }
+      }
+    },
+    {
+      "scope": {
+        "kind": "session",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "session_id": "c0d589a0-9f67-5c20-871e-f00c8bc756e2"
+      },
+      "before": {
+        "schema_version": 2,
+        "desired_set_id": "initialized-desired-137d6997d0fbfaf768d500bf8553ebeb8228368c153c0169950da384e227fc78",
+        "revision": 6,
+        "bundles": [
+          {
+            "bundle_id": "memstack-platform-base",
+            "version": "2.0.0",
+            "digest": "sha256:0577993e255866662231b36e6524bb194b233a57cc379038eb6882a7b3098014",
+            "source": "builtin://memstack-platform-base/2.0.0"
+          }
+        ],
+        "profile_source": {
+          "source_id": "initialized-source-137d6997d0fbfaf768d500bf8553ebeb8228368c153c0169950da384e227fc78",
+          "revision": 1,
+          "digest": "sha256:a6f385b1b9f4e28a547140135b21ee05c00d1247e9350885876af0e69723dd2b"
+        },
+        "digest": "sha256:33e14b93cb7de05ac1f8d4fb696238da8f572b0abfeb5ba1cf69c34934cc7f0e"
+      },
+      "fixture_removed": false,
+      "profile_source_preserved": true,
+      "put_body": {
+        "schema_version": 2,
+        "scope": {
+          "kind": "session",
+          "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "session_id": "c0d589a0-9f67-5c20-871e-f00c8bc756e2"
+        },
+        "expected_revision": 6,
+        "desired_bundle_set": {
+          "schema_version": 2,
+          "desired_set_id": "initialized-desired-137d6997d0fbfaf768d500bf8553ebeb8228368c153c0169950da384e227fc78",
+          "revision": 7,
+          "bundles": [
+            {
+              "bundle_id": "memstack-platform-base",
+              "version": "2.0.0",
+              "digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+              "source": "builtin://memstack-platform-base/2.0.0"
+            }
+          ],
+          "profile_source": {
+            "source_id": "initialized-source-137d6997d0fbfaf768d500bf8553ebeb8228368c153c0169950da384e227fc78",
+            "revision": 1,
+            "digest": "sha256:a6f385b1b9f4e28a547140135b21ee05c00d1247e9350885876af0e69723dd2b"
+          },
+          "digest": "sha256:7d9439d431bc45aebd8a266dfc495783387acbceb007724468d69038ffc24f0a"
+        }
+      }
+    },
+    {
+      "scope": {
+        "kind": "session",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "session_id": "6032f5fb-4941-549f-ae2f-b87e5b34fa3c"
+      },
+      "before": {
+        "schema_version": 2,
+        "desired_set_id": "initialized-desired-1fb770ff690d0edb585a84853471c247557bcc9f2cdadca990ac5fd778e60c1d",
+        "revision": 6,
+        "bundles": [
+          {
+            "bundle_id": "memstack-platform-base",
+            "version": "2.0.0",
+            "digest": "sha256:0577993e255866662231b36e6524bb194b233a57cc379038eb6882a7b3098014",
+            "source": "builtin://memstack-platform-base/2.0.0"
+          },
+          {
+            "bundle_id": "qa-marketplace-marker-bundle",
+            "version": "1.0.0",
+            "digest": "sha256:5690047548f07476e64db9b812514d7732d90fd4898f014634c1affef3637e18",
+            "source": "marketplace://qa-marketplace-marker-bundle/1.0.0"
+          }
+        ],
+        "profile_source": {
+          "source_id": "initialized-source-1fb770ff690d0edb585a84853471c247557bcc9f2cdadca990ac5fd778e60c1d",
+          "revision": 1,
+          "digest": "sha256:a60a4d684837fc82935afe9a477eae7bd9f8999520a4b517d4760c685c61c9ca"
+        },
+        "digest": "sha256:8cb3fe2c9854ca1145698155effe50e9d79a894aac2332ebafc3d03b6be94a6c"
+      },
+      "fixture_removed": true,
+      "profile_source_preserved": true,
+      "put_body": {
+        "schema_version": 2,
+        "scope": {
+          "kind": "session",
+          "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "session_id": "6032f5fb-4941-549f-ae2f-b87e5b34fa3c"
+        },
+        "expected_revision": 6,
+        "desired_bundle_set": {
+          "schema_version": 2,
+          "desired_set_id": "initialized-desired-1fb770ff690d0edb585a84853471c247557bcc9f2cdadca990ac5fd778e60c1d",
+          "revision": 7,
+          "bundles": [
+            {
+              "bundle_id": "memstack-platform-base",
+              "version": "2.0.0",
+              "digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+              "source": "builtin://memstack-platform-base/2.0.0"
+            }
+          ],
+          "profile_source": {
+            "source_id": "initialized-source-1fb770ff690d0edb585a84853471c247557bcc9f2cdadca990ac5fd778e60c1d",
+            "revision": 1,
+            "digest": "sha256:a60a4d684837fc82935afe9a477eae7bd9f8999520a4b517d4760c685c61c9ca"
+          },
+          "digest": "sha256:15123724df2d3d8e9e4ce6cf908b5a661c01506098d9000d9f0ea4a0440a1ea7"
+        }
+      }
+    },
+    {
+      "scope": {
+        "kind": "session",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "session_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+      },
+      "before": {
+        "schema_version": 2,
+        "desired_set_id": "initialized-desired-06ec8b53f7d0fd6e6e2bef12cf1a8bd931b34bf46f01cb49706da7ecf4819bbe",
+        "revision": 4,
+        "bundles": [
+          {
+            "bundle_id": "memstack-platform-base",
+            "version": "2.0.0",
+            "digest": "sha256:0577993e255866662231b36e6524bb194b233a57cc379038eb6882a7b3098014",
+            "source": "builtin://memstack-platform-base/2.0.0"
+          },
+          {
+            "bundle_id": "qa-marketplace-marker-bundle",
+            "version": "1.0.0",
+            "digest": "sha256:5690047548f07476e64db9b812514d7732d90fd4898f014634c1affef3637e18",
+            "source": "marketplace://qa-marketplace-marker-bundle/1.0.0"
+          }
+        ],
+        "profile_source": {
+          "source_id": "initialized-source-06ec8b53f7d0fd6e6e2bef12cf1a8bd931b34bf46f01cb49706da7ecf4819bbe",
+          "revision": 1,
+          "digest": "sha256:af4c9e7845788b0a5783461bbeb486e9447df5cd1d6ba018d11adeda88205e09"
+        },
+        "digest": "sha256:e8bb2ea56e3cbcb0d6e325e1fb2ed51237fa52150ef628e24b5679f4bddd1629"
+      },
+      "fixture_removed": true,
+      "profile_source_preserved": true,
+      "put_body": {
+        "schema_version": 2,
+        "scope": {
+          "kind": "session",
+          "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "session_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+        },
+        "expected_revision": 4,
+        "desired_bundle_set": {
+          "schema_version": 2,
+          "desired_set_id": "initialized-desired-06ec8b53f7d0fd6e6e2bef12cf1a8bd931b34bf46f01cb49706da7ecf4819bbe",
+          "revision": 5,
+          "bundles": [
+            {
+              "bundle_id": "memstack-platform-base",
+              "version": "2.0.0",
+              "digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+              "source": "builtin://memstack-platform-base/2.0.0"
+            }
+          ],
+          "profile_source": {
+            "source_id": "initialized-source-06ec8b53f7d0fd6e6e2bef12cf1a8bd931b34bf46f01cb49706da7ecf4819bbe",
+            "revision": 1,
+            "digest": "sha256:af4c9e7845788b0a5783461bbeb486e9447df5cd1d6ba018d11adeda88205e09"
+          },
+          "digest": "sha256:77484083924d3018a874dbdc2baffee68e033f108dea0916c7d8e4e39ec7c93f"
+        }
+      }
+    },
+    {
+      "scope": {
+        "kind": "session",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "session_id": "0687a537-5846-5e0b-9a02-e90b414db0fd"
+      },
+      "before": {
+        "schema_version": 2,
+        "desired_set_id": "initialized-desired-9b3218239bda298f7071698c583f720662bc1bcce6210fd349c55351df853271",
+        "revision": 1,
+        "bundles": [
+          {
+            "bundle_id": "memstack-platform-base",
+            "version": "2.0.0",
+            "digest": "sha256:0577993e255866662231b36e6524bb194b233a57cc379038eb6882a7b3098014",
+            "source": "builtin://memstack-platform-base/2.0.0"
+          }
+        ],
+        "profile_source": {
+          "source_id": "initialized-source-9b3218239bda298f7071698c583f720662bc1bcce6210fd349c55351df853271",
+          "revision": 1,
+          "digest": "sha256:a21ae5937ad237eee284e1c3fde1b20dcc43d459b52b0cefebafd45296fe833b"
+        },
+        "digest": "sha256:38b8641276c3e751f6ac1f63fdbbeda04aae6925bf22408469beba7c9dbe6d7b"
+      },
+      "fixture_removed": false,
+      "profile_source_preserved": true,
+      "put_body": {
+        "schema_version": 2,
+        "scope": {
+          "kind": "session",
+          "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "session_id": "0687a537-5846-5e0b-9a02-e90b414db0fd"
+        },
+        "expected_revision": 1,
+        "desired_bundle_set": {
+          "schema_version": 2,
+          "desired_set_id": "initialized-desired-9b3218239bda298f7071698c583f720662bc1bcce6210fd349c55351df853271",
+          "revision": 2,
+          "bundles": [
+            {
+              "bundle_id": "memstack-platform-base",
+              "version": "2.0.0",
+              "digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+              "source": "builtin://memstack-platform-base/2.0.0"
+            }
+          ],
+          "profile_source": {
+            "source_id": "initialized-source-9b3218239bda298f7071698c583f720662bc1bcce6210fd349c55351df853271",
+            "revision": 1,
+            "digest": "sha256:a21ae5937ad237eee284e1c3fde1b20dcc43d459b52b0cefebafd45296fe833b"
+          },
+          "digest": "sha256:bb9a215ed7185e2fe684576445b88d52e4e0352e801ef5fb8caadf131991ba77"
+        }
+      }
+    }
+  ],
+  "order": [
+    "Freeze and recheck reviewed production digest",
+    "Authorized ROOT operator uses upgrade_root_builtin_bundle_v2 for ROOT only",
+    "Restart new API; normal ROOT verification and publication must succeed",
+    "Original owner fresh GET/PUT CAS for five QA sessions; never replay this plan blindly",
+    "Normal session prepare verifies archives; no model or fallback in this maintenance"
+  ]
+}

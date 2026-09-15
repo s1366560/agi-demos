@@ -39,6 +39,10 @@ export const desktopProductionRouterEnUS: Readonly<Record<string, string>> = {
   'desktopProductionRouter.forbidden.description':
     'The current identity does not have every permission required by this route.',
   'desktopProductionRouter.unavailable.title': 'Native route unavailable',
+  'desktopProductionRouter.credentialRequired.title': 'Cloud plugin authorization required',
+  'desktopProductionRouter.credentialRequired.description':
+    'This desktop has no cloud plugin workload authorization. A platform administrator must configure it; signing in to your account does not grant this deployment permission. You can sign out and choose local mode to continue.',
+  'desktopProductionRouter.credentialRequired.signOut': 'Sign out to choose local mode',
   'desktopProductionRouter.unavailable.description':
     'The authoritative capability is currently unavailable for this scope.',
   'desktopProductionRouter.error.title': 'Native route failed',
@@ -93,6 +97,10 @@ export const desktopProductionRouterZhCN: Readonly<Record<string, string>> = {
   'desktopProductionRouter.forbidden.description':
     '当前身份不具备此路由要求的全部权限。',
   'desktopProductionRouter.unavailable.title': '原生路由不可用',
+  'desktopProductionRouter.credentialRequired.title': '尚未配置云端插件运行授权',
+  'desktopProductionRouter.credentialRequired.description':
+    '此桌面尚未获得云端插件工作负载授权，需要平台管理员配置。账号登录不会授予这项部署权限。你可以退出登录，选择本地模式继续使用。',
+  'desktopProductionRouter.credentialRequired.signOut': '退出登录以选择本地模式',
   'desktopProductionRouter.unavailable.description':
     '此作用域的权威能力当前不可用。',
   'desktopProductionRouter.error.title': '原生路由加载失败',

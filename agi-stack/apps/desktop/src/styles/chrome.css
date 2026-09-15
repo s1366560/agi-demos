@@ -114,7 +114,7 @@
   grid-template-rows: 44px minmax(0, 1fr) auto;
   overflow: hidden;
   border-right: 1px solid var(--desktop-border);
-  background: var(--desktop-panel-2);
+  background: var(--desktop-sidebar-bg);
 }
 
 .app-shell.desktop-window .copilot-sidebar {

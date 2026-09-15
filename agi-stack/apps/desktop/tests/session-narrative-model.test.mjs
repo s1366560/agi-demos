@@ -229,3 +229,68 @@ test('unknown protocol identifiers use localized fallbacks instead of leaking wi
   assert.equal(summary.checkpoint, '');
   assert.equal(summary.checkpointKey, 'session.activityCheckpoint');
 });
+
+test('subagent lifecycle and control acknowledgments preserve the parent tool pair', () => {
+  const events = [
+    { id: 'mcp-call', type: 'act', toolName: 'native-audit' },
+    { id: 'mcp-result', type: 'observe', toolName: 'native-audit' },
+    { id: 'child-call', type: 'act', toolName: 'subagent' },
+    ...['subagent_routed', 'subagent_started', 'ack', 'subagent_session_update', 'subagent_completed'].map((type) => ({ id: type, type })),
+    { id: 'child-result', type: 'observe', toolName: 'subagent' },
+  ];
+  for (const isError of [false, true]) {
+    const narrative = buildSessionNarrative(events.map((event) => event.id === 'child-result' ? { ...event, isError } : event));
+    const groups = narrative.filter((node) => node.kind === 'tool_group');
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].toolCount, 2);
+    assert.equal(groups[0].status, isError ? 'failed' : 'complete');
+    assert.deepEqual(groups[0].items.map((item) => item.id), ['mcp-call', 'mcp-result', 'child-call', 'child-result']);
+    assert.equal(narrative.filter((node) => node.kind === 'item').length, 5);
+  }
+});
+
+test('terminal run boundaries do not complete an unmatched earlier tool call', () => {
+  for (const type of ['complete', 'run_status', 'environment_selected', 'assistant_message']) {
+    const narrative = buildSessionNarrative([
+      { id: 'call', type: 'act', toolName: 'subagent' },
+      { id: 'started', type: 'subagent_started' },
+      { id: 'boundary', type },
+      { id: 'result', type: 'observe', toolName: 'subagent' },
+    ]);
+    const groups = narrative.filter((node) => node.kind === 'tool_group');
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].status, 'running');
+    assert.deepEqual(groups[0].items.map((item) => item.id), ['call']);
+  }
+});
+
+test('exact execution pairing spans assistant text while retaining non-tool narrative positions', () => {
+  const call = { id:'a', type:'act', execution_id:'exec-1', toolName:'todo' };
+  const assistant = { id:'text',type:'assistant_message',role:'assistant',content:'Original text' };
+  const plan = { id:'plan',type:'task_list_updated' };
+  const result = { id:'o',type:'observe',execution_id:'exec-1',toolName:'todo' };
+  const narrative=buildSessionNarrative([call,assistant,plan,result],'cid');
+  assert.deepEqual(narrative.map(n=>n.kind==='item'?n.item.id:n.items.map(i=>i.id)),[['a','o'],'text','plan']);
+  assert.equal(narrative[0].status,'complete');
+});
+
+test('cross-segment pairing refuses missing, conflicting or sibling identities and run boundaries', () => {
+  const call={id:'a',type:'act',execution_id:'exec-1',toolName:'todo'};
+  const assistant={id:'text',type:'assistant_message',role:'assistant'};
+  const result={id:'o',type:'observe',execution_id:'exec-1',toolName:'todo'};
+  const cases=[
+    [call,assistant,{...result,execution_id:'other'}],
+    [{...call,execution_id:undefined},assistant,{...result,execution_id:undefined}],
+    [{...call,conversation_id:'other'},assistant,result],
+    [call,assistant,{...result,conversation_id:'other'}],
+    [{...call,subagent_id:'child-a'},assistant,{...result,subagent_id:'child-b'}],
+    [{...call,round_id:'round-a'},assistant,{...result,round_id:'round-b'}],
+    [{...call,run_id:'run-a'},assistant,{...result,run_id:'run-b'}],
+    ...['user_message','complete','run_status','environment_selected'].map(type=>[call,assistant,{id:'boundary',type},result]),
+  ];
+  for(const items of cases){
+    const groups=buildSessionNarrative(items,'cid').filter(n=>n.kind==='tool_group');
+    assert.equal(groups.length,2,JSON.stringify(items));
+    assert.equal(groups[0].status,'running');
+  }
+});

@@ -878,3 +878,33 @@ test('HMR keeps an in-flight mutation on old generation and sends the next to ne
     ['sha256:next', 'sha256:old'],
   );
 });
+
+test('selection read and explicit null patch use the same scoped leased authority without model changes', async () => {
+  const originalFetch=globalThis.fetch, calls=[];
+  let stored=conversation({execution_selection:{agent_id:null,forced_skill_id:'skill-one',subagent_id:null}});
+  globalThis.fetch=async(input,init)=>{
+    calls.push({url:String(input),method:init?.method??'GET',body:init?.body?JSON.parse(init.body):null});
+    if(init?.method==='PATCH')stored={...stored,execution_selection:{...stored.execution_selection,...JSON.parse(init.body).execution_selection}};
+    return json(String(input).includes('/session?')?{conversation:stored}:stored);
+  };
+  const generation=await new LoaderV2(rendererDefinitions(),'desktop-renderer').stage(loadBootstrap());
+  try {
+    const service=generation.resolve(DESKTOP_CONVERSATION_CONFIG_AUTHORITY_SERVICE_V2,{kind:'root'},{version:DESKTOP_CONVERSATION_CONFIG_AUTHORITY_VERSION_V2});
+    const lifecycle=[];
+    const operations=createDesktopConversationConfigOperationsV2(()=>acceptedActions(service,'selection',lifecycle));
+    const input={config:runtimeConfig(),conversation:conversation()};
+    assert.equal((await operations.readExecutionSelection(input)).execution_selection.forced_skill_id,'skill-one');
+    const result=await operations.updateExecutionSelection({...input,patch:{forced_skill_id:null}});
+    assert.equal(result.execution_selection.forced_skill_id,null);
+    assert.deepEqual(calls[1].body,{execution_selection:{forced_skill_id:null}});
+    assert.equal(lifecycle.filter(event=>event.type==='release').length,2);
+    assert.throws(()=>operations.updateExecutionSelection({...input,patch:{unknown:null}}));
+    assert.throws(()=>operations.updateExecutionSelection({...input,config:runtimeConfig({mode:'cloud'}),patch:{forced_skill_id:null}}));
+    const count=calls.length;
+    assert.throws(()=>operations.readExecutionSelection({...input,conversation:conversation({project_id:'other'})}));
+    assert.equal(calls.length,count);
+    stored=conversation();
+    await assert.rejects(operations.readExecutionSelection(input),/execution selection/i);
+    assert.equal(lifecycle.filter(event=>event.type==='release').length,3);
+  } finally {globalThis.fetch=originalFetch;await generation.dispose();}
+});

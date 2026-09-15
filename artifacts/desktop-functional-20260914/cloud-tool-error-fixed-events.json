@@ -1,0 +1,89 @@
+[
+  {
+    "type": "observe",
+    "data": {
+      "tool_name": "todowrite",
+      "result": "{\n  \"success\": false,\n  \"action\": \"update\",\n  \"todo_id\": \"qa-missing-task-20260914\",\n  \"message\": \"Task qa-missing-task-20260914 not found in current conversation\"\n}",
+      "error": "{\n  \"success\": false,\n  \"action\": \"update\",\n  \"todo_id\": \"qa-missing-task-20260914\",\n  \"message\": \"Task qa-missing-task-20260914 not found in current conversation\"\n}",
+      "duration_ms": 3,
+      "call_id": "call_01a09e609a0b7ba18b2272ff",
+      "status": "error",
+      "tool_execution_id": "exec_f3ae440ffbaf",
+      "ui_metadata": null,
+      "display": null,
+      "file_metadata": null,
+      "observation": "{\n  \"success\": false,\n  \"action\": \"update\",\n  \"todo_id\": \"qa-missing-task-20260914\",\n  \"message\": \"Task qa-missing-task-20260914 not found in current conversation\"\n}",
+      "agent_id": "builtin:all-access",
+      "plugin_generation": {
+        "profile_id": "memstack-default-v2",
+        "generation": 4,
+        "digest": "0b2df360b481dae1483f4ec3c2cb2926a13afcdb3320b8cd73b7d4c585a2c112"
+      }
+    }
+  },
+  {
+    "type": "status",
+    "data": {
+      "status": "goal_achieved:tasks",
+      "agent_id": "builtin:all-access",
+      "plugin_generation": {
+        "profile_id": "memstack-default-v2",
+        "generation": 4,
+        "digest": "0b2df360b481dae1483f4ec3c2cb2926a13afcdb3320b8cd73b7d4c585a2c112"
+      }
+    }
+  },
+  {
+    "type": "complete",
+    "data": {
+      "result": null,
+      "trace_url": null,
+      "content": "NATIVE_TOOL_ERROR_FIXED_OK\n\n`todowrite` update \u5931\u8d25\uff0c\u63d0\u793a `Task qa-missing-task-20260914 not found in current conversation`\uff0c\u4e0e\u9884\u671f\u4e00\u81f4\uff0c\u672a\u91cd\u8bd5\u4e5f\u672a\u4fee\u6539\u5176\u4ed6\u4efb\u52a1\u3002",
+      "execution_summary": {
+        "step_count": 2,
+        "artifact_count": 0,
+        "call_count": 2,
+        "total_cost": 0.00877575,
+        "total_cost_formatted": "$0.008776",
+        "total_tokens": {
+          "input": 58045,
+          "output": 115,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "total": 58160
+        },
+        "tasks": {
+          "total": 1,
+          "completed": 1,
+          "pending": 0,
+          "in_progress": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "other": 0,
+          "remaining": 0
+        },
+        "agent_loop": {
+          "loop_id": "builtin-react",
+          "plugin_id": "memstack-kernel",
+          "scope": "builtin"
+        }
+      },
+      "skill_used": null,
+      "subagent_used": null,
+      "subagent_result": null,
+      "orchestration_mode": null,
+      "subtask_count": null,
+      "step_count": null,
+      "session_id": null,
+      "route_id": null,
+      "trace_id": null,
+      "execution_id": null,
+      "plugin_generation": {
+        "profile_id": "memstack-default-v2",
+        "generation": 4,
+        "digest": "0b2df360b481dae1483f4ec3c2cb2926a13afcdb3320b8cd73b7d4c585a2c112"
+      }
+    }
+  }
+]

@@ -99,15 +99,18 @@
   color: var(--desktop-muted);
 }
 
+/* Web parity redesign 2026-09: error surfaces use the web error bubble palette
+   (light #fef2f2 bg / #fecaca border / #991b1b text; dark equivalents). */
 .timeline-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 8px 10px;
-  border: 1px solid rgba(var(--desktop-red-rgb), 0.36);
-  border-radius: 7px;
-  background: rgba(var(--desktop-red-rgb), 0.08);
+  border: 1px solid var(--desktop-error-bubble-border);
+  border-radius: 8px;
+  background: var(--desktop-error-bubble-bg);
+  color: var(--desktop-error-bubble-text);
 }
 
 .timeline-error > :first-child {
@@ -183,7 +186,14 @@
   margin: 0;
 }
 
+/* Web parity redesign 2026-09: prose rhythm mirrors MARKDOWN_PROSE_CLASSES
+   (p/ul/ol my-1 = 4px, framed code my-2 = 8px). */
 .markdown-content > * + * {
+  margin-top: 4px;
+}
+
+.markdown-content > * + .code-block-frame,
+.markdown-content > .code-block-frame + * {
   margin-top: 8px;
 }
 
@@ -225,7 +235,7 @@
 .markdown-content ul,
 .markdown-content ol {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   padding-left: 20px;
 }
 
@@ -235,24 +245,36 @@
   padding: 8px;
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
-  border-radius: 6px;
-  background: rgba(var(--desktop-surface-32-rgb), 0.42);
+  border-radius: 8px;
+  background: var(--desktop-code-block-bg);
   color: var(--desktop-gray-33);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.92em;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
+/* Web parity redesign 2026-09: inline code = mono 13px on a subtle chip
+   (light #f1f5f9 / dark #262626 via --desktop-inline-code-bg). */
 .markdown-content code {
   border-radius: 4px;
-  background: rgba(var(--desktop-slate-rgb), 0.12);
+  background: var(--desktop-inline-code-bg);
   color: var(--desktop-text-frost);
-  font-size: 0.94em;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.93em;
 }
 
 .markdown-content :not(pre) > code {
-  padding: 1px 4px;
+  padding: 2px 4px;
+}
+
+/* Code inside a block (framed or raw pre) stays chip-free: the frame owns
+   the background, radius and padding. */
+.markdown-content pre code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .markdown-content blockquote {
@@ -368,6 +390,36 @@
   color: var(--desktop-amber);
 }
 
+/* Web parity redesign 2026-09 phase 2: tool-call rows get the web execution
+   card icon chip — 28x28, 1px ring, status-tinted (running=amber,
+   complete=green, failed=red). */
+.timeline-row-icon.tool-call-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.2);
+  border-radius: 6px;
+  background: rgba(var(--desktop-slate-rgb), 0.06);
+  color: var(--desktop-muted);
+}
+
+.timeline-row-icon.tool-call-icon.is-running {
+  border-color: rgba(var(--desktop-amber-rgb), 0.3);
+  background: rgba(var(--desktop-amber-rgb), 0.1);
+  color: var(--desktop-amber);
+}
+
+.timeline-row-icon.tool-call-icon.is-complete {
+  border-color: rgba(var(--desktop-green-rgb), 0.26);
+  background: rgba(var(--desktop-green-rgb), 0.09);
+  color: var(--desktop-green);
+}
+
+.timeline-row-icon.tool-call-icon.is-failed {
+  border-color: rgba(var(--desktop-red-rgb), 0.3);
+  background: rgba(var(--desktop-red-rgb), 0.1);
+  color: var(--desktop-red);
+}
+
 .timeline-row.artifact .timeline-row-icon {
   color: var(--desktop-gray-30);
 }
@@ -377,12 +429,14 @@
   height: 14px;
 }
 
+/* Web parity redesign 2026-09 phase 2: tool/step titles read as 13px
+   medium (web execution card tool name). */
 .timeline-row-title {
   flex: 0 0 auto;
   color: var(--desktop-text-soft);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 18px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
 }
 
 .timeline-row-summary {
@@ -407,33 +461,38 @@
   white-space: nowrap;
 }
 
+/* Web parity redesign 2026-09 phase 2: status pills follow the web
+   ExecutionTimeline vocabulary — 10px font-medium rounded-full tints
+   (running=amber, done=green #35d399, error=red #ff6978). */
 .timeline-status {
   display: inline-flex;
   align-items: center;
-  height: 18px;
-  padding: 0 6px;
+  min-height: 18px;
+  padding: 1px 8px;
   border: 1px solid rgba(var(--desktop-slate-rgb), 0.16);
   border-radius: 999px;
   background: rgba(var(--desktop-slate-rgb), 0.06);
   color: var(--desktop-muted);
+  font-size: 10px;
+  font-weight: 500;
 }
 
 .timeline-status.ok {
-  border-color: rgba(var(--desktop-green-rgb), 0.2);
-  background: rgba(var(--desktop-green-rgb), 0.08);
-  color: var(--desktop-green-aqua);
+  border-color: rgba(var(--desktop-green-rgb), 0.22);
+  background: rgba(var(--desktop-green-rgb), 0.1);
+  color: var(--desktop-green);
 }
 
 .timeline-status.error {
-  border-color: rgba(var(--desktop-red-rgb), 0.24);
-  background: rgba(var(--desktop-red-rgb), 0.09);
-  color: var(--desktop-red-light);
+  border-color: rgba(var(--desktop-red-rgb), 0.26);
+  background: rgba(var(--desktop-red-rgb), 0.1);
+  color: var(--desktop-red);
 }
 
 .timeline-status.waiting {
-  border-color: rgba(var(--desktop-amber-rgb), 0.24);
-  background: rgba(var(--desktop-amber-rgb), 0.09);
-  color: var(--desktop-amber-pale-2);
+  border-color: rgba(var(--desktop-amber-rgb), 0.26);
+  background: rgba(var(--desktop-amber-rgb), 0.12);
+  color: var(--desktop-amber);
 }
 
 .timeline-details {
@@ -450,11 +509,16 @@
   gap: 4px;
 }
 
+/* Web parity redesign 2026-09 phase 2: section micro-labels are 10px
+   uppercase tracking-wide (web text-2xs font-semibold uppercase
+   tracking-label). */
 .timeline-detail-block > span {
   color: var(--desktop-faint);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   line-height: 15px;
+  text-transform: uppercase;
 }
 
 .platform-plugin-tool-result-slots {
@@ -468,12 +532,14 @@
   background: transparent;
 }
 
+/* Web parity redesign 2026-09 phase 2: HITL response card follows the
+   bubble card vocabulary (8px radius, subtle border, tinted surface). */
 .timeline-hitl-response {
   display: grid;
   gap: 3px;
-  padding: 7px 8px;
+  padding: 8px 10px;
   border: 1px solid rgba(var(--desktop-green-glow-rgb), 0.2);
-  border-radius: 7px;
+  border-radius: 8px;
   background: rgba(var(--desktop-green-glow-rgb), 0.06);
 }
 
@@ -491,6 +557,8 @@
   line-height: 1.45;
 }
 
+/* Web parity redesign 2026-09 phase 2: expanded tool input/output reads as
+   mono 13px/1.6 on the subtle frame (web step detail pre blocks). */
 .timeline-details pre {
   max-width: 100%;
   margin: 0;
@@ -500,8 +568,9 @@
   border-radius: 6px;
   background: rgba(var(--desktop-surface-32-rgb), 0.42);
   color: var(--desktop-muted);
-  font-size: 12px;
-  line-height: 1.45;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -510,9 +579,9 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  padding: 8px;
+  padding: 8px 10px;
   border: 1px solid rgba(var(--desktop-amber-rgb), 0.22);
-  border-radius: 7px;
+  border-radius: 8px;
   background: rgba(var(--desktop-amber-rgb), 0.06);
 }
 
@@ -582,7 +651,7 @@
   border: 1px solid rgba(var(--desktop-slate-rgb), 0.14);
   border-radius: 6px;
   background: rgba(var(--desktop-slate-rgb), 0.045);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -693,14 +762,16 @@
 }
 
 /* --- Conversation rendering upgrades: code frames, streaming, day rhythm --- */
+/* Web parity redesign 2026-09: frame bg joins the panel ladder (#141414 dark /
+   #f7f7f7 light), radius 8px, 10px uppercase tertiary language label. */
 .code-block-frame {
   position: relative;
   display: grid;
   min-width: 0;
   max-width: 100%;
   border: 1px solid var(--desktop-border-soft);
-  border-radius: 7px;
-  background: rgba(var(--desktop-surface-32-rgb), 0.55);
+  border-radius: 8px;
+  background: var(--desktop-code-block-bg);
   overflow: hidden;
 }
 
@@ -720,7 +791,7 @@
   color: var(--desktop-faint);
   font-size: 10px;
   font-weight: 650;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
@@ -758,7 +829,8 @@
   border: 0;
   background: transparent;
   color: var(--desktop-text-pale);
-  font-size: 0.92em;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
   line-height: 1.5;
   white-space: pre;
   word-break: normal;
@@ -781,7 +853,7 @@
   bottom: 24px;
   left: 0;
   height: 44px;
-  background: linear-gradient(180deg, transparent, rgba(var(--desktop-surface-32-rgb), 0.92));
+  background: linear-gradient(180deg, transparent, rgba(var(--desktop-code-block-bg-rgb), 0.92));
   pointer-events: none;
 }
 
@@ -860,14 +932,15 @@
   font-weight: 700;
 }
 
-/* Streaming assistant output: blinking caret at the insertion point */
+/* Streaming assistant output: blinking caret at the insertion point.
+   Web parity redesign 2026-09: subtle 2px block in the content color. */
 .streaming-caret {
   display: inline-block;
-  width: 7px;
-  height: 13px;
+  width: 2px;
+  height: 14px;
   margin-left: 3px;
-  border-radius: 1.5px;
-  background: var(--desktop-cyan);
+  border-radius: 1px;
+  background: currentcolor;
   vertical-align: -2px;
   animation: streaming-caret-blink 1.05s steps(2, start) infinite;
 }
@@ -1021,8 +1094,8 @@
 }
 
 .message.agent-run.failed {
-  border-color: rgba(var(--desktop-red-rgb), 0.42);
-  background: rgba(var(--desktop-red-rgb), 0.08);
+  border-color: var(--desktop-error-bubble-border);
+  background: var(--desktop-error-bubble-bg);
 }
 
 .agent-run-title {

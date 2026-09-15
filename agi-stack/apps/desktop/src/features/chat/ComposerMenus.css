@@ -4,6 +4,8 @@
   flex: 0 0 auto;
 }
 
+/* prototype mission-control refactor 2026-09: dropdown anatomy per oracle
+   (bg #0d131b, border #2c3948, radius 10px) */
 .picker-menu,
 .plus-menu {
   position: absolute;
@@ -12,9 +14,9 @@
   left: 0;
   width: min(264px, calc(100vw - 44px));
   overflow: hidden;
-  border: 1px solid var(--desktop-border-15);
+  border: 1px solid var(--desktop-border-17);
   border-radius: 10px;
-  background: var(--desktop-surface-14);
+  background: var(--desktop-surface-12);
   box-shadow: var(--desktop-shadow-popover);
 }
 

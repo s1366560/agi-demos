@@ -95,7 +95,7 @@ const ExecutionItem = memo<{
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
               {execution.subagentName}
             </span>
-            {execution.status !== 'running' ? (
+            {!['running', 'queued', 'retrying'].includes(execution.status) ? (
               <button
                 type="button"
                 onClick={() => {
@@ -129,6 +129,7 @@ const ExecutionItem = memo<{
                   className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   title={t('agent.background.kill', 'Stop execution')}
                   aria-label={t('agent.background.kill', 'Stop execution')}
+                  disabled={execution.cancellation?.status === 'pending'}
                 >
                   <StopCircle size={14} />
                 </button>
@@ -138,6 +139,24 @@ const ExecutionItem = memo<{
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
             {execution.task}
           </p>
+
+          {execution.cancellation?.status === 'pending' && (
+            <p role="status" className="mt-2 text-xs text-slate-500">
+              {t(
+                'agent.background.cancelPending',
+                'Cancellation requested; waiting for execution to stop.'
+              )}
+            </p>
+          )}
+          {execution.cancellation?.status === 'failed' && (
+            <p role="alert" className="mt-2 text-xs text-red-600">
+              {execution.cancellation.error ||
+                t(
+                  'agent.background.cancelFailed',
+                  'Cancellation failed. Please retry or refresh the execution status.'
+                )}
+            </p>
+          )}
 
           {/* Metadata row */}
           <div className="flex items-center gap-3 mt-1.5">
@@ -307,7 +326,9 @@ const BackgroundSubAgentDrawer = memo(() => {
               key={exec.executionId}
               execution={exec}
               onClear={clear}
-              onKill={kill}
+              onKill={(id) => {
+                void kill(id);
+              }}
               isExpanded={expanded.has(exec.executionId)}
               onToggleExpand={toggleExpand}
             />

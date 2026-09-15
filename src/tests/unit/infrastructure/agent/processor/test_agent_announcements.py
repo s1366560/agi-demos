@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.domain.events.agent_events import AgentCompletedEvent, AgentMessageReceivedEvent
+from src.domain.events.agent_events import AgentMessageReceivedEvent
 from src.domain.ports.services.agent_message_bus_port import AgentMessage, AgentMessageType
 from src.infrastructure.agent.processor.processor import SessionProcessor
 
@@ -58,11 +58,6 @@ class TestAgentAnnouncements:
                 ),
             }
         ]
-        assert [type(event) for event in events] == [
-            AgentMessageReceivedEvent,
-            AgentCompletedEvent,
-        ]
-        completed = events[1]
-        assert isinstance(completed, AgentCompletedEvent)
-        assert completed.session_id == "child-session"
-        assert completed.result == "done"
+        # Canonical child settlement owns terminal events, including when the parent
+        # has already stopped. Polling must not replay an older child status.
+        assert [type(event) for event in events] == [AgentMessageReceivedEvent]

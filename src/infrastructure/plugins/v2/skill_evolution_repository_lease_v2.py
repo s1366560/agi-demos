@@ -13,7 +13,7 @@ from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
 from src.domain.ports.repositories.skill_version_repository import SkillVersionRepositoryPort
 
-from .runtime import OperationContextV2, RuntimeV2Error
+from .runtime import OperationContextV2, RuntimeGenerationV2, RuntimeV2Error
 from .skill_evolution_repository_services import (
     SKILL_EVOLUTION_REPOSITORY_APPLICATION_SERVICE_V2,
     SkillEvolutionRepositoryApplicationResolverProtocolV2,
@@ -81,16 +81,13 @@ async def lease_skill_evolution_repository_v2(
         OPERATION_DB_SESSION_SERVICE_V2,
         OPERATION_IDENTITY_SERVICE_V2,
         OPERATION_METADATA_SERVICE_V2,
-        current_process_generation_host_v2,
-        pin_generation_v2,
     )
 
-    host = current_process_generation_host_v2()
-    async with pin_generation_v2(host) as generation:
+    async with _capture_or_background_generation(normalized_tenant_id) as (generation, scope):
         operation = OperationContextV2(
             generation=generation,
             operation_id=(f"skill-evolution-repository:{normalized_tenant_id}:{uuid4().hex}"),
-            scope=ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=normalized_tenant_id),
+            scope=scope,
         )
         async with operation:
             _ = operation.provide(OPERATION_DB_SESSION_SERVICE_V2, db)
@@ -152,3 +149,24 @@ __all__ = [
     "SkillEvolutionRepositoryLeaseV2",
     "lease_skill_evolution_repository_v2",
 ]
+
+
+@asynccontextmanager
+async def _capture_or_background_generation(
+    tenant_id: str,
+) -> AsyncIterator[tuple[RuntimeGenerationV2, ScopeV2]]:
+    from .boundary import current_process_generation_host_v2, pin_generation_v2
+    from .skill_evolution_capture_admission_v2 import current_worker_capture_operation_v2
+
+    capture = current_worker_capture_operation_v2()
+    if capture is not None:
+        if capture.context.scope.tenant_id != tenant_id:
+            raise RuntimeV2Error(
+                "skill_capture_scope_mismatch", "capture repository tenant differs"
+            )
+        # The synchronous caller still owns the admitted operation's generation lease.
+        yield capture.generation, capture.context.scope
+        return
+    host = current_process_generation_host_v2()
+    async with pin_generation_v2(host) as generation:
+        yield generation, ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=tenant_id)

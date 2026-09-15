@@ -89,6 +89,7 @@ def test_build_timeline_projects_typed_turn_admission_as_user_message() -> None:
                     "message_id": "payload-message-id",
                     "role": "assistant",
                     "content": "legacy payload must not win",
+                    "display_content": "用户原始目标",
                     "model_message": {
                         "role": "user",
                         "content": "Inspect the typed admission",
@@ -115,6 +116,8 @@ def test_build_timeline_projects_typed_turn_admission_as_user_message() -> None:
             "message_id": "event-row-message-id",
             "content": "Inspect the typed admission",
             "role": "user",
+            "display_content": "用户原始目标",
+            "metadata": {"display_content": "用户原始目标"},
         }
     ]
 

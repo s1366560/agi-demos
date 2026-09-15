@@ -1,0 +1,76 @@
+{
+  "artifact_deliveries": [],
+  "artifact_versions": [],
+  "capabilities": {
+    "allowed_actions": [
+      "send_message"
+    ],
+    "can_approve_plan": false,
+    "can_deliver_artifacts": false,
+    "can_queue_next": false,
+    "can_respond_to_hitl": false,
+    "can_review_artifacts": false,
+    "can_send_message": true,
+    "can_steer_now": false,
+    "run_actions": []
+  },
+  "conversation": {
+    "agent_config": {
+      "capability_mode": "work",
+      "llm_model_override": "kimi-for-coding-highspeed",
+      "llm_route_override": {
+        "model_id": "kimi-for-coding-highspeed",
+        "provider_id": "provider-b88144c88cfba18c0458051fc28326b9"
+      },
+      "selected_agent_id": "builtin:all-access"
+    },
+    "conversation_mode": "workspace",
+    "coordinator_agent_id": "builtin:all-access",
+    "created_at": "2026-09-14T06:40:43.085969+00:00",
+    "current_mode": "plan",
+    "focused_agent_id": "builtin:all-access",
+    "id": "a560cb35-a3d0-54e3-aec5-b7a4ab767761",
+    "linked_workspace_task_id": null,
+    "message_count": 3,
+    "metadata": {
+      "capability_mode": "work",
+      "environment": {
+        "kind": "local",
+        "label": "Local runtime"
+      },
+      "run": null,
+      "runtime": "local"
+    },
+    "participant_agents": [
+      "builtin:all-access"
+    ],
+    "project_id": "desktop-client",
+    "status": "active",
+    "summary": null,
+    "tenant_id": "northstar",
+    "title": "工作空间绑定对话验收：记住本会话的测试代号为 WORKSPACE_MEMORY_7319。此轮不调用工具、不执行文件操作、不创建计划，仅回复 WORKSPACE_BOUND_CHAT_OK。",
+    "updated_at": "2026-09-14T06:40:43.085969+00:00",
+    "user_id": "local-user",
+    "workspace_id": "be334623-d202-46fa-a3e7-e2e5f27dcab0",
+    "workspace_name": null
+  },
+  "current_plan": null,
+  "current_run": null,
+  "evidence_summary": {
+    "artifact_delivery_count": 0,
+    "artifact_source_count": 0,
+    "artifact_version_count": 0,
+    "changes": null,
+    "checks": null,
+    "tool_invocation_count": 0,
+    "unknown_outcome_count": 0
+  },
+  "pending_hitl": [],
+  "plan_history": [],
+  "run_history": [],
+  "schema_version": 1,
+  "snapshot_revision": "c003efe6a8512bdacc90c0458df33f86a4d8ca8063035c64defbea83d930c025",
+  "tasks": [],
+  "tool_invocations": [],
+  "updated_at": "2026-09-14T06:40:43.085969+00:00"
+}

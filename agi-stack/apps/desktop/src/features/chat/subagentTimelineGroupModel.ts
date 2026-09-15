@@ -1,5 +1,7 @@
 import type { AgentTimelineItem } from '../../types';
 import { agentLifecyclePresentation } from './agentLifecyclePresentationModel';
+import { isSubagentToolEvent, subagentToolActivity } from './subagentToolActivityModel';
+import type { SubagentToolActivity } from './subagentToolActivityModel';
 
 export type SubAgentTimelineGroupMode = 'single' | 'parallel' | 'chain';
 
@@ -33,6 +35,7 @@ export type SubAgentTimelineGroup = {
   progress: number | null;
   statusMessage: string;
   toolCallsCount: number | null;
+  toolActivity: SubagentToolActivity[];
   phases: {
     routed: boolean;
     started: boolean;
@@ -108,10 +111,24 @@ export function groupSubAgentTimelineItems(
     if (!first || claimedIndexes.has(index) || !isSubAgentGroupingEvent(first))
       continue;
 
+    const exactIdentity = exactExecutionIdentity(first);
+    if (exactIdentity && groupMode(first) === 'single') {
+      const executionItems = items.filter((candidate, candidateIndex) => {
+        if (claimedIndexes.has(candidateIndex) || !isSubAgentGroupingEvent(candidate) || groupMode(candidate) !== 'single') return false;
+        const candidateIdentity = exactExecutionIdentity(candidate);
+        if (!candidateIdentity || candidateIdentity.runId !== exactIdentity.runId ||
+            candidateIdentity.conversationId !== exactIdentity.conversationId) return false;
+        claimedIndexes.add(candidateIndex);
+        return true;
+      });
+      groups.push(buildSubAgentTimelineGroup(executionItems));
+      continue;
+    }
+
     const groupedIndexes = [index];
     const groupedItems = [first];
     let cursor = index + 1;
-    while (cursor < items.length) {
+    while (!terminalEventTypes.has(first.type) && cursor < items.length) {
       const candidate = items[cursor];
       if (
         !candidate ||
@@ -135,8 +152,20 @@ export function groupSubAgentTimelineItems(
         claimedIndexes,
       );
       if (terminalIndex !== null) {
-        groupedIndexes.push(terminalIndex);
-        groupedItems.push(items[terminalIndex] as AgentTimelineItem);
+        // Claim matching progress along with its terminal event, while leaving
+        // interleaved parent work and other SubAgent executions independent.
+        for (let matchIndex = cursor; matchIndex <= terminalIndex; matchIndex += 1) {
+          const candidate = items[matchIndex];
+          if (
+            candidate &&
+            !claimedIndexes.has(matchIndex) &&
+            isSubAgentGroupingEvent(candidate) &&
+            compatibleSubAgentEvent(groupedItems, candidate)
+          ) {
+            groupedIndexes.push(matchIndex);
+            groupedItems.push(candidate);
+          }
+        }
       }
     }
 
@@ -150,6 +179,20 @@ export function groupSubAgentTimelineItems(
       claimedIndexes.has(index) ? [item.id] : [],
     ),
   };
+}
+
+/** A configuration ID/name is not an execution identity and cannot join terminal boundaries. */
+function exactExecutionIdentity(item: AgentTimelineItem): { conversationId: string; runId: string } | null {
+  const records = eventRecords(item);
+  const consistent = (keys: readonly string[]): string | null => {
+    const values = records.flatMap((record) => keys.map((key) => record[key])).filter((value) => value != null);
+    const first = values[0];
+    return typeof first === 'string' && first.length > 0 && first === first.trim() && values.every((value) => value === first)
+      ? first : null;
+  };
+  const conversationId = consistent(['conversation_id', 'conversationId']);
+  const runId = consistent(['run_id', 'runId', 'execution_id', 'executionId']);
+  return conversationId && runId ? { conversationId, runId } : null;
 }
 
 function findMatchingTerminalIndex(
@@ -303,6 +346,7 @@ function buildSubAgentTimelineGroup(
   let toolCallsCount: number | null = null;
 
   for (const item of items) {
+    if (isSubagentToolEvent(item)) continue;
     task = latestString(
       task,
       eventString(item, ['task', 'task_description', 'taskDescription']),
@@ -386,6 +430,7 @@ function buildSubAgentTimelineGroup(
     progress,
     statusMessage,
     toolCallsCount,
+    toolActivity: subagentToolActivity(items),
     phases: {
       routed: items.some(
         (item) =>
@@ -393,7 +438,7 @@ function buildSubAgentTimelineGroup(
           item.type === 'subagent_delegation',
       ),
       started: items.some((item) => startedEventTypes.has(item.type)),
-      executing: items.some((item) => executingEventTypes.has(item.type)),
+      executing: items.some((item) => executingEventTypes.has(item.type) || isSubagentToolEvent(item)),
       ended: items.some(
         (item) =>
           terminalEventTypes.has(item.type) ||
@@ -453,6 +498,7 @@ function groupMode(item: AgentTimelineItem): SubAgentTimelineGroupMode {
 function isSubAgentGroupingEvent(item: AgentTimelineItem): boolean {
   return (
     agentLifecyclePresentation(item)?.family === 'subagent' ||
+    isSubagentToolEvent(item) ||
     orchestrationEventTypes.has(item.type)
   );
 }

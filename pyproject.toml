@@ -125,7 +125,7 @@ omit = ["src/tests/*"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-exclude = [".memstack", ".claude", "alembic", "examples", "sandbox-mcp-server", "scripts", "sdk", "conftest.py"]
+exclude = [".memstack", ".claude", "alembic", "artifacts", "examples", "sandbox-mcp-server", "scripts", "sdk", "conftest.py"]
 
 [tool.ruff.lint]
 select = [

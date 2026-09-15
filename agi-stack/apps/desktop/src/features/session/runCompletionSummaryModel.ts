@@ -305,3 +305,9 @@ function verificationSummary(
     link,
   };
 }
+
+/** A total is known only when both provider token counters were reported. */
+export function runCompletionTokenTotal(usage: RunCompletionTokenUsage | null): number | null {
+  if (!usage || usage.inputTokens === null || usage.outputTokens === null) return null;
+  return usage.inputTokens + usage.outputTokens;
+}

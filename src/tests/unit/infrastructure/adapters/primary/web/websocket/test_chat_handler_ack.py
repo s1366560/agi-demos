@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import delete
@@ -359,6 +360,19 @@ async def test_send_message_passes_permission_mode_to_run_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        chat_handler,
+        "prepare_chat_permission_snapshot",
+        AsyncMock(
+            return_value={
+                "schema_version": 1,
+                "permission_profile": "workspace_write",
+                "requested_permission_mode": "automatic",
+                "effective_permission_mode": "automatic",
+                "policy": {"revision": 3, "permission_mode": "automatic"},
+            }
+        ),
+    )
 
     async def capture_run_authority(_db: object, **kwargs: Any) -> Any:
         captured.update(kwargs)
@@ -617,13 +631,19 @@ async def test_chat_run_authority_persists_requested_permission_snapshot(
     test_db: AsyncSession,
     test_user: User,
     test_project_db: Project,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        "src.application.services.chat_permission_admission_v2.load_workspace_policy",
+        AsyncMock(return_value={"revision": 3, "permission_mode": "automatic"}),
+    )
     conversation = Conversation(
         id="conversation-run-authority-permission",
         project_id=test_project_db.id,
         tenant_id=test_project_db.tenant_id,
         user_id=test_user.id,
         title="Run authority permission",
+        workspace_id="workspace-permission",
         status="active",
         agent_config={},
         meta={},
@@ -648,10 +668,16 @@ async def test_chat_run_authority_persists_requested_permission_snapshot(
     assert run.permission_profile == "workspace_write"
     assert run.authorization_snapshot["effective_permission_mode"] == "automatic"
     assert run.authorization_snapshot["requested_permission_mode"] == "automatic"
-    assert run.authorization_snapshot["policy"]["permission_mode"] == "ask"
+    assert run.authorization_snapshot["policy"]["permission_mode"] == "automatic"
 
 
-async def test_workspace_chat_run_authority_defaults_closed_without_legacy_policy_lookup() -> None:
+async def test_workspace_chat_run_authority_defaults_closed_without_legacy_policy_lookup(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "src.application.services.chat_permission_admission_v2.load_workspace_policy",
+        AsyncMock(return_value={"revision": 7, "permission_mode": "ask"}),
+    )
     db = _RunAuthorityDb()
     conversation = Conversation(
         id="conversation-avernet-run-authority",
@@ -683,7 +709,7 @@ async def test_workspace_chat_run_authority_defaults_closed_without_legacy_polic
     assert run.permission_profile == "read_only"
     assert run.authorization_snapshot["effective_permission_mode"] == "ask"
     assert run.authorization_snapshot["policy"] == {
-        "revision": 0,
+        "revision": 7,
         "permission_mode": "ask",
     }
 
@@ -863,3 +889,75 @@ async def test_send_message_rejects_revoked_scope_membership_before_ack(
     assert context.sent[0]["type"] == "error"
     _assert_error_message_id(context, "desktop-turn-membership-revoked")
     _assert_error_code(context, "CONVERSATION_ACCESS_DENIED")
+
+
+@pytest.mark.parametrize("display", [None, "", " \n", 1, [], "中" * 21846, "a" * 65537])
+async def test_display_content_rejects_invalid_wire_values_before_admission(
+    successful_chat_dependencies: None, display: object
+) -> None:
+    context = _MessageContext()
+    await SendMessageHandler().handle(
+        context, {**_message(message_id="display-invalid"), "display_content": display}
+    )
+    _assert_error_code(context, "INVALID_DISPLAY_CONTENT")
+    _assert_error_message_id(context, "display-invalid")
+    assert context.connection_manager.tasks == []
+
+
+async def test_display_content_is_part_of_idempotency_and_preserved_separately_from_raw_prompt(
+    successful_chat_dependencies: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payloads: list[dict[str, Any]] = []
+    streams: list[dict[str, Any]] = []
+    original = chat_handler._admit_client_turn
+
+    async def capture_admission(*args: Any, **kwargs: Any) -> Any:
+        payloads.append(kwargs["execution_payload"])
+        return await original(*args, **kwargs)
+
+    async def capture_stream(**kwargs: Any) -> None:
+        streams.append(kwargs)
+
+    monkeypatch.setattr(chat_handler, "_admit_client_turn", capture_admission)
+    monkeypatch.setattr(
+        chat_handler, "stream_agent_to_websocket_with_fresh_session", capture_stream
+    )
+    for display in ["  用户目标  ", "修订反馈", "a" * 65536, "中" * 21845]:
+        context = _MessageContext()
+        await SendMessageHandler().handle(
+            context, {**_message(message_id="display-message"), "display_content": display}
+        )
+        await asyncio.gather(*context.connection_manager.tasks)
+        assert streams[-1]["user_message"] == "Plan the requested change"
+        assert streams[-1]["display_content"] == display
+        assert payloads[-1]["display_content"] == display
+    assert canonical_agent_client_turn_payload_hash(
+        payloads[0]
+    ) != canonical_agent_client_turn_payload_hash(payloads[1])
+
+
+@pytest.mark.parametrize("unavailable", [False, True])
+async def test_policy_denial_precedes_client_claim_and_execution(
+    successful_chat_dependencies, monkeypatch, unavailable
+):
+    context = _MessageContext()
+    context.conversation.workspace_id = "workspace-1"
+    loader = AsyncMock(return_value={"revision": 3, "permission_mode": "ask"})
+    if unavailable:
+        loader.side_effect = RuntimeV2Error("workspace_policy_unavailable", "Policy unavailable")
+    monkeypatch.setattr(
+        "src.application.services.chat_permission_admission_v2.load_workspace_policy", loader
+    )
+    claim = AsyncMock(side_effect=AssertionError("A denied turn must not claim an id"))
+    monkeypatch.setattr(chat_handler, "_admit_client_turn", claim)
+    await SendMessageHandler().handle(
+        context, _message(message_id="policy-denied", permission_mode="automatic")
+    )
+    claim.assert_not_awaited()
+    assert context.connection_manager.tasks == []
+    assert context.connection_manager.subscriptions == []
+    assert len(context.sent) == 1
+    assert context.sent[0]["type"] == "error"
+    assert context.sent[0]["data"]["code"] == (
+        "workspace_policy_unavailable" if unavailable else "chat_permission_policy_denied"
+    )

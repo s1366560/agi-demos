@@ -15,10 +15,16 @@ from src.domain.events.agent_events import SubAgentDepthLimitedEvent
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.domain.model.agent.tool_policy import ControlMessageType
 from src.domain.ports.agent.control_channel_port import ControlChannelPort, ControlMessage
+from src.infrastructure.agent.subagent.async_run_registry_v2 import (
+    registry_call_v2,
+    registry_transaction_v2,
+)
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+from src.infrastructure.agent.subagent.run_reservation_v2 import reserve_session_run_v2
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
@@ -221,7 +227,7 @@ def _filter_spawn_options(
     }
 
 
-def _record_announce_event(
+async def _record_announce_event(
     run_registry: SubAgentRunRegistry,
     conversation_id: str,
     run_id: str,
@@ -230,27 +236,31 @@ def _record_announce_event(
     max_events: int = 20,
 ) -> None:
     """Persist bounded announce history into run metadata."""
-    run = run_registry.get_run(conversation_id, run_id)
-    if not run:
-        return
-    announce_events = run.metadata.get("announce_events")
-    if not isinstance(announce_events, list):
-        announce_events = []
-    dropped = int(run.metadata.get("announce_events_dropped") or 0)
-    if len(announce_events) >= max_events:
-        announce_events = announce_events[-(max_events - 1) :]
-        dropped += 1
-    announce_events.append(
-        {
-            "type": event_type,
-            "timestamp": datetime.now(UTC).isoformat(),
-            **payload,
-        }
-    )
-    metadata: dict[str, Any] = {"announce_events": announce_events}
-    if dropped > 0:
-        metadata["announce_events_dropped"] = dropped
-    run_registry.attach_metadata(conversation_id, run_id, metadata)
+
+    def append(memory: SubAgentRunRegistry) -> None:
+        run = memory.get_run(conversation_id, run_id)
+        if not run:
+            return
+        announce_events = run.metadata.get("announce_events")
+        if not isinstance(announce_events, list):
+            announce_events = []
+        dropped = int(run.metadata.get("announce_events_dropped") or 0)
+        if len(announce_events) >= max_events:
+            announce_events = announce_events[-(max_events - 1) :]
+            dropped += 1
+        announce_events.append(
+            {
+                "type": event_type,
+                "timestamp": datetime.now(UTC).isoformat(),
+                **payload,
+            }
+        )
+        metadata: dict[str, Any] = {"announce_events": announce_events}
+        if dropped > 0:
+            metadata["announce_events_dropped"] = dropped
+        memory.attach_metadata(conversation_id, run_id, metadata)
+
+    await registry_transaction_v2(run_registry, append, write=True)
 
 
 def _build_lifecycle_metadata(
@@ -319,14 +329,19 @@ def _spawn_validate_mode_cleanup(
     return None
 
 
-def _spawn_check_capacity() -> str | None:
+async def _spawn_check_capacity() -> str | None:
     """Check active run capacity limits, returning error if exceeded."""
     runtime = _require_core_runtime("sessions_spawn")
-    active_runs = runtime.run_registry.count_active_runs(runtime.conversation_id)
+    active_runs = await registry_call_v2(
+        runtime.run_registry, "count_active_runs", runtime.conversation_id
+    )
     if active_runs >= runtime.max_active_runs:
         return f"Error: active SubAgent sessions limit reached ({active_runs}/{runtime.max_active_runs})"
-    requester_runs = runtime.run_registry.count_active_runs_for_requester(
-        runtime.conversation_id, runtime.requester_session_key
+    requester_runs = await registry_call_v2(
+        runtime.run_registry,
+        "count_active_runs_for_requester",
+        runtime.conversation_id,
+        runtime.requester_session_key,
     )
     if requester_runs >= runtime.max_children_per_requester:
         return (
@@ -371,7 +386,7 @@ async def _spawn_with_retry_fn(
                     },
                 }
             )
-            _record_announce_event(
+            await _record_announce_event(
                 run_registry=runtime.run_registry,
                 conversation_id=runtime.conversation_id,
                 run_id=run_id,
@@ -396,7 +411,7 @@ async def _spawn_with_retry_fn(
             },
         }
     )
-    _record_announce_event(
+    await _record_announce_event(
         run_registry=runtime.run_registry,
         conversation_id=runtime.conversation_id,
         run_id=run_id,
@@ -420,7 +435,11 @@ async def _spawn_create_and_run(
 ) -> ToolResult:
     """Create run record and invoke spawn callback."""
     runtime = _require_core_runtime("sessions_spawn")
-    run = runtime.run_registry.create_run(
+    run = await reserve_session_run_v2(
+        runtime.run_registry,
+        max_active_runs=runtime.max_active_runs,
+        max_children_per_requester=runtime.max_children_per_requester,
+        max_active_runs_per_lineage=runtime.max_active_runs_per_lineage,
         conversation_id=runtime.conversation_id,
         subagent_name=target_subagent_name,
         task=task,
@@ -437,7 +456,9 @@ async def _spawn_create_and_run(
         ),
         requester_session_key=runtime.requester_session_key,
     )
-    running = runtime.run_registry.mark_running(runtime.conversation_id, run.run_id)
+    if isinstance(run, str):
+        return ToolResult(output=run, is_error=True)
+    running = run
     if running:
         await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     try:
@@ -449,7 +470,9 @@ async def _spawn_create_and_run(
             spawn_options=spawn_options,
         )
         if retry_count > 0:
-            runtime.run_registry.attach_metadata(
+            await registry_call_v2(
+                runtime.run_registry,
+                "attach_metadata",
                 runtime.conversation_id,
                 run.run_id,
                 {"announce_retry_count": retry_count},
@@ -469,7 +492,9 @@ async def _spawn_create_and_run(
         )
         return _spawn_success_result(run.run_id, target_subagent_name, spawn_options)
     except Exception as exc:
-        failed = runtime.run_registry.mark_failed(
+        failed = await registry_call_v2(
+            runtime.run_registry,
+            "mark_failed",
             conversation_id=runtime.conversation_id,
             run_id=run.run_id,
             error=str(exc),
@@ -562,6 +587,7 @@ def _spawn_success_result(
     },
     category="subagent",
     tags=frozenset({"subagent", "spawn"}),
+    permission="delegate",
 )
 async def sessions_spawn_tool(
     ctx: ToolContext,
@@ -607,7 +633,7 @@ async def sessions_spawn_tool(
         timeout_seconds = max(0, int(run_timeout_seconds or 0))
     except (TypeError, ValueError):
         timeout_seconds = 0
-    capacity_error = _spawn_check_capacity()
+    capacity_error = await _spawn_check_capacity()
     if capacity_error:
         return ToolResult(output=capacity_error, is_error=True)
     spawn_options: dict[str, Any] = {
@@ -690,6 +716,7 @@ def _spawn_resolve_agent_id(
     },
     category="subagent",
     tags=frozenset({"subagent", "list"}),
+    permission="read",
 )
 async def sessions_list_tool(
     ctx: ToolContext,
@@ -720,12 +747,15 @@ async def sessions_list_tool(
             output=f"Error: invalid visibility '{effective_visibility}'",
             is_error=True,
         )
-    runs = runtime.run_registry.list_runs_for_requester(
+    runs = await registry_call_v2(
+        runtime.run_registry,
+        "list_runs_for_requester",
         runtime.conversation_id,
         runtime.requester_session_key,
         visibility=effective_visibility,
         statuses=statuses,
-    )[: max(1, limit)]
+    )
+    runs = runs[: max(1, limit)]
     output = json.dumps(
         {
             "conversation_id": runtime.conversation_id,
@@ -766,6 +796,7 @@ async def sessions_list_tool(
     },
     category="subagent",
     tags=frozenset({"subagent", "history"}),
+    permission="read",
 )
 async def sessions_history_tool(
     ctx: ToolContext,
@@ -782,11 +813,14 @@ async def sessions_history_tool(
             output=f"Error: invalid visibility '{effective_visibility}'",
             is_error=True,
         )
-    runs = runtime.run_registry.list_runs_for_requester(
+    runs = await registry_call_v2(
+        runtime.run_registry,
+        "list_runs_for_requester",
         runtime.conversation_id,
         runtime.requester_session_key,
         visibility=effective_visibility,
-    )[: max(1, limit)]
+    )
+    runs = runs[: max(1, limit)]
     output = json.dumps(
         {
             "conversation_id": runtime.conversation_id,
@@ -929,6 +963,7 @@ def _timeline_append_ack_events(
     },
     category="subagent",
     tags=frozenset({"subagent", "timeline"}),
+    permission="read",
 )
 async def sessions_timeline_tool(
     ctx: ToolContext,
@@ -942,7 +977,9 @@ async def sessions_timeline_tool(
     runtime = _require_core_runtime("sessions_timeline")
     if not run_id:
         return ToolResult(output="Error: run_id is required", is_error=True)
-    root_run = runtime.run_registry.get_run(runtime.conversation_id, run_id)
+    root_run = await registry_call_v2(
+        runtime.run_registry, "get_run", runtime.conversation_id, run_id
+    )
     if not root_run:
         return ToolResult(
             output=f"Error: run_id '{run_id}' not found",
@@ -950,7 +987,9 @@ async def sessions_timeline_tool(
         )
     runs: dict[str, SubAgentRun] = {root_run.run_id: root_run}
     if include_descendants:
-        descendants = runtime.run_registry.list_descendant_runs(
+        descendants = await registry_call_v2(
+            runtime.run_registry,
+            "list_descendant_runs",
             runtime.conversation_id,
             run_id,
             include_terminal=True,
@@ -1194,6 +1233,7 @@ def _overview_build_response(
     },
     category="subagent",
     tags=frozenset({"subagent", "session", "observability"}),
+    permission="read",
 )
 async def sessions_overview_tool(
     ctx: ToolContext,
@@ -1211,7 +1251,9 @@ async def sessions_overview_tool(
             output=f"Error: invalid visibility '{vis}'",
             is_error=True,
         )
-    runs = registry.list_runs_for_requester(conv_id, req_key, visibility=vis)
+    runs = await registry_call_v2(
+        registry, "list_runs_for_requester", conv_id, req_key, visibility=vis
+    )
     retention = max(int(registry.terminal_retention_seconds), 0)
     stats = _overview_collect_run_stats(runs, retention)
     hook_failures = _overview_get_hook_failures(runtime.observability_provider)
@@ -1251,6 +1293,7 @@ async def sessions_overview_tool(
     },
     category="subagent",
     tags=frozenset({"subagent", "session", "wait"}),
+    permission="read",
 )
 async def sessions_wait_tool(
     ctx: ToolContext,
@@ -1276,7 +1319,7 @@ async def sessions_wait_tool(
 
     started_at = datetime.now(UTC)
     while True:
-        run = registry.get_run(conv_id, run_id)
+        run = await registry_call_v2(registry, "get_run", conv_id, run_id)
         if not run:
             return ToolResult(
                 output=f"Error: run_id '{run_id}' not found",
@@ -1345,6 +1388,7 @@ def _wait_build_result(
     },
     category="subagent",
     tags=frozenset({"subagent", "session", "ack"}),
+    permission="delegate",
 )
 async def sessions_ack_tool(
     ctx: ToolContext,
@@ -1359,7 +1403,7 @@ async def sessions_ack_tool(
     req_key = runtime.requester_session_key
     if not run_id:
         return ToolResult(output="Error: run_id is required", is_error=True)
-    run = registry.get_run(conv_id, run_id)
+    run = await registry_call_v2(registry, "get_run", conv_id, run_id)
     if not run:
         return ToolResult(
             output=f"Error: run_id '{run_id}' not found",
@@ -1385,7 +1429,9 @@ async def sessions_ack_tool(
         ack_event["note"] = note.strip()[:500]
     ack_events.append(ack_event)
 
-    updated = registry.attach_metadata(
+    updated = await registry_call_v2(
+        registry,
+        "attach_metadata",
         conv_id,
         run_id,
         {
@@ -1461,25 +1507,33 @@ def _send_validate_params(
     return None, timeout_seconds
 
 
-def _send_check_capacity(lineage_root_run_id: str) -> str | None:
+async def _send_check_capacity(lineage_root_run_id: str) -> str | None:
     """Check capacity limits for send. Returns error or None."""
     runtime = _require_send_runtime()
-    active_runs = runtime.run_registry.count_active_runs(runtime.conversation_id)
+    active_runs = await registry_call_v2(
+        runtime.run_registry, "count_active_runs", runtime.conversation_id
+    )
     if active_runs >= runtime.max_active_runs:
         return (
             f"Error: active SubAgent sessions limit reached "
             f"({active_runs}/{runtime.max_active_runs})"
         )
-    requester_runs = runtime.run_registry.count_active_runs_for_requester(
-        runtime.conversation_id, runtime.requester_session_key
+    requester_runs = await registry_call_v2(
+        runtime.run_registry,
+        "count_active_runs_for_requester",
+        runtime.conversation_id,
+        runtime.requester_session_key,
     )
     if requester_runs >= runtime.max_children_per_requester:
         return (
             "Error: requester SubAgent sessions limit reached "
             f"({requester_runs}/{runtime.max_children_per_requester})"
         )
-    lineage_active = runtime.run_registry.count_active_runs_for_lineage(
-        runtime.conversation_id, lineage_root_run_id
+    lineage_active = await registry_call_v2(
+        runtime.run_registry,
+        "count_active_runs_for_lineage",
+        runtime.conversation_id,
+        lineage_root_run_id,
     )
     if lineage_active >= runtime.max_active_runs_per_lineage:
         return (
@@ -1574,7 +1628,7 @@ async def _send_spawn_with_retry(
                     },
                 }
             )
-            _record_announce_event(
+            await _record_announce_event(
                 run_registry=runtime.run_registry,
                 conversation_id=runtime.conversation_id,
                 run_id=run_id,
@@ -1599,7 +1653,7 @@ async def _send_spawn_with_retry(
             },
         }
     )
-    _record_announce_event(
+    await _record_announce_event(
         run_registry=runtime.run_registry,
         conversation_id=runtime.conversation_id,
         run_id=run_id,
@@ -1647,6 +1701,7 @@ async def _send_spawn_with_retry(
     },
     category="subagent",
     tags=frozenset({"subagent", "send"}),
+    permission="delegate",
 )
 async def sessions_send_tool(
     ctx: ToolContext,
@@ -1672,18 +1727,22 @@ async def sessions_send_tool(
                 )
             )
         return ToolResult(output=error, is_error=True)
-    parent_run = registry.get_run(conv_id, run_id)
+    parent_run = await registry_call_v2(registry, "get_run", conv_id, run_id)
     if not parent_run:
         return ToolResult(
             output=f"Error: run_id '{run_id}' not found",
             is_error=True,
         )
     lineage_root_run_id = str(parent_run.metadata.get("lineage_root_run_id") or run_id).strip()
-    capacity_error = _send_check_capacity(lineage_root_run_id)
+    capacity_error = await _send_check_capacity(lineage_root_run_id)
     if capacity_error:
         return ToolResult(output=capacity_error, is_error=True)
     follow_up_options = _send_build_follow_up_options(parent_run, timeout_seconds)
-    child_run = registry.create_run(
+    child_run = await reserve_session_run_v2(
+        registry,
+        max_active_runs=runtime.max_active_runs,
+        max_children_per_requester=runtime.max_children_per_requester,
+        max_active_runs_per_lineage=runtime.max_active_runs_per_lineage,
         conversation_id=conv_id,
         subagent_name=parent_run.subagent_name,
         task=task,
@@ -1702,7 +1761,9 @@ async def sessions_send_tool(
         parent_run_id=run_id,
         lineage_root_run_id=lineage_root_run_id,
     )
-    running = registry.mark_running(conv_id, child_run.run_id)
+    if isinstance(child_run, str):
+        return ToolResult(output=child_run, is_error=True)
+    running = child_run
     if running:
         await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     try:
@@ -1714,7 +1775,9 @@ async def sessions_send_tool(
             spawn_options=follow_up_options,
         )
         if retry_count > 0:
-            _ = registry.attach_metadata(
+            _ = await registry_call_v2(
+                registry,
+                "attach_metadata",
                 conv_id,
                 child_run.run_id,
                 {"announce_retry_count": retry_count},
@@ -1738,7 +1801,9 @@ async def sessions_send_tool(
             title=f"Send: {child_run.run_id}",
         )
     except Exception as exc:
-        failed = registry.mark_failed(
+        failed = await registry_call_v2(
+            registry,
+            "mark_failed",
             conversation_id=conv_id,
             run_id=child_run.run_id,
             error=str(exc),
@@ -1776,7 +1841,7 @@ def _ctrl_resolve_target_token(run_id: str, target: str) -> str:
     return (target or run_id).strip()
 
 
-def _ctrl_resolve_by_index(
+async def _ctrl_resolve_by_index(
     raw_index_str: str,
 ) -> tuple[list[SubAgentRun], str | None]:
     """Resolve target by index (#N or index:N)."""
@@ -1787,7 +1852,9 @@ def _ctrl_resolve_by_index(
         return [], f"Error: invalid target index '{raw_index_str}'"
     if resolved_index <= 0:
         return [], "Error: target index must be >= 1"
-    active_runs = runtime.run_registry.list_runs(
+    active_runs = await registry_call_v2(
+        runtime.run_registry,
+        "list_runs",
         runtime.conversation_id,
         statuses=list(_CTRL_ACTIVE_STATUSES),
     )
@@ -1799,7 +1866,7 @@ def _ctrl_resolve_by_index(
     return [active_runs[resolved_index - 1]], None
 
 
-def _ctrl_resolve_by_label(
+async def _ctrl_resolve_by_label(
     label: str, include_terminal: bool
 ) -> tuple[list[SubAgentRun], str | None]:
     """Resolve target by label."""
@@ -1807,14 +1874,16 @@ def _ctrl_resolve_by_label(
     if not label:
         return [], "Error: label selector requires a non-empty value"
     statuses = None if include_terminal else list(_CTRL_ACTIVE_STATUSES)
-    runs = runtime.run_registry.list_runs(runtime.conversation_id, statuses=statuses)
+    runs = await registry_call_v2(
+        runtime.run_registry, "list_runs", runtime.conversation_id, statuses=statuses
+    )
     matched = [run for run in runs if (_ctrl_run_label(run) or "") == label]
     if not matched:
         return [], f"Error: no runs found for label '{label}'"
     return matched, None
 
 
-def _ctrl_resolve_target_runs(
+async def _ctrl_resolve_target_runs(
     target_token: str,
     *,
     include_terminal: bool,
@@ -1826,14 +1895,16 @@ def _ctrl_resolve_target_runs(
         return [], "Error: target (or run_id) is required"
     if token.lower() == "all":
         statuses = None if include_terminal else list(_CTRL_ACTIVE_STATUSES)
-        runs = runtime.run_registry.list_runs(runtime.conversation_id, statuses=statuses)
+        runs = await registry_call_v2(
+            runtime.run_registry, "list_runs", runtime.conversation_id, statuses=statuses
+        )
         return runs, None
     if token.startswith("#") or token.lower().startswith("index:"):
         raw_idx = token[1:] if token.startswith("#") else token.split(":", 1)[1]
-        return _ctrl_resolve_by_index(raw_idx)
+        return await _ctrl_resolve_by_index(raw_idx)
     if token.lower().startswith("label:"):
-        return _ctrl_resolve_by_label(token.split(":", 1)[1].strip(), include_terminal)
-    run = runtime.run_registry.get_run(runtime.conversation_id, token)
+        return await _ctrl_resolve_by_label(token.split(":", 1)[1].strip(), include_terminal)
+    run = await registry_call_v2(runtime.run_registry, "get_run", runtime.conversation_id, token)
     if not run:
         return [], f"Error: run_id '{token}' not found"
     return [run], None
@@ -1874,10 +1945,12 @@ def _ctrl_ensure_mutation_allowed(action_name: str) -> str | None:
 # -- action: list --
 
 
-def _ctrl_handle_list() -> ToolResult:
+async def _ctrl_handle_list() -> ToolResult:
     """Handle list action."""
     runtime = _require_control_runtime()
-    active_runs = runtime.run_registry.list_runs(
+    active_runs = await registry_call_v2(
+        runtime.run_registry,
+        "list_runs",
         runtime.conversation_id,
         statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
     )
@@ -1921,18 +1994,20 @@ def _ctrl_handle_list() -> ToolResult:
 # -- action: info --
 
 
-def _ctrl_handle_info(run_id: str, target: str, include_descendants: bool) -> ToolResult:
+async def _ctrl_handle_info(run_id: str, target: str, include_descendants: bool) -> ToolResult:
     """Handle info action."""
     runtime = _require_control_runtime()
     target_token = _ctrl_resolve_target_token(run_id, target)
-    matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
+    matched_runs, error = await _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return ToolResult(output=error, is_error=True)
     run_by_id: dict[str, SubAgentRun] = {}
     for run in matched_runs:
         run_by_id[run.run_id] = run
         if include_descendants:
-            descendants = runtime.run_registry.list_descendant_runs(
+            descendants = await registry_call_v2(
+                runtime.run_registry,
+                "list_descendant_runs",
                 runtime.conversation_id,
                 run.run_id,
                 include_terminal=True,
@@ -1968,7 +2043,7 @@ async def _ctrl_handle_log(
     """Handle log action by building timeline from run registry."""
     runtime = _require_control_runtime()
     target_token = _ctrl_resolve_target_token(run_id, target)
-    matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
+    matched_runs, error = await _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return ToolResult(output=error, is_error=True)
     if len(matched_runs) != 1:
@@ -1979,7 +2054,9 @@ async def _ctrl_handle_log(
     matched_run = matched_runs[0]
     runs: dict[str, SubAgentRun] = {matched_run.run_id: matched_run}
     if include_descendants:
-        descendants = runtime.run_registry.list_descendant_runs(
+        descendants = await registry_call_v2(
+            runtime.run_registry,
+            "list_descendant_runs",
             runtime.conversation_id,
             matched_run.run_id,
             include_terminal=True,
@@ -2027,7 +2104,11 @@ async def _ctrl_send_dispatch(
         timeout_seconds,
         requester_session_key=runtime.requester_session_key,
     )
-    child_run = runtime.run_registry.create_run(
+    child_run = await reserve_session_run_v2(
+        runtime.run_registry,
+        max_active_runs=runtime.max_active_runs,
+        max_children_per_requester=runtime.max_children_per_requester,
+        max_active_runs_per_lineage=runtime.max_active_runs_per_lineage,
         conversation_id=conv_id,
         subagent_name=parent_run.subagent_name,
         task=task,
@@ -2046,7 +2127,9 @@ async def _ctrl_send_dispatch(
         parent_run_id=parent_run.run_id,
         lineage_root_run_id=lineage_root,
     )
-    running = runtime.run_registry.mark_running(conv_id, child_run.run_id)
+    if isinstance(child_run, str):
+        return ToolResult(output=child_run, is_error=True)
+    running = child_run
     if running:
         await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     params, accepts_kw = _resolve_spawn_callback_signature(runtime.restart_callback)
@@ -2077,7 +2160,9 @@ async def _ctrl_send_dispatch(
             title=f"SubAgents: send {child_run.run_id}",
         )
     except Exception as exc:
-        failed = runtime.run_registry.mark_failed(
+        failed = await registry_call_v2(
+            runtime.run_registry,
+            "mark_failed",
             conversation_id=conv_id,
             run_id=child_run.run_id,
             error=str(exc),
@@ -2110,7 +2195,7 @@ async def _ctrl_handle_send(
             is_error=True,
         )
     target_token = _ctrl_resolve_target_token(run_id, target)
-    matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
+    matched_runs, error = await _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return ToolResult(output=error, is_error=True)
     if len(matched_runs) != 1:
@@ -2128,7 +2213,7 @@ async def _ctrl_handle_send(
 # -- action: kill --
 
 
-def _ctrl_collect_kill_candidates(
+async def _ctrl_collect_kill_candidates(
     matched_roots: list[SubAgentRun],
 ) -> dict[str, str]:
     """Collect candidate run_ids mapping to root_run_id."""
@@ -2137,7 +2222,9 @@ def _ctrl_collect_kill_candidates(
     for root in matched_roots:
         if root.status in _CTRL_ACTIVE_STATUSES:
             candidates[root.run_id] = root.run_id
-        descendants = runtime.run_registry.list_descendant_runs(
+        descendants = await registry_call_v2(
+            runtime.run_registry,
+            "list_descendant_runs",
             runtime.conversation_id,
             root.run_id,
             include_terminal=False,
@@ -2184,36 +2271,40 @@ async def _ctrl_exec_cancellations(
     ctx: ToolContext,
     candidates: dict[str, str],
     target_token: str,
-) -> int:
-    """Execute cancellations. Returns cancelled count."""
+) -> tuple[int, int]:
+    """Persist intent, deliver it, and count only actual owner acknowledgements."""
     runtime = _require_control_runtime()
     cancelled_count = 0
+    pending_count = 0
     for cand_id, root_id in candidates.items():
-        cand = runtime.run_registry.get_run(runtime.conversation_id, cand_id)
-        if not cand or cand.status not in _CTRL_ACTIVE_STATUSES:
-            continue
-        cancelled = await runtime.cancel_callback(cand.run_id)
-        await _ctrl_send_control_message(
-            cand.run_id,
-            ControlMessageType.KILL,
-            cascade=(root_id != cand_id),
-        )
-        updated = runtime.run_registry.mark_cancelled(
-            conversation_id=runtime.conversation_id,
-            run_id=cand.run_id,
-            reason="Cancelled by subagents tool",
-            metadata={
-                "cancelled_by_tool": True,
+        requested = await registry_call_v2(
+            runtime.run_registry,
+            "attach_metadata",
+            runtime.conversation_id,
+            cand_id,
+            {
+                "cancel_requested": True,
+                "cancel_requested_by": runtime.conversation_id,
                 "cascade_root_run_id": root_id,
                 "target_selector": target_token,
             },
             expected_statuses=list(_CTRL_ACTIVE_STATUSES),
         )
-        if updated:
-            await ctx.emit({"type": "subagent_killed", "data": updated.to_event_data()})
-        if cancelled or updated:
+        if requested is None:
+            continue
+        await _ctrl_send_control_message(
+            cand_id, ControlMessageType.KILL, cascade=(root_id != cand_id)
+        )
+        _ = await runtime.cancel_callback(cand_id)
+        acknowledged = await registry_call_v2(
+            runtime.run_registry, "get_run", runtime.conversation_id, cand_id
+        )
+        if acknowledged and acknowledged.status is SubAgentRunStatus.CANCELLED:
             cancelled_count += 1
-    return cancelled_count
+            await ctx.emit({"type": "subagent_killed", "data": acknowledged.to_event_data()})
+        elif acknowledged and acknowledged.status in _CTRL_ACTIVE_STATUSES:
+            pending_count += 1
+    return cancelled_count, pending_count
 
 
 def _ctrl_kill_result_msg(
@@ -2235,7 +2326,7 @@ def _ctrl_kill_result_msg(
 async def _ctrl_handle_kill(ctx: ToolContext, run_id: str, target: str) -> ToolResult:
     """Handle kill action."""
     target_token = _ctrl_resolve_target_token(run_id, target)
-    matched_roots, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
+    matched_roots, error = await _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return ToolResult(output=error, is_error=True)
     if (
@@ -2246,13 +2337,20 @@ async def _ctrl_handle_kill(ctx: ToolContext, run_id: str, target: str) -> ToolR
         return ToolResult(
             output=(f"Run {target_token} is already terminal ({matched_roots[0].status.value})"),
         )
-    candidates = _ctrl_collect_kill_candidates(matched_roots)
+    candidates = await _ctrl_collect_kill_candidates(matched_roots)
     is_direct = bool(target_token == run_id and run_id and not target)
     if not candidates:
         return ToolResult(
             output=_ctrl_kill_result_msg(0, target_token, run_id, is_direct),
         )
-    cancelled = await _ctrl_exec_cancellations(ctx, candidates, target_token)
+    cancelled, pending = await _ctrl_exec_cancellations(ctx, candidates, target_token)
+    if pending:
+        return ToolResult(
+            output=_(
+                "Cancellation requested for {pending} run(s); awaiting owner acknowledgement. Confirmed cancelled: {cancelled}."
+            ).format(pending=pending, cancelled=cancelled),
+            title=f"SubAgents: kill {target_token}",
+        )
     return ToolResult(
         output=_ctrl_kill_result_msg(cancelled, target_token, run_id, is_direct),
         title=f"SubAgents: kill {target_token}",
@@ -2262,11 +2360,11 @@ async def _ctrl_handle_kill(ctx: ToolContext, run_id: str, target: str) -> ToolR
 # -- action: steer --
 
 
-def _ctrl_steer_resolve_active(
+async def _ctrl_steer_resolve_active(
     target_token: str,
 ) -> tuple[SubAgentRun | None, str | None]:
     """Resolve target to exactly one active run for steering."""
-    matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
+    matched_runs, error = await _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return None, error
     active = [r for r in matched_runs if r.status in _CTRL_ACTIVE_STATUSES]
@@ -2312,7 +2410,9 @@ async def _ctrl_steer_metadata_only(
     """Attach steer instruction as metadata without restart."""
     runtime = _require_control_runtime()
     now = datetime.now(UTC)
-    updated = runtime.run_registry.attach_metadata(
+    updated = await registry_call_v2(
+        runtime.run_registry,
+        "attach_metadata",
         conversation_id=runtime.conversation_id,
         run_id=resolved_run_id,
         metadata={
@@ -2346,26 +2446,41 @@ async def _ctrl_steer_with_restart(
     if runtime.restart_callback is None:
         raise _missing_runtime("subagents steer")
     resolved_run_id = run.run_id
-    await _ctrl_send_control_message(resolved_run_id, ControlMessageType.KILL)
-    cancelled = await runtime.cancel_callback(resolved_run_id)
-    updated_old = runtime.run_registry.mark_cancelled(
-        conversation_id=runtime.conversation_id,
-        run_id=resolved_run_id,
-        reason="Cancelled by steer restart",
-        metadata={"steer_instruction": instruction},
-        expected_statuses=list(_CTRL_ACTIVE_STATUSES),
+    await _ctrl_exec_cancellations(ctx, {resolved_run_id: resolved_run_id}, resolved_run_id)
+    updated_old = await registry_call_v2(
+        runtime.run_registry, "get_run", runtime.conversation_id, resolved_run_id
     )
-    if updated_old:
-        await ctx.emit({"type": "subagent_killed", "data": updated_old.to_event_data()})
+    if updated_old is None or updated_old.status in _CTRL_ACTIVE_STATUSES:
+        return ToolResult(
+            output=_(
+                "Cancellation requested; restart requires the previous owner's terminal acknowledgement."
+            ),
+            is_error=True,
+        )
+    cancelled = updated_old.status is SubAgentRunStatus.CANCELLED
     restart_task = f"{run.task}\n\n[Steering Instruction]\n{instruction.strip()}"
     now = datetime.now(UTC)
     lineage_root = str(run.metadata.get("lineage_root_run_id") or resolved_run_id).strip()
-    replacement = runtime.run_registry.create_run(
+    replacement = await reserve_session_run_v2(
+        runtime.run_registry,
+        max_active_runs=runtime.max_active_runs,
+        max_children_per_requester=runtime.max_children_per_requester,
+        max_active_runs_per_lineage=runtime.max_active_runs_per_lineage,
         conversation_id=runtime.conversation_id,
         subagent_name=run.subagent_name,
         task=restart_task,
         metadata={
-            **dict(run.metadata),
+            **{
+                key: value
+                for key, value in run.metadata.items()
+                if key
+                not in {
+                    "cancel_requested",
+                    "cancel_requested_by",
+                    "cascade_root_run_id",
+                    "target_selector",
+                }
+            },
             "session_mode": "steer_restart",
             "steered_from_run_id": resolved_run_id,
             "steer_instruction": instruction,
@@ -2376,13 +2491,17 @@ async def _ctrl_steer_with_restart(
         parent_run_id=str(run.metadata.get("parent_run_id") or "").strip() or None,
         lineage_root_run_id=lineage_root,
     )
-    running = runtime.run_registry.mark_running(runtime.conversation_id, replacement.run_id)
+    if isinstance(replacement, str):
+        return ToolResult(output=replacement, is_error=True)
+    running = replacement
     if running:
         await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     try:
         await runtime.restart_callback(run.subagent_name, restart_task, replacement.run_id)
     except Exception as exc:
-        failed = runtime.run_registry.mark_failed(
+        failed = await registry_call_v2(
+            runtime.run_registry,
+            "mark_failed",
             conversation_id=runtime.conversation_id,
             run_id=replacement.run_id,
             error=str(exc),
@@ -2395,7 +2514,9 @@ async def _ctrl_steer_with_restart(
             is_error=True,
         )
     if updated_old:
-        _ = runtime.run_registry.attach_metadata(
+        await registry_call_v2(
+            runtime.run_registry,
+            "attach_metadata",
             conversation_id=runtime.conversation_id,
             run_id=resolved_run_id,
             metadata={"replaced_by_run_id": replacement.run_id},
@@ -2434,7 +2555,7 @@ async def _ctrl_handle_steer(
             output="Error: instruction is required for steer",
             is_error=True,
         )
-    run, error = _ctrl_steer_resolve_active(target_token)
+    run, error = await _ctrl_steer_resolve_active(target_token)
     if error:
         return ToolResult(output=error, is_error=True)
     assert run is not None
@@ -2517,6 +2638,7 @@ async def _ctrl_handle_steer(
     },
     category="subagent",
     tags=frozenset({"subagent", "control"}),
+    permission="delegate",
 )
 async def subagents_control_tool(
     ctx: ToolContext,
@@ -2534,9 +2656,9 @@ async def subagents_control_tool(
     _ = _require_control_runtime()
     normalized = (action or "list").strip().lower()
     if normalized == "list":
-        return _ctrl_handle_list()
+        return await _ctrl_handle_list()
     if normalized == "info":
-        return _ctrl_handle_info(run_id, target, include_descendants)
+        return await _ctrl_handle_info(run_id, target, include_descendants)
     if normalized == "log":
         return await _ctrl_handle_log(run_id, target, include_descendants, include_announce)
     return await _ctrl_dispatch_mutation(
@@ -2748,6 +2870,7 @@ def make_session_tool_defs(  # noqa: PLR0913
     max_children_per_requester: int,
     delegation_depth: int,
     max_delegation_depth: int,
+    control_channel: ControlChannelPort | None = None,
 ) -> list[Any]:
     """Build the complete top-level session tool set with captured dependencies."""
     if run_registry is None or spawn_callback is None or cancel_callback is None:
@@ -2757,6 +2880,7 @@ def make_session_tool_defs(  # noqa: PLR0913
         )
     runtime = _session_runtime_from_dependencies(
         run_registry=run_registry,
+        control_channel=control_channel,
         conversation_id=conversation_id,
         requester_session_key=requester_session_key,
         visibility_default=visibility_default,
@@ -2804,10 +2928,12 @@ def make_nested_session_tool_defs(  # noqa: PLR0913
     max_children_per_requester: int,
     delegation_depth: int,
     max_delegation_depth: int,
+    control_channel: ControlChannelPort | None = None,
 ) -> list[Any]:
     """Build the bounded nested session tool subset with captured dependencies."""
     runtime = _session_runtime_from_dependencies(
         run_registry=run_registry,
+        control_channel=control_channel,
         conversation_id=conversation_id,
         requester_session_key=requester_session_key,
         visibility_default=visibility_default,

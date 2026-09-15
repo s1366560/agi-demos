@@ -1,0 +1,42 @@
+{
+  "apply_requested": true,
+  "restart_requested": true,
+  "applied": true,
+  "owner_id": "bf922bb7-290d-4252-8891-f82b97aa14b2",
+  "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+  "sandbox_id": "mcp-sandbox-653501ed6a06",
+  "reviewed_image_id": "sha256:9777bf69a9681d2767e8fb0e15576c48b86fe7ec5b65bd41e24cacdb0981520b",
+  "before": {
+    "container_id": "4d83b3e57d481a8b98a21b1ba5419b5c5d0bde257d6a73f1628af713b3e4951e",
+    "image_id": "sha256:20a3629780b0bf3b1bbc2d60a427a805395015d52eaef7bd1913c603a2c5ac9b",
+    "workspace_source": "/tmp/memstack_738ace12-0d21-48ca-847d-cd0c2802816d",
+    "chromium_volume": "memstack-sky-cua-chromium-d648e4faf75e178151f7f02e1e32696a"
+  },
+  "official_before": {
+    "sandbox_id": "mcp-sandbox-653501ed6a06",
+    "status": "running",
+    "is_healthy": true
+  },
+  "restart_http_status": 200,
+  "official_after": {
+    "sandbox_id": "mcp-sandbox-653501ed6a06",
+    "status": "running",
+    "is_healthy": true
+  },
+  "after": {
+    "container_id": "b747d59566600719daf8f236bf1bad409fe7784d1e435706a4e21cf4a82c5696",
+    "image_id": "sha256:9777bf69a9681d2767e8fb0e15576c48b86fe7ec5b65bd41e24cacdb0981520b",
+    "workspace_source": "/tmp/memstack_738ace12-0d21-48ca-847d-cd0c2802816d",
+    "chromium_volume": "memstack-sky-cua-chromium-d648e4faf75e178151f7f02e1e32696a"
+  },
+  "live_tools_list": {
+    "tool": "write",
+    "meta": {
+      "memstack/workspace-write": {
+        "contract": "directory-fd-write-v1",
+        "workspace_root": "/workspace"
+      }
+    }
+  },
+  "owner_auth_revoked": true
+}

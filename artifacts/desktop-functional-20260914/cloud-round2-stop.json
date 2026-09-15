@@ -1,0 +1,11 @@
+{
+  "conversation_id": "c0d589a0-9f67-5c20-871e-f00c8bc756e2",
+  "response": {
+    "type": "ack",
+    "action": "stop_session",
+    "code": null,
+    "message": null,
+    "conversation_id": "c0d589a0-9f67-5c20-871e-f00c8bc756e2"
+  },
+  "temporary_key_revoked": true
+}

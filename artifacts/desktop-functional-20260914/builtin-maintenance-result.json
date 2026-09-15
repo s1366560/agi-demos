@@ -1,0 +1,20 @@
+{
+  "target_digest": "sha256:6be9decb25ec9b9fa2be951193f21d8137c31eacba12244f21c322375e97f8e7",
+  "applied": true,
+  "scopes": [
+    {
+      "kind": "root",
+      "before_revision": 9,
+      "after_revision": 10,
+      "profile_source_preserved": true
+    },
+    {
+      "kind": "session",
+      "before_revision": 1,
+      "after_revision": 2,
+      "profile_source_preserved": true
+    }
+  ],
+  "actor_id": "5c74a66d-9ce2-4fed-afed-55b48563f351",
+  "temporary_identity_deactivated": true
+}

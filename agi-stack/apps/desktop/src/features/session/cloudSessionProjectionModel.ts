@@ -104,7 +104,11 @@ export function decodeCloudConversationSessionProjection(
   const artifactRecordIds = readCloudArtifactRecordIds(root.artifact_records);
   const activityAuthority = readCloudToolExecutionRecords(root.tool_execution_records);
   const cloudEvidenceSummary = readCloudEvidenceSummary(root.evidence_summary);
-  const capabilities = readCloudCapabilities(root.capabilities, pendingHitl);
+  const capabilities = readCloudCapabilities(root.capabilities, pendingHitl, Boolean(
+    currentPlan?.status === 'draft' && currentPlan.tasks.length > 0 &&
+    conversation.current_mode === 'plan' && !currentAttempt &&
+    (!currentRun || !['queued', 'running'].includes(currentRun.status))
+  ), Boolean(currentRun && !currentAttempt && ['queued', 'running'].includes(currentRun.status)));
   if (!artifactRecordIds || !activityAuthority || !cloudEvidenceSummary || !capabilities) {
     return null;
   }
@@ -149,8 +153,8 @@ export function decodeCloudConversationSessionProjection(
       });
   const planAuthority: ConversationSessionProjection['planAuthority'] = {
     kind: 'agent_task_list',
-    currentPlan: null,
-    planHistory: [],
+    currentPlan,
+    planHistory,
     tasks,
     workspacePlanContext,
   };
@@ -804,6 +808,8 @@ function readCloudEvidenceSummary(value: unknown): CloudEvidenceSummary | null {
 function readCloudCapabilities(
   value: unknown,
   pendingHitl: DesktopApprovalRequest[],
+  canApproveDraft: boolean,
+  canCancelRun: boolean,
 ): SessionProjectionCapabilities | null {
   const capabilities = recordValue(value);
   if (!capabilities) return null;
@@ -818,16 +824,23 @@ function readCloudCapabilities(
   if (booleanKeys.some((key) => typeof capabilities[key] !== 'boolean')) return null;
   const allowed = readEnumArray(
     capabilities.allowed_actions,
-    new Set<SessionAllowedAction>(['send_message', 'respond_to_hitl']),
+    new Set<SessionAllowedAction>(['send_message', 'respond_to_hitl', 'approve_plan_and_start', 'cancel']),
   );
   if (!allowed) return null;
+  const environmentKinds =
+    capabilities.environment_kinds === undefined
+      ? []
+      : readEnumArray(capabilities.environment_kinds, new Set(['local', 'worktree'] as const));
+  if (!environmentKinds) return null;
   const expected = [
     ...(capabilities.can_send_message ? (['send_message'] as const) : []),
     ...(capabilities.can_respond_to_hitl ? (['respond_to_hitl'] as const) : []),
+    ...(capabilities.can_approve_plan ? (['approve_plan_and_start'] as const) : []),
+    ...(capabilities.can_control_execution ? (['cancel'] as const) : []),
   ];
   if (
-    capabilities.can_approve_plan ||
-    capabilities.can_control_execution ||
+    (capabilities.can_approve_plan && (!canApproveDraft || pendingHitl.length > 0)) ||
+    (capabilities.can_control_execution && (!canCancelRun || pendingHitl.length > 0)) ||
     capabilities.can_review_artifacts ||
     capabilities.can_deliver_artifacts ||
     (pendingHitl.length > 0 && capabilities.can_send_message) ||
@@ -837,14 +850,15 @@ function readCloudCapabilities(
     return null;
   }
   return {
+    environmentKinds,
     canSendMessage: capabilities.can_send_message as boolean,
-    canApprovePlan: false,
+    canApprovePlan: capabilities.can_approve_plan as boolean,
     canRespondToHitl: capabilities.can_respond_to_hitl as boolean,
     canSteerNow: false,
     canQueueNext: false,
     canReviewArtifacts: false,
     canDeliverArtifacts: false,
-    runActions: [],
+    runActions: capabilities.can_control_execution ? ['cancel'] : [],
     allowedActions: allowed,
   };
 }

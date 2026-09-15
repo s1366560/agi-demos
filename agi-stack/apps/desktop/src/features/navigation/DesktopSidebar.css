@@ -3,33 +3,57 @@
   display: grid;
   grid-column: 1;
   grid-row: 2;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   gap: 10px;
   padding: 10px 12px;
   overflow: hidden;
   border-right: 1px solid var(--desktop-border-soft);
-  background: var(--desktop-surface-18);
+  background: var(--desktop-sidebar-bg);
   color: var(--desktop-muted);
 }
 
 .desktop-design-brand {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 6px;
+  gap: 9px;
+  width: 100%;
+  padding: 4px 7px;
+  border-radius: 7px;
+  text-align: left;
+}
+
+.desktop-design-brand:hover {
+  background: var(--desktop-nav-hover-bg);
 }
 
 .desktop-design-brand img {
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   object-fit: contain;
+}
+
+.desktop-design-brand-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .desktop-design-brand strong {
   color: var(--desktop-text);
-  font-size: 12px;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.desktop-design-brand small {
+  overflow: hidden;
+  color: var(--desktop-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desktop-design-sidebar button {
@@ -48,39 +72,54 @@
 }
 
 .desktop-design-primary-nav button {
+  position: relative;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  min-height: 28px;
-  padding: 0 8px;
+  min-height: 32px;
+  padding: 0 9px;
   border-radius: 6px;
   text-align: left;
 }
 
-.desktop-design-primary-nav button:hover,
-.desktop-design-primary-nav button.active {
-  background: rgba(var(--desktop-slate-rgb), 0.07);
+.desktop-design-primary-nav button:hover {
+  background: var(--desktop-nav-hover-bg);
   color: var(--desktop-text);
 }
 
+.desktop-design-primary-nav button.active {
+  background: var(--desktop-nav-active-bg);
+  color: var(--desktop-text);
+}
+
+/* Prototype active marker: 2px cyan bar on the leading edge. */
+.desktop-design-primary-nav button.active::before {
+  position: absolute;
+  left: -3px;
+  width: 2px;
+  height: 15px;
+  border-radius: 2px;
+  background: var(--desktop-cyan);
+  content: '';
+}
+
 .desktop-design-primary-nav svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .desktop-design-primary-nav span {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .desktop-design-primary-nav small {
   display: grid;
   min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  padding: 1px 5px;
   place-items: center;
-  border-radius: 999px;
-  background: rgba(var(--desktop-cyan-rgb), 0.12);
+  border-radius: 8px;
+  background: var(--desktop-nav-badge-bg);
   color: var(--desktop-cyan);
   font-size: 8px;
 }
@@ -90,22 +129,23 @@
   gap: 8px;
 }
 
+/* Prototype "New thread" primary button: pinned bg/border/text tokens. */
 .desktop-design-new-task {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 32px;
-  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.56) !important;
+  gap: 7px;
+  height: 34px;
+  border: 1px solid var(--desktop-border-cyan-9) !important;
   border-radius: 7px;
-  background: rgba(var(--desktop-cyan-rgb), 0.1) !important;
-  color: var(--desktop-text) !important;
-  font-size: 10px !important;
-  font-weight: 650 !important;
+  background: var(--desktop-new-thread-bg) !important;
+  color: var(--desktop-new-thread-text) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
 }
 
 .desktop-design-new-task:hover:not(:disabled) {
-  background: rgba(var(--desktop-cyan-rgb), 0.16) !important;
+  border-color: var(--desktop-cyan) !important;
 }
 
 .desktop-design-new-task:disabled {
@@ -126,10 +166,10 @@
 .desktop-design-header-row strong,
 .desktop-design-header-row span {
   overflow: hidden;
-  color: var(--desktop-muted);
+  color: var(--desktop-gray-3);
   font-size: 8px;
   font-weight: 800;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.12em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;

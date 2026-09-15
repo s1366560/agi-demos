@@ -232,7 +232,32 @@ class TestTodoWriteTool:
 
         payload = json.loads(result.output)
         assert payload["error_code"] == "TODO_ID_IS_LIST_POSITION"
+        assert result.is_error is True
         assert "Call todoread and retry" in payload["retry_instruction"]
+
+    async def test_missing_task_update_is_a_tool_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _FakeRepo:
+            def __init__(self, session: Any) -> None:
+                del session
+
+            async def find_by_id(self, task_id: str) -> Any:
+                return None
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository."
+            "SqlAgentTaskRepository",
+            _FakeRepo,
+        )
+        ctx = _make_ctx()
+        bound_tool = make_todo_tools(session_factory=lambda: _DummySession())["todowrite"]
+        result = await bound_tool.execute(
+            ctx, action="update", todo_id="missing-task", todos=[{"status": "completed"}]
+        )
+        assert json.loads(result.output)["success"] is False
+        assert result.is_error is True
+        assert ctx.consume_pending_events() == []
 
     @pytest.mark.parametrize("action", ["replace", "add", "update"])
     async def test_workspace_write_fails_closed_without_legacy_repository(
@@ -280,6 +305,7 @@ class TestTodoWriteTool:
         payload = json.loads(result.output)
         assert payload["success"] is False
         assert payload["workspace_scope"] == "worker"
+        assert result.is_error is True
         assert "workspace_report_progress/complete/blocked" in payload["blocked_reason"]
 
 
@@ -296,3 +322,48 @@ def test_todo_tools_module_has_no_legacy_runtime_seams(name: str) -> None:
     import src.infrastructure.agent.tools.todo_tools as todo_tools_module
 
     assert not hasattr(todo_tools_module, name)
+
+
+@pytest.mark.parametrize("action", ["replace", "add", "update"])
+@pytest.mark.parametrize("status", ["in_progress", "completed", "failed"])
+async def test_plan_mode_cannot_record_execution_progress(action, status) -> None:
+    def unexpected_storage():
+        raise AssertionError("plan execution progress must be rejected before storage")
+
+    tool = make_todo_tools(session_factory=unexpected_storage)["todowrite"]
+    result = await tool.execute(
+        _make_ctx(runtime_context={"effective_mode": "plan"}),
+        action=action,
+        todos=[{"content": "Execute after approval", "status": status}],
+        todo_id="planned-task",
+    )
+    assert result.is_error is True
+    assert json.loads(result.output)["code"] == "PLAN_EXECUTION_NOT_APPROVED"
+
+
+@pytest.mark.parametrize("mode,status", [("plan", "pending"), ("build", "completed")])
+async def test_plan_drafts_and_build_completion_remain_persistable(
+    monkeypatch, mode, status
+) -> None:
+    saved = []
+
+    class Repo:
+        def __init__(self, session):
+            pass
+
+        async def save_all(self, conversation_id, tasks):
+            saved.extend(tasks)
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository.SqlAgentTaskRepository",
+        Repo,
+    )
+    tool = make_todo_tools(session_factory=lambda: _DummySession())["todowrite"]
+    result = await tool.execute(
+        _make_ctx(runtime_context={"effective_mode": mode}),
+        action="replace",
+        todos=[{"content": "Approved execution task", "status": status}],
+    )
+    assert result.is_error is False
+    assert len(saved) == 1
+    assert saved[0].status.value == status

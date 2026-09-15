@@ -366,6 +366,7 @@ class StreamConfig:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "stream": True,
+            "stream_options": {"include_usage": True},
             "timeout": self.timeout,
         }
 
@@ -554,7 +555,7 @@ class LLMStream:
             }
 
         # Prepare additional kwargs from config
-        extra_kwargs: dict[str, Any] = {}
+        extra_kwargs: dict[str, Any] = {"stream_options": {"include_usage": True}}
         extra_kwargs["model"] = self.config.model
         if self.config.tools:
             extra_kwargs["tools"] = self.config.tools
@@ -827,6 +828,10 @@ class LLMStream:
         Yields:
             StreamEvent objects
         """
+        usage = getattr(chunk, "usage", None)
+        if usage:
+            self._usage = self._extract_usage(usage)
+
         choices = getattr(chunk, "choices", [])
         if not choices:
             logger.debug("[LLMStream] chunk has no choices")
@@ -879,10 +884,6 @@ class LLMStream:
         finish_reason = getattr(choice, "finish_reason", None)
         if finish_reason:
             self._finish_reason = finish_reason
-
-        usage = getattr(chunk, "usage", None)
-        if usage:
-            self._usage = self._extract_usage(usage)
 
     async def _process_tool_calls(
         self,
@@ -1067,6 +1068,10 @@ class LLMStream:
                     name=tracker.name,
                     arguments=arguments,
                 )
+
+    def get_usage_snapshot(self) -> dict[str, int] | None:
+        """Return provider-reported usage, even if final event delivery was interrupted."""
+        return dict(self._usage) if self._usage is not None else None
 
     async def _finalize(self) -> AsyncIterator[StreamEvent]:
         """

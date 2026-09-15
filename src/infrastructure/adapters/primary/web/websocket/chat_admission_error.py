@@ -6,8 +6,10 @@ from uuid import uuid4
 from sqlalchemy import exists, select
 
 from src.domain.model.agent import AgentExecutionEvent
+from src.infrastructure.adapters.secondary.persistence.agent_run_settlement import settle_agent_run
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentRunAuthorityModel,
     Conversation,
     Project,
     UserProject,
@@ -64,6 +66,33 @@ async def persist_chat_admission_error(
         )
         if allowed is None:
             return enriched
+        result = await session.execute(
+            select(AgentRunAuthorityModel)
+            .where(
+                AgentRunAuthorityModel.id == message_id,
+                AgentRunAuthorityModel.message_id == message_id,
+                AgentRunAuthorityModel.tenant_id == tenant_id,
+                AgentRunAuthorityModel.project_id == project_id,
+                AgentRunAuthorityModel.conversation_id == conversation_id,
+                AgentRunAuthorityModel.run_kind == "chat",
+            )
+            .with_for_update()
+        )
+        run = result.scalar_one_or_none()
+        if run is not None and run.status == "queued":
+            run.status = "failed"
+            run.revision += 1
+            run.updated_at = now
+            run.completed_at = now
+            run.error = data.get("message")
+            enriched.update(run_id=run.id, run_revision=run.revision, status="failed")
+            await settle_agent_run(
+                session,
+                run=run,
+                started_at=run.created_at,
+                succeeded=False,
+                completed_at=now,
+            )
         await SqlAgentExecutionEventRepository(session).save(
             AgentExecutionEvent(
                 id=str(uuid4()),

@@ -5,6 +5,28 @@ and `desktop-renderer-v2`. A user login session is not a deployment grant. Grant
 secrets remain in Electron's trusted startup environment and the application vault;
 they must never be exposed to the renderer.
 
+Before provisioning the desktop, configure the local API deployment to include
+both desktop planes in its publication acknowledgement roster:
+
+```dotenv
+PLUGIN_V2_REQUIRED_DATA_PLANE_IDS=python-api-v2,desktop-sidecar-v2,desktop-renderer-v2
+PLUGIN_V2_ACK_DEADLINE_SECONDS=120
+```
+
+Restart the API after changing these settings. For an existing publication, a
+platform administrator must use the official `republish-last-ready` endpoint to
+apply the new roster. First verify that the current ROOT is ready and that its
+retained desired configuration matches the current desired configuration: this
+endpoint restores the last ready configuration. Verify unchanged plugin entries,
+manifests and bundle references, followed by readiness acknowledgements from all
+three planes. The bootstrap below does not perform that publication change.
+
+A successful distribution request verifies the credential; it does not prove
+publication readiness. A desktop that is absent from the required roster receives
+`data_plane_not_required` when acknowledging. Do not suppress that error or disable
+renderer acknowledgement: the current renderer requires a verified submitted
+receipt before its generation is healthy.
+
 For a local development API and loopback PostgreSQL, run from the repository root:
 
 ```sh

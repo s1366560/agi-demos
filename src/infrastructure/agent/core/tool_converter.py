@@ -224,6 +224,7 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
                     parameters=tool.parameters,
                     execute=_make_toolinfo_execute_wrapper(tool),
                     permission=tool.permission,
+                    permission_resolver=tool.permission_resolver,
                     aliases=tool.aliases,
                     _tool_instance=tool,  # ToolInfo stored for pipeline detection
                 )
@@ -243,6 +244,7 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
                 parameters=_get_tool_parameters(tool),
                 execute=_make_execute_wrapper(tool, name),
                 permission=getattr(tool, "permission", None),
+                permission_resolver=getattr(tool, "permission_resolver", None),
                 aliases=legacy_aliases,
                 _tool_instance=tool,
             )

@@ -1,0 +1,12 @@
+{
+  "real_processor_native_loop": true,
+  "model_transport": "local blocking async generator; no network",
+  "control_poll_count_while_llm_blocked": 0,
+  "control_poll_count_after_complete": 0,
+  "instruction_in_context": false,
+  "emitted_event_types": [
+    "AgentTextEndEvent",
+    "dict",
+    "AgentContextStatusEvent"
+  ]
+}

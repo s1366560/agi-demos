@@ -303,6 +303,7 @@ export function NewThreadComposer({
                 value={workspaceId}
                 options={workspacePickerOptions}
                 disabled={uploadingAttachments}
+                hideLabel
                 onChange={(value) => {
                   setContextItems([]);
                   onWorkspaceChange(value);

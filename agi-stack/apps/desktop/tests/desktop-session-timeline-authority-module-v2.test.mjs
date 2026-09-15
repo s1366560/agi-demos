@@ -661,6 +661,38 @@ test('vault-bound cloud transport remains behind DesktopApiClient', async () => 
   }
 });
 
+test('retained child trace uses the real generation service and exact scoped cloud read', async () => {
+  const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(loadBootstrap());
+  const service = generation.resolve(DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2, { kind: 'root' }, { version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2 });
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const calls = [], lifecycle = [];
+  let body = { conversation_id: 'conversation-1', runs: [], total: 0 };
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { __MEMSTACK_DESKTOP__: { core: {
+    async invoke(command, args) { calls.push({ command, args }); return { status: 200, body }; },
+  } } } });
+  const actions = acceptedActions(service, 'sha256:trace', lifecycle);
+  const operations = createDesktopSessionTimelineOperationsV2(() => actions);
+  const input = { config: runtimeConfig({ apiKey: '', localApiToken: '', mode: 'cloud' }), conversation: conversation() };
+  try {
+    assert.deepEqual(await operations.getConversationSubagentRuns(input), []);
+    assert.equal(calls[0].command, 'cloud_request');
+    assert.equal(calls[0].args.request.path, '/api/v1/agent/trace/runs/conversation-1');
+    assert.equal(calls[0].args.request.method, 'GET');
+    assert.deepEqual(lifecycle[0].request.scope, { kind: 'session', tenant_id: 'tenant-1', project_id: 'project-1', session_id: 'conversation-1' });
+    assert.throws(() => operations.getConversationSubagentRuns({ ...input, conversation: conversation({ project_id: 'foreign' }) }), /scope/);
+    body = { conversation_id: 'foreign', runs: [], total: 0 };
+    await assert.rejects(operations.getConversationSubagentRuns(input), /contract/);
+    await assert.rejects(operations.getConversationSubagentRuns({ ...input, config: runtimeConfig() }), /scope/);
+    let escaped;
+    await withDesktopSessionTimelineAuthorityOperationV2(actions, input, (authority) => { escaped = authority; });
+    assert.throws(() => escaped.getConversationSubagentRuns(conversation()), /released/);
+    assert.equal(lifecycle.filter((item) => item.type === 'acquire').length, lifecycle.filter((item) => item.type === 'release').length);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'window', previous); else delete globalThis.window;
+    await generation.dispose();
+  }
+});
+
 test('operation freezes config, identity and page before the exact session lease', async () => {
   const lifecycle = [];
   const received = [];

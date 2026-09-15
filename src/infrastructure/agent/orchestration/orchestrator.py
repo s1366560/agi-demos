@@ -11,7 +11,7 @@ import contextlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.domain.model.agent.agent_definition import Agent
@@ -42,6 +42,13 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PARENT_AGENT_IDS = frozenset({"__system__"})
 _RegistryResult = TypeVar("_RegistryResult")
+
+
+async def _fail_peer_admission(admission: object | None) -> None:
+    if admission is not None:
+        from src.application.services.peer_chat_permission_v2 import fail_peer_execution_v2
+
+        await fail_peer_execution_v2(admission)
 
 
 @dataclass
@@ -81,6 +88,7 @@ class SpawnExecutionRequest:
     metadata: dict[str, Any] = field(default_factory=dict)
     trace_id: str = ""
     span_id: str = ""
+    admission: object | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -95,6 +103,7 @@ class SessionTurnExecutionRequest:
     source_message_id: str = ""
     sender_agent_id: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    admission: object | None = field(default=None, repr=False, compare=False)
 
 
 class AgentOrchestrator:
@@ -116,6 +125,9 @@ class AgentOrchestrator:
         spawn_executor: Callable[[SpawnExecutionRequest], Awaitable[None]] | None = None,
         session_turn_executor: Callable[[SessionTurnExecutionRequest], Awaitable[None]]
         | None = None,
+        spawn_preflight: Callable[[SpawnExecutionRequest], Awaitable[object]] | None = None,
+        session_turn_preflight: Callable[[SessionTurnExecutionRequest], Awaitable[object]]
+        | None = None,
     ) -> None:
         self._agent_registry = agent_registry
         self._session_registry = session_registry
@@ -125,6 +137,8 @@ class AgentOrchestrator:
         self._db_session = db_session
         self._spawn_executor = spawn_executor
         self._session_turn_executor = session_turn_executor
+        self._spawn_preflight = spawn_preflight
+        self._session_turn_preflight = session_turn_preflight
 
     async def _release_read_transaction(self) -> None:
         """Release a read-only transaction held by the shared registry session."""
@@ -444,35 +458,38 @@ class AgentOrchestrator:
             project_id=project_id,
         )
 
-        _ = await self._message_bus.send_message(
-            from_agent_id=resolved_parent_agent_id,
-            to_agent_id=resolved_target_agent_id,
-            session_id=child_session_id,
-            content=message,
-            message_type=AgentMessageType.REQUEST,
+        execution_request = SpawnExecutionRequest(
+            parent_agent_id=resolved_parent_agent_id,
+            child_agent_id=resolved_target_agent_id,
+            child_agent_name=getattr(agent, "display_name", "") or agent.name,
+            child_session_id=child_session_id,
+            parent_session_id=parent_session_id,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            message=message,
+            mode=mode,
+            conversation_id=conversation_id,
+            metadata=enriched_metadata,
+            trace_id=trace_id,
+            span_id=span_id,
         )
-
         if self._spawn_executor is not None:
             try:
-                await self._spawn_executor(
-                    SpawnExecutionRequest(
-                        parent_agent_id=resolved_parent_agent_id,
-                        child_agent_id=resolved_target_agent_id,
-                        child_agent_name=getattr(agent, "display_name", "") or agent.name,
-                        child_session_id=child_session_id,
-                        parent_session_id=parent_session_id,
-                        project_id=project_id,
-                        tenant_id=tenant_id,
-                        user_id=user_id,
-                        message=message,
-                        mode=mode,
-                        conversation_id=conversation_id,
-                        metadata=enriched_metadata,
-                        trace_id=trace_id,
-                        span_id=span_id,
+                if self._spawn_preflight is not None:
+                    execution_request = replace(
+                        execution_request, admission=await self._spawn_preflight(execution_request)
                     )
+                await self._message_bus.send_message(
+                    from_agent_id=resolved_parent_agent_id,
+                    to_agent_id=resolved_target_agent_id,
+                    session_id=child_session_id,
+                    content=message,
+                    message_type=AgentMessageType.REQUEST,
                 )
+                await self._spawn_executor(execution_request)
             except Exception:
+                await _fail_peer_admission(execution_request.admission)
                 await self._spawn_manager.update_status(
                     child_session_id,
                     "failed",
@@ -483,6 +500,14 @@ class AgentOrchestrator:
                     project_id=project_id,
                 )
                 raise
+        else:
+            await self._message_bus.send_message(
+                from_agent_id=resolved_parent_agent_id,
+                to_agent_id=resolved_target_agent_id,
+                session_id=child_session_id,
+                content=message,
+                message_type=AgentMessageType.REQUEST,
+            )
 
         logger.info(
             "Spawned agent: parent=%s child=%s session=%s mode=%s",
@@ -630,37 +655,37 @@ class AgentOrchestrator:
 
         # ── deliver message ─────────────────────────────────────────────
         effective_message_type = message_type or AgentMessageType.REQUEST
-        message_id = await self._message_bus.send_message(
-            from_agent_id=from_agent.id,
-            to_agent_id=to_agent.id,
-            session_id=resolved_session_id,
-            content=message,
-            message_type=effective_message_type,
-            metadata=metadata,
+        execution_request = await self._prepare_session_turn(
+            SessionTurnExecutionRequest(
+                child_agent_id=to_agent.id,
+                child_session_id=resolved_session_id,
+                project_id=effective_project_id or "",
+                tenant_id=tenant_id,
+                message=message,
+                source_message_id=str(uuid.uuid4()),
+                sender_agent_id=from_agent.id,
+                metadata=dict(metadata or {}),
+            ),
+            effective_message_type,
         )
-
-        if effective_message_type == AgentMessageType.REQUEST and self._session_turn_executor:
-            record = await self._spawn_manager.get_record(resolved_session_id)
-            if record is not None and record.mode == SpawnMode.SESSION:
-                try:
-                    await self._session_turn_executor(
-                        SessionTurnExecutionRequest(
-                            child_agent_id=to_agent.id,
-                            child_session_id=resolved_session_id,
-                            project_id=effective_project_id or record.project_id,
-                            tenant_id=tenant_id,
-                            message=message,
-                            source_message_id=message_id,
-                            sender_agent_id=from_agent.id,
-                            metadata=dict(metadata or {}),
-                        )
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to wake persistent agent session: agent=%s session=%s",
-                        to_agent.id,
-                        resolved_session_id,
-                    )
+        try:
+            message_id = await self._message_bus.send_message(
+                from_agent_id=from_agent.id,
+                to_agent_id=to_agent.id,
+                session_id=resolved_session_id,
+                content=message,
+                message_type=effective_message_type,
+                metadata=metadata,
+            )
+            if execution_request is not None:
+                assert self._session_turn_executor is not None
+                if execution_request.admission is None:
+                    execution_request = replace(execution_request, source_message_id=message_id)
+                await self._session_turn_executor(execution_request)
+        except Exception:
+            if execution_request is not None:
+                await _fail_peer_admission(execution_request.admission)
+            raise
 
         logger.info(
             "Sent message: from=%s to=%s session=%s",
@@ -675,6 +700,19 @@ class AgentOrchestrator:
             to_agent_id=to_agent.id,
             session_id=resolved_session_id,
         )
+
+    async def _prepare_session_turn(
+        self, request: SessionTurnExecutionRequest, message_type: AgentMessageType
+    ) -> SessionTurnExecutionRequest | None:
+        if message_type != AgentMessageType.REQUEST or self._session_turn_executor is None:
+            return None
+        record = await self._spawn_manager.get_record(request.child_session_id)
+        if record is None or record.mode != SpawnMode.SESSION:
+            return None
+        request = replace(request, project_id=request.project_id or record.project_id)
+        if self._session_turn_preflight is not None:
+            request = replace(request, admission=await self._session_turn_preflight(request))
+        return request
 
     async def update_spawn_status(
         self,

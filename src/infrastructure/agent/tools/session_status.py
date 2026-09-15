@@ -142,7 +142,7 @@ def _build_status_card(
         },
         "required": [],
     },
-    permission=None,
+    permission="read",
     category="session",
 )
 async def session_status_tool(

@@ -340,7 +340,7 @@ class LoaderV2:
         self, snapshot: ProfileSnapshotV2, archives: Sequence[VerifiedBundleArchiveV2]
     ) -> None:
         rows = tuple(row for row in _module_rows_v2(snapshot) if self._target in row[2].targets)
-        _ = self._attest_artifacts(rows, verified_archives=archives)
+        _ = self._attest_artifacts(rows, snapshot=snapshot, verified_archives=archives)
 
     async def stage(
         self,
@@ -354,7 +354,7 @@ class LoaderV2:
         }
         target_rows = tuple(row for row in module_rows if self._target in row[2].targets)
         resolved_artifacts = self._attest_artifacts(
-            target_rows, verified_archives=verified_archives
+            target_rows, snapshot=snapshot, verified_archives=verified_archives
         )
         enabled = {
             entry.entry_id: entry
@@ -408,14 +408,30 @@ class LoaderV2:
         self,
         target_rows: Sequence[_PluginModuleRowV2],
         *,
+        snapshot: ProfileSnapshotV2,
         verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> dict[str, ResolvedPluginArtifactV2]:
+        from .external_wasm_admission import admit_external_wasm_artifacts_v2
+
+        catalog, resolved = admit_external_wasm_artifacts_v2(
+            manifests=snapshot.manifests,
+            entries=snapshot.entries,
+            target=self._target,
+            target_catalog=self._target_catalog,
+            archives=verified_archives,
+        )
+        if set(resolved).intersection(self._definitions):
+            raise RuntimeV2Error(
+                "external_preloaded_definition_forbidden",
+                "external WASM definitions must be loaded from verified artifact bytes",
+            )
         return attest_execution_artifacts_v2(
             target_rows,
-            target_catalog=self._target_catalog,
+            target_catalog=catalog,
             target=self._target,
             resolver=self._artifact_resolver,
             verified_archives=verified_archives,
+            resolved_overrides=resolved,
         )
 
     def _entry_modules(

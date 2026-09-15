@@ -11,11 +11,16 @@ objects that the caller can forward to SSE or domain event buses.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 from collections.abc import AsyncIterator
+from contextlib import nullcontext
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+
+from src.infrastructure.agent.tools.permission_metadata_v2 import resolve_tool_permission_v2
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.tools.context import ToolContext
@@ -104,8 +109,31 @@ class ToolPipeline:
         Yields:
             ``ToolEvent`` instances for each lifecycle stage.
         """
+        from src.application.services.approved_run_tool_permission_v2 import (
+            require_approved_run_tool_permission_v2,
+        )
         from src.infrastructure.agent.tools.hooks import HookDecision
         from src.infrastructure.agent.tools.result import ToolEvent
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        try:
+            from src.application.services.chat_run_tool_permission_v2 import (
+                decision_for_current_chat_tool_v2,
+            )
+
+            await require_approved_run_tool_permission_v2(resolve_tool_permission_v2(tool, args))
+            if (
+                await decision_for_current_chat_tool_v2(
+                    resolve_tool_permission_v2(tool, args), tool.name, args
+                )
+                != "allow"
+            ):
+                raise RuntimeV2Error(
+                    "chat_tool_permission_denied", "Chat tool approval is not valid"
+                )
+        except RuntimeV2Error:
+            yield ToolEvent.denied(tool.name)
+            return
 
         logger.debug("Pipeline start: tool=%s", tool.name)
 
@@ -121,20 +149,29 @@ class ToolPipeline:
             yield ToolEvent.denied(tool.name)
             return
 
+        effective_args = deepcopy(hook_result.args if hook_result.args is not None else args)
+        hook_approved = False
         if hook_result.decision == HookDecision.ASK:
-            yield ToolEvent.permission_asked(tool.name)
-            permission_result = await self._permission_manager.ask(
-                permission=tool.permission or tool.name,
-                patterns=[tool.name],
-                session_id=ctx.session_id,
-                metadata={"tool": tool.name, "input": args, "source": "pre_hook"},
+            response: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+            reviewed_args = deepcopy(effective_args)
+            yield ToolEvent(
+                type="permission_asked",
+                tool_name=tool.name,
+                data={"arguments": reviewed_args, "_approval_response": response},
             )
-            if permission_result == "reject":
-                logger.warning("User denied hook-ask for tool=%s", tool.name)
+            # The Processor mediates this internal handshake through durable HITL.
+            # An unhandled event must never authorize standalone execution.
+            hook_approved = (
+                response.done()
+                and not response.cancelled()
+                and response.result() is True
+                and reviewed_args == effective_args
+            )
+            if not hook_approved:
+                if not response.done():
+                    _ = response.cancel()
                 yield ToolEvent.denied(tool.name)
                 return
-
-        effective_args = hook_result.args if hook_result.args is not None else args
 
         # Step 2 ---- Doom loop check -------------------------------------
         if self._doom_detector.should_intervene(tool.name, effective_args):
@@ -145,18 +182,27 @@ class ToolPipeline:
         self._doom_detector.record(tool.name, effective_args)
 
         # Step 3 ---- Permission check ------------------------------------
-        denied = await self._check_permission(tool, effective_args, ctx)
+        denied = await self._check_permission(
+            tool, effective_args, ctx, approved_once=hook_approved
+        )
         if denied is not None:
             yield denied
             return
 
         # Steps 4-9 -- Execute, normalize, truncate, post-hooks, emit -----
-        async for event in self._execute_and_finalize(
-            tool,
-            effective_args,
-            ctx,
-        ):
-            yield event
+        from src.application.services.chat_run_tool_permission_v2 import (
+            approved_chat_tool_call_v2,
+            current_chat_run_guard_v2,
+        )
+
+        confirmation = (
+            approved_chat_tool_call_v2(tool.name, effective_args, supersede_previous=True)
+            if hook_approved and current_chat_run_guard_v2() is not None
+            else nullcontext()
+        )
+        with confirmation:
+            async for event in self._execute_and_finalize(tool, effective_args, ctx):
+                yield event
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -181,6 +227,34 @@ class ToolPipeline:
         start_time = time.time()
 
         try:
+            from src.application.services.approved_run_tool_permission_v2 import (
+                require_approved_run_tool_permission_v2,
+            )
+            from src.application.services.chat_run_tool_permission_v2 import (
+                claim_chat_tool_invocation_v2,
+                decision_for_current_chat_tool_v2,
+            )
+            from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+            permission = resolve_tool_permission_v2(tool, effective_args)
+            await require_approved_run_tool_permission_v2(permission)
+            if (
+                await decision_for_current_chat_tool_v2(
+                    permission,
+                    tool.name,
+                    effective_args,
+                )
+                != "allow"
+            ):
+                raise RuntimeV2Error(
+                    "chat_tool_permission_denied", "Chat tool approval is not valid"
+                )
+            if not getattr(tool, "claims_chat_invocation_v2", False):
+                claim_chat_tool_invocation_v2(
+                    tool.name,
+                    effective_args,
+                    permission=permission,
+                )
             raw_result = await tool.execute(**effective_args)
         except ToolAbortedError:
             logger.debug("Tool aborted: tool=%s", tool.name)
@@ -262,6 +336,8 @@ class ToolPipeline:
         tool: ToolInfoProtocol,
         args: dict[str, Any],
         ctx: ToolContext,
+        *,
+        approved_once: bool = False,
     ) -> ToolEvent | None:
         """Evaluate tool permission rules.
 
@@ -276,7 +352,8 @@ class ToolPipeline:
 
         rule = self._permission_manager.evaluate(tool.permission, tool.name)
 
-        if rule.action == PermissionAction.DENY:
+        action = getattr(rule.action, "value", rule.action)
+        if action == PermissionAction.DENY.value:
             logger.warning(
                 "Permission denied: tool=%s permission=%s",
                 tool.name,
@@ -284,7 +361,7 @@ class ToolPipeline:
             )
             return ToolEvent.denied(tool.name)
 
-        if rule.action == PermissionAction.ASK:
+        if action == PermissionAction.ASK.value and not approved_once:
             result_str = await self._permission_manager.ask(
                 permission=tool.permission,
                 patterns=[tool.name],

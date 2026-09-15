@@ -98,6 +98,7 @@ export type NewTaskSession = {
 };
 
 export type NewTaskAgentTurnInput = {
+  displayContent?: string;
   config: DesktopRuntimeConfig;
   conversationId: string;
   projectId: string;
@@ -169,8 +170,8 @@ export function NewTaskFlow({
   const [contextSources, setContextSources] = useState<NewTaskContextSource[]>(
     DEFAULT_CONTEXT_SOURCES,
   );
-  const [environmentKind, setEnvironmentKind] =
-    useState<DesktopExecutionEnvironmentKind>('local');
+  const environmentKind: DesktopExecutionEnvironmentKind =
+    config.mode === 'local' && kind === 'programming' ? 'worktree' : 'local';
   const [permissionProfile, setPermissionProfile] =
     useState<DesktopPermissionProfile>('read_only');
   const [workspaceRoot, setWorkspaceRoot] = useState(config.workspaceRoot);
@@ -199,6 +200,7 @@ export function NewTaskFlow({
   const displayedPlanSignatureRef = useRef('');
   const displayedPlanVersionRef = useRef<DesktopPlanVersion | null>(null);
   const lastPlanningPromptRef = useRef('');
+  const lastPlanningDisplayRef = useRef<string | undefined>(undefined);
   const planningAttemptRef = useRef<PlanningTurnAttempt | null>(null);
   const planningConversationIdRef = useRef('');
   const sessionDefinitionSignatureRef = useRef('');
@@ -339,7 +341,6 @@ export function NewTaskFlow({
     setObjective(recoveredDefinition?.objective ?? '');
     setKind(nextKind);
     setContextSources(recoveredDefinition?.contextSources ?? DEFAULT_CONTEXT_SOURCES);
-    setEnvironmentKind(nextKind === 'programming' ? 'worktree' : 'local');
     setPermissionProfile(defaultPermissionProfile(nextKind));
     setWorkspaceRoot(recoveredDefinition?.workspaceRoot ?? config.workspaceRoot);
     setWorkspaceSelection(nextWorkspaceSelection);
@@ -363,6 +364,7 @@ export function NewTaskFlow({
     displayedPlanSignatureRef.current = recoveredPlanSignature;
     displayedPlanVersionRef.current = null;
     lastPlanningPromptRef.current = '';
+    lastPlanningDisplayRef.current = undefined;
     planningAttemptRef.current = null;
     taskSessionCreationAttemptRef.current = null;
     generatePlanPendingRef.current = false;
@@ -642,6 +644,7 @@ export function NewTaskFlow({
     targetSession: NewTaskSession,
     message: string,
     messageId: string,
+    displayContent?: string,
   ): Promise<NewTaskAgentTurnOutcome> =>
     onRunAgentTurn({
       config: targetSession.config,
@@ -649,6 +652,7 @@ export function NewTaskFlow({
       projectId: targetSession.config.projectId,
       message,
       messageId,
+      ...(displayContent === undefined ? {} : { displayContent }),
     });
 
   const planningMessageId = (
@@ -702,6 +706,7 @@ export function NewTaskFlow({
       targetWorkspaceSelection,
     );
     lastPlanningPromptRef.current = planningPrompt;
+    lastPlanningDisplayRef.current = definition.objective;
     try {
       const sessionMatchesDefinition = Boolean(
         session &&
@@ -816,6 +821,7 @@ export function NewTaskFlow({
         readySession,
         planningPrompt,
         planningMessageId(readySession, planningPrompt, 'desktop-plan'),
+        definition.objective,
       );
       if (
         flowEpochRef.current !== operationEpoch ||
@@ -954,6 +960,7 @@ export function NewTaskFlow({
     expectedPlanSignatureRef.current = planTaskSignature(planTasks);
     planningConversationIdRef.current = session.conversation.id;
     lastPlanningPromptRef.current = prompt;
+    lastPlanningDisplayRef.current = humanMessage;
     setRevisionAwaitingPlan(true);
     setManualPlanReviewRequired(false);
     setPlanRetryAvailable(false);
@@ -970,6 +977,7 @@ export function NewTaskFlow({
         session,
         prompt,
         planningMessageId(session, prompt, 'desktop-plan-revision'),
+        humanMessage,
       );
       if (flowEpochRef.current !== operationEpoch) return;
       setDeliveryOutcomeUnknown(outcome === 'unknown_outcome');
@@ -998,6 +1006,7 @@ export function NewTaskFlow({
         session,
         prompt,
         planningMessageId(session, prompt, 'desktop-plan-retry'),
+        lastPlanningDisplayRef.current,
       );
       if (flowEpochRef.current !== operationEpoch) return;
       setDeliveryOutcomeUnknown(outcome === 'unknown_outcome');
@@ -1183,7 +1192,6 @@ export function NewTaskFlow({
 
   const changeKind = (nextKind: NewTaskKind) => {
     setKind(nextKind);
-    setEnvironmentKind(nextKind === 'programming' ? 'worktree' : 'local');
     setPermissionProfile(defaultPermissionProfile(nextKind));
   };
 

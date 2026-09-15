@@ -196,24 +196,14 @@ class ScopedRuntimeRegistryV2:
                 if archives is None
                 else self._candidate_artifacts.bind(archives)
             ):
-                current = slot.host.current_publication
-                if (
-                    archives is not None
-                    and current is not None
-                    and current.snapshot.digest == validated.digest
-                ):
-                    # Reconciler may ACK this digest without staging a Loader candidate.
-                    # The new publication still has to supply the exact verified bytes.
-                    modules = {
-                        (manifest.plugin_id, module.module_ref): module
-                        for manifest in validated.manifests
-                        for module in manifest.modules
-                    }
-                    for entry in validated.entries:
-                        module = modules[(entry.plugin_ref, entry.module_ref)]
-                        if entry.enabled and DataPlaneTargetV2.PYTHON in module.targets:
-                            _ = self._candidate_artifacts.resolve(module)
-                return await slot.host.apply(validated, envelope, publication_stager=slot.stage)
+                # The host verifies signed archives both when staging and when an
+                # unchanged digest is ACKed; byte resolution alone is not admission.
+                return await slot.host.apply(
+                    validated,
+                    envelope,
+                    publication_stager=slot.stage,
+                    verified_archives=archives,
+                )
 
     async def acquire(self, scope: ScopeV2) -> GenerationLeaseV2:
         """Lease only this exact authority; ancestors are never host fallbacks."""

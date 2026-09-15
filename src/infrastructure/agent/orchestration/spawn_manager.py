@@ -20,6 +20,7 @@ from src.domain.model.agent.spawn_record import SpawnRecord
 from src.infrastructure.agent.orchestration.session_registry import (
     AgentSessionRegistry,
 )
+from src.infrastructure.agent.subagent.async_run_registry_v2 import registry_call_v2
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 
 logger = logging.getLogger(__name__)
@@ -179,7 +180,9 @@ class SpawnManager:
             }
             if metadata:
                 run_metadata.update(metadata)
-            self._run_registry.create_run(
+            await registry_call_v2(
+                self._run_registry,
+                "create_run",
                 conversation_id=conversation_id,
                 subagent_name=child_agent_id,
                 task=task_summary,
@@ -190,7 +193,9 @@ class SpawnManager:
                 lineage_root_run_id=lineage_root_run_id,
             )
             if trace_id:
-                self._run_registry.set_trace_context(
+                await registry_call_v2(
+                    self._run_registry,
+                    "set_trace_context",
                     conversation_id=conversation_id,
                     run_id=record.id,
                     trace_id=trace_id,
@@ -365,7 +370,7 @@ class SpawnManager:
 
         # Mirror status to RunRegistry if available.
         if self._run_registry and conversation_id:
-            self._sync_run_registry_status(
+            await self._sync_run_registry_status(
                 conversation_id=conversation_id,
                 run_id=old.id,
                 status=new_status,
@@ -578,55 +583,71 @@ class SpawnManager:
                     exc_info=True,
                 )
 
-    def _sync_run_registry_status(
+    async def _sync_run_registry_status(
         self,
         conversation_id: str,
         run_id: str,
         status: str,
     ) -> None:
-        """Mirror spawn status to SubAgentRunRegistry (sync API)."""
+        """Commit spawn status to the SubAgent registry before returning."""
         if not self._run_registry:
             return
         try:
             if status == "running":
-                self._run_registry.mark_running(
+                await registry_call_v2(
+                    self._run_registry,
+                    "mark_running",
                     conversation_id=conversation_id,
                     run_id=run_id,
                 )
             elif status == "completed":
-                completed = self._run_registry.mark_completed(
+                completed = await registry_call_v2(
+                    self._run_registry,
+                    "mark_completed",
                     conversation_id=conversation_id,
                     run_id=run_id,
                 )
                 if completed is None:
-                    running = self._run_registry.mark_running(
+                    running = await registry_call_v2(
+                        self._run_registry,
+                        "mark_running",
                         conversation_id=conversation_id,
                         run_id=run_id,
                     )
                     if running is not None:
-                        self._run_registry.mark_completed(
+                        await registry_call_v2(
+                            self._run_registry,
+                            "mark_completed",
                             conversation_id=conversation_id,
                             run_id=run_id,
                         )
             elif status == "failed":
-                failed = self._run_registry.mark_failed(
+                failed = await registry_call_v2(
+                    self._run_registry,
+                    "mark_failed",
                     conversation_id=conversation_id,
                     run_id=run_id,
                     error="Spawn failed",
                 )
                 if failed is None:
-                    running = self._run_registry.mark_running(
+                    running = await registry_call_v2(
+                        self._run_registry,
+                        "mark_running",
                         conversation_id=conversation_id,
                         run_id=run_id,
                     )
                     if running is not None:
-                        self._run_registry.mark_failed(
+                        await registry_call_v2(
+                            self._run_registry,
+                            "mark_failed",
                             conversation_id=conversation_id,
                             run_id=run_id,
                             error="Spawn failed",
                         )
             elif status in ("stopped", "cancelled"):
-                self._run_registry.mark_cancelled(
+                await registry_call_v2(
+                    self._run_registry,
+                    "mark_cancelled",
                     conversation_id=conversation_id,
                     run_id=run_id,
                     reason=f"Spawn {status}",

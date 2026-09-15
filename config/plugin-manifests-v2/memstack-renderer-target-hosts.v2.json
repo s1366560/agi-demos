@@ -542,7 +542,7 @@
       "module_ref": "builtin://memstack/desktop/conversation-config-authority",
       "entrypoint": "applyDesktopConversationConfigAuthorityV2",
       "artifact": {
-        "digest": "sha256:914cfcfbd28a49d330b7f7d46b5c13c3e65880b5df34052d7955d7a3a2fee4b2",
+        "digest": "sha256:cb3ba952e26b03f7263cd862aef4d27f2d772cc836850ea7f4d5547d0b14ecf3",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationConfigAuthorityModuleV2.ts"
       },
       "targets": [
@@ -3260,7 +3260,7 @@
       "module_ref": "builtin://memstack/desktop/session-timeline-authority",
       "entrypoint": "applyDesktopSessionTimelineAuthorityV2",
       "artifact": {
-        "digest": "sha256:3b6e6200846dd116c870fe283d99a6c326b3e4fbfcccb891c27a58b1e760e172",
+        "digest": "sha256:79dc8d7268a32eedbc1a52e4a08090d11019213154d14567e63605067fe31428",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionTimelineAuthorityModuleV2.ts"
       },
       "targets": [
@@ -3588,7 +3588,7 @@
       "module_ref": "builtin://memstack/desktop/tenant-projects-authority",
       "entrypoint": "applyDesktopTenantProjectsAuthorityV2",
       "artifact": {
-        "digest": "sha256:f6f9de7dce7d2c5dcc583234318ea52c1ac326608d7560dc3b25ce9f268b3ee6",
+        "digest": "sha256:ba4275a976fb4bb8a29cedf3bfa9edb2b986203d154b4b5e088e6c3d4aa69300",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantProjectsAuthorityModuleV2.ts"
       },
       "targets": [

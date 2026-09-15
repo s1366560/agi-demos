@@ -8,7 +8,6 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
-from contextlib import aclosing
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -18,11 +17,20 @@ from sqlalchemy import exists, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.agent.runtime_model_route import route_from_policy
 from src.domain.model.auth.user import User
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_db,
+)
+from src.infrastructure.adapters.primary.web.routers.agent.approved_plan_stream import (
+    consume_approved_plan_stream,
+)
+from src.infrastructure.adapters.primary.web.routers.agent.plan_approval_contract import (
+    approval_request_identity,
+    require_matching_approval_request,
+    require_requested_permission_profile,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_agent_policy import (
     WorkspaceAgentPolicyResponse,
@@ -45,7 +53,9 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
     AgentPlanVersionModel,
+    AgentRunAuthorityModel,
     Conversation as ConversationModel,
+    HITLRequest,
     Project as ProjectModel,
     UserProject as UserProjectModel,
     UserTenant as UserTenantModel,
@@ -537,6 +547,11 @@ async def approve_plan_and_start(
     if conversation is None:
         raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
+    request_identity = approval_request_identity(
+        body.model_dump(mode="json"),
+        tenant_id=conversation.tenant_id,
+        user_id=str(current_user.id),
+    )
     existing_result = await db.execute(
         refresh_select_statement(
             select(AgentPlanRunModel).where(
@@ -548,15 +563,30 @@ async def approve_plan_and_start(
     if existing is not None:
         if (
             existing.conversation_id != body.conversation_id
+            or existing.project_id != body.project_id
             or existing.plan_version_id != body.plan_version_id
             or existing.message_id != body.message_id
             or existing.request_message != body.message
         ):
             raise HTTPException(status_code=409, detail=_("Plan approval idempotency conflict"))
+        require_matching_approval_request(
+            (existing.authorization_snapshot or {}).get("approval_request"),
+            request_identity,
+            run_id=existing.id,
+        )
         plan = await db.get(AgentPlanVersionModel, existing.plan_version_id)
         if plan is None:
             raise HTTPException(status_code=409, detail=_("Approved plan version is missing"))
         return _approval_response(conversation, plan, existing, created=False)
+
+    if body.environment.kind != "local":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "PLAN_ENVIRONMENT_UNSUPPORTED",
+                "message": _("This runtime does not provide the requested execution environment"),
+            },
+        )
 
     plan_result = await db.execute(
         refresh_select_statement(
@@ -576,10 +606,46 @@ async def approve_plan_and_start(
     ):
         raise HTTPException(status_code=409, detail=_("Plan version conflict"))
 
+    active_run = await db.scalar(
+        select(AgentRunAuthorityModel.id)
+        .where(
+            AgentRunAuthorityModel.tenant_id == conversation.tenant_id,
+            AgentRunAuthorityModel.project_id == conversation.project_id,
+            AgentRunAuthorityModel.conversation_id == conversation.id,
+            AgentRunAuthorityModel.status.in_(("queued", "running")),
+        )
+        .limit(1)
+    )
+    pending_hitl = await db.scalar(
+        select(HITLRequest.id)
+        .where(
+            HITLRequest.tenant_id == conversation.tenant_id,
+            HITLRequest.project_id == conversation.project_id,
+            HITLRequest.conversation_id == conversation.id,
+            HITLRequest.status == "pending",
+            HITLRequest.expires_at > datetime.now(UTC),
+        )
+        .limit(1)
+    )
+    if active_run is not None or pending_hitl is not None:
+        raise HTTPException(
+            status_code=409, detail=_("Conversation is not ready for plan approval")
+        )
+
     policy_snapshot, permission_profile = await _load_workspace_policy_snapshot(
         request,
         conversation=conversation,
         current_user=current_user,
+    )
+    permission_profile = require_requested_permission_profile(
+        body.permission_profile, permission_profile
+    )
+    model_route = (
+        route_from_policy(
+            policy_snapshot, (conversation.agent_config or {}).get("capability_mode", "")
+        )
+        if conversation.workspace_id
+        else None
     )
     now = datetime.now(UTC)
     environment = await _resolve_cloud_run_environment(
@@ -606,6 +672,7 @@ async def approve_plan_and_start(
         revision=1,
         permission_profile=permission_profile,
         authorization_snapshot={
+            "approval_request": request_identity,
             "conversation_id": conversation.id,
             "project_id": conversation.project_id,
             "plan_version_id": plan.id,
@@ -613,6 +680,16 @@ async def approve_plan_and_start(
             "policy": policy_snapshot,
             "permission_profile": permission_profile,
             "environment": environment,
+            **(
+                {
+                    "model_route": {
+                        "provider_id": model_route.provider_id,
+                        "model_id": model_route.model_id,
+                    }
+                }
+                if model_route
+                else {}
+            ),
         },
         created_at=now,
         updated_at=now,
@@ -774,6 +851,13 @@ async def _publish_plan_run_status(
         )
 
 
+async def _broadcast_approved_plan_message(
+    conversation_id: str, message: dict[str, Any]
+) -> None:
+    """Discard the recipient count so the stream consumer sees Awaitable[None]."""
+    await get_connection_manager().broadcast_to_conversation(conversation_id, message)
+
+
 async def _execute_approved_plan(
     *,
     run_id: str,
@@ -815,6 +899,7 @@ async def _execute_approved_plan(
                 run.status = "running"
                 run.updated_at = started_at
                 await session.commit()
+                await _publish_plan_run_status(run=run)
                 service = await current_agent_turn_service_v2()
                 agent_stream = cast(
                     AsyncGenerator[dict[str, Any], None],
@@ -828,11 +913,13 @@ async def _execute_approved_plan(
                         canonical_run_id=run_id,
                     ),
                 )
-                async with aclosing(agent_stream) as events:
-                    async for _event in events:
-                        pass
+                terminal_status = await consume_approved_plan_stream(
+                    agent_stream,
+                    conversation_id=conversation_id,
+                    broadcast=_broadcast_approved_plan_message,
+                )
                 await session.refresh(run)
-                run.status = "ready_review"
+                run.status = terminal_status
                 run.revision += 1
                 completed_at = datetime.now(UTC)
                 run.completed_at = completed_at
@@ -842,7 +929,7 @@ async def _execute_approved_plan(
                     run=run,
                     tenant_id=tenant_id,
                     started_at=started_at,
-                    succeeded=True,
+                    succeeded=terminal_status == "ready_review",
                     completed_at=completed_at,
                 )
                 await session.commit()

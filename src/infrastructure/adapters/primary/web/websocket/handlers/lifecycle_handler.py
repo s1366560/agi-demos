@@ -20,7 +20,13 @@ from src.infrastructure.adapters.primary.web.sandbox_application_authority_v2 im
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
+from src.infrastructure.adapters.primary.web.websocket.lifecycle_stream_bridge_v2 import (
+    lifecycle_project_access_v2,
+    start_lifecycle_bridge_v2,
+    stop_lifecycle_bridge_v2,
+)
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 if TYPE_CHECKING:
@@ -48,6 +54,12 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
             return
 
         try:
+            if not await lifecycle_project_access_v2(context, project_id):
+                await context.send_error(
+                    _("Project membership required"), code="project_access_denied"
+                )
+                return
+            await start_lifecycle_bridge_v2(context, project_id)
             # Subscribe to lifecycle state updates for this project
             await context.connection_manager.subscribe_lifecycle_state(
                 context.session_id, context.tenant_id, project_id
@@ -110,8 +122,9 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
                 logger.warning(f"[WS] Could not query current agent state: {state_err}")
 
         except Exception as e:
-            logger.error(f"[WS] Error subscribing to lifecycle state: {e}", exc_info=True)
-            await context.send_error(str(e))
+            await stop_lifecycle_bridge_v2(context, project_id)
+            logger.error("[WS] Lifecycle subscription failed: %s", type(e).__name__, exc_info=True)
+            await context.send_error(_("Lifecycle subscription unavailable"))
 
 
 class UnsubscribeLifecycleStateHandler(WebSocketMessageHandler):
@@ -132,6 +145,7 @@ class UnsubscribeLifecycleStateHandler(WebSocketMessageHandler):
         await context.connection_manager.unsubscribe_lifecycle_state(
             context.session_id, context.tenant_id, project_id
         )
+        await stop_lifecycle_bridge_v2(context, project_id)
         await context.send_ack("unsubscribe_lifecycle_state", project_id=project_id)
 
 

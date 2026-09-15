@@ -1,0 +1,51 @@
+{
+  "original": {
+    "workspace_id": "b30bf32d-36f0-4832-bcca-252a8df18b15",
+    "http_status": 200,
+    "top_level_keys": [
+      "id",
+      "tenant_id",
+      "project_id",
+      "name",
+      "created_by",
+      "description",
+      "is_archived",
+      "metadata",
+      "office_status",
+      "hex_layout_config",
+      "created_at",
+      "updated_at"
+    ],
+    "permissions": {
+      "metadata": {
+        "autonomy_profile": {}
+      },
+      "hex_layout_config": {}
+    }
+  },
+  "isolated": {
+    "workspace_id": "5e5e6120-f7b1-4fee-918e-521b150b94e8",
+    "http_status": 200,
+    "top_level_keys": [
+      "id",
+      "tenant_id",
+      "project_id",
+      "name",
+      "created_by",
+      "description",
+      "is_archived",
+      "metadata",
+      "office_status",
+      "hex_layout_config",
+      "created_at",
+      "updated_at"
+    ],
+    "permissions": {
+      "metadata": {
+        "autonomy_profile": {}
+      },
+      "hex_layout_config": {}
+    }
+  },
+  "auth_revoked": true
+}

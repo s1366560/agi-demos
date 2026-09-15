@@ -52,7 +52,7 @@
 
 .desktop-login-brand span {
   color: var(--desktop-gray-22);
-  font-size: 12px;
+  font-size: 9px;
 }
 
 .desktop-login-story-copy {
@@ -63,7 +63,7 @@
 .desktop-login-story-copy > span,
 .desktop-login-card > header > span {
   color: var(--desktop-cyan);
-  font-size: 11px;
+  font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.16em;
 }
@@ -118,12 +118,12 @@
 
 .desktop-login-proof-list b {
   color: var(--desktop-gray-33);
-  font-size: 12px;
+  font-size: 9px;
 }
 
 .desktop-login-proof-list span {
   color: var(--desktop-gray-22);
-  font-size: 11px;
+  font-size: 8px;
   line-height: 1.4;
 }
 
@@ -131,7 +131,7 @@
   gap: 6px;
   margin-top: 24px;
   color: var(--desktop-gray-4);
-  font-size: 11px;
+  font-size: 8px;
 }
 
 .desktop-login-form-side {
@@ -160,7 +160,7 @@
   height: 34px;
   padding: 0 12px;
   color: var(--desktop-gray-25);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 650;
   background: transparent;
   border: 1px solid transparent;
@@ -192,7 +192,7 @@
 .desktop-login-card > header p {
   margin: 0 0 24px;
   color: var(--desktop-gray-11);
-  font-size: 12.5px;
+  font-size: 10px;
 }
 
 .desktop-login-sso {
@@ -204,7 +204,7 @@
   gap: 9px;
   padding: 0 12px;
   color: var(--desktop-text-soft);
-  font-size: 12.5px;
+  font-size: 10px;
   font-weight: 650;
   text-align: left;
   background: var(--desktop-surface-15);
@@ -244,7 +244,7 @@
   gap: 10px;
   margin: 20px 0;
   color: var(--desktop-gray-18);
-  font-size: 11px;
+  font-size: 8px;
 }
 
 .desktop-login-divider::before,
@@ -260,7 +260,7 @@
   gap: 7px;
   margin-bottom: 14px;
   color: var(--desktop-gray-29);
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 650;
 }
 
@@ -270,7 +270,7 @@
   height: 42px;
   padding: 0 11px;
   color: var(--desktop-text-frost);
-  font-size: 12.5px;
+  font-size: 10px;
   background: var(--desktop-surface-6);
   border: 1px solid var(--desktop-border-20);
   border-radius: 7px;
@@ -293,7 +293,7 @@
   min-width: 0;
   flex: 1;
   color: var(--desktop-text-frost);
-  font-size: 12.5px;
+  font-size: 10px;
   background: transparent;
   border: 0;
   outline: 0;
@@ -331,7 +331,7 @@
 .desktop-login-options > label span {
   gap: 7px;
   color: var(--desktop-gray-26);
-  font-size: 11px;
+  font-size: 8px;
 }
 
 .desktop-login-options > label i {
@@ -348,7 +348,7 @@
 .desktop-login-options button {
   padding: 0;
   color: var(--desktop-cyan-link);
-  font-size: 11px;
+  font-size: 8px;
   background: transparent;
   border: 0;
 }
@@ -357,7 +357,7 @@
   padding: 8px 10px;
   margin: -5px 0 12px;
   color: var(--desktop-red-soft);
-  font-size: 11px;
+  font-size: 8px;
   line-height: 1.4;
   background: var(--desktop-surface-red);
   border: 1px solid var(--desktop-border-red);
@@ -372,7 +372,7 @@
   justify-content: center;
   gap: 8px;
   color: var(--desktop-white);
-  font-size: 12.5px;
+  font-size: 10px;
   font-weight: 700;
   background: var(--desktop-cyan-deep);
   border: 1px solid var(--desktop-border-cyan-4);
@@ -392,7 +392,7 @@
 .desktop-login-legal {
   margin: 13px 0 0;
   color: var(--desktop-gray-1);
-  font-size: 10.5px;
+  font-size: 7px;
   line-height: 1.5;
   text-align: center;
 }
@@ -401,13 +401,13 @@
   gap: 5px;
   margin-top: 20px;
   color: var(--desktop-gray-7);
-  font-size: 11px;
+  font-size: 8px;
 }
 
 .desktop-login-help button {
   padding: 0;
   color: var(--desktop-cyan-link);
-  font-size: 11px;
+  font-size: 8px;
   background: transparent;
   border: 0;
 }
@@ -483,7 +483,7 @@
 
 .desktop-device-auth-dialog > header > span {
   color: var(--desktop-cyan);
-  font-size: 11px;
+  font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.16em;
 }
@@ -503,7 +503,7 @@
   max-width: 360px;
   margin: 0;
   color: var(--desktop-gray-11);
-  font-size: 12px;
+  font-size: 9px;
   line-height: 1.55;
 }
 
@@ -521,7 +521,7 @@
 .desktop-device-auth-code > span,
 .desktop-device-auth-code small > span {
   color: var(--desktop-gray-6);
-  font-size: 10.5px;
+  font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -540,7 +540,7 @@
   flex-wrap: wrap;
   gap: 5px 8px;
   color: var(--desktop-cyan-link);
-  font-size: 11px;
+  font-size: 8px;
 }
 
 .desktop-device-auth-status {
@@ -577,12 +577,12 @@
 
 .desktop-device-auth-status b {
   color: var(--desktop-text-pale);
-  font-size: 12px;
+  font-size: 9px;
 }
 
 .desktop-device-auth-status small {
   color: var(--desktop-gray-10);
-  font-size: 10.5px;
+  font-size: 7px;
 }
 
 .desktop-device-auth-status.expired small {
@@ -593,7 +593,7 @@
   padding: 9px 10px;
   margin-top: 10px;
   color: var(--desktop-red-soft);
-  font-size: 11px;
+  font-size: 8px;
   line-height: 1.4;
   background: var(--desktop-surface-red);
   border: 1px solid var(--desktop-border-red);
@@ -616,7 +616,7 @@
   gap: 6px;
   padding: 0 12px;
   color: var(--desktop-muted);
-  font-size: 11px;
+  font-size: 8px;
   font-weight: 650;
   background: var(--desktop-surface-25);
   border: 1px solid var(--desktop-border-20);

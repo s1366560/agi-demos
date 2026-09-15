@@ -249,6 +249,28 @@ test('new composer threads forward the selected Sub Agent through every launch t
   );
 });
 
+test('local execution selectors do not duplicate cloud-only resource context', () => {
+  const items = [
+    { kind: 'agent', resource_id: 'agent-id', label: 'Agent',
+      metadata: { execution_slot: 'agent', execution_agent_id: 'agent-id', mention_target: false } },
+    { kind: 'agent', resource_id: 'child-id', label: 'Child',
+      metadata: { execution_slot: 'subagent', mention_target: false } },
+    { kind: 'skill', resource_id: 'skill-id', label: 'Skill',
+      metadata: { execution_slot: 'skill', execution_skill_name: 'skill-name' } },
+  ];
+  assert.deepEqual(composerAgentExecutionContext('hello', items, 'local'), {
+    message: 'hello', mentions: [], agentId: 'agent-id', subAgentId: 'child-id',
+    forcedSkillName: 'skill-name',
+  });
+  const plugin = { kind: 'plugin', resource_id: 'plugin-id', label: 'Plugin' };
+  assert.deepEqual(
+    composerAgentExecutionContext('hello', [...items, plugin], 'local').appModelContext,
+    { desktop_composer_context: { resources: [{ kind: 'plugin', resource_id: 'plugin-id' }] } },
+  );
+  assert.equal(composerAgentExecutionContext('hello', items, 'cloud')
+    .appModelContext.desktop_composer_context.resources.length, 3);
+});
+
 test('uploaded attachment context becomes authoritative sandbox file metadata', () => {
   const contextItems = [
     {
@@ -506,7 +528,7 @@ test('composer catalog exposes execution metadata for Agents, SubAgents, skills,
   assert.match(composerPlusMenuSource, /execution_subagent_name/);
   assert.match(composerPlusMenuSource, /execution_skill_name/);
   assert.match(composerPlusMenuSource, /execution_slot: 'command'/);
-  assert.match(agentConversationSource, /composerAgentExecutionContext\(content, contextItems\)/);
+  assert.match(agentConversationSource, /composerAgentExecutionContext\(content, contextItems, config\.mode\)/);
   assert.match(agentConversationSource, /agentId: execution\.agentId/);
   assert.match(agentConversationSource, /forcedSkillName: execution\.forcedSkillName/);
   assert.match(agentConversationSource, /appModelContext: execution\.appModelContext/);

@@ -303,11 +303,7 @@ export function providerModelsFromProvider(
   const operationType = provider.operation_type?.trim().toLowerCase();
   const capability =
     operationType === 'embedding' ? 'embedding' : operationType === 'rerank' ? 'rerank' : 'chat';
-  const seen = new Set<string>();
-  return (provider.allowed_models ?? [])
-    .map((model) => model.trim())
-    .filter((model) => Boolean(model) && !seen.has(model) && Boolean(seen.add(model)))
-    .map((id) => ({ id, capability }));
+  return providerEnabledModelIds(provider).map((id) => ({ id, capability }));
 }
 
 export function providerEnabledModelIds(provider: ManagedLlmProvider): string[] {

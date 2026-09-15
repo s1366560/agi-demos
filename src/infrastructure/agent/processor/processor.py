@@ -36,7 +36,6 @@ from src.domain.events.agent_events import (
     AgentActDeltaEvent,
     AgentActEvent,
     AgentCompactNeededEvent,
-    AgentCompletedEvent,
     AgentCompleteEvent,
     AgentContextStatusEvent,
     AgentCostUpdateEvent,
@@ -73,6 +72,13 @@ if TYPE_CHECKING:
 
 from src.domain.model.agent.hitl_types import HITLType
 from src.domain.ports.agent.control_channel_port import ControlChannelPort
+from src.infrastructure.agent.processor.model_step_control_v2 import (
+    ModelStepInterruptedV2,
+    await_model_control_v2,
+    model_stream_control_v2,
+)
+from src.infrastructure.agent.subagent.owner_lease_v2 import fence_subagent_owner_v2
+from src.infrastructure.agent.tools.permission_metadata_v2 import resolve_tool_permission_v2
 
 from ..core.llm_stream import LLMStream, StreamConfig, StreamEventType
 from ..core.message import Message, MessageRole, ToolPart, ToolState
@@ -171,6 +177,8 @@ class ProcessorConfig:
 
     # Permission configuration
     permission_timeout: float = 300.0  # seconds
+    approved_run_required: bool = False
+    chat_run_required: bool = False
     continue_on_deny: bool = False  # Continue loop if permission denied
 
     # Cost tracking
@@ -208,6 +216,7 @@ class ProcessorConfig:
     control_channel: ControlChannelPort | None = None
     # Multi-agent: run identifier for this SubAgent execution (used as control channel key)
     run_id: str | None = None
+    subagent_owner_required: bool = False
 
     # Required v2 agent-loop seam: every turn resolves by (provider, model).
     # The native ReAct path is selected only by an explicit builtin selection.
@@ -283,6 +292,7 @@ class ToolDefinition:
     permission: str | None = None  # Permission required
     aliases: tuple[str, ...] = ()  # Alternate names accepted by canonicalization
     _tool_instance: Any = field(default=None, repr=False)  # Original tool object
+    permission_resolver: Callable[[dict[str, Any]], str | None] | None = None
 
     def to_openai_format(self) -> dict[str, Any]:
         """Convert to OpenAI tool format."""
@@ -481,6 +491,9 @@ class SessionProcessor:
         # Multi-agent control channel for steer/kill/pause/resume
         self._control_channel = config.control_channel
         self._run_id: str | None = config.run_id
+        # STEER counter guarding the mid-run read-only stall heuristic; a fresh
+        # STEER invalidates the previous "stopped" observation.
+        self._control_steer_sequence_v2 = 0
 
         # Helper state for _execute_tool decomposition
         self.__resolve_errors: list[ProcessorEvent] = []
@@ -936,7 +949,9 @@ class SessionProcessor:
             AgentStatusEvent(status="task_progress_continuation"),
         ]
 
-    def _stop_unachievable_goal(self, reason: str) -> AgentErrorEvent:
+    def _stop_unachievable_goal(
+        self, reason: str, *, code: str = "GOAL_NOT_ACHIEVED"
+    ) -> AgentErrorEvent:
         """Stop when the goal evaluator reports a terminal blocker."""
         self._reset_tool_usage_reminder_streak()
         self._pending_completion_status = None
@@ -944,7 +959,7 @@ class SessionProcessor:
         self._last_process_result = ProcessorResult.STOP
         return AgentErrorEvent(
             message=reason or "Goal cannot be completed",
-            code="GOAL_NOT_ACHIEVED",
+            code=code,
         )
 
     async def _run_workspace_replan_protocol_recovery(
@@ -1476,7 +1491,7 @@ class SessionProcessor:
         ):
             yield loop_event
 
-    async def _run_native_loop(  # noqa: PLR0912
+    async def _run_native_loop(  # noqa: PLR0912, PLR0915
         self,
         session_id: str,
         messages: list[dict[str, Any]],
@@ -1515,25 +1530,40 @@ class SessionProcessor:
 
                 # Process one step and classify events
                 had_tool_calls = False
-                async for event in self._process_step(session_id, messages):
-                    yield event
-                    result, had_tool_calls = self._classify_step_event(
-                        event, result, had_tool_calls
-                    )
-                    if result in (
-                        ProcessorResult.COMPLETE,
-                        ProcessorResult.STOP,
-                        ProcessorResult.COMPACT,
-                    ):
-                        break
+                completed_step_context_length: int | None = None
+                try:
+                    async for event in self._process_step(session_id, messages):
+                        yield event
+                        result, had_tool_calls = self._classify_step_event(
+                            event, result, had_tool_calls
+                        )
+                        if result in (
+                            ProcessorResult.COMPLETE,
+                            ProcessorResult.STOP,
+                            ProcessorResult.COMPACT,
+                        ):
+                            break
 
-                # Evaluate goal if no tool calls and still continuing
-                result, progress_events = await self._evaluate_goal_progress(
-                    result,
-                    had_tool_calls,
-                    session_id,
-                    messages,
-                )
+                    completed_step_context_length = len(messages)
+                    # Goal judging can also wait on model I/O.
+                    result, progress_events = await await_model_control_v2(
+                        self._evaluate_goal_progress(result, had_tool_calls, session_id, messages),
+                        lambda: self._poll_model_control_v2(messages),
+                    )
+                except ModelStepInterruptedV2 as control:
+                    for control_event in control.events:
+                        yield control_event
+                    if control.restart:
+                        if completed_step_context_length is not None:
+                            # These tools already executed. Preserve their exact call/result
+                            # group before the new control instruction; never replay them.
+                            messages[
+                                completed_step_context_length:completed_step_context_length
+                            ] = self._current_step_model_messages()
+                        result = ProcessorResult.CONTINUE
+                        continue
+                    result = ProcessorResult.STOP
+                    break
                 for evt in progress_events:
                     yield evt
 
@@ -1639,17 +1669,8 @@ class SessionProcessor:
                         message_preview=result_summary[:200],
                     )
                 )
-                events.append(
-                    AgentCompletedEvent(
-                        agent_id=payload.agent_id,
-                        agent_name=payload.agent_id,
-                        parent_agent_id=msg.to_agent_id,
-                        session_id=payload.session_id,
-                        result=result_summary,
-                        success=payload.success,
-                        artifacts=list(payload.artifacts),
-                    )
-                )
+                # Canonical child settlement publishes terminal observations independently.
+                # Polling a delayed announcement must not overwrite a newer child turn.
                 self._last_announce_id = cursor_id
             return events
         except Exception:
@@ -1667,6 +1688,8 @@ class SessionProcessor:
             pending = await self._control_channel.consume_control(self._run_id)
             if not pending:
                 return []
+            kills = [msg for msg in pending if msg.message_type == ControlMessageType.KILL]
+            pending = kills or pending
 
             events: list[ProcessorEvent] = []
             for msg in pending:
@@ -1693,14 +1716,18 @@ class SessionProcessor:
                 if msg.message_type == ControlMessageType.STEER:
                     steer_text = f"[Control] Parent agent instruction: {msg.payload}"
                     messages.append({"role": "system", "content": steer_text})
-                    logger.info(
-                        "Control STEER injected for run %s: %s",
-                        self._run_id,
-                        msg.payload[:120],
+                    self._control_steer_sequence_v2 = (
+                        int(getattr(self, "_control_steer_sequence_v2", 0)) + 1
                     )
-                    if msg.target_agent_id:
+                    logger.info(
+                        "Control STEER injected for run %s",
+                        self._run_id,
+                    )
+                    if msg.target_agent_id or msg.conversation_id:
                         events.append(
                             SubAgentSteeredEvent(
+                                run_id=self._run_id,
+                                conversation_id=msg.conversation_id or None,
                                 subagent_id=msg.target_agent_id,
                                 subagent_name=msg.target_agent_name or msg.target_agent_id,
                                 instruction=msg.payload,
@@ -1741,6 +1768,19 @@ class SessionProcessor:
         except Exception:
             logger.warning("Error polling control channel", exc_info=True)
             return []
+
+    async def _poll_model_control_v2(self, messages: list[dict[str, Any]]) -> None:
+        """Apply accepted control before an old model decision becomes executable."""
+        previous_sequence = int(getattr(self, "_control_steer_sequence_v2", 0))
+        events = await self._check_control_channel(messages)
+        stopped = any(isinstance(event, AgentErrorEvent) for event in events)
+        if self.config.subagent_owner_required and any(
+            isinstance(event, AgentErrorEvent) and event.code == "KILLED" for event in events
+        ):
+            # Preserve the runner's owner-acknowledged cancellation path.
+            raise asyncio.CancelledError("SubAgent cancelled by control")
+        if stopped or int(getattr(self, "_control_steer_sequence_v2", 0)) != previous_sequence:
+            raise ModelStepInterruptedV2(events, restart=not stopped)
 
     async def _wait_for_resume(self, timeout: float = 300.0) -> bool:
         """Block until a RESUME control message arrives or timeout elapses."""
@@ -1948,7 +1988,12 @@ class SessionProcessor:
             return
 
         if goal_check.should_stop:
-            yield self._stop_unachievable_goal(goal_check.reason)
+            yield self._stop_unachievable_goal(
+                goal_check.reason,
+                code="GOAL_JUDGE_UNAVAILABLE"
+                if goal_check.source == "agent_judge"
+                else "GOAL_NOT_ACHIEVED",
+            )
             return
 
         if goal_check.source == "tasks" and goal_check.pending_tasks > 0:
@@ -2072,6 +2117,7 @@ class SessionProcessor:
             )
             if (
                 self._saw_task_events
+                and self.config.runtime_context.get("effective_mode") != "plan"
                 and not replan_dispatched
                 and not task_reconciled_completion
                 and not self._goal_evaluator.has_task_reader()
@@ -2124,10 +2170,12 @@ class SessionProcessor:
             "step_count": self._step_count,
             "artifact_count": self._artifact_count,
             "call_count": session_summary.get("call_count", 0),
-            "total_cost": session_summary.get("total_cost", 0.0),
-            "total_cost_formatted": session_summary.get("total_cost_formatted", "$0.000000"),
-            "total_tokens": session_summary.get("total_tokens", {}),
         }
+        # An untouched tracker has zero totals but no observed provider usage.
+        if session_summary.get("call_count", 0) > 0:
+            for field in ("total_cost", "total_cost_formatted", "total_tokens"):
+                if field in session_summary:
+                    summary[field] = session_summary[field]
         task_summary = await self._goal_evaluator.summarize_tasks(session_id)
         if task_summary is not None:
             summary["tasks"] = task_summary
@@ -2424,6 +2472,15 @@ class SessionProcessor:
 
         result: Any = None
         try:
+            from src.application.services.approved_run_tool_permission_v2 import (
+                require_approved_run_tool_permission_v2,
+            )
+
+            await require_approved_run_tool_permission_v2(
+                resolve_tool_permission_v2(tool_def, arguments), required=self.config.approved_run_required,
+                required_run_id=self.config.run_id if self.config.approved_run_required else None,
+            )
+            await self._require_run_tool_permission_v2(tool_def, tool_name, arguments)
             if isinstance(tool_instance, ToolInfo):
                 result = await tool_instance.execute(runtime_context, **arguments)
             elif tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
@@ -2478,6 +2535,15 @@ class SessionProcessor:
             else:
                 yield AgentActEvent(tool_name=tool_name, tool_input=result.args)
                 try:
+                    from src.application.services.approved_run_tool_permission_v2 import (
+                        require_approved_run_tool_permission_v2,
+                    )
+
+                    await require_approved_run_tool_permission_v2(
+                        resolve_tool_permission_v2(tool_def, result.args), required=self.config.approved_run_required,
+                        required_run_id=self.config.run_id if self.config.approved_run_required else None,
+                    )
+                    await self._require_run_tool_permission_v2(tool_def, tool_name, result.args)
                     raw = await tool_def.execute(result.args)
                     output = str(raw) if raw is not None else ""
                     yield AgentObserveEvent(
@@ -2638,12 +2704,16 @@ class SessionProcessor:
             self._pending_tool_calls = {}
             self._pending_tool_args = {}
             text_buffer = ""
+            pending_text_events: list[str] = []
+            pending_act_events: list[ProcessorEvent] = []
             reasoning_buffer = ""
             sequential_tool_calls = []
             deferred_tool_calls = []
             step_tokens = TokenUsage()
             step_cost = 0.0
+            usage_accounted = False
             finish_reason = "stop"
+            model_events = None
             try:
                 step_messages = list(base_step_messages)
                 runtime_guidance = self._build_runtime_guidance_message()
@@ -2666,10 +2736,18 @@ class SessionProcessor:
                         },
                     }
 
+                await fence_subagent_owner_v2(
+                    child_run_id=self._run_id if self.config.subagent_owner_required else None
+                )
                 logger.debug(f"[Processor] Calling llm_stream.generate(), step={self._step_count}")
-                async for event in llm_stream.generate(
+                model_events = llm_stream.generate(
                     step_messages, langfuse_context=step_langfuse_context
-                ):
+                )
+                if self._control_channel is not None and self._run_id is not None:
+                    model_events = model_stream_control_v2(
+                        model_events, lambda: self._poll_model_control_v2(messages)
+                    )
+                async for event in model_events:
                     if (
                         reminder_injected
                         and not reminder_consumed
@@ -2703,10 +2781,9 @@ class SessionProcessor:
                             f"[Processor] TEXT_END: len={len(full_text) if full_text else 0}"
                         )
                         self._current_message.add_text(full_text)
-                        async for text_event in self._emit_text_end_with_linked_artifacts(
-                            full_text
-                        ):
-                            yield text_event
+                        # Artifact extraction can invoke tools. Defer the generator
+                        # itself, not just its events, until the model is accepted.
+                        pending_text_events.append(full_text)
 
                     elif event.type == StreamEventType.REASONING_START:
                         yield AgentThoughtStartEvent()
@@ -2735,11 +2812,13 @@ class SessionProcessor:
                         self._pending_tool_args[call_id] = ""
 
                         # Emit act_delta so frontend can show tool skeleton immediately
-                        yield AgentActDeltaEvent(
-                            tool_name=tool_name,
-                            call_id=call_id,
-                            arguments_fragment="",
-                            accumulated_arguments="",
+                        pending_act_events.append(
+                            AgentActDeltaEvent(
+                                tool_name=tool_name,
+                                call_id=call_id,
+                                arguments_fragment="",
+                                accumulated_arguments="",
+                            )
                         )
 
                     elif event.type == StreamEventType.TOOL_CALL_DELTA:
@@ -2750,11 +2829,13 @@ class SessionProcessor:
                                 self._pending_tool_args.get(call_id, "") + args_delta
                             )
                             tool_part = self._pending_tool_calls[call_id]
-                            yield AgentActDeltaEvent(
-                                tool_name=tool_part.tool or "",
-                                call_id=call_id,
-                                arguments_fragment=args_delta,
-                                accumulated_arguments=self._pending_tool_args[call_id],
+                            pending_act_events.append(
+                                AgentActDeltaEvent(
+                                    tool_name=tool_part.tool or "",
+                                    call_id=call_id,
+                                    arguments_fragment=args_delta,
+                                    accumulated_arguments=self._pending_tool_args[call_id],
+                                )
                             )
 
                     elif event.type == StreamEventType.TOOL_CALL_END:
@@ -2831,13 +2912,15 @@ class SessionProcessor:
                             # Generate unique execution_id for act/observe matching
                             tool_part.tool_execution_id = f"exec_{uuid.uuid4().hex[:12]}"
 
-                            yield AgentActEvent(
-                                tool_name=tool_name,
-                                tool_input=arguments,
-                                call_id=call_id,
-                                status="running",
-                                tool_execution_id=tool_part.tool_execution_id,
-                                display=tool_display,
+                            pending_act_events.append(
+                                AgentActEvent(
+                                    tool_name=tool_name,
+                                    tool_input=arguments,
+                                    call_id=call_id,
+                                    status="running",
+                                    tool_execution_id=tool_part.tool_execution_id,
+                                    display=tool_display,
+                                )
                             )
 
                             # Execute tools only after the complete LLM response
@@ -2876,6 +2959,7 @@ class SessionProcessor:
                             model_name=self.config.model,
                         )
                         step_cost = float(cost_result.cost)
+                        usage_accounted = True
 
                         yield AgentCostUpdateEvent(
                             cost=step_cost,
@@ -2927,6 +3011,21 @@ class SessionProcessor:
                 # Step completed successfully
                 break
 
+            except (ModelStepInterruptedV2, asyncio.CancelledError):
+                known_usage = llm_stream.get_usage_snapshot()
+                if not usage_accounted and known_usage is not None:
+                    interrupted_cost = self.cost_tracker.calculate(
+                        usage=known_usage, model_name=self.config.model
+                    )
+                    yield AgentCostUpdateEvent(
+                        cost=float(interrupted_cost.cost),
+                        tokens={
+                            "input": interrupted_cost.tokens.input,
+                            "output": interrupted_cost.tokens.output,
+                            "reasoning": interrupted_cost.tokens.reasoning,
+                        },
+                    )
+                raise
             except Exception as e:
                 # Check if retryable
                 if self.retry_policy.is_retryable(e) and attempt < self.config.max_attempts:
@@ -2946,6 +3045,17 @@ class SessionProcessor:
                 else:
                     # Not retryable or max retries exceeded
                     raise
+            finally:
+                close_model_events = getattr(model_events, "aclose", None)
+                if close_model_events is not None:
+                    await close_model_events()
+
+        await self._poll_model_control_v2(messages)
+        for act_event in pending_act_events:
+            yield act_event
+        for full_text in pending_text_events:
+            async for text_event in self._emit_text_end_with_linked_artifacts(full_text):
+                yield text_event
 
         # Commit the complete assistant response before any tool execution.
         # Actor persistence treats this event as an immediate durability
@@ -3255,7 +3365,7 @@ class SessionProcessor:
             )
 
         if permission_rule.action == PermissionAction.ASK:
-            return await self._ask_tool_permission(
+            return self._ask_tool_permission(
                 session_id,
                 call_id,
                 tool_name,
@@ -3274,93 +3384,53 @@ class SessionProcessor:
         arguments: dict[str, Any],
         tool_part: ToolPart,
         tool_def: "ToolDefinition",
-    ) -> AsyncIterator[ProcessorEvent] | None:
-        """Interactive permission request via HITLCoordinator.
-
-        Returns ``None`` when permission is granted, or an async iterator of
-        error events to yield-and-return.
-        """
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Publish the persisted request before waiting for the human response."""
         self._state = ProcessorState.WAITING_PERMISSION
         permission = tool_def.permission
-        assert permission is not None  # caller guarantees this
-
+        assert permission is not None
+        error: str | None = None
         try:
             coordinator = self._get_hitl_coordinator()
-            request_data = {
-                "tool_name": tool_name,
-                "action": "execute",
-                "risk_level": "medium",
-                "details": {"tool": tool_name, "input": arguments},
-                "permission_type": permission,
-            }
             request_id = await coordinator.prepare_request(
                 hitl_type=HITLType.PERMISSION,
-                request_data=request_data,
+                request_data={
+                    "tool_name": tool_name,
+                    "action": "execute",
+                    "risk_level": "medium",
+                    "description": tool_def.description,
+                    "allow_remember": False,
+                    "details": {"tool": tool_name, "input": arguments},
+                    "permission_type": permission,
+                },
                 timeout_seconds=self.config.permission_timeout,
             )
-
-            # Store the permission-asked event so the orchestrator can yield it
-            # *before* blocking on the response.
-            self._permission_asked_event = AgentPermissionAskedEvent(
+            queue_tool_part_hitl_completion(tool_part, request_id)
+            yield AgentPermissionAskedEvent(
                 request_id=request_id,
                 permission=permission,
                 patterns=[tool_name],
                 metadata={"tool": tool_name, "input": arguments},
             )
-
-            permission_granted = await coordinator.wait_for_response(
+            granted = await coordinator.wait_for_response(
                 request_id=request_id,
                 hitl_type=HITLType.PERMISSION,
                 timeout_seconds=self.config.permission_timeout,
             )
-            queue_tool_part_hitl_completion(tool_part, request_id)
-
-            if not permission_granted:
-                tool_part.status = ToolState.ERROR
-                tool_part.error = "Permission rejected by user"
-                tool_part.end_time = time.time()
-                return _iter_events(
-                    [
-                        AgentObserveEvent(
-                            tool_name=tool_name,
-                            error="Permission rejected by user",
-                            call_id=call_id,
-                            tool_execution_id=tool_part.tool_execution_id,
-                        )
-                    ]
-                )
-
+            if not granted:
+                error = "Permission rejected by user"
         except TimeoutError:
+            error = "Permission request timed out"
+        except ValueError:
+            error = "Permission request failed: no HITL context"
+        if error is not None:
             tool_part.status = ToolState.ERROR
-            tool_part.error = "Permission request timed out"
+            tool_part.error = error
             tool_part.end_time = time.time()
-            return _iter_events(
-                [
-                    AgentObserveEvent(
-                        tool_name=tool_name,
-                        error="Permission request timed out",
-                        call_id=call_id,
-                        tool_execution_id=tool_part.tool_execution_id,
-                    )
-                ]
+            yield AgentObserveEvent(
+                tool_name=tool_name, error=error, call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id,
             )
-        except ValueError as e:
-            logger.warning("[Processor] HITLCoordinator unavailable: %s", e)
-            tool_part.status = ToolState.ERROR
-            tool_part.error = "Permission request failed: no HITL context"
-            tool_part.end_time = time.time()
-            return _iter_events(
-                [
-                    AgentObserveEvent(
-                        tool_name=tool_name,
-                        error="Permission request failed: no HITL context",
-                        call_id=call_id,
-                        tool_execution_id=tool_part.tool_execution_id,
-                    )
-                ]
-            )
-
-        return None  # granted
 
     async def _flush_tool_part_hitl_completions(self, tool_part: ToolPart) -> None:
         """Persist and release any queued HITL completions for a tool part."""
@@ -3545,6 +3615,39 @@ class SessionProcessor:
 
         return None
 
+    async def _require_run_tool_permission_v2(
+        self, tool_def: "ToolDefinition", tool_name: str, arguments: dict[str, Any],
+    ) -> None:
+        """Revalidate the exact invocation after any hook or human response."""
+        from src.application.services.approved_run_tool_permission_v2 import (
+            require_approved_run_tool_permission_v2,
+        )
+        from src.application.services.chat_run_tool_permission_v2 import (
+            claim_chat_tool_invocation_v2,
+            decision_for_current_chat_tool_v2,
+        )
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        permission = resolve_tool_permission_v2(tool_def, arguments)
+        if self.config.chat_run_required and self.config.approved_run_required:
+            raise RuntimeV2Error("run_tool_authority_conflict", "Agent run authority is ambiguous")
+        if not self.config.chat_run_required:
+            await require_approved_run_tool_permission_v2(
+                permission,
+                required=self.config.approved_run_required,
+                required_run_id=self.config.run_id if self.config.approved_run_required else None,
+            )
+        if self.config.approved_run_required:
+            return
+        if await decision_for_current_chat_tool_v2(
+            permission, tool_name, arguments,
+            required=self.config.chat_run_required,
+        ) != "allow":
+            raise RuntimeV2Error("chat_tool_permission_denied", "Chat tool approval is not valid")
+        claim_chat_tool_invocation_v2(
+            tool_name, arguments, permission=permission,
+        )
+
     async def _invoke_and_emit_observe(  # noqa: PLR0912, PLR0915
         self,
         tool_name: str,
@@ -3561,6 +3664,17 @@ class SessionProcessor:
         - ``self._last_raw_result`` — the raw tool result
         - ``self._last_output_str`` — the string output stored on tool_part
         """
+        await fence_subagent_owner_v2(
+            child_run_id=self._run_id if self.config.subagent_owner_required else None
+        )
+        from src.application.services.approved_run_tool_permission_v2 import (
+            require_approved_run_tool_permission_v2,
+        )
+
+        await require_approved_run_tool_permission_v2(
+            resolve_tool_permission_v2(tool_def, arguments), required=self.config.approved_run_required,
+            required_run_id=self.config.run_id if self.config.approved_run_required else None,
+        )
         # Inject per-request context for tools on the non-pipeline path.
         # The pipeline path handles this via _ToolAdapter; here we handle
         # the non-pipeline path which calls tool_def.execute() directly.
@@ -3592,6 +3706,8 @@ class SessionProcessor:
                 api_auth_token=self.config.api_auth_token,
                 runtime_context=dict(self.config.runtime_context),
             )
+
+        await self._require_run_tool_permission_v2(tool_def, tool_name, arguments)
 
         start_time = time.time()
         if _needs_direct_ctx:
@@ -3664,9 +3780,11 @@ class SessionProcessor:
             output_str = json.dumps(result, default=str)
             sse_result = result
 
-        # Update tool_part
-        tool_part.status = ToolState.COMPLETED
+        # Execution completion does not imply a successful tool result.
+        failed = isinstance(result, ToolResult) and result.is_error
+        tool_part.status = ToolState.ERROR if failed else ToolState.COMPLETED
         tool_part.output = self._artifact_handler.sanitize_tool_output(output_str)
+        tool_part.error = tool_part.output if failed else None
         tool_part.end_time = end_time
 
         # MCP App UI metadata
@@ -3714,6 +3832,8 @@ class SessionProcessor:
             tool_name=tool_name,
             result=sse_result,
             duration_ms=int((end_time - start_time) * 1000),
+            error=tool_part.error,
+            status=tool_part.status.value,
             call_id=call_id,
             tool_execution_id=tool_part.tool_execution_id,
             ui_metadata=_observe_ui_meta,
@@ -4172,6 +4292,10 @@ class SessionProcessor:
             runtime_context=dict(self.config.runtime_context),
         )
 
+        owner_run_id = self._run_id if self.config.subagent_owner_required else None
+
+        require_run_permission = self._require_run_tool_permission_v2
+
         # Adapt ToolDefinition to ToolInfoProtocol
         class _ToolAdapter:
             """Thin adapter from ToolDefinition to ToolInfoProtocol.
@@ -4185,6 +4309,8 @@ class SessionProcessor:
             def __init__(self, td: ToolDefinition, context: ToolContext) -> None:
                 self.name = td.name
                 self.permission = td.permission
+                self.permission_resolver = td.permission_resolver
+                self.claims_chat_invocation_v2 = True
                 self._td = td
                 self._ctx = context
 
@@ -4192,13 +4318,13 @@ class SessionProcessor:
                 """Delegate to underlying tool with appropriate context."""
                 from src.infrastructure.agent.tools.define import ToolInfo
 
+                await fence_subagent_owner_v2(child_run_id=owner_run_id)
+                await require_run_permission(self._td, self.name, kwargs)
                 tool_instance = getattr(self._td, "_tool_instance", None)
                 # ToolInfo-based tools: call with real ToolContext
                 if isinstance(tool_instance, ToolInfo):
-                    try:
-                        return await tool_instance.execute(self._ctx, **kwargs)
-                    except Exception as e:
-                        return f"Error executing tool {self.name}: {e!s}"
+                    # The pipeline converts exceptions into explicit failed results.
+                    return await tool_instance.execute(self._ctx, **kwargs)
 
                 # Legacy class-based tools: inject runtime context if supported
                 if tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
@@ -4228,9 +4354,11 @@ class SessionProcessor:
                     sse_result = ""
                     raw_result = ""
 
-                # Update tool_part
-                tool_part.status = ToolState.COMPLETED
+                # A completed pipeline event can carry a failed ToolResult.
+                failed = tool_result is not None and tool_result.is_error
+                tool_part.status = ToolState.ERROR if failed else ToolState.COMPLETED
                 tool_part.output = self._artifact_handler.sanitize_tool_output(output_str)
+                tool_part.error = tool_part.output if failed else None
                 tool_part.end_time = end_time
 
                 # MCP App UI metadata (same logic as _invoke_and_emit_observe)
@@ -4272,6 +4400,8 @@ class SessionProcessor:
                 yield AgentObserveEvent(
                     tool_name=tool_name,
                     result=sse_result,
+                    error=tool_part.error,
+                    status=tool_part.status.value,
                     duration_ms=event.data.get(
                         "duration_ms",
                         int((end_time - start_time) * 1000),
@@ -4399,12 +4529,26 @@ class SessionProcessor:
                 return
 
             elif event.type == "permission_asked":
-                yield AgentPermissionAskedEvent(
-                    request_id="",
-                    permission=tool_def.permission or tool_name,
-                    patterns=[tool_name],
-                    metadata={"tool": tool_name, "input": arguments},
-                )
+                response = event.data.get("_approval_response")
+                reviewed_args = event.data.get("arguments")
+                if not isinstance(response, asyncio.Future) or not isinstance(reviewed_args, dict):
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = "Tool review authority is unavailable"
+                    yield AgentObserveEvent(
+                        tool_name=tool_name, error=tool_part.error, call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                    return
+                try:
+                    async for approval_event in self._ask_tool_permission(
+                        session_id, call_id, tool_name, reviewed_args, tool_part, tool_def,
+                    ):
+                        yield approval_event
+                    if not response.done():
+                        response.set_result(tool_part.status != ToolState.ERROR)
+                finally:
+                    if not response.done():
+                        response.set_result(False)
 
             elif event.type == "aborted":
                 tool_part.status = ToolState.ERROR
@@ -4471,84 +4615,262 @@ class SessionProcessor:
                 yield ev
             return
 
-        # 1b. Error-based doom loop intervention (consecutive tool errors)
-        if self.doom_loop_detector.should_intervene_on_errors():
-            recent = self.doom_loop_detector.get_recent_errors(3)
-            error_summary = "; ".join(f"{e.tool}: {e.error}" for e in recent)
-            logger.warning(
-                "[Processor] Consecutive tool errors threshold reached (%d errors). Recent: %s",
-                self.doom_loop_detector.consecutive_error_count,
-                error_summary,
-            )
-            yield AgentDoomLoopDetectedEvent(
-                tool=tool_name,
-                input={
-                    "reason": "consecutive_tool_errors",
-                    "error_count": self.doom_loop_detector.consecutive_error_count,
-                    "recent_errors": error_summary,
-                },
-            )
-            tool_part = self._pending_tool_calls.get(call_id)
-            if tool_part:
-                tool_part.status = ToolState.ERROR
-                tool_part.error = (
-                    f"Stopped: {self.doom_loop_detector.consecutive_error_count}"
-                    f" consecutive tool errors detected"
-                )
-                tool_part.end_time = time.time()
-            yield AgentObserveEvent(
-                tool_name=tool_name,
-                error=(
-                    f"Execution halted: {self.doom_loop_detector.consecutive_error_count}"
-                    f" consecutive tool errors. Last errors: {error_summary}."
-                    f" Please verify tool names and try a different approach."
-                ),
-                call_id=call_id,
-                tool_execution_id=tool_part.tool_execution_id if tool_part else None,
-                display=self._tool_display_from_part(tool_part) if tool_part else None,
-            )
-            self._state = ProcessorState.OBSERVING
-            return
-        tool_part, tool_def = resolved
-        if arguments:
-            tool_part.input = arguments
-
-        # 2. Doom-loop
-        doom_result = await self._check_doom_loop(
-            session_id,
-            call_id,
-            tool_name,
-            arguments,
-            tool_part,
+        from src.application.services.approved_run_tool_permission_v2 import (
+            require_approved_run_tool_permission_v2,
         )
-        if doom_result is not None:
-            async for ev in doom_result:
-                yield ev
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        tool_part, tool_def = resolved
+        try:
+            await require_approved_run_tool_permission_v2(
+                resolve_tool_permission_v2(tool_def, arguments),
+                required_run_id=self.config.run_id if self.config.approved_run_required else None,
+                required=self.config.approved_run_required,
+            )
+        except RuntimeV2Error as permission_error:
+            tool_part.status = ToolState.ERROR
+            tool_part.error = str(permission_error)
+            tool_part.end_time = time.time()
+            yield AgentObserveEvent(
+                tool_name=tool_name, call_id=call_id, error=tool_part.error,
+                status=ToolState.ERROR.value, tool_execution_id=tool_part.tool_execution_id,
+            )
             return
 
-        # Record for doom-loop tracking
-        self.doom_loop_detector.record(tool_name, arguments)
+        from contextlib import nullcontext
 
-        # 3. HITL dispatch
-        hitl_handler = self._check_hitl_dispatch(tool_name)
-        if hitl_handler is not None:
-            handler_method = getattr(self, hitl_handler)
+        from src.application.services.chat_run_tool_permission_v2 import (
+            approved_chat_tool_call_v2,
+            decision_for_current_chat_tool_v2,
+        )
+
+        try:
+            chat_decision = await decision_for_current_chat_tool_v2(
+                resolve_tool_permission_v2(tool_def, arguments), tool_name, arguments,
+            required=self.config.chat_run_required,
+            )
+        except RuntimeV2Error:
+            chat_decision = "deny"
+        if chat_decision == "deny":
+            tool_part.status = ToolState.ERROR
+            tool_part.error = "Chat run does not authorize this tool operation"
+            tool_part.end_time = time.time()
+            yield AgentObserveEvent(
+                tool_name=tool_name, call_id=call_id, error=tool_part.error,
+                status=ToolState.ERROR.value, tool_execution_id=tool_part.tool_execution_id,
+            )
+            return
+        if chat_decision == "ask":
             try:
-                async for ev in handler_method(
-                    session_id,
-                    call_id,
+                async for event in self._ask_tool_permission(
+                    session_id, call_id, tool_name, arguments, tool_part, tool_def,
+                ):
+                    yield event
+                if tool_part.status == ToolState.ERROR:
+                    return
+            finally:
+                await self._flush_tool_part_hitl_completions(tool_part)
+
+        approval_context = (
+            approved_chat_tool_call_v2(tool_name, arguments)
+            if chat_decision == "ask" else nullcontext()
+        )
+        with approval_context:
+            # 1b. Error-based doom loop intervention (consecutive tool errors)
+            if self.doom_loop_detector.should_intervene_on_errors():
+                recent = self.doom_loop_detector.get_recent_errors(3)
+                error_summary = "; ".join(f"{e.tool}: {e.error}" for e in recent)
+                logger.warning(
+                    "[Processor] Consecutive tool errors threshold reached (%d errors). Recent: %s",
+                    self.doom_loop_detector.consecutive_error_count,
+                    error_summary,
+                )
+                yield AgentDoomLoopDetectedEvent(
+                    tool=tool_name,
+                    input={
+                        "reason": "consecutive_tool_errors",
+                        "error_count": self.doom_loop_detector.consecutive_error_count,
+                        "recent_errors": error_summary,
+                    },
+                )
+                tool_part = self._pending_tool_calls.get(call_id)
+                if tool_part:
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = (
+                        f"Stopped: {self.doom_loop_detector.consecutive_error_count}"
+                        f" consecutive tool errors detected"
+                    )
+                    tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=(
+                        f"Execution halted: {self.doom_loop_detector.consecutive_error_count}"
+                        f" consecutive tool errors. Last errors: {error_summary}."
+                        f" Please verify tool names and try a different approach."
+                    ),
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id if tool_part else None,
+                    display=self._tool_display_from_part(tool_part) if tool_part else None,
+                )
+                self._state = ProcessorState.OBSERVING
+                return
+            tool_part, tool_def = resolved
+            if arguments:
+                tool_part.input = arguments
+
+            # 2. Doom-loop
+            doom_result = await self._check_doom_loop(
+                session_id,
+                call_id,
+                tool_name,
+                arguments,
+                tool_part,
+            )
+            if doom_result is not None:
+                async for ev in doom_result:
+                    yield ev
+                return
+
+            # Record for doom-loop tracking
+            self.doom_loop_detector.record(tool_name, arguments)
+
+            # 3. HITL dispatch
+            hitl_handler = self._check_hitl_dispatch(tool_name)
+            if hitl_handler is not None:
+                handler_method = getattr(self, hitl_handler)
+                try:
+                    await self._require_run_tool_permission_v2(tool_def, tool_name, arguments)
+                    async for ev in handler_method(
+                        session_id,
+                        call_id,
+                        tool_name,
+                        arguments,
+                        tool_part,
+                    ):
+                        yield ev
+                finally:
+                    await self._flush_tool_part_hitl_completions(tool_part)
+                return
+
+            # ── Pipeline shortcut ── (phases 2, 4, 6 handled by pipeline)
+            if self._tool_pipeline is not None:
+                # 5. Parse & fix arguments (still needed before pipeline)
+                self._state = ProcessorState.ACTING
+                cleaned = self._parse_and_fix_arguments(
                     tool_name,
                     arguments,
                     tool_part,
-                ):
-                    yield ev
-            finally:
-                await self._flush_tool_part_hitl_completions(tool_part)
-            return
+                    call_id,
+                    session_id,
+                )
+                if cleaned is None:
+                    for ev in self.__arg_parse_errors:
+                        yield ev
+                    return
+                arguments = cleaned
 
-        # ── Pipeline shortcut ── (phases 2, 4, 6 handled by pipeline)
-        if self._tool_pipeline is not None:
-            # 5. Parse & fix arguments (still needed before pipeline)
+                before_tool_payload = await self._notify_plugin_hook(
+                    "before_tool_execution",
+                    {
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                        "call_id": call_id,
+                        "session_id": session_id,
+                        **self._runtime_hook_context_fields(),
+                    },
+                )
+                if isinstance(before_tool_payload.get("arguments"), dict):
+                    arguments = cast(dict[str, Any], before_tool_payload["arguments"])
+                try:
+                    # 6. Pipeline execution (doom loop + permission + invoke)
+                    async for ev in self._execute_tool_via_pipeline(
+                        session_id,
+                        call_id,
+                        tool_name,
+                        arguments,
+                        tool_part,
+                        tool_def,
+                    ):
+                        yield ev
+
+                    await self._notify_plugin_hook(
+                        "after_tool_execution",
+                        {
+                            "tool_name": tool_name,
+                            "call_id": call_id,
+                            "session_id": session_id,
+                            **self._runtime_hook_context_fields(),
+                            "result_metadata": (
+                                dict(self._last_sse_result)
+                                if isinstance(self._last_sse_result, dict)
+                                else None
+                            ),
+                            "result": getattr(tool_part, "output", None),
+                            "error": getattr(tool_part, "error", None),
+                        },
+                    )
+                    # 7. Side effects (same as non-pipeline path)
+                    async for ev in self._emit_tool_side_effects(
+                        tool_name,
+                        tool_def,
+                        tool_part,
+                        session_id,
+                    ):
+                        yield ev
+                    # Reset error tracker on successful pipeline execution
+                    if tool_part.status == ToolState.COMPLETED:
+                        self.doom_loop_detector.reset_errors()
+
+                except Exception as e:
+                    logger.error(
+                        "Tool execution error (pipeline): %s",
+                        e,
+                        exc_info=True,
+                    )
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = str(e)
+                    tool_part.end_time = time.time()
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        error=str(e),
+                        duration_ms=(
+                            int((time.time() - tool_part.start_time) * 1000)
+                            if tool_part.start_time
+                            else None
+                        ),
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                        display=self._tool_display_from_part(tool_part),
+                    )
+                finally:
+                    await self._flush_tool_part_hitl_completions(tool_part)
+
+                self._state = ProcessorState.OBSERVING
+                return
+            # 4. Permission check
+            self._permission_asked_event = None
+            perm_result = await self._check_tool_permission(
+                session_id,
+                call_id,
+                tool_name,
+                arguments,
+                tool_part,
+                tool_def,
+            )
+            # Yield permission-asked event if one was generated
+            permission_asked_event = self._pop_permission_asked_event()
+            if permission_asked_event is not None:
+                yield permission_asked_event
+            if perm_result is not None:
+                try:
+                    async for ev in perm_result:
+                        yield ev
+                finally:
+                    await self._flush_tool_part_hitl_completions(tool_part)
+                if tool_part.status == ToolState.ERROR:
+                    return
+
+            # 5. Parse & fix arguments
             self._state = ProcessorState.ACTING
             cleaned = self._parse_and_fix_arguments(
                 tool_name,
@@ -4563,6 +4885,7 @@ class SessionProcessor:
                 return
             arguments = cleaned
 
+            # 6. Invoke tool + emit observe
             before_tool_payload = await self._notify_plugin_hook(
                 "before_tool_execution",
                 {
@@ -4576,14 +4899,13 @@ class SessionProcessor:
             if isinstance(before_tool_payload.get("arguments"), dict):
                 arguments = cast(dict[str, Any], before_tool_payload["arguments"])
             try:
-                # 6. Pipeline execution (doom loop + permission + invoke)
-                async for ev in self._execute_tool_via_pipeline(
-                    session_id,
-                    call_id,
+                async for ev in self._invoke_and_emit_observe(
                     tool_name,
                     arguments,
                     tool_part,
                     tool_def,
+                    call_id,
+                    session_id,
                 ):
                     yield ev
 
@@ -4603,7 +4925,7 @@ class SessionProcessor:
                         "error": getattr(tool_part, "error", None),
                     },
                 )
-                # 7. Side effects (same as non-pipeline path)
+                # 7. Side effects
                 async for ev in self._emit_tool_side_effects(
                     tool_name,
                     tool_def,
@@ -4611,26 +4933,18 @@ class SessionProcessor:
                     session_id,
                 ):
                     yield ev
-                # Reset error tracker on successful pipeline execution
-                self.doom_loop_detector.reset_errors()
 
             except Exception as e:
-                logger.error(
-                    "Tool execution error (pipeline): %s",
-                    e,
-                    exc_info=True,
-                )
+                logger.error("Tool execution error: %s", e, exc_info=True)
                 tool_part.status = ToolState.ERROR
                 tool_part.error = str(e)
                 tool_part.end_time = time.time()
                 yield AgentObserveEvent(
                     tool_name=tool_name,
                     error=str(e),
-                    duration_ms=(
-                        int((time.time() - tool_part.start_time) * 1000)
-                        if tool_part.start_time
-                        else None
-                    ),
+                    duration_ms=int((time.time() - tool_part.start_time) * 1000)
+                    if tool_part.start_time
+                    else None,
                     call_id=call_id,
                     tool_execution_id=tool_part.tool_execution_id,
                     display=self._tool_display_from_part(tool_part),
@@ -4638,113 +4952,10 @@ class SessionProcessor:
             finally:
                 await self._flush_tool_part_hitl_completions(tool_part)
 
+            # Reset error tracker on successful non-pipeline execution
+            if tool_part.status == ToolState.COMPLETED:
+                self.doom_loop_detector.reset_errors()
             self._state = ProcessorState.OBSERVING
-            return
-        # 4. Permission check
-        self._permission_asked_event = None
-        perm_result = await self._check_tool_permission(
-            session_id,
-            call_id,
-            tool_name,
-            arguments,
-            tool_part,
-            tool_def,
-        )
-        # Yield permission-asked event if one was generated
-        permission_asked_event = self._pop_permission_asked_event()
-        if permission_asked_event is not None:
-            yield permission_asked_event
-        if perm_result is not None:
-            async for ev in perm_result:
-                yield ev
-            await self._flush_tool_part_hitl_completions(tool_part)
-            return
-
-        # 5. Parse & fix arguments
-        self._state = ProcessorState.ACTING
-        cleaned = self._parse_and_fix_arguments(
-            tool_name,
-            arguments,
-            tool_part,
-            call_id,
-            session_id,
-        )
-        if cleaned is None:
-            for ev in self.__arg_parse_errors:
-                yield ev
-            return
-        arguments = cleaned
-
-        # 6. Invoke tool + emit observe
-        before_tool_payload = await self._notify_plugin_hook(
-            "before_tool_execution",
-            {
-                "tool_name": tool_name,
-                "arguments": arguments,
-                "call_id": call_id,
-                "session_id": session_id,
-                **self._runtime_hook_context_fields(),
-            },
-        )
-        if isinstance(before_tool_payload.get("arguments"), dict):
-            arguments = cast(dict[str, Any], before_tool_payload["arguments"])
-        try:
-            async for ev in self._invoke_and_emit_observe(
-                tool_name,
-                arguments,
-                tool_part,
-                tool_def,
-                call_id,
-                session_id,
-            ):
-                yield ev
-
-            await self._notify_plugin_hook(
-                "after_tool_execution",
-                {
-                    "tool_name": tool_name,
-                    "call_id": call_id,
-                    "session_id": session_id,
-                    **self._runtime_hook_context_fields(),
-                    "result_metadata": (
-                        dict(self._last_sse_result)
-                        if isinstance(self._last_sse_result, dict)
-                        else None
-                    ),
-                    "result": getattr(tool_part, "output", None),
-                    "error": getattr(tool_part, "error", None),
-                },
-            )
-            # 7. Side effects
-            async for ev in self._emit_tool_side_effects(
-                tool_name,
-                tool_def,
-                tool_part,
-                session_id,
-            ):
-                yield ev
-
-        except Exception as e:
-            logger.error("Tool execution error: %s", e, exc_info=True)
-            tool_part.status = ToolState.ERROR
-            tool_part.error = str(e)
-            tool_part.end_time = time.time()
-            yield AgentObserveEvent(
-                tool_name=tool_name,
-                error=str(e),
-                duration_ms=int((time.time() - tool_part.start_time) * 1000)
-                if tool_part.start_time
-                else None,
-                call_id=call_id,
-                tool_execution_id=tool_part.tool_execution_id,
-                display=self._tool_display_from_part(tool_part),
-            )
-        finally:
-            await self._flush_tool_part_hitl_completions(tool_part)
-
-        # Reset error tracker on successful non-pipeline execution
-        self.doom_loop_detector.reset_errors()
-        self._state = ProcessorState.OBSERVING
 
     # Max bytes for tool output stored in LLM context
     async def _handle_clarification_tool(

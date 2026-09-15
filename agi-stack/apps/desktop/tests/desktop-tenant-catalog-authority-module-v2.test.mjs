@@ -613,7 +613,7 @@ test('local and cloud operations freeze config and forward AbortSignal through e
     assert.equal(cloudCommands[0].command, 'cloud_request');
     assert.equal(typeof cloudCommands[0].args.requestId, 'string');
     assert.deepEqual(cloudCommands[0].args.request, {
-      path: '/api/v1/tenants?page=1&page_size=100',
+      path: '/api/v1/tenants/?page=1&page_size=100',
       method: 'GET',
     });
     assert.equal(JSON.stringify(cloudCommands).includes('Bearer'), false);

@@ -225,6 +225,31 @@ test('intentional new conversation adoption continues through socket and local H
   assert.ok(h.events.includes('run'));
   assert.equal(h.state.sending, false);
 });
+
+for (const connected of [true, false])
+  test(`local selected skill reaches the Agent over ${connected ? 'WebSocket' : 'HTTP'}`, async () => {
+    const h = harness();
+    let sent;
+    h.params.socket.sendAgentMessage = (input) => {
+      sent = input;
+      h.events.push('socket');
+      return connected;
+    };
+    h.client.runAgentMessage = async (_conversation, _message, _id, execution) => {
+      assert.equal(execution.forcedSkillName, 'native-audit-skill');
+      assert.equal(execution.appModelContext, undefined);
+      h.events.push('run');
+    };
+    h.render();
+    await h.hook.sendMessageContent('Run the selected skill', [{
+      kind: 'skill', resource_id: 'skill-uuid', label: 'Native audit',
+      metadata: { execution_slot: 'skill', execution_skill_name: 'native-audit-skill' },
+    }]);
+    assert.equal(h.state.error, null);
+    assert.equal(sent?.forcedSkillName, 'native-audit-skill');
+    assert.equal(sent?.appModelContext, undefined);
+    assert.equal(h.events.includes('run'), !connected);
+  });
 test('late workspace save cannot clear composer or start a conversation', async () => {
   const h = harness();
   const pending = deferred();

@@ -46,6 +46,7 @@ async def _load_scoped_run(
         .where(
             Conversation.id == run.conversation_id,
             Conversation.project_id == run.project_id,
+            Conversation.tenant_id == run.tenant_id,
             Conversation.user_id == user_id,
             exists(
                 select(Project.id).where(

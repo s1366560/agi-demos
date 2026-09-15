@@ -10,19 +10,22 @@ import os
 import signal
 import subprocess
 import sys
-import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from subprocess import DEVNULL
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+from src.application.services.publication_archive_loader_v2 import load_agent_generation_archives_v2
 from src.configuration.config import Settings
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.domain.model.agent import Conversation
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.infrastructure.llm.provider_credentials import resolve_persisted_provider_credential
+from src.infrastructure.plugins.v2.agent_worker_lifecycle_transport_v2 import (
+    AgentWorkerLifecycleTransportV2,
+)
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
@@ -327,21 +330,16 @@ class AgentRuntimeBootstrapper:
         request: SpawnExecutionRequest,
     ) -> None:
         """Persist and start a child session created via agent_spawn."""
-        conversation = await self.ensure_spawned_agent_conversation(
-            child_session_id=request.child_session_id,
-            parent_session_id=request.parent_session_id,
-            project_id=request.project_id,
-            tenant_id=request.tenant_id,
-            user_id=request.user_id,
-            parent_agent_id=request.parent_agent_id,
-            child_agent_id=request.child_agent_id,
-            child_agent_name=request.child_agent_name,
-            mode=request.mode.value,
-            metadata=request.metadata,
-        )
+        from src.application.services.peer_chat_permission_v2 import resolve_peer_execution_v2
+
+        admission = await resolve_peer_execution_v2(request, spawn=True)
+        if not admission.created:
+            return
+        conversation = admission.conversation
         await self.start_chat_actor(
             conversation=conversation,
-            message_id=str(uuid.uuid4()),
+            message_id=admission.run_id,
+            canonical_run_id=admission.run_id,
             user_message=request.message,
             conversation_context=[],
             agent_id=request.child_agent_id,
@@ -384,14 +382,16 @@ class AgentRuntimeBootstrapper:
         request: SessionTurnExecutionRequest,
     ) -> None:
         """Start one follow-up turn for a persistent session spawned via agent_spawn."""
-        conversation = await self.load_spawned_agent_conversation(
-            child_session_id=request.child_session_id,
-            project_id=request.project_id,
-            tenant_id=request.tenant_id,
-        )
+        from src.application.services.peer_chat_permission_v2 import resolve_peer_execution_v2
+
+        admission = await resolve_peer_execution_v2(request, spawn=False)
+        if not admission.created:
+            return
+        conversation = admission.conversation
         await self.start_chat_actor(
             conversation=conversation,
-            message_id=str(uuid.uuid4()),
+            message_id=admission.run_id,
+            canonical_run_id=admission.run_id,
             user_message=request.message,
             conversation_context=[],
             agent_id=request.child_agent_id,
@@ -742,17 +742,25 @@ class AgentRuntimeBootstrapper:
 
             try:
                 if item.run_in_subprocess:
-                    await self._run_local_subprocess_chat_once(
+                    turn = self._run_local_subprocess_chat_once(
                         conversation_id,
                         item.config,
                         item.request,
                     )
                 else:
-                    await self._run_chat_local(
+                    turn = self._run_chat_local(
                         item.config,
                         item.request,
                         abort_signal=abort_signal,
                     )
+                # A run-scoped cancellation targets this turn, not the FIFO worker.
+                turn_task = asyncio.create_task(turn)
+                try:
+                    await turn_task
+                except asyncio.CancelledError:
+                    worker = asyncio.current_task()
+                    if worker is not None and worker.cancelling():
+                        raise
             finally:
                 queue.task_done()
                 async with self._local_chat_lock:
@@ -1152,6 +1160,7 @@ class AgentRuntimeBootstrapper:
             ProjectReActAgent,
         )
 
+        execution_started = False
         try:
             agent_config = ProjectAgentConfig(
                 tenant_id=config.tenant_id,
@@ -1193,6 +1202,7 @@ class AgentRuntimeBootstrapper:
                 agent_worker_graph_runtime_factory_v2,
                 agent_worker_redis_runtime_factory_v2,
                 agent_worker_sandbox_runtime_factory_v2,
+                agent_worker_workspace_core_runtime_factory_v2,
             )
             from src.infrastructure.plugins.v2.boundary import (
                 OPERATION_IDENTITY_SERVICE_V2,
@@ -1208,10 +1218,13 @@ class AgentRuntimeBootstrapper:
 
             admission = DataPlaneGenerationAdmissionV2(
                 builtin_runtime_definitions_v2(
+                    agent_lifecycle_connection_manager=AgentWorkerLifecycleTransportV2(),
                     graph_runtime_factory=agent_worker_graph_runtime_factory_v2(config.tenant_id),
                     redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
                     sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
-                )
+                    workspace_core_runtime_factory=agent_worker_workspace_core_runtime_factory_v2,
+                ),
+                archive_loader=load_agent_generation_archives_v2,
             )
             try:
                 async with admission.admit(
@@ -1227,6 +1240,7 @@ class AgentRuntimeBootstrapper:
                     services={
                         OPERATION_IDENTITY_SERVICE_V2: {
                             "tenant_id": config.tenant_id,
+                            "project_id": config.project_id,
                             "user_id": request.user_id,
                         },
                         OPERATION_METADATA_SERVICE_V2: {
@@ -1235,7 +1249,12 @@ class AgentRuntimeBootstrapper:
                             "message_id": request.message_id,
                         },
                     },
-                ):
+                ) as operation:
+                    from src.application.services.wasm_operation_authority_v2 import (
+                        prepare_agent_wasm_tools_v2,
+                    )
+
+                    await prepare_agent_wasm_tools_v2(operation)
                     await self._ensure_local_runtime_bootstrapped()
                     initialized = await agent.initialize()
                     if not initialized:
@@ -1243,6 +1262,7 @@ class AgentRuntimeBootstrapper:
                             "agent_initialization_failed",
                             "agent initialization failed for the admitted plugin generation",
                         )
+                    execution_started = True
                     result = await execute_project_chat(
                         agent,
                         request,
@@ -1270,6 +1290,8 @@ class AgentRuntimeBootstrapper:
                 e,
                 exc_info=True,
             )
+            if not execution_started:
+                await _settle_local_bootstrap_failure(config, request, e)
             try:
                 from src.infrastructure.agent.actor.execution import _publish_error_event
 
@@ -1336,3 +1358,24 @@ class AgentRuntimeBootstrapper:
     def _get_model(self, settings: Settings) -> str:
         # Deprecated: Using ProviderResolutionService now
         return "qwen-plus"
+
+
+async def _settle_local_bootstrap_failure(
+    config: ProjectAgentActorConfig,
+    request: ProjectChatRequest,
+    error: Exception,
+) -> None:
+    """Settle the admitted root run before notifying projection subscribers."""
+    from src.infrastructure.agent.actor.execution import _settle_root_run_authority
+
+    try:
+        await _settle_root_run_authority(
+            tenant_id=config.tenant_id,
+            project_id=config.project_id,
+            conversation_id=request.conversation_id,
+            run_id=request.canonical_run_id or request.message_id,
+            outcome="failed",
+            error=f"Agent execution failed: {error}",
+        )
+    except Exception as settlement_error:
+        logger.warning("[AgentService] Failed to settle bootstrap error: %s", settlement_error)

@@ -288,6 +288,9 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
     """
     # Read-type tools - allow by default
     read_tools = {
+        "read",
+        "batch_read",
+        "list",
         "file_read",
         "read_file",
         "list_files",

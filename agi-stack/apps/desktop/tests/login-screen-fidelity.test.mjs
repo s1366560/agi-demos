@@ -323,7 +323,9 @@ test('browser storage never receives a trusted session credential or recovery ca
     /createProjectedCloudSessionState\(projection, configRef\.current\)/,
   );
   assert.match(appSource, /clearNativeTrustedSession\(\)/);
-  assert.match(appSource, /const message = t\('login\.restoreFailed'\)/);
+  assert.match(appSource, /settleTrustedSessionRestoreFailure\(/);
+  assert.match(appSource, /'login\.restoreUnavailable' : 'login\.restoreFailed'/);
+  assert.match(loginSource, /onRetrySavedSession/);
   assert.match(desktopAuthSource, /if \(outcome\.must_change_password\)/);
   assert.match(appSource, /authAttemptRevisionRef/);
   assert.match(appSource, /authAttemptRevisionRef\.current !== authAttemptRevision/);

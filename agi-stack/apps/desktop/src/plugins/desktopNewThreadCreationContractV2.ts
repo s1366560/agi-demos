@@ -1,3 +1,4 @@
+import { validMessageDisplayContent } from '../features/chat/messageDisplayModel';
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
 import type { DesktopApiClient } from '../api/client';
@@ -235,6 +236,10 @@ function cloneAgentConfigV2(value: unknown): NewThreadAgentConfigV2 {
 function cloneAgentExecutionV2(value: unknown): NewThreadAgentExecutionV2 {
   if (!isPlainRecordV2(value)) throw newThreadInputInvalidV2();
   const copy: Record<string, string> = {};
+  if (value.displayContent !== undefined) {
+    if (!validMessageDisplayContent(value.displayContent)) throw newThreadInputInvalidV2();
+    copy.displayContent = value.displayContent;
+  }
   for (const [sourceKey, targetKey] of [
     ['agentId', 'agentId'],
     ['forcedSkillName', 'forcedSkillName'],

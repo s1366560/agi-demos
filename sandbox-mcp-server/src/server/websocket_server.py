@@ -57,6 +57,7 @@ class MCPTool:
     description: str
     input_schema: Dict[str, Any]
     handler: Callable[..., Any]
+    workspace_write_contract: str | None = None
 
 
 class MCPWebSocketServer:
@@ -488,11 +489,18 @@ class MCPWebSocketServer:
 
     async def _handle_list_tools(self) -> dict:
         """Handle tools/list request."""
+        from src.tools.confined_workspace_write import workspace_mount_id
+
+        confined_mount = workspace_mount_id(self.workspace_dir)
         tools = [
             {
                 "name": tool.name,
                 "description": tool.description,
                 "inputSchema": tool.input_schema,
+                **({"_meta": {"memstack/workspace-write": {
+                    "contract": tool.workspace_write_contract,
+                    "workspace_root": self.workspace_dir,
+                }}} if tool.workspace_write_contract is not None and confined_mount is not None else {}),
             }
             for tool in self._tools.values()
         ]

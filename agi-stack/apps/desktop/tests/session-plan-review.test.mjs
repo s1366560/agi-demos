@@ -30,6 +30,7 @@ const plan = {
 };
 
 const capabilities = {
+  environmentKinds: ['local', 'worktree'],
   canSendMessage: true,
   canApprovePlan: true,
   canRespondToHitl: false,
@@ -57,6 +58,24 @@ function renderReview(overrides = {}) {
     ),
   );
 }
+
+test('cloud code review offers only its declared project environment', () => {
+  const markup = renderReview({
+    capabilities: { ...capabilities, environmentKinds: ['local'] },
+  });
+  assert.doesNotMatch(markup, /<option value="worktree"/);
+  assert.match(markup, /<option value="local" selected=""/);
+  assert.doesNotMatch(markup, /<button[^>]*disabled/);
+});
+
+test('missing environment authority keeps the plan readable without approval', () => {
+  const markup = renderReview({
+    capabilities: { ...capabilities, environmentKinds: [] },
+  });
+  assert.match(markup, /Review the persisted plan/);
+  assert.match(markup, /<button[^>]*disabled/);
+  assert.doesNotMatch(markup, /<option value="worktree"/);
+});
 
 test('draft review renders persisted steps and an enabled atomic approval action', () => {
   const markup = renderReview();

@@ -18,7 +18,17 @@ from src.domain.model.plugins.generated_v2 import (
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Tenant, User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Conversation,
+    Project,
+    Tenant,
+    User,
+    UserProject,
+    UserTenant,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
+    PlatformPluginDesiredBundleSetRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
     PlatformPluginProfileSourceRepositoryV2,
 )
@@ -217,3 +227,121 @@ async def stored_tenant_source(db_session):
             expected_revision=revision - 1 if revision > 1 else None,
         )
     await db_session.commit()
+
+
+@pytest.fixture
+async def session_desired(db_session, stored_tenant_source):
+    owner = "plugin-v2-admin"
+    db_session.add(Project(id="desired-project", tenant_id="tenant-a", owner_id=owner, name="QA"))
+    await db_session.flush()
+    db_session.add_all(
+        [
+            User(id="desired-other", email="desired-other@example.test", hashed_password="unused"),
+            UserTenant(
+                id="desired-tenant-member", user_id=owner, tenant_id="tenant-a", role="member"
+            ),
+            UserProject(
+                id="desired-project-member",
+                user_id=owner,
+                project_id="desired-project",
+                role="admin",
+            ),
+        ]
+    )
+    await db_session.flush()
+    for cid, user_id in (("desired-owned", owner), ("desired-other-session", "desired-other")):
+        db_session.add(
+            Conversation(
+                id=cid,
+                tenant_id="tenant-a",
+                project_id="desired-project",
+                user_id=user_id,
+                title="QA",
+            )
+        )
+    await db_session.flush()
+    scope = ScopeV2(
+        kind=ScopeKindV2.SESSION,
+        tenant_id="tenant-a",
+        project_id="desired-project",
+        session_id="desired-owned",
+    )
+    desired = _desired_set(revision=1)
+    sources = PlatformPluginProfileSourceRepositoryV2(db_session)
+    ref = desired.profile_source
+    source = await sources.read_exact(
+        scope=ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-a"),
+        source_id=ref.source_id,
+        revision=ref.revision,
+        digest=ref.digest,
+    )
+    for revision in range(1, source.revision + 1):
+        current = replace(source, revision=revision)
+        current = replace(current, digest=profile_source_digest_v2(current))
+        await sources.record_source(
+            scope=scope, source=current, expected_revision=revision - 1 if revision > 1 else None
+        )
+    await PlatformPluginDesiredBundleSetRepositoryV2(db_session).record_desired_set(
+        scope=scope, desired_set=desired, expected_revision=None, actor_id=owner
+    )
+    await db_session.commit()
+    return scope, desired
+
+
+async def test_session_owner_can_read_then_cas_with_existing_publication_acl(
+    db_session, session_desired
+):
+    scope, desired = session_desired
+    client = _client(db_session, superuser=False)
+    params = {
+        "scope_kind": "session",
+        "tenant_id": scope.tenant_id,
+        "project_id": scope.project_id,
+        "session_id": scope.session_id,
+    }
+    path = "/api/v1/platform-plugins/v2/desired-bundle-sets/current"
+    response = client.get(path, params=params)
+    assert response.status_code == 200
+    assert response.json()["desired_bundle_set"] == desired_bundle_set_v2_to_payload(desired)
+    updated = replace(desired, revision=desired.revision + 1)
+    updated = replace(updated, digest=desired_bundle_set_digest_v2(updated))
+    request = _request(updated, expected_revision=desired.revision)
+    request["scope"] = {
+        "kind": "session",
+        "tenant_id": scope.tenant_id,
+        "project_id": scope.project_id,
+        "session_id": scope.session_id,
+    }
+    assert client.put(path, json=request).status_code == 200
+    assert client.get(path, params=params).json()[
+        "desired_bundle_set"
+    ] == desired_bundle_set_v2_to_payload(updated)
+
+
+@pytest.mark.parametrize(
+    "denial", ["other_session", "no_project", "no_tenant", "project_viewer", "root"]
+)
+async def test_session_desired_read_rejects_wrong_authority(db_session, session_desired, denial):
+    scope, _desired_value = session_desired
+    params = {
+        "scope_kind": "session",
+        "tenant_id": scope.tenant_id,
+        "project_id": scope.project_id,
+        "session_id": scope.session_id,
+    }
+    if denial == "other_session":
+        params["session_id"] = "desired-other-session"
+    elif denial == "no_project":
+        await db_session.delete(await db_session.get(UserProject, "desired-project-member"))
+    elif denial == "no_tenant":
+        await db_session.delete(await db_session.get(UserTenant, "desired-tenant-member"))
+    elif denial == "project_viewer":
+        member = await db_session.get(UserProject, "desired-project-member")
+        member.role = "viewer"
+    elif denial == "root":
+        params = {"scope_kind": "root"}
+    await db_session.commit()
+    response = _client(db_session, superuser=False).get(
+        "/api/v1/platform-plugins/v2/desired-bundle-sets/current", params=params
+    )
+    assert response.status_code == 403

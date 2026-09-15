@@ -85,3 +85,56 @@ class TestWasmToolHost:
         host.call("demo", "")
         # Second call must not hit the concurrency ceiling: released in finally.
         host.call("demo", "")
+
+
+@pytest.mark.parametrize(
+    "wat",
+    [
+        '(module (import "env" "read" (func)) (func (export "score") (param i32) (result i32) i32.const 1))',
+        '(module (func (export "score") (param i64) (result i32) i32.const 1))',
+        '(module (global (export "score") i32 (i32.const 1)))',
+    ],
+)
+def test_imports_and_non_score_abi_rejected_at_activation(wat):
+    with pytest.raises(WasmHostError):
+        WasmToolHost("restricted", wat.encode())
+
+
+def test_linear_memory_initial_and_growth_are_bounded():
+    oversized = '(module (memory 2) (func (export "score") (param i32) (result i32) i32.const 1))'
+    host = WasmToolHost("memory", oversized.encode(), memory_limit_bytes=65536)
+    with pytest.raises(WasmHostError, match="memory"):
+        host.call("score", "")
+    grow = '(module (memory 1) (func (export "score") (param i32) (result i32) i32.const 1 memory.grow))'
+    host = WasmToolHost("grow", grow.encode(), memory_limit_bytes=65536)
+    assert host.call("score", "").score == -1
+
+
+def test_wall_deadline_interrupts_guest_before_large_fuel_budget():
+    import time
+
+    host = WasmToolHost("wall", SPIN_WAT.encode(), fuel_budget=10**12, wall_time_ms=20)
+    started = time.monotonic()
+    with pytest.raises(WasmHostError, match="interrupt|deadline"):
+        host.call("score", "")
+    assert time.monotonic() - started < 1
+
+
+async def test_async_guest_execution_does_not_block_other_coroutines():
+    import asyncio
+
+    host = WasmToolHost("async", SPIN_WAT.encode(), fuel_budget=10**12, wall_time_ms=100)
+    finished = asyncio.Event()
+
+    async def run_guest():
+        try:
+            await host.call_async("score", "")
+        except WasmHostError:
+            pass
+        finally:
+            finished.set()
+
+    task = asyncio.create_task(run_guest())
+    await asyncio.sleep(0.01)
+    assert not finished.is_set()
+    await asyncio.wait_for(task, 1)

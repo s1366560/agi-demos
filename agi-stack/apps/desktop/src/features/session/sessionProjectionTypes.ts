@@ -3,6 +3,7 @@ import type {
   DesktopApprovalRequest,
   DesktopArtifactDelivery,
   DesktopArtifactVersion,
+  DesktopExecutionEnvironmentKind,
   DesktopRun,
   DesktopToolInvocation,
 } from '../../types';
@@ -44,6 +45,7 @@ export type SessionAllowedAction =
   | SessionRunAction;
 
 export type SessionProjectionCapabilities = {
+  environmentKinds: DesktopExecutionEnvironmentKind[];
   canSendMessage: boolean;
   canApprovePlan: boolean;
   canRespondToHitl: boolean;
@@ -176,8 +178,8 @@ export type SessionPlanAuthority =
     }
   | {
       kind: 'agent_task_list';
-      currentPlan: null;
-      planHistory: [];
+      currentPlan: SessionProjectionPlan | null;
+      planHistory: SessionProjectionPlan[];
       tasks: SessionProjectionTask[];
       workspacePlanContext: CloudWorkspacePlanContext | null;
     };

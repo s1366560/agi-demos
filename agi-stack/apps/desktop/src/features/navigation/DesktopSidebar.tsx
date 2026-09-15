@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import {
   BellIcon,
@@ -7,6 +7,7 @@ import {
   DashboardIcon,
   GearIcon,
   GridIcon,
+  MagnifyingGlassIcon,
   PersonIcon,
   PlusIcon,
 } from '@radix-ui/react-icons';
@@ -45,6 +46,7 @@ type DesktopSidebarProps = {
   newTaskDisabledReason: string | null;
   onModeChange?: (mode: 'work' | 'code') => void;
   onNavigate: (section: DesktopSidebarSection) => void;
+  onOpenSearch?: () => void;
   onOpenFeatureDirectory?: (trigger: HTMLButtonElement) => void;
   onToggleWorkspace: (workspaceId: string) => void;
   onRetryProject: () => void;
@@ -98,6 +100,7 @@ export function DesktopSidebar({
   expandedWorkspaceIds,
   newTaskDisabledReason,
   onNavigate,
+  onOpenSearch,
   onOpenFeatureDirectory,
   onToggleWorkspace,
   onRetryProject,
@@ -144,53 +147,56 @@ export function DesktopSidebar({
 
   return (
     <aside className="desktop-design-sidebar" aria-label={t('sidebar.primaryNavigation')}>
-      {/* Brand: one compact row. */}
-      <div className="desktop-design-brand">
+      {/* Brand: one compact row; navigates home like the prototype brand button. */}
+      <button className="desktop-design-brand" type="button" onClick={() => onNavigate('home')}>
         <img src="/icon-192.png" alt="" />
-        <strong>MemStack</strong>
-      </div>
+        <span className="desktop-design-brand-text">
+          <strong>MemStack</strong>
+          <small>{t('nav.agentWorkspace')}</small>
+        </span>
+      </button>
 
-      {/* View navigation: every workbench section in one column. */}
+      {/* Primary create action: prototype "New thread" anatomy, above the nav. */}
+      <button
+        className="desktop-design-new-task"
+        type="button"
+        disabled={Boolean(newTaskDisabledReason)}
+        title={newTaskDisabledReason ?? undefined}
+        onClick={onNewTask}
+      >
+        <PlusIcon /> {t('overview.newTask')}
+      </button>
+
+      {/* View navigation: every workbench section in one column. Search is a
+          route surface (not a workbench section), so it renders as a standalone
+          item between My Work and Activity via its own handler. */}
       <nav className="desktop-design-primary-nav">
         {primaryItems.map(({ id, labelKey, icon: Icon }) => (
-          <button
-            className={activeSection === id ? 'active' : ''}
-            type="button"
-            key={id}
-            onClick={() => onNavigate(id)}
-          >
-            <Icon />
-            <span>{t(labelKey)}</span>
-            {id === 'my-work' && taskCount > 0 ? <small>{taskCount}</small> : null}
-            {id === 'activity' && activityUnreadCount > 0 ? (
-              <small>{activityUnreadCount}</small>
+          <Fragment key={id}>
+            {id === 'activity' && onOpenSearch ? (
+              <button type="button" onClick={onOpenSearch}>
+                <MagnifyingGlassIcon />
+                <span>{t('nav.search')}</span>
+              </button>
             ) : null}
-          </button>
+            <button
+              className={activeSection === id ? 'active' : ''}
+              type="button"
+              onClick={() => onNavigate(id)}
+            >
+              <Icon />
+              <span>{t(labelKey)}</span>
+              {id === 'my-work' && taskCount > 0 ? <small>{taskCount}</small> : null}
+              {id === 'activity' && activityUnreadCount > 0 ? (
+                <small>{activityUnreadCount}</small>
+              ) : null}
+            </button>
+          </Fragment>
         ))}
-        {onOpenFeatureDirectory ? (
-          <button
-            className="desktop-design-feature-directory"
-            type="button"
-            aria-haspopup="dialog"
-            onClick={(event) => onOpenFeatureDirectory(event.currentTarget)}
-          >
-            <GridIcon aria-hidden="true" />
-            <span>{t('featureDirectory.open')}</span>
-          </button>
-        ) : null}
       </nav>
 
-      {/* Header: the primary create action and the project/workspace heading. */}
+      {/* Header: the project/workspace heading and conversation status chips. */}
       <div className="desktop-design-header">
-        <button
-          className="desktop-design-new-task"
-          type="button"
-          disabled={Boolean(newTaskDisabledReason)}
-          title={newTaskDisabledReason ?? undefined}
-          onClick={onNewTask}
-        >
-          <PlusIcon /> {t('overview.newTask')}
-        </button>
         <header className="desktop-design-header-row">
           <strong>{projectName}</strong>
           <div className="desktop-workspace-heading-actions">
@@ -275,8 +281,19 @@ export function DesktopSidebar({
         />
       </section>
 
-      {/* Bottom toolbar: settings entry plus the profile menu trigger. */}
+      {/* Bottom toolbar: feature directory, settings entry, profile menu. */}
       <div className="desktop-design-toolbar">
+        {onOpenFeatureDirectory ? (
+          <button
+            className="desktop-design-toolbar-button"
+            type="button"
+            aria-label={t('featureDirectory.open')}
+            aria-haspopup="dialog"
+            onClick={(event) => onOpenFeatureDirectory(event.currentTarget)}
+          >
+            <GridIcon aria-hidden="true" />
+          </button>
+        ) : null}
         <button
           className="desktop-design-toolbar-button"
           type="button"

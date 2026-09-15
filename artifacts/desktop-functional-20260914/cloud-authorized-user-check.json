@@ -1,0 +1,6 @@
+{
+  "is_superuser": false,
+  "is_active": true,
+  "cloud_login_verified": true,
+  "restart_without_startup_credentials_verified": true
+}

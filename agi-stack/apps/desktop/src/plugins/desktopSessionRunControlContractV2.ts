@@ -193,7 +193,7 @@ export function assertRunControlOutcomeV2(
   }
   const run = cloneRunV2(value.run);
   assertRunIdentityV2(run, config, identity, command.runId);
-  if (!matchesRunControlOutcomeV2(command, value.status, run)) {
+  if (!matchesRunControlOutcomeV2(command, value.status, run, config.mode === 'cloud')) {
     throw sessionRunControlResponseInvalidV2();
   }
   return deepFreezeV2({
@@ -258,6 +258,7 @@ function matchesRunControlOutcomeV2(
   command: DesktopRunTransitionCommandV2 | DesktopRunReviewCommandV2,
   status: string,
   run: DesktopRun,
+  cloud: boolean,
 ): boolean {
   if (command.kind === 'pause') {
     return (
@@ -279,7 +280,7 @@ function matchesRunControlOutcomeV2(
   if (command.kind === 'cancel') {
     return (
       (status === 'cancel_requested' &&
-        run.status === 'running' &&
+        (run.status === 'running' || (cloud && run.status === 'queued')) &&
         run.revision === command.expectedRevision) ||
       (status === 'cancelled' &&
         run.status === 'cancelled' &&

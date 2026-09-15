@@ -151,7 +151,7 @@ class TestCheckControlChannelKill:
         assert len(events) == 1
         assert isinstance(events[0], AgentErrorEvent)
         assert events[0].code == "KILLED"
-        assert len(messages) == 1
+        assert messages == []
 
 
 @pytest.mark.unit

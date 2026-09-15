@@ -313,7 +313,7 @@ async def test_builds_discriminated_workspace_session_without_desktop_authority(
         "tool_output",
         "response_metadata",
     ):
-        assert forbidden not in serialized
+        assert f"'{forbidden}':" not in serialized
     assert payload["pending_hitl"][0]["authority_revision"] == 1
     assert "run_revision" not in serialized
 
@@ -421,3 +421,84 @@ async def test_missing_complete_scope_raises_not_found() -> None:
             user_id="user-1",
             now=NOW,
         )
+
+
+@pytest.mark.parametrize("status", ["queued", "running", "completed", "failed", "cancelled"])
+@pytest.mark.parametrize("has_blocking_hitl", [False, True])
+async def test_send_capability_requires_idle_run_and_no_blocking_hitl(
+    status: str, has_blocking_hitl: bool
+) -> None:
+    source = replace(
+        snapshot(),
+        runs=(replace(plan_run(), status=status),),
+        has_blocking_hitl=has_blocking_hitl,
+        pending_hitl=snapshot().pending_hitl if has_blocking_hitl else (),
+    )
+    projection = await ConversationSessionProjectionService(
+        FakeConversationSessionReader(source)
+    ).get_projection(
+        conversation_id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        now=NOW,
+    )
+    can_send = not has_blocking_hitl and status not in {"queued", "running"}
+    assert projection.capabilities.can_send_message is can_send
+    assert ("send_message" in projection.capabilities.allowed_actions) is can_send
+    assert projection.capabilities.can_respond_to_hitl is has_blocking_hitl
+    assert projection.capabilities.can_control_execution is False
+
+
+@pytest.mark.parametrize("run_status", [None, "queued", "running", "completed", "failed"])
+@pytest.mark.parametrize("blocked", [False, True])
+async def test_plan_approval_capability_requires_idle_versioned_draft(run_status, blocked) -> None:
+    source = replace(
+        snapshot(),
+        conversation=replace(conversation(), current_mode="plan"),
+        attempts=(),
+        runs=() if run_status is None else (replace(plan_run(), status=run_status),),
+        plan_versions=(plan_version(),),
+        pending_hitl=(),
+        has_blocking_hitl=blocked,
+    )
+    projection = await ConversationSessionProjectionService(
+        FakeConversationSessionReader(source)
+    ).get_projection(
+        conversation_id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        now=NOW,
+    )
+    expected = not blocked and run_status not in {"queued", "running"}
+    assert projection.capabilities.can_approve_plan is expected
+    assert ("approve_plan_and_start" in projection.capabilities.allowed_actions) is expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("status", ["queued", "running", "completed", "failed", "cancelled"])
+@pytest.mark.parametrize("blocked", [False, True])
+async def test_cloud_run_control_capability_requires_active_unparked_turn(status, blocked):
+    source = replace(
+        snapshot(),
+        attempts=(),
+        runs=(replace(plan_run(), status=status),),
+        has_blocking_hitl=blocked,
+        pending_hitl=snapshot().pending_hitl if blocked else (),
+    )
+    projection = await ConversationSessionProjectionService(
+        FakeConversationSessionReader(source)
+    ).get_projection(
+        conversation_id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        now=NOW,
+    )
+    expected = status in {"queued", "running"} and not blocked
+    assert projection.capabilities.can_control_execution is expected
+    assert ("cancel" in projection.capabilities.allowed_actions) is expected

@@ -576,3 +576,27 @@ test('Desktop runtime configuration and sidecar configure payload contain no LLM
     /workspaceRuntimeModelOptions\([\s\S]{0,160}config\.mode/,
   );
 });
+
+test('App displays project inheritance for an unbound conversation without a model override', () => {
+  const ts = require('typescript');
+  const ast = ts.createSourceFile('App.tsx', appSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let initializer;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'chatRuntimeModelLabel') initializer = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(initializer);
+  const expression = ts.createPrinter().printNode(ts.EmitHint.Expression, initializer, ast);
+  const label = new Function('runtimeProvider', 'scopedConversation', 'config', 't', `return ${expression};`);
+  const inherited = label(null, {id:'conversation-1'}, {workspaceId:''}, key=>key);
+  const config = {llm_model_override:null,llm_route_override:null};
+  assert.equal(inherited, 'task.projectDefaultModel');
+  assert.deepEqual(conversationRuntimeModelSelection(config, [], null, inherited), {
+    overrideModel:null,selectedValue:null,displayLabel:'task.projectDefaultModel',canReset:false,
+  });
+  assert.equal(conversationRuntimeModelSelection({...config,llm_model_override:'kimi-for-coding-highspeed'},[],null,inherited).displayLabel,'kimi-for-coding-highspeed');
+  assert.equal(label({model:'known-authoritative-model'}, {id:'conversation-1'}, {workspaceId:''}, key=>key), 'known-authoritative-model');
+  assert.equal(label(null, {id:'conversation-1'}, {workspaceId:'workspace-1'}, key=>key), 'chat.modelNotConfigured');
+  assert.deepEqual(config,{llm_model_override:null,llm_route_override:null});
+});

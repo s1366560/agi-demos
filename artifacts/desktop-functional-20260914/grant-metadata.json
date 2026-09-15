@@ -1,0 +1,32 @@
+{
+  "bootstrap_user_id": "97a73673-c8ca-4f56-9ca5-c3209e0bb7e2",
+  "bootstrap_id": "f84b3dc5-d0e4-48c3-9734-beb60b46c027",
+  "bootstrap_identity_retired_after_issuance": true,
+  "expires_at": "2026-09-15T02:24:14.059287+00:00",
+  "grants": [
+    {
+      "schema_version": 2,
+      "credential_id": "9e1b19d2-ccad-4585-8938-0a86b6609990",
+      "data_plane_id": "desktop-sidecar-v2",
+      "key_prefix": "ms_dp_3173807270b7",
+      "created_by_user_id": "97a73673-c8ca-4f56-9ca5-c3209e0bb7e2",
+      "created_at": "2026-09-14T02:24:14.844954Z",
+      "expires_at": "2026-09-15T02:24:14.059287Z",
+      "revoked_at": null,
+      "revoked_by_user_id": null,
+      "rotated_from_id": null
+    },
+    {
+      "schema_version": 2,
+      "credential_id": "5ca0bd58-a3be-43c5-94b2-57e06669e7a1",
+      "data_plane_id": "desktop-renderer-v2",
+      "key_prefix": "ms_dp_bb6fc329796c",
+      "created_by_user_id": "97a73673-c8ca-4f56-9ca5-c3209e0bb7e2",
+      "created_at": "2026-09-14T02:24:14.911863Z",
+      "expires_at": "2026-09-15T02:24:14.059287Z",
+      "revoked_at": null,
+      "revoked_by_user_id": null,
+      "rotated_from_id": null
+    }
+  ]
+}

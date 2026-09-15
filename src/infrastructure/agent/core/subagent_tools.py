@@ -17,6 +17,7 @@ from src.domain.model.agent.agent_role import (
     AgentRole,
 )
 from src.domain.model.agent.subagent import SubAgent
+from src.domain.ports.agent.control_channel_port import ControlChannelPort
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
@@ -44,6 +45,7 @@ class SubAgentToolBuilderDeps:
     subagent_run_registry_resolver: SubAgentRunRegistryResolverV2
 
     # -- SubAgent config --
+    control_channel: ControlChannelPort | None = None
     enable_subagent_as_tool: bool = True
     max_subagent_delegation_depth: int = 2
     max_subagent_active_runs: int = 16
@@ -378,6 +380,7 @@ class SubAgentToolBuilder:
         nested_visibility = "tree" if nested_depth < max_delegation_depth else "self"
         return make_nested_session_tool_defs(
             run_registry=self.deps.subagent_run_registry,
+            control_channel=self.deps.control_channel,
             conversation_id=conversation_id,
             requester_session_key=conversation_id,
             visibility_default=nested_visibility,
@@ -482,6 +485,7 @@ class SubAgentToolBuilder:
         tools_to_use.extend(
             make_session_tool_defs(
                 run_registry=self.deps.subagent_run_registry,
+                control_channel=self.deps.control_channel,
                 conversation_id=conversation_id,
                 requester_session_key=conversation_id,
                 visibility_default="tree",

@@ -1521,8 +1521,9 @@ export function createStreamEventHandlers(
       });
       // Update background store if this was a background execution
       const bgStore = useBackgroundStore.getState();
-      const execId = event.data.subagent_id || '';
-      if (bgStore.executions.has(execId)) {
+      const execId = event.data.execution_id || event.data.run_id || '';
+      if (bgStore.executions.get(execId)?.conversationId === handlerConversationId
+        && (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)) {
         bgStore.complete(
           execId,
           event.data.summary || '',
@@ -1550,8 +1551,9 @@ export function createStreamEventHandlers(
       });
       // Update background store if this was a background execution
       const bgStore = useBackgroundStore.getState();
-      const execId = event.data.subagent_id || '';
-      if (bgStore.executions.has(execId)) {
+      const execId = event.data.execution_id || event.data.run_id || '';
+      if (bgStore.executions.get(execId)?.conversationId === handlerConversationId
+        && (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)) {
         bgStore.fail(execId, event.data.error || 'Unknown error');
       }
     },
@@ -1640,9 +1642,10 @@ export function createStreamEventHandlers(
       });
       // Update background store if this was a background execution
       const bgStore = useBackgroundStore.getState();
-      const execId = event.data.subagent_id || '';
-      if (bgStore.executions.has(execId)) {
-        bgStore.fail(execId, event.data.kill_reason || 'Killed');
+      const execId = event.data.execution_id || event.data.run_id || '';
+      if (bgStore.executions.get(execId)?.conversationId === handlerConversationId
+        && (!event.data.conversation_id || event.data.conversation_id === handlerConversationId)) {
+        bgStore.cancel(execId);
       }
     },
 
@@ -1763,7 +1766,8 @@ export function createStreamEventHandlers(
       bgStore.launch(
         event.data.execution_id || '',
         event.data.subagent_name || '',
-        event.data.task || ''
+        event.data.task || '',
+        handlerConversationId
       );
     },
 

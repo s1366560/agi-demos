@@ -1,0 +1,14 @@
+{
+  "outside_rename_errno": 18,
+  "outside_rename_is_exdev": true,
+  "root": {
+    "device": 48,
+    "mount_id": "720"
+  },
+  "nested_bind": {
+    "device": 48,
+    "mount_id": "721"
+  },
+  "nested_mount_distinct": true,
+  "image_id": "sha256:ab1441031fa7b1e85c3b1d323b8c189f8809bd8b13167db4d6944c46d69c9755"
+}

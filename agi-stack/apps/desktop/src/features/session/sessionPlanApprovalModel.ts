@@ -96,21 +96,29 @@ export function sessionPlanTaskPriorityTranslationKey(priority: string): string 
 export function canApproveSessionPlan(
   plan: SessionProjectionPlan | null,
   capabilities: SessionProjectionCapabilities | null,
+  environmentKind?: DesktopExecutionEnvironmentKind,
 ): boolean {
   return Boolean(
     plan?.status === 'draft' &&
       plan.tasks.length > 0 &&
       capabilities?.canApprovePlan &&
+      Boolean(capabilities.environmentKinds?.length) &&
+      (!environmentKind || capabilities.environmentKinds.includes(environmentKind)) &&
       capabilities.allowedActions.includes('approve_plan_and_start'),
   );
 }
 
 export function defaultSessionPlanApprovalSelection(
   capabilityMode: SessionCapabilityMode,
+  environmentKinds: readonly DesktopExecutionEnvironmentKind[] = [],
 ): SessionPlanApprovalSelection {
-  return capabilityMode === 'code'
-    ? { environmentKind: 'worktree', permissionProfile: 'workspace_write' }
-    : { environmentKind: 'local', permissionProfile: 'read_only' };
+  const preferred = capabilityMode === 'code' ? 'worktree' : 'local';
+  return {
+    environmentKind: environmentKinds.includes(preferred)
+      ? preferred
+      : (environmentKinds[0] ?? 'local'),
+    permissionProfile: capabilityMode === 'code' ? 'workspace_write' : 'read_only',
+  };
 }
 
 export function sessionPlanApprovalIdentity(input: SessionPlanApprovalIdentityInput): string {

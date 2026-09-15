@@ -241,7 +241,7 @@ async def _search_graph_for_tool(
         },
         "required": ["query"],
     },
-    permission=None,
+    permission="read",
     category="memory",
     aliases=("memorysearch",),
 )
@@ -345,7 +345,7 @@ def _current_memory_get_runtime() -> tuple[Callable[..., Any] | None, str]:
         },
         "required": ["source_id"],
     },
-    permission=None,
+    permission="read",
     category="memory",
     aliases=("memoryget",),
 )
@@ -681,7 +681,7 @@ async def _execute_memory_create(
         },
         "required": ["content"],
     },
-    permission=None,
+    permission="write",
     category="memory",
     aliases=("memorycreate",),
 )
@@ -871,7 +871,7 @@ async def _execute_memory_update(
         },
         "required": ["memory_id"],
     },
-    permission=None,
+    permission="write",
     category="memory",
 )
 async def memory_update_tool(
@@ -1005,7 +1005,7 @@ async def _execute_memory_delete(
         },
         "required": ["memory_id"],
     },
-    permission=None,
+    permission="write",
     category="memory",
 )
 async def memory_delete_tool(

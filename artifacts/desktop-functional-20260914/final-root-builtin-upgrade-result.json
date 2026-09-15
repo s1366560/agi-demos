@@ -1,0 +1,47 @@
+{
+  "apply_requested": true,
+  "applied": true,
+  "target_digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+  "before": {
+    "schema_version": 2,
+    "desired_set_id": "memstack-default-v2",
+    "revision": 17,
+    "bundles": [
+      {
+        "bundle_id": "memstack-platform-base",
+        "version": "2.0.0",
+        "digest": "sha256:0577993e255866662231b36e6524bb194b233a57cc379038eb6882a7b3098014",
+        "source": "builtin://memstack-platform-base/2.0.0"
+      }
+    ],
+    "profile_source": {
+      "source_id": "memstack-root-initialized-profile-source-v2",
+      "revision": 1,
+      "digest": "sha256:bd4cb197577b7c9d97d0690cadb942d94cd25c79d2ed9996b2597eb8a49f830b"
+    },
+    "digest": "sha256:2f25e38fb5e74e1c2b158923487c1f612591a1ad96f4b4716207068966ec9b0e"
+  },
+  "expected_revision": 17,
+  "already_current": false,
+  "after": {
+    "schema_version": 2,
+    "desired_set_id": "memstack-default-v2",
+    "revision": 18,
+    "bundles": [
+      {
+        "bundle_id": "memstack-platform-base",
+        "version": "2.0.0",
+        "digest": "sha256:67d299ed156b5b01ce4872fe24aadd4c3edc7dbf30dbad1aa0f90952583c6f43",
+        "source": "builtin://memstack-platform-base/2.0.0"
+      }
+    ],
+    "profile_source": {
+      "source_id": "memstack-root-initialized-profile-source-v2",
+      "revision": 1,
+      "digest": "sha256:bd4cb197577b7c9d97d0690cadb942d94cd25c79d2ed9996b2597eb8a49f830b"
+    },
+    "digest": "sha256:d070a86d529699c232c6bd04ea7fa1d260d7c602788b3b7151c0eb1144427f0d"
+  },
+  "profile_source_preserved": true,
+  "temporary_identity_deactivated": true
+}

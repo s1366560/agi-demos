@@ -76,11 +76,11 @@ export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.dataset.theme = resolved;
-    // Mirror the resolved theme background (#0a0a0a dark / #ffffff light,
+    // Mirror the resolved theme background (#080c12 dark / #ffffff light,
     // matching --desktop-bg) into the browser chrome meta tag.
     const themeColorMeta = document.querySelector('meta[name="theme-color"]');
     if (themeColorMeta) {
-      themeColorMeta.setAttribute('content', resolved === 'light' ? '#ffffff' : '#0a0a0a');
+      themeColorMeta.setAttribute('content', resolved === 'light' ? '#ffffff' : '#080c12');
     }
   }, [resolved]);
 

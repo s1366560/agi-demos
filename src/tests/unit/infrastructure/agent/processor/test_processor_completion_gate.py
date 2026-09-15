@@ -185,3 +185,103 @@ class TestProcessorCompletionGate:
             isinstance(status, str) and status.startswith("goal_achieved:")
             for status in status_values
         )
+
+
+@pytest.mark.parametrize("has_task_reader", [False, True])
+async def test_plan_can_finish_with_pending_execution_tasks(has_task_reader) -> None:
+    from types import SimpleNamespace
+
+    config = _processor_config()
+    config.runtime_context = {"effective_mode": "plan"}
+    processor = SessionProcessor(config=config, tools=[])
+    evaluator = processor._goal_evaluator
+    if has_task_reader:
+        evaluator._tools["todoread"] = MagicMock()
+    evaluator._llm_client = MagicMock()
+    evaluator._load_session_tasks = AsyncMock(return_value=[{"status": "pending"}])
+    evaluator._call_goal_check_llm = AsyncMock(
+        return_value=SimpleNamespace(
+            achieved=True, rationale="The plan is ready for approval; execution remains pending."
+        )
+    )
+    evaluator.generate_suggestions = AsyncMock(return_value=None)
+    processor._notify_plugin_hook = AsyncMock(return_value={})
+
+    async def step(_session_id, _messages):
+        processor._saw_task_events = True
+        if False:
+            yield {}
+
+    processor._process_step = step
+    events = [
+        event
+        async for event in processor.process(
+            session_id="plan-session", messages=[{"role": "user", "content": "Prepare a plan"}]
+        )
+    ]
+    types = [
+        event.get("type") if isinstance(event, dict) else event.event_type.value for event in events
+    ]
+    assert "complete" in types
+    assert "error" not in types
+    assert not any(
+        call.kwargs.get("strict") for call in evaluator._load_session_tasks.await_args_list
+    )
+    evaluator._call_goal_check_llm.assert_awaited_once()
+    assert "Plan mode" in evaluator._call_goal_check_llm.await_args.args[0]
+    assert "approval" in evaluator._call_goal_check_llm.await_args.args[0]
+
+
+async def test_unavailable_goal_judge_stops_without_asking_agent_to_repeat_tools():
+    from src.infrastructure.agent.processor.processor import ProcessorResult, ProcessorState
+
+    client = AsyncMock()
+    client.generate.return_value = {"content": "", "tool_calls": [], "finish_reason": "stop"}
+    processor = SessionProcessor(config=_processor_config(), tools=[])
+    processor._goal_evaluator._llm_client = client
+    processor.config.runtime_context["effective_mode"] = "plan"
+    processor._goal_evaluator._runtime_context["effective_mode"] = "plan"
+    events = [
+        event
+        async for event in processor._evaluate_no_tool_result(
+            "judge-unavailable", [{"role": "user", "content": "Produce the plan"}]
+        )
+    ]
+    assert client.generate.await_count == 2
+    assert processor._last_process_result is ProcessorResult.STOP
+    assert processor._state is ProcessorState.ERROR
+    assert [getattr(event, "code", None) for event in events] == ["GOAL_JUDGE_UNAVAILABLE"]
+    assert processor._no_progress_steps == 0
+
+
+async def test_invalid_first_judgment_retries_in_judge_without_main_agent_turn():
+    import json
+
+    from src.infrastructure.agent.processor.goal_evaluator import (
+        GOAL_COMPLETION_JUDGE_TOOL_V2,
+        GoalEvaluator,
+    )
+
+    client = AsyncMock()
+    client.generate.side_effect = [
+        {"tool_calls": [], "finish_reason": "stop"},
+        {
+            "tool_calls": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+                        "arguments": json.dumps(
+                            {"goal_achieved": True, "rationale": "The plan is ready for approval."}
+                        ),
+                    },
+                }
+            ]
+        },
+    ]
+    evaluator = GoalEvaluator(client, {}, runtime_context={"effective_mode": "plan"})
+    result = await evaluator.evaluate_goal_completion(
+        "retry-judge", [{"role": "user", "content": "Produce a plan"}]
+    )
+    assert result.achieved
+    assert client.generate.await_count == 2

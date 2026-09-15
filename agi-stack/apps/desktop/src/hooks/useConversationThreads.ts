@@ -292,6 +292,7 @@ export function useConversationThreads(params: AgentConversationParams) {
       conversationId: input.conversationId,
       projectId: input.projectId,
       message: input.message,
+      displayContent: input.displayContent,
       messageId: input.messageId,
       deferUntilNextConnection: delivery.deferUntilNextConnection,
       agentId: input.agentId,
@@ -399,6 +400,7 @@ export function useConversationThreads(params: AgentConversationParams) {
         const execution = composerAgentExecutionContext(
           input.prompt,
           input.contextItems,
+          threadConfig.mode,
         );
         firstMessageId = `desktop-thread-${crypto.randomUUID()}`;
         firstSignalId = `agent-task-${firstMessageId}`;
@@ -416,6 +418,7 @@ export function useConversationThreads(params: AgentConversationParams) {
             conversationId: conversation.id,
             projectId: threadConfig.projectId,
             message: execution.message,
+            displayContent: input.prompt,
             messageId: firstMessageId,
             agentId: execution.agentId,
             forcedSkillName: execution.forcedSkillName,
@@ -548,6 +551,7 @@ export function useConversationThreads(params: AgentConversationParams) {
       const execution = composerAgentExecutionContext(
         buildPlanningPrompt(definition),
         input.contextItems,
+        session.config.mode,
       );
       await runNewTaskAgentTurn(
         {
@@ -555,6 +559,7 @@ export function useConversationThreads(params: AgentConversationParams) {
           conversationId: session.conversation.id,
           projectId: session.config.projectId,
           message: execution.message,
+          displayContent: definition.objective,
           messageId: `desktop-plan-${crypto.randomUUID()}`,
           agentId: execution.agentId,
           forcedSkillName: execution.forcedSkillName,

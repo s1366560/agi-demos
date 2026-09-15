@@ -1,0 +1,28 @@
+{
+  "abi": "memstack.wasm.score-json-utf8.v1",
+  "archive_bytes": 1191,
+  "artifact_digest": "sha256:efc79f6a71ebe6d1a648a9fa448df29e4abf8a61b0d00dfa834ab19a85b78ddc",
+  "entrypoint": "score",
+  "model_tool_name_for_test_scope": "plugin__cd4e5051f62610bb79bd5c358143630036d44751",
+  "permissions": [
+    "tools.execute"
+  ],
+  "private_key_persisted": false,
+  "reference": {
+    "bundle_id": "qa-marketplace-marker-bundle",
+    "digest": "sha256:4d81bf75902708f9a7ceb4200418d0ef3b9162f1584ffd1a14567dd127303ca1",
+    "source": "local-file://qa-marketplace-marker-bundle/1.0.0",
+    "version": "1.0.0"
+  },
+  "target": "desktop-sidecar",
+  "test_scope": {
+    "project_id": "local-project",
+    "tenant_id": "local"
+  },
+  "tool_name": "qa_marketplace_marker",
+  "validation": "Actual signed archive -> authenticated local import -> production generation -> AuthorizedRunToolHost -> Wasmtime",
+  "verified_result": {
+    "input_bytes": 15,
+    "score": 20260914
+  }
+}

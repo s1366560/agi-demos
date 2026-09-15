@@ -76,10 +76,13 @@ async def test_subagent_control_writes_cancel_signal_through_generation_redis() 
         conversation_id="conversation-a",
     )
 
-    redis_client.set.assert_awaited_once()
-    key, encoded = redis_client.set.await_args.args
+    assert redis_client.set.await_count == 2
+    key, encoded = redis_client.set.await_args_list[0].args
     assert key == "subagent:cancel:execution-a"
-    assert redis_client.set.await_args.kwargs == {"ex": 600}
+    assert redis_client.set.await_args_list[0].kwargs == {"ex": 600}
+    owner_key, owner_payload = redis_client.set.await_args_list[1].args
+    assert owner_key == "agent:control:kill:execution-a"
+    assert json.loads(owner_payload)["sender_id"] == "user-a"
     assert json.loads(encoded) == {
         "requested_by": "user-a",
         "reason": "Cancelled by user",

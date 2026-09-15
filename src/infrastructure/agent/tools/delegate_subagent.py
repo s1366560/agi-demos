@@ -24,6 +24,11 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any
 
+from src.domain.model.agent.subagent_run import SubAgentRun
+from src.infrastructure.agent.subagent.async_run_registry_v2 import (
+    registry_call_v2,
+    registry_transaction_v2,
+)
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo, tool_define
@@ -346,19 +351,26 @@ async def _register_single_run(
     conv_id = runtime.conversation_id or ctx.conversation_id
     if not conv_id:
         return None
-    active = registry.count_active_runs(conv_id)
-    if runtime.max_active_runs is not None and active >= runtime.max_active_runs:
-        return f"Error: active SubAgent run limit reached ({active}/{runtime.max_active_runs})"
-    run = registry.create_run(
-        conversation_id=conv_id,
-        subagent_name=subagent_name,
-        task=task,
-        metadata={"delegation_depth": runtime.delegation_depth},
-    )
-    running = registry.mark_running(conv_id, run.run_id)
+
+    def reserve(memory: SubAgentRunRegistry) -> SubAgentRun | str | None:
+        active = memory.count_active_runs(conv_id)
+        if runtime.max_active_runs is not None and active >= runtime.max_active_runs:
+            return f"Error: active SubAgent run limit reached ({active}/{runtime.max_active_runs})"
+        run = memory.create_run(
+            conversation_id=conv_id,
+            subagent_name=subagent_name,
+            task=task,
+            metadata={"delegation_depth": runtime.delegation_depth},
+        )
+        return memory.mark_running(conv_id, run.run_id)
+
+    running = await registry_transaction_v2(registry, reserve, write=True)
+    if isinstance(running, str):
+        return running
     if running:
         await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
-    return run.run_id
+        return running.run_id
+    return None
 
 
 async def _finalize_success(
@@ -374,7 +386,9 @@ async def _finalize_success(
     if not (conv_id and run_id):
         return
     elapsed_ms = int((time.time() - started_at) * 1000)
-    completed = registry.mark_completed(
+    completed = await registry_call_v2(
+        registry,
+        "mark_completed",
         conversation_id=conv_id,
         run_id=run_id,
         summary=result,
@@ -397,7 +411,9 @@ async def _finalize_failure(
     if not (conv_id and run_id):
         return
     elapsed_ms = int((time.time() - started_at) * 1000)
-    failed = registry.mark_failed(
+    failed = await registry_call_v2(
+        registry,
+        "mark_failed",
         conversation_id=conv_id,
         run_id=run_id,
         error=str(error),
@@ -462,27 +478,37 @@ async def _register_parallel_runs_new(
         return run_ids
 
     task_count = len(tasks)
-    active = registry.count_active_runs(conv_id)
-    if runtime.max_active_runs is not None and active + task_count > runtime.max_active_runs:
-        return (
-            f"Error: active SubAgent run limit reached "
-            f"({active + task_count}/{runtime.max_active_runs})"
-        )
-    for idx, item in enumerate(tasks):
-        run = registry.create_run(
-            conversation_id=conv_id,
-            subagent_name=item["subagent_name"],
-            task=item["task"],
-            metadata={
-                "delegation_depth": runtime.delegation_depth,
-                "parallel_index": idx,
-                "parallel_total": task_count,
-            },
-        )
-        run_ids[idx] = run.run_id
-        running = registry.mark_running(conv_id, run.run_id)
-        if running:
-            await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
+
+    def reserve(memory: SubAgentRunRegistry) -> list[SubAgentRun] | str:
+        active = memory.count_active_runs(conv_id)
+        if runtime.max_active_runs is not None and active + task_count > runtime.max_active_runs:
+            return (
+                f"Error: active SubAgent run limit reached "
+                f"({active + task_count}/{runtime.max_active_runs})"
+            )
+        running = []
+        for idx, item in enumerate(tasks):
+            run = memory.create_run(
+                conversation_id=conv_id,
+                subagent_name=item["subagent_name"],
+                task=item["task"],
+                metadata={
+                    "delegation_depth": runtime.delegation_depth,
+                    "parallel_index": idx,
+                    "parallel_total": task_count,
+                },
+            )
+            run_ids[idx] = run.run_id
+            current = memory.mark_running(conv_id, run.run_id)
+            if current:
+                running.append(current)
+        return running
+
+    running = await registry_transaction_v2(registry, reserve, write=True)
+    if isinstance(running, str):
+        return running
+    for run in running:
+        await ctx.emit({"type": "subagent_started", "data": run.to_event_data()})
     return run_ids
 
 

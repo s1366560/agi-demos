@@ -12,7 +12,10 @@ use std::{
 };
 
 use agistack_core::{
-    agent::{react::ReActEngine, types::SessionStatus},
+    agent::{
+        react::{ReActControl, ReActEngine},
+        types::SessionStatus,
+    },
     ports::{CoreError, CoreResult, ToolHost},
 };
 use async_trait::async_trait;
@@ -39,6 +42,16 @@ struct SubagentToolInput {
 }
 
 pub(super) trait SubagentLifecycleObserver: Send + Sync {
+    fn control_for_execution(
+        &self,
+        _execution_id: &str,
+        _subagent_id: &str,
+        _parent_run_id: &str,
+        _parent_revision: u64,
+    ) -> CoreResult<Option<Arc<dyn ReActControl>>> {
+        Ok(None)
+    }
+
     fn on_started(
         &self,
         subagent_id: &str,
@@ -61,11 +74,15 @@ pub(super) trait SubagentLifecycleObserver: Send + Sync {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct LifecyclePayloadMetadata {
     pub(super) bytes: usize,
+    pub(super) execution_id: String,
 }
 
 impl LifecyclePayloadMetadata {
-    fn from_text(value: &str) -> Self {
-        Self { bytes: value.len() }
+    fn from_text(value: &str, execution_id: &str) -> Self {
+        Self {
+            bytes: value.len(),
+            execution_id: execution_id.to_string(),
+        }
     }
 }
 
@@ -76,6 +93,7 @@ pub(super) struct SubagentToolTarget {
     identifiers: BTreeSet<String>,
     effect: ToolEffect,
     engine: ReActEngine,
+    observer: Option<Arc<dyn agistack_core::agent::ReActObserver>>,
     project_id: String,
     run_id: String,
     run_revision: u64,
@@ -108,33 +126,75 @@ impl SubagentToolTarget {
             identifiers,
             effect,
             engine,
+            observer: None,
             project_id,
             run_id,
             run_revision,
         })
     }
 
+    pub(super) fn with_observer(
+        mut self,
+        observer: Arc<dyn agistack_core::agent::ReActObserver>,
+    ) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
     async fn run(
         &self,
         task: &str,
         invocation: &authorized_tool_host::AuthorizedInvocationContext,
+        session_id: &str,
+        control: Option<Arc<dyn ReActControl>>,
     ) -> CoreResult<String> {
         if invocation.run_id != self.run_id || invocation.run_revision != self.run_revision {
             return Err(CoreError::Tool(
                 "SubAgent invocation authority does not match the active run".to_string(),
             ));
         }
-        let digest = canonical_json_digest(&json!({
-            "run_id": self.run_id,
-            "run_revision": self.run_revision,
-            "invocation_id": invocation.invocation_id,
-            "subagent_id": self.id,
-        }))
-        .map_err(|error| CoreError::Tool(error.to_string()))?;
-        let session_id = format!("local-subagent-{digest}");
-        let state = self
-            .engine
-            .run(&session_id, task, Some(&self.project_id))
+        let child_identity = super::local_plugin_tool_host_v2::identity::ChildIdentityV2 {
+            execution_id: session_id.to_owned(),
+            subagent_id: self.id.clone(),
+            run_id: self.run_id.clone(),
+            revision: self.run_revision,
+        };
+        let state =
+            super::local_plugin_tool_host_v2::identity::child_scope(child_identity, async {
+                match (control, self.observer.as_ref()) {
+                    (Some(control), Some(observer)) => {
+                        self.engine
+                            .run_observed_controlled(
+                                session_id,
+                                task,
+                                Some(&self.project_id),
+                                observer.clone(),
+                                control,
+                            )
+                            .await
+                    }
+                    (None, Some(observer)) => {
+                        self.engine
+                            .run_observed(
+                                session_id,
+                                task,
+                                Some(&self.project_id),
+                                observer.clone(),
+                            )
+                            .await
+                    }
+                    (Some(control), None) => {
+                        self.engine
+                            .run_controlled(session_id, task, Some(&self.project_id), control)
+                            .await
+                    }
+                    (None, None) => {
+                        self.engine
+                            .run(session_id, task, Some(&self.project_id))
+                            .await
+                    }
+                }
+            })
             .await
             .map_err(opaque_child_error)?;
         match state.status {
@@ -152,7 +212,16 @@ impl SubagentToolTarget {
                 "SubAgent failed before completing the delegated task".to_string(),
             )),
             SessionStatus::Cancelled => Err(CoreError::Tool(
-                "SubAgent delegation was cancelled".to_string(),
+                json!({
+                    "error": "SubAgent delegation was cancelled",
+                    "status": "cancelled",
+                    "success": false,
+                    "execution_id": session_id,
+                    "completed_tool_calls_count": state.completed_tool_calls.len(),
+                    "failed_tool_calls_count": state.completed_tool_calls.iter()
+                        .filter(|call| call.failed).count(),
+                })
+                .to_string(),
             )),
             SessionStatus::Running => Err(CoreError::Tool(
                 "SubAgent returned while still running".to_string(),
@@ -259,6 +328,40 @@ impl SubagentAgentToolHost {
 
 #[async_trait]
 impl ToolHost for SubagentAgentToolHost {
+    fn tool_definition(&self, name: &str) -> Option<agistack_core::ports::ToolDefinition> {
+        if name != SUBAGENT_TOOL_NAME {
+            return None;
+        }
+        let ids: Vec<_> = self
+            .targets
+            .iter()
+            .map(|target| target.id.as_str())
+            .collect();
+        let names: BTreeSet<_> = self
+            .targets
+            .iter()
+            .flat_map(|target| target.identifiers.iter().map(String::as_str))
+            .collect();
+        Some(agistack_core::ports::ToolDefinition::new(
+            name,
+            "Delegate a bounded task to an authorized SubAgent. Prefer subagent_id for an \
+             exact target; subagent_name may also select a unique target. If both selectors \
+             are supplied, they must identify the same target. Task must be non-blank, \
+             contain no NUL, and fit within 65536 UTF-8 bytes.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "subagent_id": {"type": "string", "enum": ids},
+                    "subagent_name": {"type": "string", "enum": names},
+                    "task": {"type": "string", "minLength": 1},
+                },
+                "required": ["task"],
+                "anyOf": [{"required": ["subagent_id"]}, {"required": ["subagent_name"]}],
+                "additionalProperties": false,
+            }),
+        ))
+    }
+
     fn list_tools(&self) -> Vec<String> {
         vec![SUBAGENT_TOOL_NAME.to_string()]
     }
@@ -276,7 +379,33 @@ impl ToolHost for SubagentAgentToolHost {
                     "SubAgent execution requires an authorized invocation context".to_string(),
                 )
             })?;
-        let task_metadata = LifecyclePayloadMetadata::from_text(&task);
+        if invocation.run_id != target.run_id || invocation.run_revision != target.run_revision {
+            return Err(CoreError::Tool(
+                "SubAgent invocation authority does not match the active run".to_string(),
+            ));
+        }
+        let digest = canonical_json_digest(&json!({
+            "run_id": target.run_id,
+            "run_revision": target.run_revision,
+            "invocation_id": invocation.invocation_id,
+            "subagent_id": target.id,
+        }))
+        .map_err(|error| CoreError::Tool(error.to_string()))?;
+        let execution_id = format!("local-subagent-{digest}");
+        let control = self
+            .lifecycle_observer
+            .as_ref()
+            .map(|observer| {
+                observer.control_for_execution(
+                    &execution_id,
+                    &target.id,
+                    &target.run_id,
+                    target.run_revision,
+                )
+            })
+            .transpose()?
+            .flatten();
+        let task_metadata = LifecyclePayloadMetadata::from_text(&task, &execution_id);
         if let Some(observer) = self.lifecycle_observer.as_ref() {
             observer.on_started(
                 &target.id,
@@ -286,9 +415,9 @@ impl ToolHost for SubagentAgentToolHost {
             );
         }
         let started_at = Instant::now();
-        let content = match target.run(&task, &invocation).await {
+        let content = match target.run(&task, &invocation, &execution_id, control).await {
             Ok(content) => {
-                let result_metadata = LifecyclePayloadMetadata::from_text(&content);
+                let result_metadata = LifecyclePayloadMetadata::from_text(&content, &execution_id);
                 if let Some(observer) = self.lifecycle_observer.as_ref() {
                     observer.on_completed(
                         &target.id,
@@ -302,7 +431,8 @@ impl ToolHost for SubagentAgentToolHost {
                 content
             }
             Err(error) => {
-                let result_metadata = LifecyclePayloadMetadata::from_text(&error.to_string());
+                let result_metadata =
+                    LifecyclePayloadMetadata::from_text(&error.to_string(), &execution_id);
                 if let Some(observer) = self.lifecycle_observer.as_ref() {
                     observer.on_completed(
                         &target.id,
@@ -317,6 +447,9 @@ impl ToolHost for SubagentAgentToolHost {
             }
         };
         serde_json::to_string(&json!({
+            "execution_id": execution_id,
+            "run_id": target.run_id,
+            "run_revision": target.run_revision,
             "subagent_id": target.id,
             "subagent_name": target.name,
             "subagent_display_name": target.display_name,

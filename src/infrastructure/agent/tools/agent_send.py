@@ -64,7 +64,7 @@ def _current_agent_orchestrator_v2() -> AgentOrchestrator:
         },
         "required": ["agent_id", "message"],
     },
-    permission=None,
+    permission="write",
     category="multi_agent",
 )
 async def agent_send_tool(
@@ -109,10 +109,17 @@ async def agent_send_tool(
             project_id=ctx.project_id or None,
             tenant_id=ctx.tenant_id,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("agent_send failed")
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
         return ToolResult(
-            output=json.dumps({"error": "Internal error in agent_send"}),
+            output=json.dumps(
+                {
+                    "error": "Agent session delivery failed",
+                    **({"code": exc.code} if isinstance(exc, RuntimeV2Error) else {}),
+                }
+            ),
             is_error=True,
         )
 

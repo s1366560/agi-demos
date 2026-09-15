@@ -36,6 +36,183 @@ fn test_root(label: &str) -> PathBuf {
 }
 
 #[tokio::test]
+async fn registered_mcp_alias_timeline_matches_canonical_redaction() {
+    use agistack_core::agent::react::ReActObserver;
+    let root = test_root("alias-observer");
+    let script = write_mock_server(&root);
+    let state = super::tests::test_state("alias-observer-session");
+    let supervisor = Arc::clone(&state.mcp_supervisor);
+    let active_scope = scope("local-project");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition("native-audit", &python_executable(), &script, "normal"),
+            "alias-observer-create",
+        )
+        .expect("server");
+    supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect("discovery");
+    let run = running_run(
+        &state.session_store,
+        &root,
+        "alias-observer",
+        DesktopPermissionProfile::FullAccess,
+    )
+    .unwrap();
+    let host = McpAgentToolHost::new(supervisor, active_scope, run.id.clone(), None).unwrap();
+    let canonical = host
+        .list_tools()
+        .into_iter()
+        .find(|name| name.starts_with("mcp__"))
+        .unwrap();
+    let profile = ExecutionProfile {
+        agent: super::execution_profile::SelectedResource {
+            id: "agent".into(),
+            name: "agent".into(),
+        },
+        skill: None,
+        subagent: None,
+        allowed_tools: vec!["*".into()],
+        allowed_mcp_servers: vec![server.name.clone()],
+        instructions: String::new(),
+    };
+    let observer = super::LocalTimelineObserver::new(
+        Arc::clone(&state),
+        run.conversation_id.clone(),
+        "alias-message".into(),
+        profile,
+        "audit".into(),
+    );
+    let input = r#"{"message":"safe-marker","api_key":"input-secret"}"#;
+    let output =
+        r#"{"content":[{"type":"text","text":"safe-result"}],"nested":{"token":"output-secret"}}"#;
+    for (round, name) in [canonical.as_str(), server.name.as_str(), "unknown-alias"]
+        .into_iter()
+        .enumerate()
+    {
+        observer
+            .on_tool_call(&run.id, round as u64, name, input)
+            .await
+            .unwrap();
+        observer
+            .on_tool_result(&run.id, round as u64, name, input, output)
+            .await
+            .unwrap();
+    }
+    let timeline = state
+        .session_store
+        .timeline(&run.conversation_id, 30)
+        .unwrap();
+    for event_type in ["act", "observe"] {
+        let events: Vec<_> = timeline
+            .iter()
+            .filter(|event| event["type"] == event_type)
+            .collect();
+        let canonical_event = events
+            .iter()
+            .find(|event| event["toolName"] == canonical)
+            .unwrap();
+        let alias = events
+            .iter()
+            .find(|event| event["toolName"] == server.name)
+            .unwrap();
+        let unknown = events
+            .iter()
+            .find(|event| event["toolName"] == "unknown-alias")
+            .unwrap();
+        assert_eq!(
+            alias["payload"]["tool_input"],
+            canonical_event["payload"]["tool_input"]
+        );
+        assert!(alias.to_string().contains("safe-marker"));
+        assert!(!alias.to_string().contains("input-secret"));
+        assert_eq!(unknown["payload"]["tool_input"], "[UNAVAILABLE]");
+        if event_type == "observe" {
+            assert_eq!(
+                alias["payload"]["tool_output"],
+                canonical_event["payload"]["tool_output"]
+            );
+            assert!(alias.to_string().contains("safe-result"));
+            assert!(!alias.to_string().contains("output-secret"));
+            assert_eq!(unknown["payload"]["tool_output"], "[UNAVAILABLE]");
+        }
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn discovered_mcp_schemas_reach_model_visible_contracts_and_aliases() {
+    let root = test_root("agent-tool-schema");
+    let script = write_mock_server(&root);
+    let store = DesktopSessionStore::in_memory().expect("session store");
+    let supervisor = Arc::new(
+        McpSupervisor::new(store, root.clone(), None, test_limits()).expect("MCP supervisor"),
+    );
+    let active_scope = scope("local-project");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition("mock", &python_executable(), &script, "normal"),
+            "create-agent-tool-schema",
+        )
+        .expect("create MCP server");
+    supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect("discover tools");
+    let host = McpAgentToolHost::new(
+        Arc::clone(&supervisor),
+        active_scope,
+        "schema-run".into(),
+        None,
+    )
+    .expect("agent tool host");
+    let canonical = host
+        .list_tools()
+        .into_iter()
+        .find(|name| name.starts_with("mcp__"))
+        .expect("canonical identity");
+    let legacy = legacy_exposed_tool_name(&server.id, "echo");
+    // The legacy alias remains dispatchable but is not advertised unless selected.
+    assert!(!host.list_tools().contains(&legacy));
+    let profile = ExecutionProfile {
+        agent: super::execution_profile::SelectedResource {
+            id: "agent".into(),
+            name: "agent".into(),
+        },
+        skill: None,
+        subagent: None,
+        allowed_tools: vec![canonical.clone(), "mock".into(), legacy.clone()],
+        allowed_mcp_servers: vec!["*".into()],
+        instructions: String::new(),
+    };
+    let combined = Arc::new(FanOutToolHost::new(vec![Arc::new(host)]));
+    let profiled = ProfiledToolHost::new(combined, &profile);
+    let contracts = profiled
+        .tool_definitions()
+        .expect("model visible contracts");
+    assert_eq!(contracts.len(), 3);
+    for name in [canonical, "mock".into(), legacy] {
+        let contract = contracts
+            .iter()
+            .find(|item| item.name == name)
+            .expect("exact identity");
+        assert_eq!(
+            contract.description.as_deref(),
+            Some("Echo structured input")
+        );
+        assert_eq!(contract.input_schema, Some(json!({"type": "object"})));
+    }
+    assert!(profiled.tool_definition("unknown").is_none());
+    let prompt = agistack_core::tool_definition::prompt_with_tool_definitions("echo", &contracts)
+        .expect("model prompt");
+    assert!(prompt.contains("\"input_schema\":{\"type\":\"object\"}"));
+    fs::remove_dir_all(root).expect("remove MCP test root");
+}
+
+#[tokio::test]
 async fn discovered_mcp_tools_are_dispatchable_through_the_agent_tool_host() {
     let root = test_root("agent-tool-host");
     let script = write_mock_server(&root);

@@ -14,6 +14,8 @@ This constraint applies to file system and system operations ONLY.
 ## ALLOWED: Task List Management
 You CAN and SHOULD use `todowrite` and `todoread` to create the work plan.
 Task management is a core part of planning -- it persists the plan for Build Mode execution.
+Keep execution tasks pending. Do not start them or mark them completed/failed in Plan Mode.
+Finishing this planning turn means the plan is ready for approval, not that its execution tasks are complete.
 
 ## Plan Mode Workflow
 

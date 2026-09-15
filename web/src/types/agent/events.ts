@@ -1296,6 +1296,9 @@ export interface SubAgentStartedEventData {
 }
 
 export interface SubAgentCompletedEventData {
+  execution_id?: string | undefined;
+  run_id?: string | undefined;
+  conversation_id?: string | undefined;
   subagent_id: string;
   subagent_name: string;
   summary: string;
@@ -1305,6 +1308,9 @@ export interface SubAgentCompletedEventData {
 }
 
 export interface SubAgentFailedEventData {
+  execution_id?: string | undefined;
+  run_id?: string | undefined;
+  conversation_id?: string | undefined;
   subagent_id: string;
   subagent_name: string;
   error: string;
@@ -1361,6 +1367,9 @@ export interface SubAgentQueuedEventData {
 }
 
 export interface SubAgentKilledEventData {
+  execution_id?: string | undefined;
+  run_id?: string | undefined;
+  conversation_id?: string | undefined;
   subagent_id: string;
   subagent_name: string;
   kill_reason: string;

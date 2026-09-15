@@ -1,0 +1,63 @@
+{
+  "package": "qa-marketplace-marker-bundle",
+  "installed": true,
+  "before_generation": 11,
+  "http_status": 202,
+  "install_response": {
+    "plugin_id": "qa-marketplace-marker-bundle",
+    "version": "1.0.0",
+    "status": "approved",
+    "reason": "protocol v2 Bundle verified and desired"
+  },
+  "readiness": {
+    "schema_version": 2,
+    "publication_id": "47d810f6-682b-47a4-b92c-6fdfd9bbd4c1",
+    "profile_id": "memstack-default-v2",
+    "generation": 12,
+    "requested_version": 12,
+    "snapshot_digest": "c369ca2ef1726efcbcdb402db4603566c8945e319932ce7ea2ec965eeb4f9a37",
+    "nonce": "ee33603e-fa43-4118-ba39-f97552987241",
+    "republished_from_nonce": null,
+    "required_data_plane_ids": [
+      "python-api-v2",
+      "desktop-sidecar-v2",
+      "desktop-renderer-v2"
+    ],
+    "ack_deadline_at": "2026-09-14T04:10:22.684745Z",
+    "status": "ready",
+    "ready_at": "2026-09-14T04:08:44.679237Z",
+    "data_planes": [
+      {
+        "data_plane_id": "python-api-v2",
+        "status": "ack",
+        "requested_version": 12,
+        "requested_digest": "c369ca2ef1726efcbcdb402db4603566c8945e319932ce7ea2ec965eeb4f9a37",
+        "applied_version": 12,
+        "applied_digest": "c369ca2ef1726efcbcdb402db4603566c8945e319932ce7ea2ec965eeb4f9a37",
+        "error_code": null,
+        "error_message": null
+      },
+      {
+        "data_plane_id": "desktop-sidecar-v2",
+        "status": "ack",
+        "requested_version": 12,
+        "requested_digest": "c369ca2ef1726efcbcdb402db4603566c8945e319932ce7ea2ec965eeb4f9a37",
+        "applied_version": 12,
+        "applied_digest": "c369ca2ef1726efcbcdb402db4603566c8945e319932ce7ea2ec965eeb4f9a37",
+        "error_code": null,
+        "error_message": null
+      },
+      {
+        "data_plane_id": "desktop-renderer-v2",
+        "status": "ack",
+        "requested_version": 12,
+        "requested_digest": "c369ca2ef1726efcbcdb402db4603566c8945e319932ce7ea2ec965eeb4f9a37",
+        "applied_version": 12,
+        "applied_digest": "c369ca2ef1726efcbcdb402db4603566c8945e319932ce7ea2ec965eeb4f9a37",
+        "error_code": null,
+        "error_message": null
+      }
+    ]
+  },
+  "temporary_identity_deactivated": true
+}

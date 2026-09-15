@@ -225,6 +225,7 @@ async def test_stream_admits_turn_and_materializes_history_only_through_pinned_v
             async for event in service.stream_chat_v2(
                 conversation_id="conversation-a",
                 user_message="current question",
+                display_content="原始用户目标",
                 project_id="project-a",
                 user_id="user-a",
                 tenant_id="tenant-a",
@@ -252,14 +253,18 @@ async def test_stream_admits_turn_and_materializes_history_only_through_pinned_v
         assert admitted["data"]["file_metadata"] == [{"name": "brief.txt"}]
         assert admitted["data"]["forced_skill_name"] == "planning"
         assert admitted["data"]["mentions"] == ["agent-reviewer"]
+        assert admitted["data"]["display_content"] == "原始用户目标"
 
     assert [event["type"] for event in events] == ["message", "complete"]
     assert events[0]["data"]["id"] == "execution-message-a"
     assert events[0]["data"]["role"] == "user"
     assert events[0]["data"]["content"] == "current question"
+    assert events[0]["data"]["display_content"] == "原始用户目标"
     assert events[1]["data"]["message_id"] == "execution-message-a"
     assert service.started_kwargs is not None
     assert service.started_kwargs["message_id"] == "execution-message-a"
+    assert service.started_kwargs["user_message"] == "current question"
+    assert "display_content" not in service.started_kwargs
     assert service.started_kwargs["conversation_context"] == [
         {"role": "user", "content": "previous question"},
         {"role": "assistant", "content": "previous answer"},

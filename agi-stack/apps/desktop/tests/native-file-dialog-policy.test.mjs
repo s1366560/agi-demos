@@ -540,3 +540,30 @@ test('native file frame URL trust is exact for the configured dev origin and pro
     assert.equal(isTrustedNativeFileFrameUrl(frameUrl, null), false);
   }
 });
+
+test('signed plugin selection uses a single mspkg file with its own 64 MiB bound', async () => {
+  const bytes = new Uint8Array(17 * 1_048_576);
+  bytes.set([0x50, 0x4b, 0x03, 0x04]);
+  const result = await openNativeFileWithDialog({ purpose: 'plugin_package' }, createAuthority({
+    async chooseOpenTargets(input) {
+      assert.equal(input.allowMultiple, false);
+      assert.deepEqual(input.filters[0].extensions, ['mspkg']);
+      return ['/tmp/user-selected/example.mspkg'];
+    },
+    async readFileNoFollow(path, maxBytes) {
+      assert.equal(path, '/tmp/user-selected/example.mspkg');
+      assert.equal(maxBytes, 64 * 1_048_576);
+      return bytes;
+    },
+  }));
+  assert.equal(result.status, 'selected');
+  assert.equal(result.files[0].bytes.byteLength, bytes.byteLength);
+  await assert.rejects(openNativeFileWithDialog({ purpose: 'plugin_package', path: '/etc/passwd' }, createAuthority()), /invalid/);
+  await assert.rejects(openNativeFileWithDialog({ purpose: 'plugin_package' }, createAuthority({
+    async chooseOpenTargets() { return ['/tmp/user-selected/key.pem']; },
+  })), /extension is not allowed/);
+  await assert.rejects(openNativeFileWithDialog({ purpose: 'plugin_package' }, createAuthority({
+    async chooseOpenTargets() { return ['/tmp/user-selected/fake.mspkg']; },
+    async readFileNoFollow() { return new Uint8Array([1, 2, 3]); },
+  })), /not a ZIP/);
+});

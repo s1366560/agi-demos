@@ -832,3 +832,25 @@ test("active conversation transition replaces stale subscriptions without cleari
   });
   assert.equal(state.subscribedConversations.size, 0);
 });
+
+test('socket batch updater replay preserves chronological thought and cost events', () => {
+  const { prependAgentSocketEvents } = require('/tmp/agistack-desktop-test-dist/src/hooks/agentSocketEventFlush.js');
+  const { mergeLiveTimelineEvent } = require('/tmp/agistack-desktop-test-dist/src/features/chat/appTimelineEventModel.js');
+  const pending = [
+    { type: 'thought_start', event_time_us: 100, event_counter: 0, data: { message_id: 'run' } },
+    { type: 'thought_delta', event_time_us: 101, event_counter: 0, data: { message_id: 'run', delta: 'First ' } },
+    { type: 'thought_delta', event_time_us: 102, event_counter: 0, data: { message_id: 'run', delta: 'second' } },
+    { type: 'thought', event_time_us: 103, event_counter: 0, data: { message_id: 'run', thought: 'First second' } },
+  ];
+  const original = [...pending];
+  // React may evaluate the same updater twice, discarding the first result.
+  prependAgentSocketEvents([], pending, 100);
+  const replay = prependAgentSocketEvents([], pending, 100);
+  assert.deepEqual(pending, original);
+  const chronological = socketEventsSince(replay, null);
+  assert.deepEqual(chronological, original);
+  const items = chronological.reduce(mergeLiveTimelineEvent, []);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].content, 'First second');
+  assert.equal(items[0].metadata.streaming, false);
+});

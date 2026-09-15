@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@radix-ui/themes';
 import {
-  ActivityLogIcon,
-  ArchiveIcon,
-  ChatBubbleIcon,
   CheckCircledIcon,
   ChevronRightIcon,
-  ClockIcon,
   CodeIcon,
   ExclamationTriangleIcon,
-  GlobeIcon,
-  LightningBoltIcon,
+  FileTextIcon,
   Link2Icon,
   Pencil2Icon,
   StackIcon,
@@ -23,6 +18,7 @@ import {
   sessionStatusPresentation,
   type SessionDetailViewModel,
   type SessionRunAction,
+  type SessionStage,
 } from './sessionViewModel';
 import { executionModeLabel, statusLabel } from './SessionWorkspace';
 import './SessionContextRail.css';
@@ -33,6 +29,33 @@ type SessionContextRailProps = {
   onRunAction: (action: SessionRunAction, feedback?: string) => void;
   onOpenCanvas: (tab?: SessionCanvasTabId) => void;
 };
+
+// prototype mission-control refactor 2026-09: the run snapshot progress bar
+// counts stages (understand → review); terminal-ready runs read 4 / 4.
+const SNAPSHOT_STAGE_ORDER: Array<Exclude<SessionStage, 'unavailable'>> = [
+  'understand',
+  'implement',
+  'verify',
+  'review',
+];
+const SNAPSHOT_STAGE_LABELS: Record<Exclude<SessionStage, 'unavailable'>, string> = {
+  understand: 'session.stageUnderstand',
+  implement: 'session.stageImplement',
+  verify: 'session.stageVerify',
+  review: 'session.stageReview',
+};
+
+function snapshotProgress(viewModel: SessionDetailViewModel): { count: number; percent: number } | null {
+  if (viewModel.stage === 'unavailable') return null;
+  const complete =
+    viewModel.status === 'ready_review' ||
+    viewModel.status === 'completed' ||
+    viewModel.status === 'accepted';
+  const count = complete
+    ? SNAPSHOT_STAGE_ORDER.length
+    : SNAPSHOT_STAGE_ORDER.indexOf(viewModel.stage) + 1;
+  return { count, percent: (count / SNAPSHOT_STAGE_ORDER.length) * 100 };
+}
 
 /**
  * Session context rail hosted by the desktop right sidebar. The markup moved
@@ -53,6 +76,7 @@ export function SessionContextRail({
   const runActions = viewModel.runActions;
   const actionDisabled = runActionPending !== null || viewModel.runRevision === null;
   const evidenceSurface = viewModel.capabilityMode === 'code' ? 'checks' : 'verification';
+  const progress = snapshotProgress(viewModel);
 
   useEffect(() => {
     if (viewModel.status !== 'ready_review') {
@@ -66,7 +90,11 @@ export function SessionContextRail({
       {statusPresentation ? (
         <section className={`session-context-attention tone-${statusPresentation.tone}`}>
           <header>
-            <ExclamationTriangleIcon />
+            {statusPresentation.tone === 'success' ? (
+              <CheckCircledIcon />
+            ) : (
+              <ExclamationTriangleIcon />
+            )}
             <strong>{t(statusPresentation.titleKey)}</strong>
           </header>
           <p>
@@ -149,125 +177,149 @@ export function SessionContextRail({
 
       <div className="session-context-card">
         <section className="session-context-section session-context-snapshot">
-          <h2>{t('session.runSnapshot')}</h2>
-          <ul className="session-context-rows">
-            <li>
-              <TargetIcon />
-              <span>{t('session.overviewStatus')}</span>
-              <strong>{statusLabel(viewModel.status, t)}</strong>
-            </li>
-            <li>
-              <ChatBubbleIcon />
-              <span>{t('session.conversation')}</span>
-              <strong>
-                {viewModel.capabilityMode === 'unavailable'
+          <header>
+            <h2>{t('session.runSnapshot')}</h2>
+            <em>{statusLabel(viewModel.status, t)}</em>
+          </header>
+          {progress ? (
+            <div className="session-context-progress">
+              <span>
+                <i style={{ width: `${progress.percent}%` }} />
+              </span>
+              <b>
+                {progress.count} / {SNAPSHOT_STAGE_ORDER.length}
+              </b>
+            </div>
+          ) : null}
+          <dl className="session-context-facts">
+            <div>
+              <dt>{t('session.currentStage')}</dt>
+              <dd>
+                {viewModel.stage === 'unavailable'
                   ? t('session.notAvailable')
-                  : viewModel.capabilityMode === 'code'
-                    ? t('session.code')
-                    : t('session.work')}
-              </strong>
-            </li>
-            <li>
-              <LightningBoltIcon />
-              <span>{t('session.runMode')}</span>
-              <strong>
+                  : t(SNAPSHOT_STAGE_LABELS[viewModel.stage])}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('session.overviewEnvironment')}</dt>
+              <dd title={viewModel.environmentLabel ?? undefined}>
+                {viewModel.environmentLabel ?? t('session.notAvailable')}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('session.elapsed')}</dt>
+              <dd>{viewModel.elapsedLabel ?? t('session.notAvailable')}</dd>
+            </div>
+            <div>
+              <dt>{t('session.runMode')}</dt>
+              <dd>
                 {viewModel.executionMode === 'unavailable'
                   ? t('session.notAvailable')
                   : executionModeLabel(viewModel.executionMode, t)}
-              </strong>
-            </li>
-            <li>
-              <ClockIcon />
-              <span>{t('session.elapsed')}</span>
-              <strong>{viewModel.elapsedLabel ?? t('session.notAvailable')}</strong>
-            </li>
-            {viewModel.environmentLabel ? (
-              <li>
-                <GlobeIcon />
-                <span>{t('session.overviewEnvironment')}</span>
-                <strong title={viewModel.environmentLabel}>
-                  {viewModel.environmentLabel}
-                </strong>
-              </li>
-            ) : null}
-          </ul>
+              </dd>
+            </div>
+            <div>
+              <dt>{t('session.permission')}</dt>
+              <dd>{viewModel.permissionLabel ?? t('session.notAvailable')}</dd>
+            </div>
+          </dl>
         </section>
 
         <section className="session-context-section session-context-surfaces">
-          <h2>{t('session.workSurfaces')}</h2>
-          <button
-            type="button"
-            data-session-canvas-trigger="plan"
-            onClick={() => onOpenCanvas('plan')}
-          >
-            <ActivityLogIcon />
-            <strong>{t('session.canvasPlan')}</strong>
-            <small>
-              {viewModel.hasPlan ? t('session.planReady') : t('session.noPlanShort')}
-            </small>
-            <ChevronRightIcon />
-          </button>
-          <button
-            type="button"
-            data-session-canvas-trigger="output"
-            onClick={() =>
-              onOpenCanvas(viewModel.capabilityMode === 'code' ? 'changes' : 'artifacts')
-            }
-          >
-            {viewModel.capabilityMode === 'code' ? <CodeIcon /> : <ArchiveIcon />}
-            <strong>
-              {viewModel.capabilityMode === 'code'
-                ? t('session.canvasChanges')
-                : t('session.canvasArtifacts')}
-            </strong>
-            <small>
-              {viewModel.artifactCount === null
-                ? t('session.notAvailable')
-                : t('session.evidence.recordCount', { count: viewModel.artifactCount })}
-            </small>
-            <ChevronRightIcon />
-          </button>
-          <button
-            type="button"
-            data-session-canvas-trigger="evidence"
-            onClick={() => onOpenCanvas(evidenceSurface)}
-          >
-            <CheckCircledIcon />
-            <strong>
-              {evidenceSurface === 'checks'
-                ? t('session.canvasChecks')
-                : t('session.canvasVerification')}
-            </strong>
-            <small>
-              {viewModel.verificationCount === null
-                ? t('session.notAvailable')
-                : t('session.evidence.recordCount', {
-                    count: viewModel.verificationCount,
-                  })}
-            </small>
-            <ChevronRightIcon />
-          </button>
+          <header>
+            <h2>{t('session.workSurfaces')}</h2>
+            <small>{t('session.workSurfacesDescription')}</small>
+          </header>
+          <div className="session-context-surfaces-list">
+            <button
+              type="button"
+              data-session-canvas-trigger="plan"
+              onClick={() => onOpenCanvas('plan')}
+            >
+              <TargetIcon />
+              <span>
+                <b>{t('session.canvasPlan')}</b>
+                <small>
+                  {viewModel.hasPlan
+                    ? t('session.inspectPlanDescription')
+                    : t('session.noPlanShort')}
+                </small>
+              </span>
+              <ChevronRightIcon />
+            </button>
+            <button
+              type="button"
+              data-session-canvas-trigger="output"
+              onClick={() =>
+                onOpenCanvas(viewModel.capabilityMode === 'code' ? 'changes' : 'artifacts')
+              }
+            >
+              {viewModel.capabilityMode === 'code' ? <CodeIcon /> : <FileTextIcon />}
+              <span>
+                <b>
+                  {viewModel.capabilityMode === 'code'
+                    ? t('session.canvasChanges')
+                    : t('session.canvasArtifacts')}
+                </b>
+                <small>
+                  {viewModel.capabilityMode === 'code'
+                    ? t('session.inspectChangesDescription')
+                    : t('session.inspectArtifactsDescription')}
+                </small>
+              </span>
+              <ChevronRightIcon />
+            </button>
+            <button
+              type="button"
+              data-session-canvas-trigger="evidence"
+              onClick={() => onOpenCanvas(evidenceSurface)}
+            >
+              <CheckCircledIcon />
+              <span>
+                <b>
+                  {evidenceSurface === 'checks'
+                    ? t('session.canvasChecks')
+                    : t('session.canvasVerification')}
+                </b>
+                <small>{t('session.inspectChecksDescription')}</small>
+              </span>
+              <ChevronRightIcon />
+            </button>
+          </div>
         </section>
 
         <section className="session-context-section session-context-evidence">
-          <h2>{t('session.latestEvidence')}</h2>
+          <header>
+            <h2>{t('session.latestEvidence')}</h2>
+          </header>
+          <div className="session-context-evidence-summary">
+            <CheckCircledIcon />
+            <span>
+              <b>
+                {viewModel.sourceCount === null
+                  ? t('session.notAvailable')
+                  : t('session.linkedClaimCount', { count: viewModel.sourceCount })}
+              </b>
+              <small>{t('session.evidenceCoverage')}</small>
+            </span>
+          </div>
           <ul className="session-context-rows">
             <li>
               <StackIcon />
-              <span>{t('session.toolActivity')}</span>
+              <span>{t('session.loadedToolActivity')}</span>
               <strong>
-                {viewModel.toolActivityCount === null
+                {viewModel.observedToolActivityCount === null
                   ? t('session.notAvailable')
-                  : viewModel.toolActivityCount}
+                  : viewModel.observedToolActivityCount}
               </strong>
             </li>
             <li>
               <ExclamationTriangleIcon />
-              <span>{t('session.failedShort')}</span>
+              <span>{t('session.loadedFailedToolActivity')}</span>
               <strong>
-                {viewModel.failedToolActivityCount === null
+                {viewModel.observedFailedToolActivityCount === null
                   ? t('session.notAvailable')
-                  : viewModel.failedToolActivityCount}
+                  : viewModel.observedFailedToolActivityCount}
               </strong>
             </li>
             <li>

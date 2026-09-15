@@ -295,7 +295,8 @@ class TestBackgroundExecutor:
         assert "subagent_completed" in event_types
 
     async def test_cancel(self, sample_subagent):
-        executor = BackgroundExecutor()
+        events = []
+        executor = BackgroundExecutor(on_event=events.append)
 
         with patch(
             "src.infrastructure.agent.subagent.background_executor.SubAgentProcess"
@@ -319,11 +320,19 @@ class TestBackgroundExecutor:
             )
             await asyncio.sleep(0.1)
 
+            task = executor._tasks[eid]
             result = await executor.cancel(eid, "c1")
             assert result is True
 
             state = executor.tracker.get_state(eid, "c1")
             assert state.status == SubAgentStatus.CANCELLED
+            await task
+            killed = [event["data"] for event in events if event["type"] == "subagent_killed"]
+            assert killed
+            assert all(
+                event.get("execution_id") == eid and event.get("conversation_id") == "c1"
+                for event in killed
+            )
 
     async def test_get_active(self, sample_subagent):
         executor = BackgroundExecutor()
@@ -382,3 +391,43 @@ class TestBackgroundExecutor:
 
             state = executor.tracker.get_state(eid, "c1")
             assert state.status == SubAgentStatus.FAILED
+
+
+@pytest.mark.unit
+async def test_cancel_waits_for_owner_unwind_before_terminal_event(sample_subagent):
+    entered, stopping, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    events = []
+    executor = BackgroundExecutor(on_event=events.append)
+
+    async def execute():
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            stopping.set()
+            await release.wait()
+            raise
+        yield {}
+
+    with patch("src.infrastructure.agent.subagent.background_executor.SubAgentProcess") as process:
+        process.return_value.execute = execute
+        eid = executor.launch(
+            subagent=sample_subagent,
+            user_message="test",
+            conversation_id="c1",
+            tools=[],
+            base_model="test",
+        )
+        await entered.wait()
+        cancellation = asyncio.create_task(executor.cancel(eid, "c1"))
+        try:
+            await stopping.wait()
+            await asyncio.sleep(0)
+            assert not cancellation.done()
+            assert executor.tracker.get_state(eid, "c1").status is SubAgentStatus.RUNNING
+            assert not any(event["type"] == "subagent_killed" for event in events)
+        finally:
+            release.set()
+            await cancellation
+            await asyncio.gather(*executor._tasks.values(), return_exceptions=True)
+        assert executor.tracker.get_state(eid, "c1").status is SubAgentStatus.CANCELLED

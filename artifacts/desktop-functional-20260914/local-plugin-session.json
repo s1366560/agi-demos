@@ -1,0 +1,8 @@
+{
+  "profile": "/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-plugin-9h959vrb",
+  "workspace": "/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt",
+  "debug_port": 9335,
+  "trust_file": "/Users/tiejunsun/github/agi-demos/artifacts/desktop-functional-20260914/local-marketplace-wasm-fixture/trust.json",
+  "electron_app": "/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-electron-4repck7u/Electron.app",
+  "electron_exec": "/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-electron-4repck7u/Electron.app/Contents/MacOS/Electron"
+}

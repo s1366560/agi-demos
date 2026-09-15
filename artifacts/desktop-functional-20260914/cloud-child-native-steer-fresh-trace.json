@@ -1,0 +1,108 @@
+{
+  "observed_at": "2026-09-14T08:21:01.585402+00:00",
+  "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+  "run_id": "4663354a014a427fa43f6220cbe13722",
+  "trace": {
+    "run_id": "4663354a014a427fa43f6220cbe13722",
+    "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+    "subagent_name": "qa_owner_20260914",
+    "task": "不调用任何工具，用中文详细撰写不少于五千字的分布式系统一致性分析。执行中若收到新的引导指令，立即改按新指令回答。",
+    "status": "timed_out",
+    "created_at": "2026-09-14T08:17:06.348478+00:00",
+    "started_at": "2026-09-14T08:17:06.348522+00:00",
+    "ended_at": "2026-09-14T08:19:06.553269+00:00",
+    "summary": null,
+    "error": "SubAgent session exceeded timeout (120.0s)",
+    "execution_time_ms": null,
+    "tokens_used": null,
+    "metadata": {
+      "session_mode": "spawn",
+      "control_plane_version": "v2",
+      "delegation_depth": 0,
+      "spawn_mode": "run",
+      "thread_requested": false,
+      "cleanup": "keep",
+      "agent_id": "qa_owner_20260914",
+      "model": null,
+      "thinking": null,
+      "run_timeout_seconds": 120,
+      "requested_subagent_name": "qa_owner_20260914",
+      "max_active_runs_per_lineage": 8,
+      "execution_protocol": "detached-owner-v1",
+      "requester_session_key": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "lineage_root_run_id": "4663354a014a427fa43f6220cbe13722",
+      "plugin_generation": {
+        "profile_id": "memstack-default-v2",
+        "generation": 3,
+        "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+      },
+      "inherited_tool_set_generation": {
+        "profile_id": "memstack-default-v2",
+        "generation": 3,
+        "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+      },
+      "inherited_tool_set_owner_operation_id": "local-turn:40a664e6-5cc8-5739-ad0b-9516fa7a1d62",
+      "model_override": null,
+      "thinking_override": null,
+      "control_revision": 1,
+      "control_receipts": {
+        "desktop-subagent-steer:4663354a014a427fa43f6220cbe13722:87d1d755-1c46-44da-b12a-80711cdb94c0": {
+          "fingerprint": "b8e1101265902b10a9ba0212c78edb4f0beb330ec2d3e48fc7698a81194f7978",
+          "control_revision": 1,
+          "delivered": true
+        }
+      },
+      "timeout_seconds": 120.0,
+      "announce_payload": {
+        "run_id": "4663354a014a427fa43f6220cbe13722",
+        "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "subagent_name": "qa_owner_20260914",
+        "status": "timed_out",
+        "outcome": "timeout",
+        "status_text": "timed out",
+        "result": "(not available)",
+        "notes": "SubAgent session exceeded timeout (120.0s)",
+        "execution_time_ms": null,
+        "tokens_used": null,
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "model_override": null,
+        "thinking_override": null,
+        "completed_at": "2026-09-14T08:19:06.553269+00:00"
+      },
+      "announce_status": "delivered",
+      "announce_attempt_count": 1,
+      "announce_completed_at": "2026-09-14T08:19:06.615384+00:00",
+      "announce_last_error": "",
+      "announce_events": [
+        {
+          "timestamp": "2026-09-14T08:19:06.615367+00:00",
+          "type": "completion_delivered",
+          "attempt": 1,
+          "run_id": "4663354a014a427fa43f6220cbe13722",
+          "status": "timed_out"
+        }
+      ],
+      "announce_events_dropped": 0
+    },
+    "frozen_result_text": null,
+    "frozen_at": null,
+    "trace_id": null,
+    "parent_span_id": null,
+    "announce_state": null
+  },
+  "controls_http": 200,
+  "control_snapshot": [
+    {
+      "run_id": "4663354a014a427fa43f6220cbe13722",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "subagent_name": "qa_owner_20260914",
+      "status": "timed_out",
+      "control_revision": 1,
+      "allowed_actions": [],
+      "cancel_requested": false
+    }
+  ],
+  "signout_http": 200
+}

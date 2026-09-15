@@ -1,0 +1,73 @@
+{
+  "artifact_deliveries": [],
+  "artifact_versions": [],
+  "capabilities": {
+    "allowed_actions": [
+      "send_message"
+    ],
+    "can_approve_plan": false,
+    "can_deliver_artifacts": false,
+    "can_queue_next": false,
+    "can_respond_to_hitl": false,
+    "can_review_artifacts": false,
+    "can_send_message": true,
+    "can_steer_now": false,
+    "run_actions": []
+  },
+  "conversation": {
+    "agent_config": {
+      "capability_mode": "work",
+      "llm_model_override": null,
+      "llm_route_override": null,
+      "selected_agent_id": "builtin:all-access"
+    },
+    "conversation_mode": "workspace",
+    "coordinator_agent_id": "builtin:all-access",
+    "created_at": "2026-09-14T05:53:52.950741+00:00",
+    "current_mode": "plan",
+    "focused_agent_id": "builtin:all-access",
+    "id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+    "linked_workspace_task_id": null,
+    "message_count": 9,
+    "metadata": {
+      "capability_mode": "work",
+      "environment": {
+        "kind": "local",
+        "label": "Local runtime"
+      },
+      "run": null,
+      "runtime": "local"
+    },
+    "participant_agents": [
+      "builtin:all-access"
+    ],
+    "project_id": "desktop-client",
+    "status": "active",
+    "summary": null,
+    "tenant_id": "northstar",
+    "title": "本地签名插件原生验收：当前项目已批准并激活 qa-marketplace-marker-bundle。请在规划阶段先实际调用可用目录中的 qa_marketplace_marker 插件工具（",
+    "updated_at": "2026-09-14T05:53:52.950741+00:00",
+    "user_id": "local-user",
+    "workspace_id": null,
+    "workspace_name": null
+  },
+  "current_plan": null,
+  "current_run": null,
+  "evidence_summary": {
+    "artifact_delivery_count": 0,
+    "artifact_source_count": 0,
+    "artifact_version_count": 0,
+    "changes": null,
+    "checks": null,
+    "tool_invocation_count": 0,
+    "unknown_outcome_count": 0
+  },
+  "pending_hitl": [],
+  "plan_history": [],
+  "run_history": [],
+  "schema_version": 1,
+  "snapshot_revision": "4c90186f06c601b0222cc59518251520fccd44724506e92c8cce02c550e5e625",
+  "tasks": [],
+  "tool_invocations": [],
+  "updated_at": "2026-09-14T05:53:52.950741+00:00"
+}

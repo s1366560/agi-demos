@@ -20,6 +20,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event
     _sanitize_event_data_for_postgres,  # pyright: ignore[reportPrivateUsage]
     apply_conversation_event_projection_delta,
 )
+from src.infrastructure.adapters.secondary.persistence.tool_execution_event_projection import (
+    apply_tool_execution_event_projection,
+)
 from src.infrastructure.agent.events.converter import normalize_event_dict
 
 from .session_event_log import TURN_ADMITTED_EVENT_V2
@@ -294,6 +297,15 @@ class SqlSessionEventLogStoreV2:
                 inserted_row = insert_result.one_or_none()
                 if inserted_row is None:
                     continue
+                await apply_tool_execution_event_projection(
+                    session,
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    event_type=persistable_event.event_type,
+                    event_data=persistable_event.event_data,
+                    event_time_us=persistable_event.cursor.event_time_us,
+                    event_counter=persistable_event.cursor.event_counter,
+                )
                 inserted_event_type, inserted_event_time = inserted_row
                 if inserted_event_type in _MESSAGE_EVENT_TYPES:
                     inserted_message_count += 1

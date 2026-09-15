@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 import logging
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,12 +19,14 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, override
 from sqlalchemy import exists, select
 
 from src.application.services.agent_service import canonical_agent_client_turn_payload_hash
+from src.application.services.chat_permission_admission_v2 import prepare_chat_permission_snapshot
 from src.domain.model.agent import (
     Agent,
     AgentClientTurn,
     AgentClientTurnPayloadConflictError,
     AgentClientTurnStatus,
 )
+from src.domain.model.agent.display_content import validate_display_content
 from src.domain.model.agent.execution_backend import execution_backend_from_metadata
 from src.infrastructure.adapters.primary.web.conversation_access_application_authority_v2 import (
     conversation_access_application_authority_v2,
@@ -221,6 +223,26 @@ def _sanitize_client_app_model_context(value: object) -> dict[str, Any] | None:
     return sanitized or None
 
 
+async def _validated_display_content(
+    context: MessageContext,
+    message: dict[str, Any],
+    conversation_id: object,
+    client_message_id: str | None,
+) -> dict[str, str] | None:
+    if "display_content" not in message:
+        return {}
+    try:
+        return {"display_content": validate_display_content(message["display_content"])}
+    except ValueError:
+        await context.send_error(
+            _("Invalid display content"),
+            code="INVALID_DISPLAY_CONTENT",
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            extra=_client_message_id_extra(client_message_id),
+        )
+        return None
+
+
 class SendMessageHandler(WebSocketMessageHandler):
     """Handle send_message: Start agent execution."""
 
@@ -258,6 +280,12 @@ class SendMessageHandler(WebSocketMessageHandler):
         ) is None:
             return
         client_message_id, permission_mode = controls
+        if (
+            presentation := await _validated_display_content(
+                context, message, conversation_id, client_message_id
+            )
+        ) is None:
+            return
         if not all([conversation_id, user_message, project_id]):
             await context.send_error(
                 "Missing required fields: conversation_id, message, project_id",
@@ -271,12 +299,9 @@ class SendMessageHandler(WebSocketMessageHandler):
         assert isinstance(conversation_id, str)
         assert isinstance(user_message, str)
         assert isinstance(project_id, str)
-        if preferred_language not in {"en-US", "zh-CN"}:
-            preferred_language = None
-
         # Fallback: when the client did not specify a per-message language,
         # use the authenticated user's stored preference.
-        if preferred_language is None:
+        if preferred_language not in {"en-US", "zh-CN"}:
             preferred_language = await _resolve_user_preferred_language(context)
 
         client_execution_payload = {
@@ -291,6 +316,7 @@ class SendMessageHandler(WebSocketMessageHandler):
             "permission_mode": permission_mode,
             "preferred_language": preferred_language,
             "project_id": project_id,
+            **presentation,
         }
 
         try:
@@ -322,6 +348,9 @@ class SendMessageHandler(WebSocketMessageHandler):
                     )
                     return
 
+                permission_snapshot = await prepare_chat_permission_snapshot(
+                    cast(Any, conversation), permission_mode
+                )
                 admission = await _admit_client_turn(
                     context,
                     conversation_id=conversation_id,
@@ -345,6 +374,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                     client_message_id=client_message_id,
                     app_model_context=app_model_context,
                     permission_mode=permission_mode,
+                    permission_snapshot=permission_snapshot,
                 )
 
                 # Auto-subscribe this session to this conversation
@@ -376,6 +406,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                         context=context,
                         conversation_id=conversation_id,
                         user_message=user_message,
+                        display_content=presentation.get("display_content"),
                         project_id=project_id,
                         preferred_language=preferred_language,
                         attachment_ids=attachment_ids,
@@ -442,26 +473,13 @@ class StopSessionHandler(WebSocketMessageHandler):
                     await context.send_error("Access denied", conversation_id=conversation_id)
                     return
 
-                manager = context.connection_manager
-                cancelled = False
-
-                # Cancel the bridge task if exists for this session
-                if (
-                    context.session_id in manager.bridge_tasks
-                    and conversation_id in manager.bridge_tasks[context.session_id]
-                ):
-                    task = manager.bridge_tasks[context.session_id][conversation_id]
-                    task.cancel()
-                    del manager.bridge_tasks[context.session_id][conversation_id]
-                    cancelled = True
-                    logger.info(f"[WS] Cancelled stream task for conversation {conversation_id}")
-
+                # Keep the bridge alive: the worker publishes the authoritative terminal event.
                 from src.application.services.agent.runtime_cancellation import (
                     cancel_conversation_runtime,
                 )
 
                 runtime_cancellation = await cancel_conversation_runtime(conversation)
-                cancelled = cancelled or runtime_cancellation.cancelled
+                cancelled = runtime_cancellation.cancelled
 
                 if runtime_cancellation.ray_error is not None and not cancelled:
                     await context.send_error(
@@ -1069,6 +1087,7 @@ async def _create_external_acp_user_event(
     user_message: str,
     agent: Agent,
     execution_message_id: str | None = None,
+    display_content: str | None = None,
 ) -> _ExternalACPExecutionState:
     from src.domain.model.agent.execution.event_time import EventTimeGenerator
     from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
@@ -1082,6 +1101,11 @@ async def _create_external_acp_user_event(
     assistant_msg_id = str(uuid.uuid4())
 
     next_time_us, next_counter = time_gen.next()
+    presentation = (
+        {}
+        if display_content is None
+        else {"display_content": validate_display_content(display_content)}
+    )
     user_event = _new_execution_event(
         conversation_id=conversation_id,
         message_id=user_msg_id,
@@ -1092,6 +1116,7 @@ async def _create_external_acp_user_event(
             "content": user_message,
             "created_at": datetime.now(UTC).isoformat(),
             "agent_id": agent.id,
+            **presentation,
         },
         event_time_us=next_time_us,
         event_counter=next_counter,
@@ -1109,6 +1134,7 @@ async def _create_external_acp_user_event(
             "content": user_message,
             "created_at": user_event.created_at.isoformat(),
             "agent_id": agent.id,
+            **presentation,
         },
         event_time_us=next_time_us,
         event_counter=next_counter,
@@ -1388,6 +1414,7 @@ async def _stream_external_acp_agent_definition(
     agent: Agent,
     backend: dict[str, Any],
     execution_message_id: str | None = None,
+    display_content: str | None = None,
 ) -> None:
     acp_agent_key = str(backend["acp_agent_key"])
     service = await _load_external_acp_service(context, acp_agent_key=acp_agent_key)
@@ -1400,6 +1427,7 @@ async def _stream_external_acp_agent_definition(
         context,
         conversation_id=conversation_id,
         user_message=user_message,
+        display_content=display_content,
         agent=agent,
         execution_message_id=execution_message_id,
     )
@@ -1439,6 +1467,7 @@ async def stream_agent_to_websocket_with_fresh_session(  # noqa: PLR0913
     client_message_id: str | None = None,
     client_payload_hash: str | None = None,
     execution_message_id: str | None = None,
+    display_content: str | None = None,
 ) -> None:
     """Create a fresh DB-scoped agent service for the long-running stream."""
     async with context.fresh_db_context() as stream_context:
@@ -1446,6 +1475,7 @@ async def stream_agent_to_websocket_with_fresh_session(  # noqa: PLR0913
             stream_context=stream_context,
             conversation_id=conversation_id,
             user_message=user_message,
+            display_content=display_content,
             project_id=project_id,
             preferred_language=preferred_language,
             attachment_ids=attachment_ids,
@@ -1478,6 +1508,7 @@ async def _stream_agent_with_scoped_session(  # noqa: PLR0913
     client_message_id: str | None,
     client_payload_hash: str | None,
     execution_message_id: str | None,
+    display_content: str | None = None,
 ) -> None:
     """Run one admitted turn inside its already-pinned generation and DB scope."""
     client_turn_claimed = False
@@ -1502,6 +1533,7 @@ async def _stream_agent_with_scoped_session(  # noqa: PLR0913
             context=stream_context,
             conversation_id=conversation_id,
             user_message=user_message,
+            display_content=display_content,
             project_id=project_id,
             preferred_language=preferred_language,
             attachment_ids=attachment_ids,
@@ -1534,6 +1566,7 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
     agent_id: str | None = None,
     mentions: list[str] | None = None,
     execution_message_id: str | None = None,
+    display_content: str | None = None,
 ) -> None:
     """Pin one WebSocket agent turn before consuming its complete async stream."""
     turn_id = execution_message_id or str(uuid.uuid4())
@@ -1567,6 +1600,7 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
                 context=context,
                 conversation_id=conversation_id,
                 user_message=user_message,
+                display_content=display_content,
                 project_id=project_id,
                 preferred_language=preferred_language,
                 attachment_ids=attachment_ids,
@@ -1598,14 +1632,15 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
             )
         except Exception:
             logger.warning("[WS] Failed to persist admission error", exc_info=True)
-        await manager.send_to_session(
-            context.session_id,
-            {
-                "type": "error",
-                "conversation_id": conversation_id,
-                "data": error_data,
-            },
-        )
+        error_event = {
+            "type": "error",
+            "conversation_id": conversation_id,
+            "data": error_data,
+        }
+        if error_data.get("run_id") == turn_id and error_data.get("status") == "failed":
+            await manager.broadcast_to_conversation(conversation_id, error_event)
+        else:
+            await manager.send_to_session(context.session_id, error_event)
 
 
 async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
@@ -1622,6 +1657,7 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
     agent_id: str | None = None,
     mentions: list[str] | None = None,
     execution_message_id: str | None = None,
+    display_content: str | None = None,
 ) -> None:
     """
     Stream agent events to WebSocket inside an already-pinned operation.
@@ -1653,6 +1689,7 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
                 context=context,
                 conversation_id=conversation_id,
                 user_message=user_message,
+                display_content=display_content,
                 project_id=project_id,
                 agent=agent,
                 backend=backend,
@@ -1666,6 +1703,7 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
             agent_service.stream_chat_v2(
                 conversation_id=conversation_id,
                 user_message=user_message,
+                display_content=display_content,
                 project_id=project_id,
                 user_id=context.user_id,
                 tenant_id=context.tenant_id,
@@ -1710,7 +1748,9 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
                 }
 
                 # Broadcast to ALL sessions subscribed to this conversation
-                await manager.broadcast_to_conversation(conversation_id, ws_event)
+                await manager.broadcast_agent_stream_event(
+                    conversation_id, ws_event, message_id=execution_message_id,
+                )
 
     except asyncio.CancelledError:
         logger.info(f"[WS] Stream cancelled for conversation {conversation_id}")
@@ -1736,6 +1776,7 @@ async def stream_hitl_response_to_websocket(
     replay_from_db: bool = True,
     from_time_us: int | None = None,
     from_counter: int | None = None,
+    authorize_delivery: Callable[[], Awaitable[None]] | None = None,
 ) -> None:
     """
     Stream agent events after HITL response to WebSocket.
@@ -1780,6 +1821,11 @@ async def stream_hitl_response_to_websocket(
                 logger.info(f"[WS HITL] Session {session_id[:8]}... unsubscribed, stopping stream")
                 break
 
+            if authorize_delivery is not None:
+                await authorize_delivery()
+            # Authorization can await; subscription may have ended meanwhile.
+            if not manager.is_subscribed(session_id, conversation_id):
+                break
             # Add conversation_id to event for routing
             ws_event = {
                 "type": event_type,
@@ -1791,27 +1837,16 @@ async def stream_hitl_response_to_websocket(
                 "event_counter": event.get("event_counter"),
             }
 
-            # Broadcast to ALL sessions subscribed to this conversation
-            await manager.broadcast_to_conversation(conversation_id, ws_event)
+            # This independently authorized recovery bridge owns only its socket.
+            await manager.send_agent_stream_event(
+                session_id, conversation_id, ws_event, message_id=message_id,
+            )
 
-            # Stop after completion or when agent pauses for another HITL request.
-            # HITL-asked events mean the agent has paused again waiting for user input,
-            # so the bridge should stop and let _start_hitl_stream_bridge create a new
-            # one when the user responds to the next HITL request.
-            HITL_ASKED_EVENTS = {
-                "clarification_asked",
-                "decision_asked",
-                "env_var_requested",
-                "permission_asked",
-            }
+            # HTTP HITL responses resume the same stream without creating a WS bridge.
+            # Keep the authorized subscription alive across each pause; the manager
+            # cancels it on unsubscribe, disconnect, or replacement by a new message.
             if event_type in ("complete", "error"):
                 logger.info(f"[WS HITL Bridge] Stream completed: type={event_type}")
-                break
-            if event_type in HITL_ASKED_EVENTS:
-                logger.info(
-                    f"[WS HITL Bridge] Agent paused for another HITL: type={event_type}, "
-                    f"stopping bridge for conversation {conversation_id}"
-                )
                 break
 
     except asyncio.CancelledError:

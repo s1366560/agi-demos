@@ -705,7 +705,9 @@ export function createDesktopWorkbenchCapabilityClient(
     });
   const cloudRequestBroker =
     options.cloudRequestBroker === undefined
-      ? desktopVaultBoundCloudRequestBroker()
+      ? config.mode === 'cloud'
+        ? desktopVaultBoundCloudRequestBroker()
+        : null
       : options.cloudRequestBroker;
   return {
     async loadSnapshot(

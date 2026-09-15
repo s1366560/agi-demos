@@ -626,6 +626,24 @@ pub(super) fn fill_credentials_tool_metadata() -> Value {
 
 #[async_trait]
 impl<E: BridgeEndpoint> ToolHost for BrowserRunToolHost<E> {
+    fn tool_definition(&self, name: &str) -> Option<agistack_core::ports::ToolDefinition> {
+        if !self.list_tools().iter().any(|tool| tool == name) {
+            return None;
+        }
+        let metadata = if name == TOOL_FILL_CREDENTIALS {
+            fill_credentials_tool_metadata()
+        } else {
+            agistack_adapters_browser::host::list_tool_metadata()
+                .into_iter()
+                .find(|metadata| metadata["name"].as_str() == Some(name))?
+        };
+        Some(agistack_core::ports::ToolDefinition {
+            name: name.to_string(),
+            description: metadata["description"].as_str().map(str::to_string),
+            input_schema: metadata.get("inputSchema").cloned(),
+        })
+    }
+
     fn list_tools(&self) -> Vec<String> {
         let mut tools = self.inner.list_tools();
         tools.push(TOOL_FILL_CREDENTIALS.to_string());
@@ -722,6 +740,34 @@ mod tests {
         ProviderCredentialBroker::in_memory(store.installation_id())
             .expect("provider credential broker")
             .site_credential_broker()
+    }
+
+    #[tokio::test]
+    async fn browser_model_contracts_preserve_native_and_credential_fill_schemas() {
+        let fixture = build_fixture(MockEndpoint::new());
+        let contracts = fixture.host.tool_definitions().expect("model contracts");
+        for metadata in agistack_adapters_browser::host::list_tool_metadata()
+            .into_iter()
+            .chain([fill_credentials_tool_metadata()])
+        {
+            let name = metadata["name"].as_str().expect("tool name");
+            let contract = contracts
+                .iter()
+                .find(|item| item.name == name)
+                .expect("advertised browser tool");
+            assert_eq!(
+                contract.input_schema.as_ref(),
+                Some(&metadata["inputSchema"])
+            );
+            assert_eq!(
+                contract.description.as_deref(),
+                metadata["description"].as_str()
+            );
+            assert!(contract.input_schema.as_ref().unwrap()["properties"]
+                .get("_run_id")
+                .is_none());
+        }
+        assert!(fixture.host.tool_definition("unavailable").is_none());
     }
 
     /// Scripted bridge endpoint: responses are queued per bridge method and
@@ -1235,7 +1281,7 @@ mod tests {
                 request_message: "Browse with consent",
                 environment: None,
                 requested_environment_kind: DesktopExecutionEnvironmentKind::Local,
-                permission_profile: DesktopPermissionProfile::FullAccess,
+                permission_profile: DesktopPermissionProfile::ReadOnly,
                 now: &now_iso(),
             })
             .expect("approve and start");
@@ -1261,7 +1307,12 @@ mod tests {
             test_site_credentials(&store),
             None,
         );
-        let host = AuthorizedRunToolHost::new(Arc::new(gated), store.clone(), run);
+        let tool_once = Arc::new(Mutex::new(BTreeSet::from([(
+            run.id.clone(),
+            TOOL_CLAIM_TAB.to_string(),
+        )])));
+        let host = AuthorizedRunToolHost::new(Arc::new(gated), store.clone(), run)
+            .with_once_permissions(Arc::clone(&tool_once));
 
         let first = host
             .call(TOOL_CLAIM_TAB, r#"{"tabId": 7}"#)
@@ -1270,6 +1321,11 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Value>(&first).unwrap()["error"],
             "origin_consent_required"
+        );
+        assert_eq!(
+            tool_once.lock().unwrap().len(),
+            1,
+            "pending consent must not spend the action grant"
         );
         assert!(
             store
@@ -1289,6 +1345,14 @@ mod tests {
             .expect("retry executes");
         let second: Value = serde_json::from_str(&second).unwrap();
         assert_eq!(second["tabId"], 7, "retry must not replay: {second}");
+        assert!(
+            tool_once.lock().unwrap().is_empty(),
+            "successful action spends its exact once grant"
+        );
+        assert!(
+            host.call(TOOL_CLAIM_TAB, r#"{"tabId":7}"#).await.is_err(),
+            "the tool grant cannot execute a second action"
+        );
         // Both calls resolved the origin (the second via the URL cache).
         assert_eq!(requests.count(METHOD_GET_TABS), 1);
     }

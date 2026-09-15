@@ -50,7 +50,7 @@ export async function openFilesWithDesktopDialog(
   const maxFiles = purpose === 'attachment' ? MAX_RENDERER_NATIVE_FILE_COUNT : 1;
   return Object.freeze({
     status: 'selected',
-    files: nativePayloadsToFiles(result.files, maxFiles),
+    files: nativePayloadsToFiles(result.files, maxFiles, purpose === 'plugin_package' ? 64 * 1_048_576 : MAX_RENDERER_NATIVE_FILE_BYTES),
   });
 }
 
@@ -116,6 +116,7 @@ function validateRendererFileBatch(files: readonly File[]): void {
 function nativePayloadsToFiles(
   payloads: readonly DesktopFilePayload[],
   maxFiles: number,
+  maxBytes = MAX_RENDERER_NATIVE_FILE_BYTES,
 ): readonly File[] {
   if (payloads.length === 0 || payloads.length > maxFiles) {
     throw new Error('native_file_result_count_invalid');
@@ -124,8 +125,8 @@ function nativePayloadsToFiles(
   const files = payloads.map((payload) => {
     totalBytes += payload.bytes.byteLength;
     if (
-      payload.bytes.byteLength > MAX_RENDERER_NATIVE_FILE_BYTES ||
-      totalBytes > MAX_RENDERER_NATIVE_FILE_BYTES
+      payload.bytes.byteLength > maxBytes ||
+      totalBytes > maxBytes
     ) {
       throw new Error('native_file_result_limit_exceeded');
     }

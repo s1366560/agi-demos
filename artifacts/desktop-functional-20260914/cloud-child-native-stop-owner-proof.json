@@ -1,0 +1,19 @@
+{
+  "run_id": "2bcf337c38354e4797aeaaf52c03cf4b",
+  "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+  "status": "cancelled",
+  "created_at": "2026-09-14T08:22:57.640594+00:00",
+  "started_at": "2026-09-14T08:22:57.640621+00:00",
+  "ended_at": "2026-09-14T08:23:33.317245+00:00",
+  "error": "Cancelled by control tool",
+  "summary": null,
+  "control_revision": 1,
+  "control_receipts": {
+    "desktop-subagent-kill_run:2bcf337c38354e4797aeaaf52c03cf4b:e57f0834-523f-4f8d-a5e5-ffb881baf856": {
+      "fingerprint": "e45d259f60db9ce84c0d85829db985b2a4cc33fa25adb178e95b281b7d78d04c",
+      "control_revision": 1,
+      "delivered": true
+    }
+  },
+  "owner_state": "closed"
+}

@@ -274,7 +274,7 @@ def _current_todoread_session_factory() -> Callable[..., Any] | None:
         },
         "required": [],
     },
-    permission=None,
+    permission="read",
     category="task_management",
 )
 async def todoread_tool(
@@ -379,9 +379,26 @@ async def _todowrite_handle_update(
 
     updates: dict[str, Any] = {}
     if todos and len(todos) > 0:
-        updates = {k: v for k, v in todos[0].items() if k != "id"}
+        # Only declared task-edit fields may reach the persistence adapter.
+        # In particular, nested input cannot reassign the conversation or ID.
+        editable_fields = {
+            "content",
+            "title",
+            "description",
+            "estimated_duration_seconds",
+            "started_at",
+            "completed_at",
+            "result_summary",
+            "evidence_refs",
+            "status",
+            "priority",
+        }
+        updates = {k: v for k, v in todos[0].items() if k in editable_fields}
+        for field in ("started_at", "completed_at"):
+            if field in updates:
+                updates[field] = _todo_optional_datetime(updates[field])
     updated = await repo.update(todo_id, **updates)
-    if updated:
+    if updated and updates.keys() - _TODO_PROGRESS_FIELDS:
         replacement = await repo.find_by_conversation(conversation_id)
         await repo.save_all(conversation_id, replacement)
     await session.commit()
@@ -457,6 +474,11 @@ async def _todowrite_replace(
         "success": True,
         "action": "replace",
         "total_count": len(task_items),
+        "todos": [task.to_dict() for task in task_items],
+        "update_instruction": (
+            "For todowrite action=update, use the exact returned todos[].id as todo_id. "
+            "Do not invent IDs or use list positions."
+        ),
         "message": f"Replaced task list with {len(task_items)} items",
     }
 
@@ -506,6 +528,11 @@ async def _todowrite_add(
         "action": "add",
         "added_count": len(added),
         "total_count": len(all_tasks),
+        "todos": [task.to_dict() for task in all_tasks],
+        "update_instruction": (
+            "For todowrite action=update, use the exact returned todos[].id as todo_id. "
+            "Do not invent IDs or use list positions."
+        ),
         "message": f"Added {len(added)} new tasks",
     }
 
@@ -876,6 +903,30 @@ async def _dispatch_created_workspace_tasks(
     }
 
 
+_TODO_PROGRESS_FIELDS = frozenset(
+    {"status", "started_at", "completed_at", "result_summary", "evidence_refs"}
+)
+
+
+def _todowrite_permission(arguments: dict[str, Any]) -> str:
+    """Declare progress-only effects from the tool's structural argument schema."""
+    todo_id = arguments.get("todo_id")
+    todos = arguments.get("todos")
+    if (
+        arguments.get("action") == "update"
+        and set(arguments) <= {"action", "todo_id", "todos"}
+        and isinstance(todo_id, str)
+        and bool(todo_id.strip())
+        and isinstance(todos, list)
+        and len(todos) == 1
+        and isinstance(todos[0], dict)
+        and bool(todos[0])
+        and set(todos[0]) <= _TODO_PROGRESS_FIELDS
+    ):
+        return "conversation_progress"
+    return "workspace_task_write"
+
+
 @tool_define(
     name="todowrite",
     description=(
@@ -963,7 +1014,8 @@ async def _dispatch_created_workspace_tasks(
         },
         "required": ["action"],
     },
-    permission=None,
+    permission="workspace_task_write",
+    permission_resolver=_todowrite_permission,
     category="task_management",
 )
 async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
@@ -993,6 +1045,20 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
 
     conversation_id = ctx.conversation_id or ctx.session_id
     todos_list = todos or []
+    if ctx.runtime_context.get("effective_mode") == "plan" and any(
+        item.get("status") in {"in_progress", "completed", "failed"} for item in todos_list
+    ):
+        return ToolResult(
+            output=json.dumps(
+                {
+                    "success": False,
+                    "code": "PLAN_EXECUTION_NOT_APPROVED",
+                    "error": "Plan mode cannot record execution progress. Leave execution tasks "
+                    "pending and present the plan for approval before Build mode execution.",
+                }
+            ),
+            is_error=True,
+        )
     result: dict[str, Any] = {}
     workspace_markers = _workspace_authority_markers(ctx)
     structural_write_blocked_reason = (
@@ -1011,7 +1077,8 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     "message": structural_write_blocked_reason,
                 },
                 indent=2,
-            )
+            ),
+            is_error=True,
         )
 
     async with session_factory() as session:
@@ -1229,7 +1296,10 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                                 ),
                             }
                             logger.info("todowrite: %s completed for %s", action, conversation_id)
-                            return ToolResult(output=json.dumps(result, indent=2))
+                            return ToolResult(
+                                output=json.dumps(result, indent=2),
+                                is_error=result.get("success") is False,
+                            )
                         next_status = (
                             _todo_status_to_workspace(todo_patch.get("status"))
                             if todo_patch.get("status") is not None
@@ -1363,7 +1433,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                             }
 
     logger.info("todowrite: %s completed for %s", action, conversation_id)
-    return ToolResult(output=json.dumps(result, indent=2))
+    return ToolResult(output=json.dumps(result, indent=2), is_error=result.get("success") is False)
 
 
 # =============================================================================
@@ -1377,6 +1447,27 @@ class _BoundTodoExecutor:
     runtime: TodoToolRuntime
 
     async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        from src.domain.model.plugins.generated_v2 import ScopeKindV2
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        try:
+            operation = current_operation_context_v2()
+        except RuntimeV2Error as exc:
+            if exc.code != "operation_context_not_pinned":
+                raise
+        else:
+            scope = operation.context.scope
+            if (
+                scope.kind != ScopeKindV2.SESSION
+                or scope.session_id != (ctx.conversation_id or ctx.session_id)
+                or (ctx.tenant_id and ctx.tenant_id != scope.tenant_id)
+                or (ctx.project_id and ctx.project_id != scope.project_id)
+            ):
+                raise RuntimeV2Error(
+                    "todo_operation_scope_mismatch",
+                    "Task tool context must match its active session operation",
+                )
         token = _todo_tool_runtime.set(self.runtime)
         try:
             return await self.template.execute(ctx, **kwargs)

@@ -48,7 +48,7 @@ export function usePluginManagement({
 
   const openUninstall = useCallback(
     (plugin: ManagedPlugin) => {
-      if (!canManage || plugin.install_status !== 'installed' || plugin.revoked) return;
+      if (!canManage || plugin.install_status !== 'installed') return;
       setDialogError(null);
       setDialog({
         kind: 'uninstall',

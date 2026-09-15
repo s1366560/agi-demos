@@ -10,6 +10,7 @@ import {
 
 import { useI18n } from '../../i18n';
 import { formatElapsedClock } from '../session/currentActivityModel';
+import { runCompletionTokenTotal } from '../session/runCompletionSummaryModel';
 import type {
   RunCompletionSummary,
   RunCompletionSummaryLink,
@@ -40,6 +41,7 @@ export function RunCompletionSummaryCard({
 }: RunCompletionSummaryCardProps) {
   const { t } = useI18n();
   const OutcomeIcon = OUTCOME_ICONS[summary.outcome];
+  const totalTokens = runCompletionTokenTotal(summary.tokenUsage);
 
   const evidenceLink = (link: RunCompletionSummaryLink, className: string) => (
     <button
@@ -93,13 +95,10 @@ export function RunCompletionSummaryCard({
                 })}
               </span>
             ) : null}
-            {summary.tokenUsage ? (
+            {totalTokens !== null ? (
               <span>
                 {t('session.runSummary.totalTokens', {
-                  tokens: formatTokenCount(
-                    (summary.tokenUsage.inputTokens ?? 0) +
-                      (summary.tokenUsage.outputTokens ?? 0),
-                  ),
+                  tokens: formatTokenCount(totalTokens),
                 })}
               </span>
             ) : null}

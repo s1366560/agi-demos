@@ -1638,7 +1638,10 @@ async def _execute_with_retry(
     )
     execution_kwargs = _with_bash_timeout_guard(tool_name, kwargs, configured_timeout_s)
 
-    for attempt in range(retry_config.max_retries + 1):
+    confined = execution_kwargs.get("_workspace_write_contract") == "directory-fd-write-v1"
+    # A lost response may have already written bytes; never retry this mutation.
+    max_retries = 0 if confined else retry_config.max_retries
+    for attempt in range(max_retries + 1):
         start_time = _time.time()
         try:
             call_kwargs: dict[str, Any] = {}
@@ -1649,6 +1652,16 @@ async def _execute_with_retry(
                     + _BASH_TIMEOUT_TRANSPORT_GRACE_SECONDS
                 )
 
+            if confined:
+                from src.application.services.workspace_file_permission_v2 import (
+                    require_workspace_file_binding_v2,
+                )
+
+                await require_workspace_file_binding_v2(
+                    sandbox_id=sandbox_id,
+                    workspace_root=execution_kwargs["_workspace_dir"],
+                    sandbox_port=sandbox_port,
+                )
             result = await sandbox_port.call_tool(
                 sandbox_id,
                 tool_name,
@@ -1674,7 +1687,7 @@ async def _execute_with_retry(
                 mcp_err.retry_count = attempt
                 last_error = mcp_err
 
-                if mcp_err.is_retryable and attempt < retry_config.max_retries:
+                if mcp_err.is_retryable and attempt < max_retries:
                     await asyncio.sleep(retry_config.get_delay(attempt))
                     continue
                 break
@@ -1697,7 +1710,7 @@ async def _execute_with_retry(
             )
             mcp_err.retry_count = attempt
 
-            if mcp_err.is_retryable and attempt < retry_config.max_retries:
+            if mcp_err.is_retryable and attempt < max_retries:
                 await asyncio.sleep(retry_config.get_delay(attempt))
                 last_error = mcp_err
                 continue
@@ -1745,7 +1758,13 @@ def create_sandbox_mcp_tool(
         tool_name,
         _convert_mcp_schema(tool_schema.get("input_schema", {})),
     )
-    permission = classify_sandbox_tool_permission(tool_name)
+    from src.application.services.workspace_file_permission_v2 import (
+        parse_workspace_write_contract_v2,
+        require_workspace_file_binding_v2,
+        validate_confined_write_arguments_v2,
+    )
+    confined_root = parse_workspace_write_contract_v2(tool_schema)
+    permission = "workspace_file_write" if confined_root is not None else classify_sandbox_tool_permission(tool_name)
 
     async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:
         """Execute the sandbox MCP tool with retry logic."""
@@ -1753,10 +1772,17 @@ def create_sandbox_mcp_tool(
         root_override = None
         declared_code_root = None
         try:
+            if confined_root is not None:
+                validate_confined_write_arguments_v2(kwargs, confined_root)
+                await require_workspace_file_binding_v2(
+                    sandbox_id=sandbox_id, workspace_root=confined_root, sandbox_port=sandbox_port,
+                )
             normalized_kwargs = _normalize_workspace_harness_kwargs(tool_name, kwargs)
             root_override = _workspace_root_override_from_context(ctx)
             declared_code_root = _declared_sandbox_code_root_from_context(ctx)
             code_root = _sandbox_code_root_from_context(ctx)
+            if confined_root is not None and declared_code_root is None and root_override is None:
+                code_root = confined_root
             if argument_error := _workspace_code_root_argument_error(
                 tool_name,
                 normalized_kwargs,
@@ -1798,6 +1824,9 @@ def create_sandbox_mcp_tool(
                 normalized_kwargs,
                 root_override,
             )
+            if confined_root is not None:
+                normalized_kwargs["_workspace_write_contract"] = "directory-fd-write-v1"
+                normalized_kwargs["_workspace_dir"] = confined_root
             output, raw_result = await _execute_workspace_sandbox_tool(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,

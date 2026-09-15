@@ -1,4 +1,5 @@
 import type { ProjectSummary, TenantSummary } from '../types';
+import { decodeTrustedSessionRestoreError } from './trustedSessionRecovery';
 
 type DesktopInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 
@@ -200,6 +201,7 @@ export function desktopCloudSessionProjectionClient(): CloudSessionProjectionCli
         ? await waitForProjection(invoke, requestId, request, signal)
         : await request;
       if (value === null || value === undefined) return null;
+      decodeTrustedSessionRestoreError(value);
       const projection = decodeCloudSessionProjection(value);
       if (!projection) throw new Error('cloud_session_projection_contract_invalid');
       return projection;

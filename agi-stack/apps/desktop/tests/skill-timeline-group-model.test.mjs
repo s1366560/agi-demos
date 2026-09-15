@@ -293,3 +293,104 @@ function skillEvent(id, type, skillId, skillName, extra = {}) {
     },
   };
 }
+
+test('native forced skill allowlist does not create a phantom pending invocation', () => {
+  const events = [
+    skillEvent('native-match', 'skill_matched', 'native', 'Native', {
+      tools: ['read'],
+      execution_mode: 'forced',
+    }),
+    skillEvent('native-start', 'skill_execution_start', 'native', 'Native'),
+    skillEvent('read-start', 'skill_tool_start', 'native', 'Native', {
+      tool_name: 'read',
+      step_index: 1,
+      tool_input: { path: 'README.md' },
+      status: 'running',
+    }),
+    skillEvent('read-result', 'skill_tool_result', 'native', 'Native', {
+      tool_name: 'read',
+      step_index: 1,
+      result: 'README contents',
+      status: 'completed',
+    }),
+  ];
+  for (const items of [
+    events,
+    [
+      ...events,
+      skillEvent('native-complete', 'skill_execution_complete', 'native', 'Native', {
+        success: true,
+        tool_calls_count: 1,
+      }),
+    ],
+  ]) {
+    const [group] = groupSkillTimelineItems(items).groups;
+    assert.equal(group.toolSteps.length, 1);
+    assert.equal(group.toolSteps[0].status, 'completed');
+    assert.equal(group.toolSteps[0].result, 'README contents');
+    assert.equal(group.currentStep, 1);
+    assert.equal(group.totalSteps, 1);
+  }
+});
+
+test('allowed tools and wildcard are not planned or executed skill steps', () => {
+  const [group] = groupSkillTimelineItems([
+    skillEvent('empty-match', 'skill_matched', 'empty', 'Empty', {
+      tools: ['*', 'read', 'write'],
+    }),
+    skillEvent('empty-start', 'skill_execution_start', 'empty', 'Empty'),
+    skillEvent('empty-end', 'skill_execution_complete', 'empty', 'Empty', {
+      success: true,
+      tool_calls_count: 0,
+    }),
+  ]).groups;
+  assert.deepEqual(group.toolSteps, []);
+  assert.equal(group.totalSteps, 0);
+  assert.equal(group.currentStep, 0);
+});
+
+test('repeated same-tool calls retain separate rounds and summary results do not duplicate them', () => {
+  for (const indexed of [true, false]) {
+    const events = [
+      skillEvent('repeat-match', 'skill_matched', 'repeat', 'Repeat', {
+        tools: ['read'],
+      }),
+    ];
+    for (const round of [1, 2]) {
+      const step = indexed ? { step_index: round } : {};
+      events.push(
+        skillEvent(`repeat-start-${round}`, 'skill_tool_start', 'repeat', 'Repeat', {
+          tool_name: 'read',
+          ...step,
+          tool_input: { path: `${round}.txt` },
+          status: 'running',
+        }),
+        skillEvent(`repeat-result-${round}`, 'skill_tool_result', 'repeat', 'Repeat', {
+          tool_name: 'read',
+          ...step,
+          result: `contents-${round}`,
+          status: 'completed',
+        }),
+      );
+    }
+    events.push(
+      skillEvent('repeat-end', 'skill_execution_complete', 'repeat', 'Repeat', {
+        success: true,
+        tool_calls_count: 2,
+        tool_results: [
+          { tool_name: 'read', status: 'completed' },
+          { tool_name: 'read', status: 'completed' },
+        ],
+      }),
+    );
+    const [group] = groupSkillTimelineItems(events).groups;
+    assert.equal(group.toolSteps.length, 2);
+    assert.deepEqual(
+      group.toolSteps.map((step) => step.result),
+      ['contents-1', 'contents-2'],
+    );
+    assert.equal(new Set(group.toolSteps.map((step) => step.key)).size, 2);
+    assert.equal(group.currentStep, 2);
+    assert.equal(group.totalSteps, 2);
+  }
+});

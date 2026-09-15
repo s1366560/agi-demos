@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.schemas.conversation_session_projection import SessionPermissionReviewResponse
 from src.application.services.conversation_session_projection_service import (
     AgentPlanRunAuthority,
     AgentPlanVersionAuthority,
@@ -51,6 +52,7 @@ from src.infrastructure.agent.hitl.utils import (
     sanitize_env_var_text,
     sanitize_hitl_scalar,
     sanitize_hitl_text,
+    sanitize_permission_description,
 )
 
 
@@ -367,6 +369,8 @@ class SqlConversationSessionProjectionReader:
             prompt = (
                 sanitize_env_var_text(record.question)
                 if kind == "env_var"
+                else sanitize_permission_description(record.question)
+                if kind == "permission"
                 else sanitize_hitl_text(record.question)
             )
             if prompt is None:
@@ -385,9 +389,38 @@ class SqlConversationSessionProjectionReader:
                     authority_revision=HITL_PENDING_AUTHORITY_REVISION,
                     created_at=record.created_at,
                     expires_at=record.expires_at,
+                    permission=(
+                        self._permission_review(record.request_metadata)
+                        if kind == "permission"
+                        else None
+                    ),
                 )
             )
         return tuple(items), bool(records)
+
+    @staticmethod
+    def _permission_review(
+        metadata: dict[str, Any] | None,
+    ) -> SessionPermissionReviewResponse | None:
+        if not isinstance(metadata, dict):
+            return None
+        fields = {key: sanitize_hitl_text(metadata.get(key)) for key in ("tool_name", "action")}
+        fields["description"] = sanitize_permission_description(metadata.get("description"))
+        risk = metadata.get("risk_level")
+        remember = metadata.get("allow_remember")
+        if (
+            any(value is None for value in fields.values())
+            or risk not in ("low", "medium", "high")
+            or not isinstance(remember, bool)
+        ):
+            return None
+        return SessionPermissionReviewResponse(
+            tool_name=cast(str, fields["tool_name"]),
+            action=cast(str, fields["action"]),
+            description=cast(str, fields["description"]),
+            risk_level=risk,
+            allow_remember=remember,
+        )
 
     async def _load_artifact_records(
         self, conversation: ConversationAuthority

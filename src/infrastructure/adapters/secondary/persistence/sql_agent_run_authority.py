@@ -8,20 +8,13 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.chat_permission_admission_v2 import prepare_chat_permission_snapshot
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
     AgentRunAuthorityModel,
     Conversation,
 )
-
-
-def _permission_profile(permission_mode: str) -> str:
-    return {
-        "ask": "read_only",
-        "automatic": "workspace_write",
-        "full_access": "full_access",
-    }.get(permission_mode, "read_only")
 
 
 async def ensure_chat_run_authority(
@@ -33,6 +26,7 @@ async def ensure_chat_run_authority(
     client_message_id: str | None,
     app_model_context: dict[str, Any] | None,
     permission_mode: str | None = None,
+    permission_snapshot: dict[str, Any] | None = None,
 ) -> AgentRunAuthorityModel:
     """Create or replay the canonical authority before acknowledging a chat turn."""
 
@@ -49,14 +43,16 @@ async def ensure_chat_run_authority(
             or existing.message_id != run_id
             or existing.request_message != request_message
             or existing.idempotency_key != idempotency_key
+            or existing.authorization_snapshot.get("requested_permission_mode") != permission_mode
         ):
             raise ValueError("Chat run authority conflict")
         await db.commit()
         return existing
 
-    policy_permission_mode = "ask"
-    effective_permission_mode = permission_mode or policy_permission_mode
-    permission_profile = _permission_profile(effective_permission_mode)
+    permissions = permission_snapshot or await prepare_chat_permission_snapshot(
+        conversation, permission_mode
+    )
+    permission_profile = permissions["permission_profile"]
     now = datetime.now(UTC)
     row = AgentRunAuthorityModel(
         id=run_id,
@@ -78,12 +74,7 @@ async def ensure_chat_run_authority(
             "project_id": conversation.project_id,
             "workspace_id": conversation.workspace_id,
             "permission_profile": permission_profile,
-            "requested_permission_mode": permission_mode,
-            "effective_permission_mode": effective_permission_mode,
-            "policy": {
-                "revision": 0,
-                "permission_mode": policy_permission_mode,
-            },
+            **permissions,
             "context_authorities": (
                 list(app_model_context.get("context_items", []))
                 if isinstance(app_model_context, dict)

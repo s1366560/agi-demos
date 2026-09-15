@@ -452,3 +452,12 @@ test("usage passes through verbatim and defaults to null", () => {
   });
   assert.equal(without.usage, null);
 });
+
+test("partial billing telemetry cannot manufacture a total token count", () => {
+  const { runCompletionTokenTotal } = require("/tmp/agistack-desktop-test-dist/src/features/session/runCompletionSummaryModel.js");
+  assert.equal(runCompletionTokenTotal(null), null);
+  assert.equal(runCompletionTokenTotal({ inputTokens: null, outputTokens: null, costUsd: 0.1 }), null);
+  assert.equal(runCompletionTokenTotal({ inputTokens: 12, outputTokens: null, costUsd: null }), null);
+  assert.equal(runCompletionTokenTotal({ inputTokens: 0, outputTokens: 0, costUsd: 0 }), 0);
+  assert.equal(runCompletionTokenTotal({ inputTokens: 12, outputTokens: 5, costUsd: null }), 17);
+});

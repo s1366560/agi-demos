@@ -7905,6 +7905,8 @@
       "clearAll": "全部清除",
       "clearAllConfirmTitle": "清除所有执行记录？",
       "kill": "停止执行",
+      "cancelPending": "已请求取消，正在等待执行停止。",
+      "cancelFailed": "取消失败，请重试或刷新执行状态。",
       "killConfirmTitle": "停止该执行任务？",
       "killConfirmDescription": "正在运行的任务将被终止。",
       "cancel": "取消",

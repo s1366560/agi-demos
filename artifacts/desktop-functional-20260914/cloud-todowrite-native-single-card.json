@@ -1,0 +1,9 @@
+{
+  "conversation_id": "0687a537-5846-5e0b-9a02-e90b414db0fd",
+  "cards": [
+    {
+      "text": "工具活动\n1 次工具调用\n已完成\ntodowrite\n{ \"success\": true, \"action\": \"replace\", \"total_count\": 7, \"message\": \"Replaced task list with 7 items\" }\n30ms\n16:52",
+      "className": "timeline-tool-group status-complete"
+    }
+  ]
+}

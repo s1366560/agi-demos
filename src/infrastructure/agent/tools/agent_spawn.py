@@ -63,7 +63,7 @@ def _current_agent_orchestrator_v2() -> AgentOrchestrator:
         },
         "required": ["agent_id", "message"],
     },
-    permission=None,
+    permission="write",
     category="multi_agent",
 )
 async def agent_spawn_tool(

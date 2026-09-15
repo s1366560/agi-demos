@@ -1,0 +1,25 @@
+{
+  "installations": [
+    {
+      "activation_error": null,
+      "activation_status": "active",
+      "approved_permissions": [
+        "tools.execute"
+      ],
+      "authorization_status": "approved",
+      "enabled": true,
+      "reference": {
+        "bundle_id": "qa-marketplace-marker-bundle",
+        "digest": "sha256:4d81bf75902708f9a7ceb4200418d0ef3b9162f1584ffd1a14567dd127303ca1",
+        "source": "local-file://qa-marketplace-marker-bundle/1.0.0",
+        "version": "1.0.0"
+      },
+      "scope": {
+        "kind": "project",
+        "project_id": "desktop-client",
+        "tenant_id": "northstar"
+      }
+    }
+  ],
+  "trust_configured": true
+}

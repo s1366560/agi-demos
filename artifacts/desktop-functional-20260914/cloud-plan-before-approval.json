@@ -1,0 +1,46 @@
+{
+  "http_status": 200,
+  "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+  "snapshot_revision": "1fd43c594a93ee2e7daa36e575acaa428661e755642edc275233b78cfac7db2b",
+  "current_run": {
+    "id": "7d09189f-bdfa-5545-a390-ce6e709121f5",
+    "status": "completed",
+    "completed_at": "2026-09-14T03:23:08.429043Z"
+  },
+  "current_plan": {
+    "id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+    "version": 3,
+    "status": "draft",
+    "tasks": [
+      {
+        "id": "3f4ed377-de3b-43bb-a992-5060598f603e",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "content": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+        "title": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+        "description": null,
+        "estimated_duration_seconds": null,
+        "started_at": null,
+        "completed_at": null,
+        "result_summary": null,
+        "evidence_refs": [],
+        "status": "pending",
+        "priority": "high",
+        "order_index": 0,
+        "created_at": "2026-09-14T03:22:39.860534+00:00",
+        "updated_at": "2026-09-14T03:22:39.860535+00:00"
+      }
+    ]
+  },
+  "capabilities": {
+    "can_send_message": true,
+    "can_respond_to_hitl": false,
+    "can_approve_plan": false,
+    "can_control_execution": false,
+    "can_review_artifacts": false,
+    "can_deliver_artifacts": false,
+    "allowed_actions": [
+      "send_message"
+    ]
+  },
+  "pending_hitl_count": 0
+}

@@ -1,0 +1,14 @@
+{
+  "PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES": {
+    "before": [],
+    "after": [
+      "/Users/tiejunsun/github/agi-demos/artifacts/desktop-functional-20260914/marketplace-wasm-fixture/signer-public.pem"
+    ]
+  },
+  "PLUGIN_MARKETPLACE_ALLOWED_REGISTRIES": {
+    "before": [],
+    "after": [
+      "http://127.0.0.1:64212"
+    ]
+  }
+}

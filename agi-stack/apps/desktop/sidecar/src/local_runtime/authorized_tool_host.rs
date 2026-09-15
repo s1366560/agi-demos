@@ -112,20 +112,89 @@ impl AuthorizedRunToolHost {
     }
 
     fn allows(&self, tool: &str, effect: ToolEffect) -> bool {
-        let workspace_granted = self.run.authorization_snapshot["mode"].as_str() == Some("build")
-            && self
-                .session_store
-                .workspace_tool_grant_active(&self.run.conversation_id, tool)
-                .unwrap_or(false);
+        self.allows_without_once(tool, effect) || self.once_permission_active(tool)
+    }
+
+    fn allows_without_once(&self, tool: &str, effect: ToolEffect) -> bool {
+        // DesktopRun is an approved plan authority, including Build execution.
+        // Historical workspace grants cannot broaden that plan's chosen profile.
+        // Fresh, exact run/tool approvals are handled separately by `allows`.
         match self.run.permission_profile {
-            DesktopPermissionProfile::ReadOnly => {
-                effect == ToolEffect::Read || workspace_granted || self.once_permission_active(tool)
-            }
+            DesktopPermissionProfile::ReadOnly => effect == ToolEffect::Read,
             DesktopPermissionProfile::WorkspaceWrite => {
-                effect == ToolEffect::Read || is_workspace_write_tool(tool) || workspace_granted
+                effect == ToolEffect::Read || is_workspace_write_tool(tool)
             }
             DesktopPermissionProfile::FullAccess => true,
         }
+    }
+
+    fn validate_browser_run(&self) -> CoreResult<()> {
+        let current = self
+            .session_store
+            .run(&self.run.id)
+            .map_err(CoreError::Tool)?
+            .ok_or_else(|| CoreError::Tool("authorized browser run no longer exists".into()))?;
+        if current.status != super::authority_store::DesktopRunStatus::Running
+            || current.revision != self.run.revision
+            || current.plan_version_id != self.run.plan_version_id
+            || current.conversation_id != self.run.conversation_id
+            || current.project_id != self.run.project_id
+            || current.permission_profile != self.run.permission_profile
+            || current.environment.as_ref().map(|env| &env.id)
+                != self.run.environment.as_ref().map(|env| &env.id)
+        {
+            return Err(CoreError::Tool(
+                "browser authority no longer matches the active run".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn call_browser(
+        &self,
+        tool: &str,
+        input_json: &str,
+        effect: ToolEffect,
+    ) -> CoreResult<String> {
+        self.validate_browser_run()?;
+        let profile_allowed = self.allows_without_once(tool, effect);
+        // Reserve the exact once capability before any await. A second concurrent
+        // call cannot observe or reuse it while origin consent is being resolved.
+        let used_once = self
+            .once_permissions
+            .lock()
+            .expect("run once tool permissions")
+            .remove(&(self.run.id.clone(), tool.to_string()));
+        if !profile_allowed && !used_once {
+            return Err(CoreError::Tool(
+                "browser tool permission is no longer active".into(),
+            ));
+        }
+        let result = self.inner.call(tool, input_json).await;
+        // These protocol results mean the origin/capability gate did not execute
+        // the action. Restore only this attempt's reserved capability, only while
+        // the same run authority remains live, so an approved retry can proceed.
+        let consent_pending = result
+            .as_ref()
+            .ok()
+            .and_then(|output| serde_json::from_str::<Value>(output).ok())
+            .is_some_and(|output| {
+                matches!(
+                    output.get("error").and_then(Value::as_str),
+                    Some(
+                        "origin_consent_required"
+                            | "full_cdp_consent_required"
+                            | "credential_fill_consent_required"
+                    )
+                )
+            });
+        if used_once && consent_pending && self.validate_browser_run().is_ok() {
+            self.once_permissions
+                .lock()
+                .expect("run once tool permissions")
+                .insert((self.run.id.clone(), tool.to_string()));
+        }
+        result
     }
 
     fn request(&self, tool: &str, input: Value) -> CoreResult<ToolInvocationRequest> {
@@ -189,7 +258,7 @@ impl ToolHost for AuthorizedRunToolHost {
         // trap a byte-identical retry after the user grants consent behind
         // the "already completed" replay.
         if tool.starts_with("browser_") {
-            return self.inner.call(tool, input_json).await;
+            return self.call_browser(tool, input_json, metadata.effect).await;
         }
         let input: Value = serde_json::from_str(input_json)
             .map_err(|error| CoreError::Tool(format!("invalid tool input: {error}")))?;
@@ -210,11 +279,6 @@ impl ToolHost for AuthorizedRunToolHost {
             run_revision: request.run_revision,
         };
         let now_ms = Utc::now().timestamp_millis();
-        let workspace_granted = self.run.authorization_snapshot["mode"].as_str() == Some("build")
-            && self
-                .session_store
-                .workspace_tool_grant_active(&self.run.conversation_id, tool)
-                .map_err(CoreError::Tool)?;
         let grant = if metadata.requires_grant() {
             Some(PermissionGrant {
                 grant_id: format!("local-profile-grant-{identity_digest}"),
@@ -239,11 +303,7 @@ impl ToolHost for AuthorizedRunToolHost {
                 &request,
                 &metadata,
                 grant,
-                if workspace_granted {
-                    "workspace_tool_grant"
-                } else {
-                    "plan_permission_profile"
-                },
+                "plan_permission_profile",
                 now_ms,
             )
             .map_err(CoreError::Tool)?;
@@ -417,6 +477,8 @@ static SENSITIVE_INPUT_FIELDS: LazyLock<BTreeSet<&'static str>> = LazyLock::new(
 });
 
 const READ_ONLY_TOOLS: &[&str] = &[
+    "skill_list",
+    "skill_loader",
     "knowledge_search",
     "knowledge_source",
     "read",
@@ -611,6 +673,158 @@ mod tests {
         Ok(())
     }
 
+    #[derive(Default)]
+    struct BrowserAuthorityProbe {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    #[tokio::test]
+    async fn approved_read_only_plan_does_not_inherit_historical_workspace_grant(
+    ) -> Result<(), String> {
+        use crate::local_runtime::authority_store::{
+            DesktopHitlRequest, DesktopHitlStatus, WorkspaceToolGrant,
+        };
+        use crate::local_runtime::session_store::HitlResponseCommit;
+
+        let (root, store, run, host) = running_host(DesktopPermissionProfile::ReadOnly)?;
+        let request = DesktopHitlRequest {
+            id: Uuid::new_v4().to_string(),
+            conversation_id: run.conversation_id.clone(),
+            run_id: None,
+            round: 1,
+            kind: agistack_core::agent::types::HitlKind::Permission,
+            prompt: "Allow workspace write".into(),
+            decision: None,
+            a2ui_action: None,
+            status: DesktopHitlStatus::Pending,
+            authority_revision: 1,
+            created_at: super::super::now_iso(),
+            responded_at: None,
+            response_data: None,
+            response_actor: None,
+            response_revision: None,
+            idempotency_key: None,
+        };
+        store.insert_hitl_request(&request)?;
+        let grant = WorkspaceToolGrant {
+            id: Uuid::new_v4().to_string(),
+            workspace_id: "local-workspace".into(),
+            canonical_tool_name: "write".into(),
+            source_hitl_request_id: request.id.clone(),
+            revision: 1,
+            created_by: "owner".into(),
+            created_at: super::super::now_iso(),
+            revoked_by: None,
+            revoked_at: None,
+        };
+        store.mark_hitl_responded(&request.id, HitlResponseCommit {
+            expected_authority_revision: 1,
+            response_data: &json!({"action":"allow_always", "granted":true, "scope":"workspace_tool"}),
+            response_actor: "owner",
+            response_revision: None,
+            idempotency_key: "historical-workspace-grant",
+            workspace_tool_grant: Some(&grant),
+            now: &super::super::now_iso(),
+        }).map_err(|error| format!("{error:?}"))?;
+        assert!(store.workspace_tool_grant_active(&run.conversation_id, "write")?);
+        assert!(!run.plan_version_id.is_empty());
+        assert_eq!(run.authorization_snapshot["mode"], "build");
+        let input = r#"{"path":"historical-grant.txt","content":"explicit approval only"}"#;
+        assert!(host.call("write", input).await.is_err());
+        assert!(!root.join("historical-grant.txt").exists());
+
+        // A fresh human approval for this exact run/tool remains sufficient.
+        let once = Arc::new(Mutex::new(BTreeSet::from([(
+            run.id.clone(),
+            "write".into(),
+        )])));
+        let host = host.with_once_permissions(Arc::clone(&once));
+        host.call("write", input)
+            .await
+            .map_err(|error| error.to_string())?;
+        assert!(root.join("historical-grant.txt").exists());
+        assert!(once.lock().expect("once permissions").is_empty());
+        assert!(host
+            .call("write", r#"{"path":"second.txt","content":"blocked"}"#)
+            .await
+            .is_err());
+        std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    #[async_trait]
+    impl ToolHost for BrowserAuthorityProbe {
+        fn list_tools(&self) -> Vec<String> {
+            vec!["browser_navigate".to_string()]
+        }
+
+        async fn call(&self, _tool: &str, _input: &str) -> CoreResult<String> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tokio::task::yield_now().await;
+            Ok(json!({"ok": true}).to_string())
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_dispatch_rejects_stale_run_revision_environment_and_cancelled_run(
+    ) -> Result<(), String> {
+        for fault in ["revision", "environment", "cancelled"] {
+            let (root, store, run, _) = running_host(DesktopPermissionProfile::FullAccess)?;
+            let probe = Arc::new(BrowserAuthorityProbe::default());
+            let mut host = AuthorizedRunToolHost::new(probe.clone(), store.clone(), run.clone());
+            match fault {
+                "revision" => host.run.revision += 1,
+                "environment" => {
+                    host.run.environment.as_mut().expect("environment").id = "other".into()
+                }
+                _ => {
+                    store.transition_run(
+                        &run.id,
+                        run.revision,
+                        DesktopRunStatus::Cancelled,
+                        None,
+                        &super::super::now_iso(),
+                    )?;
+                }
+            }
+            assert!(
+                host.call("browser_navigate", r#"{"url":"https://example.test"}"#)
+                    .await
+                    .is_err(),
+                "stale {fault} must fail closed"
+            );
+            assert_eq!(probe.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+            std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn browser_tool_once_grant_cannot_be_reused_or_raced() -> Result<(), String> {
+        let (root, store, run, _) = running_host(DesktopPermissionProfile::ReadOnly)?;
+        let probe = Arc::new(BrowserAuthorityProbe::default());
+        let permissions: RunOnceToolPermissions = Arc::new(Mutex::new(BTreeSet::from([(
+            run.id.clone(),
+            "browser_navigate".into(),
+        )])));
+        let host = AuthorizedRunToolHost::new(probe.clone(), store, run)
+            .with_once_permissions(permissions.clone());
+        let (first, second) = tokio::join!(
+            host.call("browser_navigate", "{}"),
+            host.call("browser_navigate", "{}")
+        );
+        assert_ne!(
+            first.is_ok(),
+            second.is_ok(),
+            "exactly one concurrent invocation is authorized"
+        );
+        assert_eq!(probe.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(permissions.lock().expect("permissions").is_empty());
+        assert!(host.call("browser_navigate", "{}").await.is_err());
+        std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
     #[tokio::test]
     async fn one_time_hitl_permission_exposes_and_consumes_exactly_one_call() -> Result<(), String>
     {
@@ -732,6 +946,53 @@ mod tests {
 
         std::fs::remove_dir_all(read_root).map_err(|error| error.to_string())?;
         std::fs::remove_dir_all(full_root).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn workspace_write_mcp_once_grant_is_exact_and_consumed() -> Result<(), String> {
+        let (root, store, run, _) = running_host(DesktopPermissionProfile::WorkspaceWrite)?;
+        let tool = "mcp__server__tool";
+        let permissions: RunOnceToolPermissions = Arc::new(Mutex::new(BTreeSet::new()));
+        let host = AuthorizedRunToolHost::with_dynamic_metadata(
+            Arc::new(StubDynamicHost),
+            store,
+            run.clone(),
+            BTreeMap::from([(
+                tool.to_string(),
+                ToolMetadata {
+                    name: tool.to_string(),
+                    effect: ToolEffect::Mutate,
+                    sensitive_input_fields: BTreeSet::new(),
+                },
+            )]),
+        )
+        .with_once_permissions(Arc::clone(&permissions));
+        assert!(!host.list_tools().contains(&tool.to_string()));
+        permissions
+            .lock()
+            .unwrap()
+            .insert(("other-run".into(), tool.into()));
+        permissions
+            .lock()
+            .unwrap()
+            .insert((run.id.clone(), "another-tool".into()));
+        assert!(host.call(tool, "{}").await.is_err());
+        permissions
+            .lock()
+            .unwrap()
+            .insert((run.id.clone(), tool.into()));
+        assert!(host.list_tools().contains(&tool.to_string()));
+        host.call(tool, "{}")
+            .await
+            .map_err(|error| error.to_string())?;
+        assert!(!permissions
+            .lock()
+            .unwrap()
+            .contains(&(run.id.clone(), tool.into())));
+        assert!(!host.list_tools().contains(&tool.to_string()));
+        assert!(host.call(tool, r#"{"second":true}"#).await.is_err());
+        std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
         Ok(())
     }
 

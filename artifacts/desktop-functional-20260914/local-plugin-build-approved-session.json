@@ -1,0 +1,292 @@
+{
+  "artifact_deliveries": [],
+  "artifact_versions": [],
+  "capabilities": {
+    "allowed_actions": [
+      "request_changes",
+      "approve"
+    ],
+    "can_approve_plan": false,
+    "can_deliver_artifacts": false,
+    "can_queue_next": false,
+    "can_respond_to_hitl": false,
+    "can_review_artifacts": false,
+    "can_send_message": false,
+    "can_steer_now": false,
+    "run_actions": [
+      "request_changes",
+      "approve"
+    ]
+  },
+  "conversation": {
+    "agent_config": {
+      "capability_mode": "work",
+      "llm_model_override": null,
+      "llm_route_override": null,
+      "selected_agent_id": "builtin:all-access"
+    },
+    "conversation_mode": "workspace",
+    "coordinator_agent_id": "builtin:all-access",
+    "created_at": "2026-09-14T05:53:52.950741+00:00",
+    "current_mode": "build",
+    "focused_agent_id": "builtin:all-access",
+    "id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+    "linked_workspace_task_id": null,
+    "message_count": 24,
+    "metadata": {
+      "capability_mode": "work",
+      "environment": {
+        "branch": null,
+        "created_at": "2026-09-14T06:18:28.907238+00:00",
+        "id": "local-environment-82db388c-9dd7-4391-87ef-072a8548bcfd",
+        "kind": "local",
+        "label": "Local workspace",
+        "repository_root": null,
+        "source_run_id": null,
+        "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+      },
+      "run": {
+        "authorization_snapshot": {
+          "approved_at": "2026-09-14T06:18:28.934988+00:00",
+          "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+          "environment": {
+            "branch": null,
+            "created_at": "2026-09-14T06:18:28.907238+00:00",
+            "id": "local-environment-82db388c-9dd7-4391-87ef-072a8548bcfd",
+            "kind": "local",
+            "label": "Local workspace",
+            "repository_root": null,
+            "source_run_id": null,
+            "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+          },
+          "mode": "build",
+          "permission_profile": "read_only",
+          "plan_version_id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+          "project_id": "desktop-client"
+        },
+        "completed_at": null,
+        "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+        "created_at": "2026-09-14T06:18:28.934988+00:00",
+        "environment": {
+          "branch": null,
+          "created_at": "2026-09-14T06:18:28.907238+00:00",
+          "id": "local-environment-82db388c-9dd7-4391-87ef-072a8548bcfd",
+          "kind": "local",
+          "label": "Local workspace",
+          "repository_root": null,
+          "source_run_id": null,
+          "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+        },
+        "error": null,
+        "id": "local-run-f2d4c576-7fa0-497c-ae8b-8be312286b3d",
+        "idempotency_key": "desktop-plan-approval-0f0cb5b7-5916-4f78-9bd7-2f08a6a4d658",
+        "last_heartbeat_at": "2026-09-14T06:18:35.089639+00:00",
+        "message_id": "desktop-build-0f0cb5b7-5916-4f78-9bd7-2f08a6a4d658",
+        "permission_profile": "read_only",
+        "plan_version_id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+        "project_id": "desktop-client",
+        "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"Reported real score for NATIVE_LOCAL_PLAN_PLUGIN_RETEST is 20260914. Upon approval, call plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e with input NATIVE_LOCAL_PLUGIN_BUILD_OK and return the resulting score.\",\"priority\":\"high\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+        "revision": 3,
+        "started_at": "2026-09-14T06:18:28.936602+00:00",
+        "status": "ready_review",
+        "updated_at": "2026-09-14T06:18:35.089639+00:00"
+      },
+      "runtime": "local"
+    },
+    "participant_agents": [
+      "builtin:all-access"
+    ],
+    "project_id": "desktop-client",
+    "status": "active",
+    "summary": null,
+    "tenant_id": "northstar",
+    "title": "本地签名插件原生验收：当前项目已批准并激活 qa-marketplace-marker-bundle。请在规划阶段先实际调用可用目录中的 qa_marketplace_marker 插件工具（",
+    "updated_at": "2026-09-14T06:18:28.934988+00:00",
+    "user_id": "local-user",
+    "workspace_id": null,
+    "workspace_name": null
+  },
+  "current_plan": {
+    "approved_at": "2026-09-14T06:18:28.934988+00:00",
+    "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+    "created_at": "2026-09-14T06:16:23.079467+00:00",
+    "id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+    "status": "approved",
+    "tasks": [
+      {
+        "content": "Reported real score for NATIVE_LOCAL_PLAN_PLUGIN_RETEST is 20260914. Upon approval, call plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e with input NATIVE_LOCAL_PLUGIN_BUILD_OK and return the resulting score.",
+        "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+        "created_at": "2026-09-14T06:16:23.079467+00:00",
+        "id": "local-plan-task-615ef8ab-667b-41d1-b59a-ae201c074606",
+        "order_index": 0,
+        "priority": "high",
+        "status": "pending",
+        "updated_at": "2026-09-14T06:16:23.079467+00:00"
+      }
+    ],
+    "version": 1
+  },
+  "current_run": {
+    "authorization_snapshot": {
+      "approved_at": "2026-09-14T06:18:28.934988+00:00",
+      "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+      "environment": {
+        "branch": null,
+        "created_at": "2026-09-14T06:18:28.907238+00:00",
+        "id": "local-environment-82db388c-9dd7-4391-87ef-072a8548bcfd",
+        "kind": "local",
+        "label": "Local workspace",
+        "repository_root": null,
+        "source_run_id": null,
+        "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+      },
+      "mode": "build",
+      "permission_profile": "read_only",
+      "plan_version_id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+      "project_id": "desktop-client"
+    },
+    "completed_at": null,
+    "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+    "created_at": "2026-09-14T06:18:28.934988+00:00",
+    "environment": {
+      "branch": null,
+      "created_at": "2026-09-14T06:18:28.907238+00:00",
+      "id": "local-environment-82db388c-9dd7-4391-87ef-072a8548bcfd",
+      "kind": "local",
+      "label": "Local workspace",
+      "repository_root": null,
+      "source_run_id": null,
+      "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+    },
+    "error": null,
+    "id": "local-run-f2d4c576-7fa0-497c-ae8b-8be312286b3d",
+    "idempotency_key": "desktop-plan-approval-0f0cb5b7-5916-4f78-9bd7-2f08a6a4d658",
+    "last_heartbeat_at": "2026-09-14T06:18:35.089639+00:00",
+    "message_id": "desktop-build-0f0cb5b7-5916-4f78-9bd7-2f08a6a4d658",
+    "permission_profile": "read_only",
+    "plan_version_id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+    "project_id": "desktop-client",
+    "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"Reported real score for NATIVE_LOCAL_PLAN_PLUGIN_RETEST is 20260914. Upon approval, call plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e with input NATIVE_LOCAL_PLUGIN_BUILD_OK and return the resulting score.\",\"priority\":\"high\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+    "revision": 3,
+    "started_at": "2026-09-14T06:18:28.936602+00:00",
+    "status": "ready_review",
+    "updated_at": "2026-09-14T06:18:35.089639+00:00"
+  },
+  "evidence_summary": {
+    "artifact_delivery_count": 0,
+    "artifact_source_count": 0,
+    "artifact_version_count": 0,
+    "changes": null,
+    "checks": null,
+    "tool_invocation_count": 1,
+    "unknown_outcome_count": 0
+  },
+  "pending_hitl": [],
+  "plan_history": [
+    {
+      "approved_at": "2026-09-14T06:18:28.934988+00:00",
+      "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+      "created_at": "2026-09-14T06:16:23.079467+00:00",
+      "id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+      "status": "approved",
+      "tasks": [
+        {
+          "content": "Reported real score for NATIVE_LOCAL_PLAN_PLUGIN_RETEST is 20260914. Upon approval, call plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e with input NATIVE_LOCAL_PLUGIN_BUILD_OK and return the resulting score.",
+          "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+          "created_at": "2026-09-14T06:16:23.079467+00:00",
+          "id": "local-plan-task-615ef8ab-667b-41d1-b59a-ae201c074606",
+          "order_index": 0,
+          "priority": "high",
+          "status": "pending",
+          "updated_at": "2026-09-14T06:16:23.079467+00:00"
+        }
+      ],
+      "version": 1
+    }
+  ],
+  "run_history": [
+    {
+      "authorization_snapshot": {
+        "approved_at": "2026-09-14T06:18:28.934988+00:00",
+        "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+        "environment": {
+          "branch": null,
+          "created_at": "2026-09-14T06:18:28.907238+00:00",
+          "id": "local-environment-82db388c-9dd7-4391-87ef-072a8548bcfd",
+          "kind": "local",
+          "label": "Local workspace",
+          "repository_root": null,
+          "source_run_id": null,
+          "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+        },
+        "mode": "build",
+        "permission_profile": "read_only",
+        "plan_version_id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+        "project_id": "desktop-client"
+      },
+      "completed_at": null,
+      "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+      "created_at": "2026-09-14T06:18:28.934988+00:00",
+      "environment": {
+        "branch": null,
+        "created_at": "2026-09-14T06:18:28.907238+00:00",
+        "id": "local-environment-82db388c-9dd7-4391-87ef-072a8548bcfd",
+        "kind": "local",
+        "label": "Local workspace",
+        "repository_root": null,
+        "source_run_id": null,
+        "workspace_path": "/private/var/folders/_5/59bsb6h13vz0m8ydpn71jxv80000gn/T/agistack-desktop-qa-local-workspace-lelv5jvt"
+      },
+      "error": null,
+      "id": "local-run-f2d4c576-7fa0-497c-ae8b-8be312286b3d",
+      "idempotency_key": "desktop-plan-approval-0f0cb5b7-5916-4f78-9bd7-2f08a6a4d658",
+      "last_heartbeat_at": "2026-09-14T06:18:35.089639+00:00",
+      "message_id": "desktop-build-0f0cb5b7-5916-4f78-9bd7-2f08a6a4d658",
+      "permission_profile": "read_only",
+      "plan_version_id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+      "project_id": "desktop-client",
+      "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"Reported real score for NATIVE_LOCAL_PLAN_PLUGIN_RETEST is 20260914. Upon approval, call plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e with input NATIVE_LOCAL_PLUGIN_BUILD_OK and return the resulting score.\",\"priority\":\"high\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+      "revision": 3,
+      "started_at": "2026-09-14T06:18:28.936602+00:00",
+      "status": "ready_review",
+      "updated_at": "2026-09-14T06:18:35.089639+00:00"
+    }
+  ],
+  "schema_version": 1,
+  "snapshot_revision": "96c8b75932290fb75bc0147234c5303f3d633a255509b7d83b2a3f551b89893d",
+  "tasks": [
+    {
+      "content": "Reported real score for NATIVE_LOCAL_PLAN_PLUGIN_RETEST is 20260914. Upon approval, call plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e with input NATIVE_LOCAL_PLUGIN_BUILD_OK and return the resulting score.",
+      "conversation_id": "local-conversation-8b30f51f-0cb0-4a2f-a072-9bf41bbb0334",
+      "created_at": "2026-09-14T06:16:23.079467+00:00",
+      "id": "local-plan-task-615ef8ab-667b-41d1-b59a-ae201c074606",
+      "order_index": 0,
+      "priority": "high",
+      "status": "pending",
+      "updated_at": "2026-09-14T06:16:23.079467+00:00"
+    }
+  ],
+  "tool_invocations": [
+    {
+      "effect": "read",
+      "environment_id": "local-environment-82db388c-9dd7-4391-87ef-072a8548bcfd",
+      "finished_at_ms": 1789366712062,
+      "input_digest": "d1859e11968028e48a8765371d56899a7f1a475acf97455d50b462f6518015b4",
+      "invocation_id": "local-invocation-0a30f3a50e8b13fb7b06c9cb78d68411c5495f6f0240cd5f070b5d84e25511ff",
+      "plan_version_id": "local-plan-version-d470dfba-67a1-4f48-b696-a9392763f247",
+      "prepared_at_ms": 1789366711958,
+      "redacted_input": {
+        "input": "NATIVE_LOCAL_PLUGIN_BUILD_OK"
+      },
+      "run_id": "local-run-f2d4c576-7fa0-497c-ae8b-8be312286b3d",
+      "run_revision": 2,
+      "started_at_ms": 1789366711958,
+      "status": "completed",
+      "target": {
+        "input_digest": "d1859e11968028e48a8765371d56899a7f1a475acf97455d50b462f6518015b4"
+      },
+      "tool_name": "plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e"
+    }
+  ],
+  "updated_at": "2026-09-14T06:18:35.089639+00:00"
+}

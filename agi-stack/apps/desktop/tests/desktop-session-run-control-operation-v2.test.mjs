@@ -553,3 +553,14 @@ test('operation error outranks release error and HMR pins each mutation generati
     ['acquire:sha256:old', 'acquire:sha256:new', 'release:sha256:new', 'release:sha256:old'],
   );
 });
+
+test('only cloud cancellation accepts an unchanged queued request receipt', async () => {
+  const response = { accepted: true, status: 'cancel_requested', run: run({ status: 'queued', revision: 8 }) };
+  const actions = acceptedActions(serviceFixture([], { cancelResponse: response }), 'sha256:cancel', []);
+  const cloudClient = createClient(actions, runtimeConfig({ mode: 'cloud' }));
+  const outcome = await cloudClient.cancelRun('run-1', 8);
+  assert.equal(outcome.status, 'cancel_requested');
+  assert.equal(outcome.run.status, 'queued');
+  const localClient = createClient(actions);
+  await assert.rejects(localClient.cancelRun('run-1', 8));
+});

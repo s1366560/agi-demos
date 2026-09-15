@@ -20,7 +20,7 @@ impl ToolHost for PlanModeToolHost {
         if name == SUBMIT_PLAN_TOOL_NAME {
             return Some(submit_plan_definition());
         }
-        if !Self::is_allowed(name) {
+        if !self.accepts_tool(name) {
             return None;
         }
         self.inner.tool_definition(name)
@@ -31,14 +31,14 @@ impl ToolHost for PlanModeToolHost {
             .inner
             .list_tools()
             .into_iter()
-            .filter(|tool| Self::is_allowed(tool))
+            .filter(|tool| self.accepts_tool(tool))
             .collect::<Vec<_>>();
         tools.push(SUBMIT_PLAN_TOOL_NAME.to_string());
         tools
     }
 
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
-        if !Self::is_allowed(tool) {
+        if !self.accepts_tool(tool) {
             return Err(CoreError::Tool(format!(
                 "tool '{tool}' is blocked while the conversation is in plan mode"
             )));

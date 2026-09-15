@@ -506,6 +506,29 @@ test('provider workspace helpers search structured fields and map attention stat
   ]);
 });
 
+test('provider directory includes the enabled primary model without counting duplicates', () => {
+  const provider = {
+    id: 'primary-only',
+    name: 'Primary only',
+    provider_type: 'openai',
+    llm_model: ' primary-model ',
+    allowed_models: [],
+  };
+  assert.deepEqual(providerModelsFromProvider(provider), [
+    { id: 'primary-model', capability: 'chat' },
+  ]);
+  assert.deepEqual(
+    providerModelsFromProvider({
+      ...provider,
+      allowed_models: [' primary-model ', '', 'secondary-model', 'secondary-model'],
+    }),
+    [
+      { id: 'primary-model', capability: 'chat' },
+      { id: 'secondary-model', capability: 'chat' },
+    ],
+  );
+});
+
 test('authoritative routing nulls do not fall back to provider defaults', () => {
   const provider = {
     id: 'provider-openai',

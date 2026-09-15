@@ -12,7 +12,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -246,7 +246,7 @@ class ToolHookRegistry:
                         tool_name,
                         result.reason,
                     )
-                    return result
+                    return replace(result, args=current_args) if result.args is None else result
                 if result.args is not None:
                     current_args = result.args
             except Exception:

@@ -46,7 +46,7 @@ def _current_agent_orchestrator_v2() -> AgentOrchestrator:
         },
         "required": ["session_id"],
     },
-    permission=None,
+    permission="delegate",
     category="multi_agent",
 )
 async def agent_stop_tool(

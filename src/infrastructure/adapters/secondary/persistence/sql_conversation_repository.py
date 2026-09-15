@@ -129,11 +129,7 @@ class SqlConversationRepository(
             "merge_strategy": conversation.merge_strategy.value,
             # Multi-agent (Track B)
             "participant_agents": list(conversation.participant_agents),
-            "conversation_mode": (
-                conversation.conversation_mode.value
-                if conversation.conversation_mode is not None
-                else None
-            ),
+            "conversation_mode": conversation.persisted_conversation_mode,
             "coordinator_agent_id": conversation.coordinator_agent_id,
             "focused_agent_id": conversation.focused_agent_id,
             # Workspace linkage (Track G2)
@@ -163,11 +159,7 @@ class SqlConversationRepository(
                     "merge_strategy": conversation.merge_strategy.value,
                     # Multi-agent (Track B)
                     "participant_agents": list(conversation.participant_agents),
-                    "conversation_mode": (
-                        conversation.conversation_mode.value
-                        if conversation.conversation_mode is not None
-                        else None
-                    ),
+                    "conversation_mode": conversation.persisted_conversation_mode,
                     "coordinator_agent_id": conversation.coordinator_agent_id,
                     "focused_agent_id": conversation.focused_agent_id,
                     # Workspace linkage (Track G2)
@@ -432,7 +424,7 @@ class SqlConversationRepository(
         # Multi-agent (Track B) — safe decode with defaults for legacy rows.
         mode_raw = getattr(db_conversation, "conversation_mode", None)
         try:
-            conv_mode = ConversationMode(mode_raw) if mode_raw else None
+            conv_mode = ConversationMode(mode_raw) if mode_raw and mode_raw != "workspace" else None
         except ValueError:
             logger.warning(
                 "Ignoring unknown persisted conversation mode %r for conversation %s",
@@ -468,6 +460,7 @@ class SqlConversationRepository(
             # Multi-agent
             participant_agents=participant_agents,
             conversation_mode=conv_mode,
+            task_session_mode="workspace" if mode_raw == "workspace" else None,
             coordinator_agent_id=getattr(db_conversation, "coordinator_agent_id", None),
             focused_agent_id=getattr(db_conversation, "focused_agent_id", None),
             # Workspace linkage (Track G2)
@@ -517,11 +510,7 @@ class SqlConversationRepository(
             merge_strategy=domain_entity.merge_strategy.value,
             # Multi-agent (Track B)
             participant_agents=list(domain_entity.participant_agents),
-            conversation_mode=(
-                domain_entity.conversation_mode.value
-                if domain_entity.conversation_mode is not None
-                else None
-            ),
+            conversation_mode=domain_entity.persisted_conversation_mode,
             coordinator_agent_id=domain_entity.coordinator_agent_id,
             focused_agent_id=domain_entity.focused_agent_id,
             # Workspace linkage (Track G2)

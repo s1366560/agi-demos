@@ -87,9 +87,13 @@ test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatSource, /<MessageActionMenu[\s\S]*content=\{content\}/);
   assert.doesNotMatch(chatSource, /className="session-message-context sr-only"/);
   assert.match(chatStyles, /\.session-thread-avatar \{[\s\S]*display: grid/);
+  // Web parity redesign 2026-09: the user bubble background moved from the
+  // generic surface ladder (--desktop-surface-29) to a dedicated bubble token
+  // mirroring the web MessageBubble user surface (slate-50/80 light,
+  // panel-ladder dark).
   assert.match(
     chatStyles,
-    /\.session-thread-message\.user \.session-message-surface \{[\s\S]*background: var\(--desktop-surface-29\)/,
+    /\.session-thread-message\.user \.session-message-surface \{[\s\S]*background: var\(--desktop-bubble-user-bg\)/,
   );
   assert.match(chatStyles, /\.session-thread-message\.agent \{[\s\S]*background: transparent/);
   assert.match(chatStyles, /\.session-message-actions \{[\s\S]*opacity: 0/);
@@ -438,7 +442,10 @@ test('assistant execution summaries render structured input, output, and reasoni
 });
 
 test('debug activity collapses by structural event kind without text routing', () => {
-  assert.match(chatSource, /groupNarrativeActivity\(buildSessionNarrative\(displayItems\)\)/);
+  assert.match(
+    chatSource,
+    /groupNarrativeActivity\(\s*buildSessionNarrative\(displayItems, state\.conversationId \?\? undefined\)/,
+  );
   assert.match(
     chatSource,
     /return timelineKind\(item\) === 'runtime' && !isImportantTimelineItem\(item\)/,

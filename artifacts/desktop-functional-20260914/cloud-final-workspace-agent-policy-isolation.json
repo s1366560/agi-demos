@@ -1,0 +1,17 @@
+{
+  "original": {
+    "workspace_id": "b30bf32d-36f0-4832-bcca-252a8df18b15",
+    "http_status": 200,
+    "revision": 4,
+    "permission_mode": "ask",
+    "reasoning_effort": "medium"
+  },
+  "isolated": {
+    "workspace_id": "5e5e6120-f7b1-4fee-918e-521b150b94e8",
+    "http_status": 200,
+    "revision": 2,
+    "permission_mode": "automatic",
+    "reasoning_effort": "medium"
+  },
+  "auth_revoked": true
+}

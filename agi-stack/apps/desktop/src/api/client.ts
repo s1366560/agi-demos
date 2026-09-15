@@ -1,3 +1,5 @@
+import { validMessageDisplayContent } from '../features/chat/messageDisplayModel';
+import { createLocalPluginClient, type LocalPluginClient } from './localPluginClient';
 import type {
   WorkspaceAgentPolicy,
   LlmProviderRoutingPolicy,
@@ -443,7 +445,7 @@ export class DesktopApiClient {
           page: String(page),
           page_size: String(pageSize),
         });
-        return this.request<unknown>(`/api/v1/tenants?${params.toString()}`, { signal });
+        return this.request<unknown>(`/api/v1/tenants${this.config.mode === 'cloud' ? '/' : ''}?${params.toString()}`, { signal });
       },
       normalizeTenantSummary,
     );
@@ -461,7 +463,7 @@ export class DesktopApiClient {
           page_size: String(pageSize),
         });
         if (requiredTenantId) params.set('tenant_id', requiredTenantId);
-        return this.request<unknown>(`/api/v1/projects?${params.toString()}`, { signal });
+        return this.request<unknown>(`/api/v1/projects${this.config.mode === 'cloud' ? '/' : ''}?${params.toString()}`, { signal });
       },
       parseProject,
     );
@@ -1167,6 +1169,7 @@ export class DesktopApiClient {
   async updateAgentConversationConfig(
     conversationId: string,
     payload: {
+      execution_selection?: Partial<NonNullable<AgentConversation['execution_selection']>>;
       selected_agent_id?: string | null;
       llm_model_override?: string | null;
       llm_route_override?: { provider_id: string; model_id: string } | null;
@@ -1420,12 +1423,16 @@ export class DesktopApiClient {
     projectId = this.config.projectId,
     workloadRole?: LlmRoutingRole,
     execution?: {
+      displayContent?: string;
       agentId?: string;
       forcedSkillName?: string;
       subAgentId?: string;
     },
     signal?: AbortSignal,
   ): Promise<{ queued: boolean }> {
+    if (execution?.displayContent !== undefined && !validMessageDisplayContent(execution.displayContent)) {
+      throw new Error('message_display_content_invalid');
+    }
     signal?.throwIfAborted();
     const requiredProjectId = requireValue(projectId, 'project id');
     return this.request<{ queued: boolean }>(
@@ -1436,6 +1443,7 @@ export class DesktopApiClient {
         body: {
           project_id: requiredProjectId,
           message,
+          ...(execution?.displayContent === undefined ? {} : { display_content: execution.displayContent }),
           message_id: messageId,
           ...(workloadRole ? { workload_role: workloadRole } : {}),
           ...(execution?.agentId ? { agent_id: execution.agentId } : {}),
@@ -1805,6 +1813,10 @@ export class DesktopApiClient {
     return `/api/v1/workspaces/${encodeURIComponent(workspaceId)}${suffix}`;
   }
 
+  localPlugins(): LocalPluginClient {
+    return createLocalPluginClient(this.config, (path, options) => this.request<unknown>(path, options));
+  }
+
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const headers = new Headers({ Accept: 'application/json' });
     const formDataBody =
@@ -1844,10 +1856,7 @@ export class DesktopApiClient {
         signal: options.signal,
       });
       if (response.status < 200 || response.status >= 300) {
-        const message =
-          isRecord(response.body) && 'detail' in response.body
-            ? String(response.body.detail)
-            : `HTTP ${response.status}`;
+        const message = desktopApiErrorMessage(response.body, response.status);
         throw new DesktopApiError(message, response.status, response.body);
       }
       return response.body as T;
@@ -1884,20 +1893,24 @@ export class DesktopApiClient {
       : await response.text().catch(() => '');
 
     if (!response.ok) {
-      const detail = isRecord(payload) ? payload.detail : null;
-      const message =
-        typeof detail === 'string'
-          ? detail
-          : isRecord(detail) && typeof detail.message === 'string'
-            ? detail.message
-            : isRecord(detail) && typeof detail.code === 'string'
-              ? detail.code
-              : `HTTP ${response.status}`;
+      const message = desktopApiErrorMessage(payload, response.status);
       throw new DesktopApiError(message, response.status, payload);
     }
 
     return payload as T;
   }
+}
+
+function desktopApiErrorMessage(payload: unknown, status: number): string {
+  const detail = isRecord(payload) ? payload.detail : null;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (isRecord(detail)) {
+    for (const field of ['message', 'detail', 'code']) {
+      const value = detail[field];
+      if (typeof value === 'string' && value.trim()) return value;
+    }
+  }
+  return `HTTP ${status}`;
 }
 
 async function requestWorkspaceRevisionMutation(
@@ -1938,8 +1951,7 @@ async function requestWorkspaceRevisionMutation(
     ? await response.json().catch(() => null)
     : await response.text().catch(() => '');
   if (!response.ok) {
-    const message =
-      isRecord(payload) && 'detail' in payload ? String(payload.detail) : `HTTP ${response.status}`;
+    const message = desktopApiErrorMessage(payload, response.status);
     throw new DesktopApiError(message, response.status, payload);
   }
   return payload;
@@ -2206,6 +2218,7 @@ const TASK_SESSION_CAPABILITY_KEYS = new Set([
   'initial_plan_mode',
 ]);
 const TASK_SESSION_CAPABILITY_OPTIONAL_KEYS = new Set([
+  'workspace_authority',
   'workspace_agent_policy',
   'capability_version',
 ]);
@@ -2306,6 +2319,8 @@ function isAtomicTaskSessionCapability(payload: unknown): boolean {
       TASK_SESSION_CAPABILITY_OPTIONAL_KEYS,
     ) &&
     TASK_SESSION_SUPPORTED_SCHEMA_VERSIONS.has(payload.schema_version as number) &&
+    (!Object.prototype.hasOwnProperty.call(payload, 'workspace_authority') ||
+      payload.workspace_authority === 'avernet') &&
     payload.atomic_creation === true &&
     payload.initial_conversation_mode === 'workspace' &&
     payload.initial_plan_mode === 'plan'

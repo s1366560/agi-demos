@@ -11,6 +11,7 @@ Manages WebSocket connections for agent chat with support for:
 
 import asyncio
 import logging
+from collections import OrderedDict
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -60,6 +61,8 @@ class ConnectionManager:
         self.session_project_subscriptions: dict[str, set[tuple[str, str]]] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
+        self._stream_delivery_locks: dict[str, asyncio.Lock] = {}
+        self._stream_delivered: dict[str, OrderedDict[tuple[str, str, int, int], None]] = {}
         # Strong references to in-flight cleanup tasks scheduled from sync
         # paths (e.g. ``send_to_session`` failure). Without this set the
         # tasks could be garbage-collected mid-execution.
@@ -110,6 +113,8 @@ class ConnectionManager:
             self._remove_user_session(user_id, session_id)
             self.active_connections.pop(session_id, None)
             self.session_users.pop(session_id, None)
+            self._stream_delivery_locks.pop(session_id, None)
+            self._stream_delivered.pop(session_id, None)
 
         # Await cancellation outside the lock. ``return_exceptions=True``
         # ensures one misbehaving task does not break cleanup of others;
@@ -288,6 +293,63 @@ class ConnectionManager:
 
         return enqueued_count
 
+    async def send_agent_stream_event(
+        self,
+        session_id: str,
+        conversation_id: str,
+        message: dict[str, Any],
+        *,
+        message_id: str | None,
+    ) -> bool:
+        """Enqueue one exact agent-stream cursor once, including overlapping recovery."""
+        if session_id not in self.active_connections or not self.is_subscribed(
+            session_id, conversation_id
+        ):
+            return False
+        lock = self._stream_delivery_locks.setdefault(session_id, asyncio.Lock())
+        async with lock:
+            ws = self.active_connections.get(session_id)
+            if ws is None or not self.is_subscribed(session_id, conversation_id):
+                return False
+            event_time, counter = message.get("event_time_us"), message.get("event_counter")
+            key = None
+            if message_id and type(event_time) is int and type(counter) is int:
+                key = (conversation_id, message_id, event_time, counter)
+            delivered = self._stream_delivered.setdefault(session_id, OrderedDict())
+            if key is not None and key in delivered:
+                return True
+            dispatcher = await self.dispatcher_manager.get_dispatcher(session_id, ws)
+            if not await dispatcher.enqueue(message):
+                return False
+            if key is not None:
+                delivered[key] = None
+                # Bounded replay overlap, scoped to this socket lifetime. Late unseen
+                # cursors remain valid; never use a maximum watermark to suppress them.
+                if len(delivered) > 4096:
+                    delivered.popitem(last=False)
+            return True
+
+    async def broadcast_agent_stream_event(
+        self,
+        conversation_id: str,
+        message: dict[str, Any],
+        *,
+        message_id: str | None,
+    ) -> int:
+        """Original streams also serve subscribers without their own recovery consumer."""
+        async with self._lock:
+            subscribers = tuple(self.conversation_subscribers.get(conversation_id, ()))
+        delivered = 0
+        for session_id in subscribers:
+            if await self.send_agent_stream_event(
+                session_id,
+                conversation_id,
+                message,
+                message_id=message_id,
+            ):
+                delivered += 1
+        return delivered
+
     # ==========================================================================
     # Lifecycle State Subscriptions
     # ==========================================================================
@@ -453,6 +515,7 @@ class ConnectionManager:
         task_factory: Callable[[], asyncio.Task[None]],
         *,
         bridge_message_id: str | None = None,
+        replace_existing: bool = False,
     ) -> bool:
         """Atomically start/register bridge task when no compatible active bridge exists."""
         async with self._lock:
@@ -481,7 +544,11 @@ class ConnectionManager:
                     task.cancel()
                     del task_map[conversation_id]
                     continue
-                return False
+                if existing_session_id == session_id:
+                    if not replace_existing:
+                        return False
+                    task.cancel()
+                    del task_map[conversation_id]
 
             if session_id not in self.bridge_tasks:
                 self.bridge_tasks[session_id] = {}
@@ -495,6 +562,7 @@ class ConnectionManager:
                 existing_task.cancel()
 
             new_task = task_factory()
+            new_task._bridge_session_delivery = True  # type: ignore[attr-defined]
             if bridge_message_id:
                 new_task._bridge_message_id = bridge_message_id  # type: ignore[attr-defined]
             self.bridge_tasks[session_id][conversation_id] = new_task

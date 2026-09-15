@@ -1,0 +1,9 @@
+{
+  "started_at": "2026-09-14T09:07:14.428637+00:00",
+  "scopes": [],
+  "model_requests": 0,
+  "authenticated_actor_id": "bf922bb7-290d-4252-8891-f82b97aa14b2",
+  "failure_type": "HTTPStatusError",
+  "signout_http": 200,
+  "finished_at": "2026-09-14T09:07:14.847848+00:00"
+}

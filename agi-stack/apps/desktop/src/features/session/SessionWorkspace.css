@@ -27,13 +27,13 @@
 .session-workspace-identity {
   display: grid;
   min-width: 0;
-  gap: 6px;
+  gap: 7px;
 }
 
 .session-workspace-identity > span {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   overflow: hidden;
   color: var(--desktop-faint);
   font-size: 10px;
@@ -42,8 +42,8 @@
 }
 
 .session-workspace-identity > span svg {
-  width: 9px;
-  height: 9px;
+  width: 12px;
+  height: 12px;
 }
 
 .session-workspace-identity > div {
@@ -57,10 +57,57 @@
   overflow: hidden;
   margin: 0;
   color: var(--desktop-text);
-  font-size: 17px;
+  font-size: 18px;
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* prototype mission-control refactor 2026-09: StatusBadge pill (dot + label)
+   with amber / cyan / green tints, matching ConversationDetail.css. */
+.session-status-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--desktop-muted) 8%, var(--desktop-surface-12));
+  border: 1px solid color-mix(in srgb, var(--desktop-muted) 26%, transparent);
+  border-radius: 10px;
+}
+
+.session-status-badge i {
+  width: 6px;
+  height: 6px;
+  background: currentcolor;
+  border-radius: 50%;
+}
+
+.session-status-badge.tone-green {
+  color: var(--green-10);
+  background: color-mix(in srgb, var(--green-9) 10%, var(--desktop-surface-12));
+  border-color: color-mix(in srgb, var(--green-9) 34%, transparent);
+}
+
+.session-status-badge.tone-cyan {
+  color: var(--cyan-10);
+  background: color-mix(in srgb, var(--cyan-9) 10%, var(--desktop-surface-12));
+  border-color: color-mix(in srgb, var(--cyan-9) 34%, transparent);
+}
+
+.session-status-badge.tone-amber {
+  color: var(--amber-10);
+  background: color-mix(in srgb, var(--amber-9) 10%, var(--desktop-surface-12));
+  border-color: color-mix(in srgb, var(--amber-9) 36%, transparent);
+}
+
+.session-status-badge.tone-red {
+  color: var(--red-10);
+  background: color-mix(in srgb, var(--red-9) 10%, var(--desktop-surface-12));
+  border-color: color-mix(in srgb, var(--red-9) 34%, transparent);
 }
 
 .session-workspace-stages {
@@ -69,29 +116,31 @@
   gap: 3px;
 }
 
+/* prototype mission-control refactor 2026-09: stage strip geometry aligned to
+   the prototype connected strip (76px nodes, 13px connectors, 14px icons). */
 .session-workspace-stages > div {
   position: relative;
   display: flex;
-  min-width: 72px;
+  min-width: 76px;
   align-items: center;
-  gap: 6px;
-  padding-right: 13px;
+  gap: 7px;
+  padding-right: 16px;
   color: var(--desktop-faint);
 }
 
 .session-workspace-stages > div:not(:last-child)::after {
   position: absolute;
-  top: 10px;
+  top: 12px;
   right: 2px;
-  width: 10px;
+  width: 13px;
   height: 1px;
   background: var(--desktop-border);
   content: '';
 }
 
 .session-workspace-stages svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .session-workspace-stages span {
@@ -105,12 +154,13 @@
 }
 
 .session-workspace-stages strong {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 650;
 }
 
 .session-workspace-stages .complete { color: var(--green-10); }
 .session-workspace-stages .active { color: var(--cyan-10); }
+.session-workspace-stages .paused { color: var(--amber-10); }
 .session-workspace-stages .queued { color: var(--desktop-muted); }
 .session-workspace-stages .unavailable { opacity: 0.42; }
 
@@ -122,6 +172,13 @@
   gap: 8px;
 }
 
+/* prototype mission-control refactor 2026-09: header buttons follow the
+   prototype rhythm (32px, 10px labels); icon-only collapse below 980px stays. */
+.session-workspace-actions .rt-Button {
+  height: 32px;
+  font-size: 10px;
+}
+
 .session-workspace-more {
   position: relative;
   flex: 0 0 auto;
@@ -129,8 +186,8 @@
 
 .session-workspace-more summary {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   color: var(--desktop-muted);
   background: transparent;

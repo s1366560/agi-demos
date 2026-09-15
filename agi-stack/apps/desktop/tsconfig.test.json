@@ -10,6 +10,9 @@
     "types": ["node"]
   },
   "include": [
+    "src/features/workspace/WorkspaceDiscussionReplies.tsx",
+    "src/features/settings/LocalPluginSettings.tsx",
+    "src/features/settings/pluginMarketplaceSettingsModel.ts",
     "src/plugins/desktopNativeProjectSchemaHttpV2.ts",
     "src/plugins/desktopCloudMemoryHttpV2.ts",
     "tests/css.d.ts",

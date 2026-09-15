@@ -221,6 +221,33 @@
   background: var(--desktop-amber);
 }
 
+/* Prototype thread dots: running pulses cyan, waiting-for-input pulses amber. */
+@keyframes desktop-thread-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.workspace-tree-session-status[data-status='active'] {
+  animation: desktop-thread-status-pulse 2s ease-in-out infinite;
+}
+
+.workspace-tree-session-status[data-status='attention'] {
+  animation: desktop-thread-status-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tree-session-status[data-status='active'],
+  .workspace-tree-session-status[data-status='attention'] {
+    animation: none;
+  }
+}
+
 .workspace-tree-session-status[data-status='ready'],
 .workspace-tree-session-status[data-status='completed'] {
   background: var(--desktop-green-vivid-2);

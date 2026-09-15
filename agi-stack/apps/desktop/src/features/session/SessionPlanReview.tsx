@@ -47,14 +47,21 @@ export function SessionPlanReview({
   onApprove,
 }: SessionPlanReviewProps) {
   const { t } = useI18n();
+  const supportsLocal = Boolean(capabilities?.environmentKinds?.includes('local'));
+  const supportsWorktree = Boolean(capabilities?.environmentKinds?.includes('worktree'));
   const [selection, setSelection] = useState<SessionPlanApprovalSelection>(() =>
-    defaultSessionPlanApprovalSelection(capabilityMode),
+    defaultSessionPlanApprovalSelection(capabilityMode, capabilities?.environmentKinds),
   );
-  const canApprove = canApproveSessionPlan(plan, capabilities);
+  const canApprove = canApproveSessionPlan(plan, capabilities, selection.environmentKind);
 
   useEffect(() => {
-    setSelection(defaultSessionPlanApprovalSelection(capabilityMode));
-  }, [capabilityMode, plan.id, plan.version]);
+    setSelection(
+      defaultSessionPlanApprovalSelection(capabilityMode, [
+        ...(supportsLocal ? ['local' as const] : []),
+        ...(supportsWorktree ? ['worktree' as const] : []),
+      ]),
+    );
+  }, [capabilityMode, plan.id, plan.version, supportsLocal, supportsWorktree]);
 
   return (
     <>
@@ -98,7 +105,7 @@ export function SessionPlanReview({
               <span>{t('session.planEnvironment')}</span>
               <select
                 value={selection.environmentKind}
-                disabled={pending}
+                disabled={pending || (!supportsLocal && !supportsWorktree)}
                 onChange={(event) => {
                   const environmentKind = event.currentTarget
                     .value as DesktopExecutionEnvironmentKind;
@@ -108,8 +115,12 @@ export function SessionPlanReview({
                   }));
                 }}
               >
-                <option value="local">{t('task.currentWorkspace')}</option>
-                <option value="worktree">{t('task.isolatedWorktree')}</option>
+                {supportsLocal ? (
+                  <option value="local">{t('task.currentWorkspace')}</option>
+                ) : null}
+                {supportsWorktree ? (
+                  <option value="worktree">{t('task.isolatedWorktree')}</option>
+                ) : null}
               </select>
             </label>
             <label>

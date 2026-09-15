@@ -117,6 +117,9 @@ type AuthorizedEndpoint = Readonly<{
   tenantId: string | null;
   projectId: string | null;
   workspaceId?: string | null;
+  mcpServerId?: string;
+  conversationId?: string;
+  catalogProjectId?: string;
 }>;
 
 const REQUEST_KEYS = new Set(['path', 'method', 'body', 'form', 'mutation', 'response', 'memory_scope']);
@@ -373,6 +376,13 @@ function activityDeliveryDependencies(
   };
 }
 
+export class CloudSessionAuthenticationInvalidError extends Error {
+  constructor() {
+    super('cloud session authentication is invalid');
+    this.name = 'CloudSessionAuthenticationInvalidError';
+  }
+}
+
 export async function projectVaultBoundCloudSession(
   dependencies: VaultBoundCloudRequestDependencies,
 ): Promise<VaultBoundCloudSessionProjection | null> {
@@ -387,6 +397,7 @@ export async function projectVaultBoundCloudSession(
     dependencies,
     Object.freeze({ path: '/api/v1/workspace-context', method: 'GET' }),
   );
+  if (contextResponse.status === 401) throw new CloudSessionAuthenticationInvalidError();
   const contextBody = await boundedJson(contextResponse, false, session.credential);
   if (!contextResponse.ok || !isRecord(contextBody)) {
     throw new Error('cloud session scope observation failed');
@@ -398,6 +409,7 @@ export async function projectVaultBoundCloudSession(
     dependencies,
     Object.freeze({ path: '/api/v1/auth/me', method: 'GET' }),
   );
+  if (identityResponse.status === 401) throw new CloudSessionAuthenticationInvalidError();
   const identityBody = await boundedJson(identityResponse, false, session.credential);
   if (!identityResponse.ok || !isRecord(identityBody)) {
     throw new Error('cloud session identity observation failed');
@@ -458,6 +470,7 @@ async function loadProjectedIdentityCatalog(
       dependencies,
       Object.freeze({ path: pathForPage(page), method: 'GET' }),
     );
+    if (response.status === 401) throw new CloudSessionAuthenticationInvalidError();
     const body = await boundedJson(response, false, session.credential);
     if (!response.ok) throw new Error('cloud session identity catalog request failed');
     const record = exactRecord(body, responseKeys, 'cloud session identity catalog is invalid');
@@ -1257,6 +1270,42 @@ async function observeEndpointWorkspaceScope(
   dependencies: VaultBoundCloudRequestDependencies,
 ): Promise<typeof context> {
   assertEndpointScope({ ...endpoint, workspaceId: null }, context);
+  if (endpoint.catalogProjectId !== undefined) {
+    const response = await authorizedFetch(session, dependencies, {
+      path: `/api/v1/projects/${encodeURIComponent(endpoint.catalogProjectId)}?tenant_id=${encodeURIComponent(context.tenantId)}`,
+      method: 'GET',
+    });
+    const body = await boundedJson(response, false, session.credential);
+    dependencies.signal?.throwIfAborted();
+    if (!response.ok || !isRecord(body) || body.id !== endpoint.catalogProjectId || body.tenant_id !== context.tenantId) {
+      throw new Error('cloud request catalog project scope observation failed');
+    }
+  }
+  if (endpoint.conversationId !== undefined) {
+    if (context.projectId === null) throw new Error('cloud request conversation scope unavailable');
+    const response = await authorizedFetch(session, dependencies, {
+      path: `/api/v1/agent/conversations/${encodeURIComponent(endpoint.conversationId)}?project_id=${encodeURIComponent(context.projectId)}`,
+      method: 'GET',
+    });
+    const body = await boundedJson(response, false, session.credential);
+    dependencies.signal?.throwIfAborted();
+    if (!response.ok || !isRecord(body) || body.id !== endpoint.conversationId ||
+        body.project_id !== context.projectId || body.tenant_id !== context.tenantId) {
+      throw new Error('cloud request conversation scope observation failed');
+    }
+  }
+  if (endpoint.mcpServerId !== undefined) {
+    const response = await authorizedFetch(session, dependencies, {
+      path: `/api/v1/mcp/${encodeURIComponent(endpoint.mcpServerId)}`, method: 'GET',
+    });
+    const body = await boundedJson(response, false, session.credential);
+    dependencies.signal?.throwIfAborted();
+    if (!response.ok || !isRecord(body) || body.id !== endpoint.mcpServerId ||
+      context.projectId === null || body.project_id !== context.projectId ||
+      body.tenant_id !== context.tenantId) {
+      throw new Error('cloud request MCP server scope observation failed');
+    }
+  }
   if (endpoint.workspaceId == null || context.workspaceId !== null) return context;
   if (context.projectId === null) throw new Error('cloud request workspace scope unavailable');
   const path = `/api/v1/tenants/${encodeURIComponent(context.tenantId)}/projects/${

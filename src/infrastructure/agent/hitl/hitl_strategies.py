@@ -33,6 +33,7 @@ from src.infrastructure.agent.hitl.utils import (
     sanitize_env_var_text,
     sanitize_hitl_context,
     sanitize_hitl_text,
+    sanitize_permission_description,
 )
 
 logger = logging.getLogger(__name__)
@@ -442,7 +443,7 @@ class PermissionStrategy(HITLTypeStrategy):
             project_id=kwargs.get("project_id"),
             message_id=kwargs.get("message_id"),
             details=sanitize_hitl_context(request_data.get("details", {})),
-            description=sanitize_hitl_text(request_data.get("description")),
+            description=sanitize_permission_description(request_data.get("description")),
             allow_remember=request_data.get("allow_remember", True),
             default_action=default_action,
             context=sanitize_hitl_context(request_data.get("context", {})),

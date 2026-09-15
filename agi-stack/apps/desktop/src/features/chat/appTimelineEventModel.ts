@@ -2,6 +2,7 @@ import {
   protocolClientMessageId,
   protocolStreamMessageId,
 } from './agentEventIdentityModel';
+import { mergeCloudSubagentTraceLiveItem } from './cloudSubagentTraceModel';
 import type { AgentTaskSignalStatus } from './agentTaskSignalModel';
 import {
   applyArtifactCanvasStreamEvent,
@@ -175,7 +176,7 @@ export function mergeTimelineItems(
 export function timelineCursorFromFirst(
   items: AgentTimelineItem[],
 ): ConversationTimelineState['firstCursor'] {
-  const first = items[0];
+  const first = items.find((item) => item.cursorSource !== 'project_lifecycle');
   if (!first) return null;
   return { timeUs: first.eventTimeUs, counter: first.eventCounter };
 }
@@ -183,7 +184,7 @@ export function timelineCursorFromFirst(
 export function timelineCursorFromLast(
   items: AgentTimelineItem[],
 ): ConversationTimelineState['lastCursor'] {
-  const last = items[items.length - 1];
+  const last = items.findLast((item) => item.cursorSource !== 'project_lifecycle');
   if (!last) return null;
   return { timeUs: last.eventTimeUs, counter: last.eventCounter };
 }
@@ -249,7 +250,10 @@ export function timelineItemFromSocketEvent(
     readStringField(payload, 'execution_message_id') ??
     readStringField(payload, 'executionMessageId');
   const item: AgentTimelineItem = {
-    id: `${type}-${eventTimeUs}-${eventCounter}`,
+    ...(payload.timeline_cursor_source === 'project_lifecycle'
+      ? { cursorSource: 'project_lifecycle' as const }
+      : {}),
+    id: readStringField(payload, 'lifecycle_event_id') ?? `${type}-${eventTimeUs}-${eventCounter}`,
     type,
     eventTimeUs,
     eventCounter,
@@ -463,6 +467,10 @@ export function mergeLiveTimelineEvent(
   if (hitlResponse.handled) return hitlResponse.items;
   const timeline = existing;
   const item = timelineItemFromSocketEvent(event);
+  if (item) {
+    const restored = mergeCloudSubagentTraceLiveItem(timeline, item);
+    if (restored) return restored;
+  }
   if (
     item &&
     [

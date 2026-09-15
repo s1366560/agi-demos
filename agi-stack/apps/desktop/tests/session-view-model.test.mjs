@@ -148,6 +148,47 @@ function projection(overrides = {}) {
   };
 }
 
+test('loaded tool activity pairs events without changing authority evidence', () => {
+  const items = [
+    { id: 'thought', type: 'thought', eventTimeUs: 1, eventCounter: 1 },
+    { id: 'call', type: 'act', toolName: 'read', execution_id: 'read-1', eventTimeUs: 2, eventCounter: 2 },
+    { id: 'result', type: 'observe', toolName: 'read', execution_id: 'read-1', eventTimeUs: 3, eventCounter: 3 },
+    { id: 'failed', type: 'observe', toolName: 'read', execution_id: 'read-2', isError: true, eventTimeUs: 4, eventCounter: 4 },
+  ];
+  for (const hasMore of [false, true]) {
+    const planProjection = projection({
+      conversation: conversation({ current_mode: 'plan' }),
+      currentRun: null,
+    });
+    const view = build({
+      projection: planProjection,
+      timeline: { conversationId: 'conversation-1', items, loading: false, loadingEarlier: hasMore, hasMore, error: null },
+    });
+    assert.equal(view.observedToolActivityCount, 2);
+    assert.equal(view.observedFailedToolActivityCount, 1);
+    assert.equal(view.toolActivityCount, 0);
+    assert.equal(view.failedToolActivityCount, 0);
+    assert.equal(view.executionMode, 'plan');
+    assert.equal(view.permissionLabel, null);
+  }
+});
+
+test('loaded tool activity ignores a different conversation and unavailable history', () => {
+  for (const timeline of [
+    { conversationId: 'conversation-2', items: [{ type: 'act', toolName: 'read' }], loading: false },
+    { conversationId: null, items: [], loading: false },
+    { conversationId: 'conversation-1', items: [], loading: true },
+    { conversationId: 'conversation-1', items: [], loading: false, error: 'history unavailable' },
+  ]) {
+    const view = build({ projection: projection(), timeline });
+    assert.equal(view.observedToolActivityCount, null);
+    assert.equal(view.observedFailedToolActivityCount, null);
+  }
+  const empty = build();
+  assert.equal(empty.observedToolActivityCount, 0);
+  assert.equal(empty.observedFailedToolActivityCount, 0);
+});
+
 test('session view model reads only the scoped authority projection', () => {
   const view = build({
     conversation: conversation({

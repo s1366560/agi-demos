@@ -7,6 +7,10 @@ mod generated;
 mod generated_catalog;
 mod reconciler;
 mod runtime;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod signed_archive;
+#[cfg(all(feature = "external-wasm-v2", not(target_arch = "wasm32")))]
+pub mod wasm_runtime;
 mod target_modules;
 
 use std::collections::{BTreeMap, BTreeSet};

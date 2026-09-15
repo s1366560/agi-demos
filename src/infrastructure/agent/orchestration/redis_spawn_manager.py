@@ -27,6 +27,7 @@ from src.infrastructure.agent.orchestration.session_registry import (
 from src.infrastructure.agent.orchestration.spawn_manager import (
     SpawnDepthExceededError,
 )
+from src.infrastructure.agent.subagent.async_run_registry_v2 import registry_call_v2
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 
 logger = logging.getLogger(__name__)
@@ -177,7 +178,9 @@ class RedisSpawnManager:
             }
             if metadata:
                 run_metadata.update(metadata)
-            self._run_registry.create_run(
+            await registry_call_v2(
+                self._run_registry,
+                "create_run",
                 conversation_id=conversation_id,
                 subagent_name=child_agent_id,
                 task=task_summary,
@@ -372,7 +375,7 @@ class RedisSpawnManager:
             return None
 
         if self._run_registry and conversation_id:
-            self._sync_run_registry_status(
+            await self._sync_run_registry_status(
                 conversation_id=conversation_id,
                 run_id=old.id,
                 status=new_status,
@@ -668,29 +671,35 @@ class RedisSpawnManager:
                     exc_info=True,
                 )
 
-    def _sync_run_registry_status(
+    async def _sync_run_registry_status(
         self,
         conversation_id: str,
         run_id: str,
         status: str,
     ) -> None:
-        """Mirror spawn status to SubAgentRunRegistry (sync API)."""
+        """Commit spawn status to the SubAgent registry before returning."""
         if not self._run_registry:
             return
         try:
             if status == "completed":
-                self._run_registry.mark_completed(
+                await registry_call_v2(
+                    self._run_registry,
+                    "mark_completed",
                     conversation_id=conversation_id,
                     run_id=run_id,
                 )
             elif status == "failed":
-                self._run_registry.mark_failed(
+                await registry_call_v2(
+                    self._run_registry,
+                    "mark_failed",
                     conversation_id=conversation_id,
                     run_id=run_id,
                     error="Spawn failed",
                 )
             elif status in ("stopped", "cancelled"):
-                self._run_registry.mark_cancelled(
+                await registry_call_v2(
+                    self._run_registry,
+                    "mark_cancelled",
                     conversation_id=conversation_id,
                     run_id=run_id,
                     reason=f"Spawn {status}",

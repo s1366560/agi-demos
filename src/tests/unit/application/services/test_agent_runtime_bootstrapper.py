@@ -1244,3 +1244,119 @@ async def test_has_running_local_subprocess_ignores_orphaned_processes(monkeypat
     )
 
     assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-orphan") is False
+
+
+async def test_in_process_chat_acquires_enabled_workspace_runtime(bootstrapper) -> None:
+    from contextlib import asynccontextmanager
+
+    from src.infrastructure.plugins.v2.workspace_core_runtime import (
+        WORKSPACE_CORE_RUNTIME_MODULE_V2,
+        WORKSPACE_CORE_RUNTIME_SERVICE_V2,
+        WorkspaceCoreRuntimeServiceV2,
+    )
+
+    runtime = MagicMock(spec=WorkspaceCoreRuntimeServiceV2)
+    runtime.dispose = AsyncMock()
+    factory = AsyncMock(return_value=runtime)
+    context = MagicMock()
+    disposers = []
+
+    async def acquire(effect, **_kwargs):
+        disposers.append(await effect())
+
+    context.effect = acquire
+
+    class Admission:
+        def __init__(self, definitions, *, archive_loader):
+            from src.application.services.publication_archive_loader_v2 import (
+                load_agent_generation_archives_v2,
+            )
+
+            assert archive_loader is load_agent_generation_archives_v2
+            self.definition = next(
+                item for item in definitions if item.module_ref == WORKSPACE_CORE_RUNTIME_MODULE_V2
+            )
+
+        @asynccontextmanager
+        async def admit(self, **_kwargs):
+            await self.definition.apply(context, {"strategy": "avernet-client"})
+            yield context
+
+        async def close(self):
+            for dispose in disposers:
+                await dispose()
+
+    config = ProjectAgentActorConfig(tenant_id="tenant-1", project_id="proj-1")
+    request = ProjectChatRequest(
+        conversation_id="factory-conversation",
+        message_id="factory-message",
+        user_id="user-1",
+        user_message="verify runtime",
+    )
+    agent = MagicMock()
+    agent.initialize = AsyncMock(return_value=True)
+    prepare = AsyncMock()
+    execute = AsyncMock(return_value=SimpleNamespace(is_error=False, event_count=1))
+    publish_error = AsyncMock()
+    with (
+        patch(
+            "src.application.services.wasm_operation_authority_v2.prepare_agent_wasm_tools_v2",
+            prepare,
+        ),
+        patch(
+            "src.infrastructure.agent.core.project_react_agent.ProjectReActAgent",
+            return_value=agent,
+        ),
+        patch("src.infrastructure.agent.actor.execution.execute_project_chat", execute),
+        patch("src.infrastructure.agent.actor.execution._publish_error_event", publish_error),
+        patch(
+            "src.infrastructure.plugins.v2.runtime_host.DataPlaneGenerationAdmissionV2", Admission
+        ),
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.agent_worker_workspace_core_runtime_factory_v2",
+            factory,
+        ),
+        patch.object(bootstrapper, "_ensure_local_runtime_bootstrapped", AsyncMock()),
+    ):
+        await bootstrapper._run_chat_local(config, request)
+
+    prepare.assert_awaited_once_with(context)
+    publish_error.assert_not_awaited()
+    factory.assert_awaited_once_with()
+    context.provide.assert_called_once_with(
+        WORKSPACE_CORE_RUNTIME_SERVICE_V2, runtime, label="workspace-core-runtime-provider"
+    )
+    execute.assert_awaited_once()
+    runtime.dispose.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_cancel_exact_local_turn_preserves_next_queued_turn(bootstrapper) -> None:
+    first_started = asyncio.Event()
+    second_finished = asyncio.Event()
+    turn_tasks = []
+    config = ProjectAgentActorConfig(tenant_id="tenant-1", project_id="proj-1")
+
+    async def run_local(_config, request, abort_signal=None):
+        if request.message_id == "first":
+            turn_tasks.append(asyncio.current_task())
+            first_started.set()
+            await asyncio.Event().wait()
+        else:
+            second_finished.set()
+
+    with patch.object(bootstrapper, "_run_chat_local", side_effect=run_local):
+        for message_id in ("first", "second"):
+            await bootstrapper._start_local_chat(
+                "conv-1",
+                config,
+                ProjectChatRequest(
+                    conversation_id="conv-1",
+                    message_id=message_id,
+                    user_message="hello",
+                    user_id="u",
+                ),
+            )
+        await first_started.wait()
+        turn_tasks[0].cancel()
+        await asyncio.wait_for(second_finished.wait(), timeout=1)

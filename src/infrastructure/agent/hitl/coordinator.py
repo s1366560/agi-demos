@@ -622,6 +622,8 @@ async def _persist_hitl_request(
     request_type = type_mapping.get(hitl_type.value, HITLRequestType.CLARIFICATION)
 
     question = type_data.get("question", "")
+    if not question and hitl_type == HITLType.PERMISSION:
+        question = type_data.get("description") or ""
     if not question and hitl_type.value == "env_var":
         question = type_data.get("message") or "Please provide environment variables"
 

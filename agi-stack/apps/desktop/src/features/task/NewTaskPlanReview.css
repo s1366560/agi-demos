@@ -44,9 +44,9 @@
   gap: 12px;
   margin-top: 20px;
   padding: 12px;
-  border: 1px solid var(--desktop-border-3);
-  border-radius: 6px;
-  background: var(--desktop-surface-6);
+  border: 1px solid var(--desktop-plan-card-border);
+  border-radius: 10px;
+  background: var(--desktop-plan-card-bg);
 }
 
 .new-task-plan-objective > span {
@@ -54,9 +54,9 @@
   width: 36px;
   height: 36px;
   place-items: center;
-  border: 1px solid var(--desktop-border-cyan-6);
-  border-radius: 6px;
-  background: var(--desktop-surface-cyan-2);
+  border: 1px solid var(--desktop-plan-icon-border);
+  border-radius: 8px;
+  background: var(--desktop-plan-icon-bg);
   color: var(--desktop-cyan-bright);
 }
 
@@ -134,9 +134,9 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--desktop-border-3);
-  border-radius: 6px;
-  background: var(--desktop-surface-6);
+  border: 1px solid var(--desktop-plan-card-border);
+  border-radius: 10px;
+  background: var(--desktop-plan-card-bg);
 }
 
 .new-task-plan-step.disabled {

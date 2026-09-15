@@ -127,7 +127,7 @@ def _provider_config_matches_exact_route(provider: object, route: ModelRouteRef)
         return False
     provider_type = getattr(provider, "provider_type", "")
     provider_id = str(getattr(provider_type, "value", provider_type)).strip()
-    if provider_id != route.provider_id:
+    if route.provider_id not in {provider_id, str(getattr(provider, "id", ""))}:
         return False
     operation_type = getattr(provider, "operation_type", "llm")
     operation_id = str(getattr(operation_type, "value", operation_type)).strip()
@@ -189,9 +189,10 @@ async def _bind_processor_model_route(
     config: ProcessorConfig,
     route: ModelRouteRef,
     tenant_id: str,
+    revalidate: bool = False,
 ) -> None:
     """Bind exact route identity and, when needed, its unambiguous LLM client."""
-    if config.provider_id.strip() != route.provider_id:
+    if revalidate or config.provider_id.strip() != route.provider_id:
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
 
         provider_config = await _resolve_exact_provider_config_for_route(
@@ -1064,7 +1065,7 @@ class StreamMixin:
 
         from .processor import ProcessorConfig as _ProcessorConfig
 
-        _ = (selection_context, tool_set)
+        _ = tool_set
 
         dispatcher = current_operation_context_v2().require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)
         if not isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2):
@@ -1095,7 +1096,10 @@ class StreamMixin:
             max_cost_per_session=config.max_cost_per_session,
             llm_client=config.llm_client,
             plugin_event_dispatcher=dispatcher,
-            runtime_context=dict(config.runtime_context),
+            runtime_context={
+                **dict(config.runtime_context),
+                "effective_mode": selection_context.metadata.get("effective_mode"),
+            },
             tool_provider=None,
             forced_skill_name=config.forced_skill_name,
             forced_skill_tools=(
@@ -1894,6 +1898,29 @@ class StreamMixin:
         from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 
         operation = current_operation_context_v2()
+        from src.application.services.approved_run_tool_permission_v2 import (
+            current_approved_run_guard_v2,
+            prepare_approved_run_guard_v2,
+            restore_approved_child_guard_v2,
+        )
+        from src.application.services.chat_run_tool_permission_v2 import (
+            current_chat_run_guard_v2,
+            prepare_chat_run_guard_v2,
+            restore_chat_child_guard_v2,
+        )
+
+        if current_approved_run_guard_v2() is None:
+            await restore_approved_child_guard_v2(operation)
+        if current_chat_run_guard_v2() is None:
+            await restore_chat_child_guard_v2(operation)
+        if (
+            canonical_run_id is None
+            and current_approved_run_guard_v2() is None
+            and current_chat_run_guard_v2() is None
+        ):
+            raise RuntimeV2Error("run_tool_authority_missing", "Agent turn requires canonical authority")
+        await prepare_approved_run_guard_v2(operation, canonical_run_id)
+        await prepare_chat_run_guard_v2(operation, canonical_run_id)
         operation_catalog = bind_operation_tool_set_catalog_v2(operation)
         from src.infrastructure.plugins.v2.agent_skill_mcp_service import (
             SKILL_MCP_MANAGER_SERVICE_V2,
@@ -2097,6 +2124,8 @@ class StreamMixin:
             tool_set=turn_tool_set,
         )
         config.run_id = canonical_run_id or message_id
+        config.approved_run_required = current_approved_run_guard_v2() is not None
+        config.chat_run_required = current_chat_run_guard_v2() is not None
         config.api_auth_token = api_auth_token
         previous_model_route = ModelRouteRef(
             provider_id=config.provider_id,
@@ -2106,6 +2135,7 @@ class StreamMixin:
             config=config,
             route=effective_model_route,
             tenant_id=tenant_id,
+            revalidate=resolved_model_route_override is not None,
         )
         config.temperature = runtime_profile.effective_temperature
         config.max_tokens = runtime_profile.effective_max_tokens

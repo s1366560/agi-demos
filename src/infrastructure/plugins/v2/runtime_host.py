@@ -6,6 +6,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -447,9 +448,19 @@ class PlatformPluginRuntimeHostV2:
 class DataPlaneGenerationAdmissionV2:
     """Atomically validate a distribution and lease its exact local generation."""
 
-    def __init__(self, definitions: Sequence[PluginDefinitionV2] = ()) -> None:
+    def __init__(
+        self,
+        definitions: Sequence[PluginDefinitionV2] = (),
+        *,
+        archive_loader: Callable[
+            [Mapping[str, object], ScopeV2],
+            Awaitable[Sequence[VerifiedBundleArchiveV2] | None],
+        ]
+        | None = None,
+    ) -> None:
         self.host = PlatformPluginRuntimeHostV2(definitions)
         self._lock = asyncio.Lock()
+        self._archive_loader = archive_loader
 
     @asynccontextmanager
     async def admit(
@@ -472,12 +483,20 @@ class DataPlaneGenerationAdmissionV2:
 
         async with self._lock:
             if distribution_payload is not None:
+                distribution_payload = deepcopy(dict(distribution_payload))
                 if distribution_payload.get("descriptor") != descriptor_payload:
                     raise RuntimeV2Error(
                         "generation_descriptor_mismatch",
                         "plugin distribution does not match the requested generation",
                     )
-                publication = await self.host.apply_distribution(distribution_payload)
+                archives = (
+                    await self._archive_loader(distribution_payload, scope)
+                    if self._archive_loader is not None
+                    else None
+                )
+                publication = await self.host.apply_distribution(
+                    distribution_payload, verified_archives=archives
+                )
                 if not publication.accepted:
                     raise RuntimeV2Error(
                         publication.receipt.error_code or "generation_apply_failed",
@@ -496,13 +515,25 @@ class DataPlaneGenerationAdmissionV2:
                     "requested plugin generation is no longer active on this data plane",
                 )
 
-            from .boundary import pin_operation_context_v2
+            from .boundary import (
+                OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+                pin_operation_context_v2,
+            )
 
+            admitted_distribution = self.host.distribution_for_generation(current).to_payload()
+            resolved_services = dict(services or {})
+            supplied_distribution = resolved_services.get(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+            if supplied_distribution is not None and supplied_distribution != admitted_distribution:
+                raise RuntimeV2Error(
+                    "generation_distribution_mismatch",
+                    "operation distribution differs from the admitted generation",
+                )
+            resolved_services[OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2] = admitted_distribution
             context_manager = pin_operation_context_v2(
                 self.host,
                 operation_id=operation_id,
                 scope=scope,
-                services=services,
+                services=resolved_services,
             )
             operation = await context_manager.__aenter__()
             if operation.descriptor != descriptor:
@@ -513,6 +544,9 @@ class DataPlaneGenerationAdmissionV2:
                 )
 
         try:
+            from .skill_evolution_capture_admission_v2 import admit_worker_skill_capture_v2
+
+            admit_worker_skill_capture_v2(operation, self.host)
             yield operation
         finally:
             await context_manager.__aexit__(None, None, None)

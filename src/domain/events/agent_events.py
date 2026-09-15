@@ -1226,6 +1226,9 @@ class SubAgentKilledEvent(AgentDomainEvent):
     """Event: SubAgent forcibly terminated."""
 
     event_type: AgentEventType = AgentEventType.SUBAGENT_KILLED
+    execution_id: str | None = None
+    run_id: str | None = None
+    conversation_id: str | None = None
     subagent_id: str
     subagent_name: str
     kill_reason: str  # "timeout" | "user_cancel" | "parent_cancel" | "orphan_sweep"
@@ -1235,6 +1238,8 @@ class SubAgentSteeredEvent(AgentDomainEvent):
     """Event: SubAgent received steering instruction from parent."""
 
     event_type: AgentEventType = AgentEventType.SUBAGENT_STEERED
+    run_id: str | None = None
+    conversation_id: str | None = None
     subagent_id: str
     subagent_name: str
     instruction: str

@@ -1,0 +1,13 @@
+{
+  "conversation_id": "c0d589a0-9f67-5c20-871e-f00c8bc756e2",
+  "run_id": "41e65048-1f0d-50e8-b602-c9cd50c86304",
+  "status": "running",
+  "model_snapshot": {
+    "model_route": {
+      "provider_id": "3fe15bfc-3759-4267-b9c1-70f80b63eb7d",
+      "model_id": "MiniMax-M3"
+    },
+    "model_policy_revision": 2
+  },
+  "workspace_id": "b30bf32d-36f0-4832-bcca-252a8df18b15"
+}

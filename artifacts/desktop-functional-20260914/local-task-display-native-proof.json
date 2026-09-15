@@ -1,0 +1,9 @@
+{
+  "conversation_id": "1cc05786-72be-5efe-9d0e-a4536a367dce",
+  "workspace_id": "be334623-d202-46fa-a3e7-e2e5f27dcab0",
+  "objective": "原生任务展示验收：请提出一个只读验证计划，计划目标是检查对话消息是否只展示这段中文任务说明。此轮不要读取文件、不要调用外部工具、不要执行计划。计划中保留标记 NATIVE_DISPLAY_CONTENT_20260914。",
+  "reload_visible": true,
+  "plan_submitted": true,
+  "plan_approved": false,
+  "source_of_evidence": "actual native DOM and screenshot; independent real HTTP/WS provider contract tests verify raw preservation"
+}

@@ -40,6 +40,7 @@ export type ManagedResourceFact = {
     | 'discovery'
     | 'publisher'
     | 'installStatus'
+    | 'revocationStatus'
     | 'securityScan'
     | 'model'
     | 'project';
@@ -202,7 +203,11 @@ export function managedResourceFacts(
       fact('source', plugin.source),
       fact('publisher', plugin.publisher),
       fact('version', plugin.version ?? ''),
-      fact('installStatus', plugin.install_status),
+      fact('installStatus', plugin.install_status || 'unknown'),
+      fact(
+        'revocationStatus',
+        plugin.revoked === true ? 'revoked' : plugin.revoked === false ? 'notRevoked' : 'unknown',
+      ),
       fact('securityScan', plugin.security_scan_status),
     ]);
   }
@@ -293,12 +298,14 @@ export function managedResourceManagementAllowed(
   roles: readonly string[],
   section: ResourceSection,
   item: ManagedResource,
+  isPlatformAdministrator = false,
 ): boolean {
   const normalizedRoles = new Set(roles.map((role) => role.trim().toLowerCase()));
   const isAdmin = normalizedRoles.has('admin');
   const isOwner = normalizedRoles.has('owner');
   if (mode === 'local') return isAdmin || isOwner;
-  if (section === 'agents' || section === 'plugins' || section === 'subagents') {
+  if (section === 'plugins') return isPlatformAdministrator;
+  if (section === 'agents' || section === 'subagents') {
     return isAdmin || isOwner;
   }
   const skill = item as ManagedSkill;
@@ -318,7 +325,7 @@ export function resourceIsImmutable(
   }
   if (section === 'plugins') {
     const plugin = item as ManagedPlugin;
-    return plugin.revoked || plugin.install_status !== 'installed';
+    return plugin.install_status !== 'installed';
   }
   if (section === 'subagents') {
     return (item as ManagedSubAgent).source === 'filesystem';
@@ -452,4 +459,20 @@ function compactGroups(
   groups: ManagedResourceCapabilityGroup[],
 ): ManagedResourceCapabilityGroup[] {
   return groups.filter((group) => group.values.length > 0);
+}
+
+export function managedResourceFactValueKey(
+  key: ManagedResourceFact['key'],
+  value: string | null,
+): string | null {
+  if (key === 'installStatus') {
+    const status =
+      value === 'installed' || value === 'uninstalled' || value === 'verified' ? value : 'unknown';
+    return `settings.pluginInstallStatus.${status}`;
+  }
+  if (key === 'revocationStatus') {
+    const status = value === 'revoked' || value === 'notRevoked' ? value : 'unknown';
+    return `settings.pluginRevocationStatus.${status}`;
+  }
+  return null;
 }

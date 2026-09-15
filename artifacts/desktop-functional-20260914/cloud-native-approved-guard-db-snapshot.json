@@ -1,0 +1,20 @@
+{
+  "run_id": "0b8b7bed-8822-47e5-af89-188d98d1f2ee",
+  "kind": "plan",
+  "status": "cancelled",
+  "profile": "read_only",
+  "plan_run_id": "0b8b7bed-8822-47e5-af89-188d98d1f2ee",
+  "plan_version_id": "a333c8e9-fe79-4af8-a271-651fd9179d77",
+  "source_status": "cancelled",
+  "source_id_matches": true,
+  "source_profile_matches": true,
+  "source_approval_matches": true,
+  "approval_schema": 1,
+  "approval_user_matches": true,
+  "approval_tenant_matches": true,
+  "approval_request_profile": "read_only",
+  "approval_request_plan_matches": true,
+  "approval_request_conversation_matches": true,
+  "user_active": true,
+  "cancel_receipt_present": true
+}

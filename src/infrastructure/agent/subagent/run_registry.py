@@ -45,6 +45,10 @@ class SubAgentRunRegistry:
             "requester_session_key",
             "parent_run_id",
             "lineage_root_run_id",
+            "approved_plan_run_id",
+            "approved_plan_permission_ceiling",
+            "chat_permission_run_id",
+            "chat_permission_mode",
         }
     )
     _PERSIST_VERSION = 1
@@ -88,6 +92,59 @@ class SubAgentRunRegistry:
         )
         self._load_from_disk()
 
+    def bind_approved_plan_authority(
+        self,
+        conversation_id: str,
+        run_id: str,
+        *,
+        approved_run_id: str,
+        ceiling: str,
+    ) -> SubAgentRun:
+        """Bind host-validated approval provenance before detached execution starts."""
+        if not approved_run_id or ceiling not in {"read_only", "workspace_write", "full_access"}:
+            raise ValueError("Invalid approved plan binding")
+        with self._with_registry_lock(exclusive=True):
+            self._sync_from_disk_locked()
+            run = self._runs_by_conversation.get(conversation_id, {}).get(run_id)
+            if run is None or run.status not in self._ACTIVE_STATUSES:
+                raise ValueError("SubAgent is not admitted")
+            if run.metadata.get("chat_permission_run_id"):
+                raise ValueError("SubAgent already has chat authority")
+            binding = {
+                "approved_plan_run_id": approved_run_id,
+                "approved_plan_permission_ceiling": ceiling,
+            }
+            if any(
+                key in run.metadata and run.metadata[key] != value for key, value in binding.items()
+            ):
+                raise ValueError("SubAgent approval binding cannot be changed")
+            return self._upsert_locked(replace(run, metadata={**run.metadata, **binding}))
+
+    def bind_chat_permission_authority(
+        self,
+        conversation_id: str,
+        run_id: str,
+        *,
+        chat_run_id: str,
+        mode: str,
+    ) -> SubAgentRun:
+        """Persist host-verified chat authority for independently owned children."""
+        if not chat_run_id or mode not in {"ask", "automatic", "full_access"}:
+            raise ValueError("Invalid chat permission binding")
+        with self._with_registry_lock(exclusive=True):
+            self._sync_from_disk_locked()
+            run = self._runs_by_conversation.get(conversation_id, {}).get(run_id)
+            if run is None or run.status not in self._ACTIVE_STATUSES:
+                raise ValueError("SubAgent is not admitted")
+            if run.metadata.get("approved_plan_run_id"):
+                raise ValueError("SubAgent already has approved plan authority")
+            binding = {"chat_permission_run_id": chat_run_id, "chat_permission_mode": mode}
+            if any(
+                key in run.metadata and run.metadata[key] != value for key, value in binding.items()
+            ):
+                raise ValueError("SubAgent chat binding cannot be changed")
+            return self._upsert_locked(replace(run, metadata={**run.metadata, **binding}))
+
     def create_run(
         self,
         conversation_id: str,
@@ -113,6 +170,12 @@ class SubAgentRunRegistry:
 
         with self._with_registry_lock(exclusive=True):
             self._sync_from_disk_locked()
+            previous = self._runs_by_conversation.get(conversation_id, {}).get(run_id or "")
+            if previous is not None and (
+                previous.metadata.get("approved_plan_run_id")
+                or previous.metadata.get("chat_permission_run_id")
+            ):
+                raise ValueError("Cannot recreate a SubAgent with bound approval authority")
             run = SubAgentRun(
                 run_id=run_id or uuid.uuid4().hex,
                 conversation_id=conversation_id,
@@ -553,6 +616,11 @@ class SubAgentRunRegistry:
                 updated = mutator(run)
             except ValueError:
                 return None
+            if any(
+                updated.metadata.get(key) != run.metadata.get(key)
+                for key in self._PROTECTED_METADATA_KEYS
+            ):
+                raise ValueError("Cannot update protected run metadata through lifecycle changes")
             return self._upsert_locked(updated)
 
     def _upsert(self, run: SubAgentRun) -> SubAgentRun:

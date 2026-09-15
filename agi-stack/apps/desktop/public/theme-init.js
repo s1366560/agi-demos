@@ -15,9 +15,9 @@
   }
   document.documentElement.dataset.theme = theme;
   // Keep the browser chrome color in sync with the resolved theme background
-  // (#0a0a0a dark / #ffffff light, matching --desktop-bg).
+  // (#080c12 dark / #ffffff light, matching --desktop-bg).
   var themeColorMeta = document.querySelector('meta[name="theme-color"]');
   if (themeColorMeta) {
-    themeColorMeta.setAttribute('content', theme === 'light' ? '#ffffff' : '#0a0a0a');
+    themeColorMeta.setAttribute('content', theme === 'light' ? '#ffffff' : '#080c12');
   }
 })();

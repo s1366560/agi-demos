@@ -178,13 +178,15 @@ test('no-flash bootstrap script is referenced from index.html and stays in sync'
 });
 
 test('meta theme-color follows the resolved theme background', () => {
-  // index.html declares the dark default; the bootstrap script and the provider
-  // effect both rewrite it to the resolved theme's --desktop-bg value.
-  assert.match(indexHtml, /<meta name="theme-color" content="#0a0a0a" \/>/);
+  // Prototype mission-control refactor 2026-09: index.html declares the dark
+  // default (#080c12, matching the restored --desktop-bg); the bootstrap script
+  // and the provider effect both rewrite it to the resolved theme's --desktop-bg
+  // value.
+  assert.match(indexHtml, /<meta name="theme-color" content="#080c12" \/>/);
   for (const source of [themeInitSource, themeSource]) {
     assert.ok(source.includes('meta[name="theme-color"]'));
     assert.ok(source.includes('#ffffff'), 'light theme-color must match light --desktop-bg');
-    assert.ok(source.includes('#0a0a0a'), 'dark theme-color must stay #0a0a0a');
+    assert.ok(source.includes('#080c12'), 'dark theme-color must stay #080c12');
   }
   assert.equal(lightTokens.get('--desktop-bg'), '#ffffff');
 });

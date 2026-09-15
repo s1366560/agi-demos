@@ -169,7 +169,11 @@ function buildSkillTimelineGroup(items: AgentTimelineItem[]): SkillTimelineGroup
     );
     matchScore = latestNumber(matchScore, eventNumber(item, ['match_score', 'matchScore']));
     query = latestString(query, eventString(item, ['query']));
-    totalSteps = Math.max(totalSteps, eventNumber(item, ['total_steps', 'totalSteps']) ?? 0);
+    totalSteps = Math.max(
+      totalSteps,
+      eventNumber(item, ['total_steps', 'totalSteps']) ?? 0,
+      eventNumber(item, ['tool_calls_count', 'toolCallsCount']) ?? 0,
+    );
     summary = latestString(summary, eventString(item, ['summary']));
     error = latestString(error, eventString(item, ['error']));
     reason = latestString(reason, eventString(item, ['reason']));
@@ -180,21 +184,15 @@ function buildSkillTimelineGroup(items: AgentTimelineItem[]): SkillTimelineGroup
     status = skillStatus(item, status);
   }
 
-  totalSteps = Math.max(totalSteps, tools.length);
   const stepOwner = identity.id || identity.name || first.id;
-  const toolSteps = buildToolSteps(items, tools, stepOwner);
-  const highestObservedStep = toolSteps.reduce(
-    (highest, step) =>
-      step.status === 'pending' ? highest : Math.max(highest, step.stepIndex),
-    0,
-  );
+  const toolSteps = buildToolSteps(items, stepOwner);
+  totalSteps = Math.max(totalSteps, toolSteps.length);
+  const observedStepCount = toolSteps.filter((step) => step.status !== 'pending').length;
   const executionEnded = items.some((item) => terminalSkillEventTypes.has(item.type));
   const currentStep =
-    status === 'completed' ||
-    status === 'fallback' ||
-    (status === 'failed' && executionEnded)
+    status === 'completed' || status === 'fallback' || (status === 'failed' && executionEnded)
       ? totalSteps
-      : highestObservedStep;
+      : observedStepCount;
 
   return {
     id: `skill-group:${first.id}:${last.id}`,
@@ -218,21 +216,26 @@ function buildSkillTimelineGroup(items: AgentTimelineItem[]): SkillTimelineGroup
   };
 }
 
-function buildToolSteps(
-  items: readonly AgentTimelineItem[],
-  tools: readonly string[],
-  owner: string,
-): SkillToolStep[] {
+function buildToolSteps(items: readonly AgentTimelineItem[], owner: string): SkillToolStep[] {
+  // The matched tools are an authority roster, not a sequence of invocations.
+  // Only lifecycle events and terminal result records establish actual steps.
   const steps = new Map<number, SkillToolStep>();
-  tools.forEach((toolName, stepIndex) => {
-    steps.set(stepIndex, emptyToolStep(owner, stepIndex, toolName));
-  });
+  const seenItems = new Set<string>();
+  const nextIndex = () => Math.max(-1, ...steps.keys()) + 1;
 
   for (const item of items) {
+    if (seenItems.has(item.id)) continue;
+    seenItems.add(item.id);
     if (item.type === 'skill_tool_start' || item.type === 'skill_tool_result') {
       const toolName = eventString(item, ['tool_name', 'toolName']);
       const explicitIndex = eventNumber(item, ['step_index', 'stepIndex']);
-      const stepIndex = explicitIndex ?? Math.max(0, tools.indexOf(toolName));
+      const runningStep =
+        item.type === 'skill_tool_result'
+          ? [...steps.values()]
+              .reverse()
+              .find((step) => step.toolName === toolName && step.status === 'running')
+          : undefined;
+      const stepIndex = explicitIndex ?? runningStep?.stepIndex ?? nextIndex();
       const current = steps.get(stepIndex) ?? emptyToolStep(owner, stepIndex, toolName);
       steps.set(stepIndex, {
         ...current,
@@ -248,14 +251,22 @@ function buildToolSteps(
       });
     }
 
+    const summaryOccurrences = new Map<string, number>();
     for (const [resultIndex, result] of eventRecordArray(item, [
       'tool_results',
       'toolResults',
     ]).entries()) {
       const toolName = recordString(result, ['tool_name', 'toolName']);
       const explicitIndex = recordNumber(result, ['step_index', 'stepIndex']);
-      const declaredIndex = tools.indexOf(toolName);
-      const stepIndex = explicitIndex ?? (declaredIndex >= 0 ? declaredIndex : resultIndex);
+      const occurrence = summaryOccurrences.get(toolName) ?? 0;
+      summaryOccurrences.set(toolName, occurrence + 1);
+      const observedStep = [...steps.values()]
+        .filter((step) => step.toolName === toolName)
+        .sort((left, right) => left.stepIndex - right.stepIndex)[occurrence];
+      const stepIndex =
+        explicitIndex ??
+        observedStep?.stepIndex ??
+        (steps.has(resultIndex) ? nextIndex() : resultIndex);
       const current = steps.get(stepIndex) ?? emptyToolStep(owner, stepIndex, toolName);
       const resultError = recordString(result, ['error']);
       const explicitStatus = recordString(result, ['status']).toLowerCase();

@@ -1,0 +1,36 @@
+{
+  "plugin_id": "qa-marketplace-marker-bundle",
+  "applied": true,
+  "steps": [
+    {
+      "action": "revoke",
+      "status_code": 200,
+      "result": {
+        "plugin_id": "qa-marketplace-marker-bundle",
+        "revoked_versions": [
+          "1.0.0"
+        ],
+        "revoked_permissions": 1
+      }
+    },
+    {
+      "action": "uninstall",
+      "status_code": 200,
+      "result": {
+        "plugin_id": "qa-marketplace-marker-bundle",
+        "version": "1.0.0",
+        "status": "uninstalled",
+        "desired_removed": false,
+        "revoked_permissions": 0
+      }
+    }
+  ],
+  "actor_id": "b0ab68aa-db89-4a6a-9638-978a21e24e5b",
+  "temporary_identity_deactivated": true,
+  "after": {
+    "plugin_id": "qa-marketplace-marker-bundle",
+    "version": "1.0.0",
+    "install_status": "uninstalled",
+    "revoked": true
+  }
+}

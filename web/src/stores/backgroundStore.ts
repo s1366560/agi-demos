@@ -11,6 +11,8 @@ import { subagentAPI } from '../services/subagentService';
 
 export interface BackgroundSubAgent {
   executionId: string;
+  conversationId: string;
+  cancellation?: { status: 'pending' | 'failed'; error?: string } | undefined;
   subagentName: string;
   task: string;
   status: 'running' | 'completed' | 'failed' | 'cancelled' | 'queued' | 'retrying' | 'killed';
@@ -30,7 +32,7 @@ interface BackgroundState {
   panelOpen: boolean;
 
   // Actions
-  launch: (executionId: string, subagentName: string, task: string) => void;
+  launch: (executionId: string, subagentName: string, task: string, conversationId: string) => void;
   complete: (
     executionId: string,
     summary: string,
@@ -44,20 +46,23 @@ interface BackgroundState {
   togglePanel: () => void;
   setPanel: (open: boolean) => void;
   updateProgress: (executionId: string, progress: number, message?: string) => void;
-  kill: (executionId: string, reason?: string) => void;
+  kill: (executionId: string, reason?: string) => Promise<void>;
 }
 
 export const useBackgroundStore = create<BackgroundState>()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       executions: new Map(),
       panelOpen: false,
 
-      launch: (executionId, subagentName, task) => {
+      launch: (executionId, subagentName, task, conversationId) => {
+        if (!executionId || !conversationId) return;
+        if (get().executions.has(executionId)) return;
         set((state) => {
           const next = new Map(state.executions);
           next.set(executionId, {
             executionId,
+            conversationId,
             subagentName,
             task,
             status: 'running',
@@ -71,10 +76,11 @@ export const useBackgroundStore = create<BackgroundState>()(
         set((state) => {
           const next = new Map(state.executions);
           const existing = next.get(executionId);
-          if (existing) {
+          if (existing && ['running', 'queued', 'retrying'].includes(existing.status)) {
             next.set(executionId, {
               ...existing,
               status: 'completed',
+              cancellation: undefined,
               completedAt: Date.now(),
               summary,
               tokensUsed,
@@ -89,10 +95,11 @@ export const useBackgroundStore = create<BackgroundState>()(
         set((state) => {
           const next = new Map(state.executions);
           const existing = next.get(executionId);
-          if (existing) {
+          if (existing && ['running', 'queued', 'retrying'].includes(existing.status)) {
             next.set(executionId, {
               ...existing,
               status: 'failed',
+              cancellation: undefined,
               completedAt: Date.now(),
               error,
             });
@@ -105,10 +112,11 @@ export const useBackgroundStore = create<BackgroundState>()(
         set((state) => {
           const next = new Map(state.executions);
           const existing = next.get(executionId);
-          if (existing) {
+          if (existing && ['running', 'queued', 'retrying'].includes(existing.status)) {
             next.set(executionId, {
               ...existing,
               status: 'cancelled',
+              cancellation: undefined,
               completedAt: Date.now(),
             });
           }
@@ -151,21 +159,63 @@ export const useBackgroundStore = create<BackgroundState>()(
         });
       },
 
-      kill: (executionId, reason) => {
-        subagentAPI.cancelExecution(executionId, undefined, reason).catch(() => {});
-        set((state) => {
-          const next = new Map(state.executions);
-          const existing = next.get(executionId);
-          if (existing) {
-            next.set(executionId, {
-              ...existing,
-              status: 'killed',
-              completedAt: Date.now(),
-              killReason: reason,
-            });
+      kill: async (executionId, reason) => {
+        const execution = get().executions.get(executionId);
+        if (
+          !execution ||
+          !['running', 'queued', 'retrying'].includes(execution.status) ||
+          execution.cancellation?.status === 'pending'
+        )
+          return;
+        const request = { status: 'pending' as const };
+        set((state) => ({
+          executions: new Map(state.executions).set(executionId, {
+            ...execution,
+            cancellation: request,
+            killReason: reason,
+          }),
+        }));
+        const updateRequest = (
+          cancellation: BackgroundSubAgent['cancellation'],
+          cancelled = false
+        ) => {
+          set((state) => {
+            const current = state.executions.get(executionId);
+            if (!current || current.cancellation !== request) return state;
+            return {
+              executions: new Map(state.executions).set(executionId, {
+                ...current,
+                cancellation,
+                ...(cancelled ? { status: 'cancelled' as const, completedAt: Date.now() } : {}),
+              }),
+            };
+          });
+        };
+        if (!execution.conversationId) {
+          updateRequest({ status: 'failed' });
+          return;
+        }
+        try {
+          const response = await subagentAPI.cancelExecution(
+            executionId,
+            execution.conversationId,
+            reason
+          );
+          if (response.execution_id !== executionId) {
+            updateRequest({ status: 'failed' });
+            // Runtime receipt must contain a boolean, not a truthy malformed payload.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare
+          } else if (response.cancelled === true) {
+            updateRequest(undefined, true);
+          } else if (response.cancel_requested !== true) {
+            updateRequest({ status: 'failed', error: response.message });
           }
-          return { executions: next };
-        });
+        } catch (error) {
+          updateRequest({
+            status: 'failed',
+            ...(error instanceof Error ? { error: error.message } : {}),
+          });
+        }
       },
     }),
     { name: 'background-store' }

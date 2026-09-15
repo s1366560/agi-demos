@@ -328,10 +328,10 @@
   gap: 4px;
   padding: 0 6px;
   color: var(--desktop-gray-27);
-  font-size: 10.5px;
+  font-size: 7px;
   white-space: nowrap;
   background: var(--desktop-surface-30);
-  border: 1px solid var(--desktop-border-6);
+  border: 1px solid var(--desktop-pill-neutral-border);
   border-radius: 9px;
 }
 
@@ -343,13 +343,13 @@
 }
 
 .managed-resource-status.active {
-  color: var(--desktop-green-vivid);
+  color: var(--desktop-green);
   background: var(--desktop-surface-green-2);
   border-color: var(--desktop-border-green-2);
 }
 
 .managed-resource-status.attention {
-  color: var(--desktop-amber-dim);
+  color: var(--desktop-amber);
   background: var(--desktop-surface-amber-2);
   border-color: var(--desktop-border-amber);
 }
@@ -576,13 +576,31 @@
   display: flex;
   height: 38px;
   align-items: center;
-  padding: 0 28px;
-  color: var(--desktop-text);
-  font-size: 11px;
+  padding: 0 20px;
+  color: var(--desktop-gray-23);
+  font-size: 8px;
   background: var(--desktop-surface-12);
   border-top: 1px solid var(--desktop-border-5);
   border-bottom: 1px solid var(--desktop-border-5);
-  box-shadow: inset 0 -2px var(--desktop-cyan);
+}
+
+.managed-resource-overview-label > span {
+  position: relative;
+  display: flex;
+  height: 100%;
+  align-items: center;
+  padding: 0 11px;
+  color: var(--desktop-white);
+}
+
+.managed-resource-overview-label > span::after {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 2px;
+  background: var(--desktop-cyan);
+  content: '';
 }
 
 .managed-resource-overview {

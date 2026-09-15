@@ -1,3 +1,4 @@
+import { useBackgroundStore } from '../../../stores/backgroundStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { createStreamEventHandlers } from '../../../stores/agent/streamEventHandlers';
@@ -112,6 +113,44 @@ describe('streamEventHandlers', () => {
       }),
       flushTimelineBufferSync: vi.fn(),
     };
+  });
+
+  it('tracks background execution ownership and accepts only exact owner terminal events', () => {
+    useBackgroundStore.getState().clearAll();
+    mockState.subagentPreviews = new Map();
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    handlers.onBackgroundLaunched?.({ type: 'background_launched', data: {
+      execution_id: 'bg-current', subagent_name: 'worker', task: 'task',
+    } } as any);
+    expect(useBackgroundStore.getState().executions.get('bg-current')?.conversationId).toBe(conversationId);
+    handlers.onSubAgentKilled?.({ type: 'subagent_killed', data: {
+      subagent_id: 'bg-current', kill_reason: 'configuration id is not execution identity',
+    } } as any);
+    expect(useBackgroundStore.getState().executions.get('bg-current')?.status).toBe('running');
+    handlers.onSubAgentKilled?.({ type: 'subagent_killed', data: {
+      execution_id: 'bg-current', conversation_id: 'other-conversation', subagent_id: 'worker',
+    } } as any);
+    expect(useBackgroundStore.getState().executions.get('bg-current')?.status).toBe('running');
+    handlers.onSubAgentKilled?.({ type: 'subagent_killed', data: {
+      execution_id: 'bg-current', conversation_id: conversationId, subagent_id: 'worker',
+    } } as any);
+    expect(useBackgroundStore.getState().executions.get('bg-current')?.status).toBe('cancelled');
+    useBackgroundStore.getState().clearAll();
+  });
+
+  it('settles background completion by execution id and never the reusable agent id', () => {
+    useBackgroundStore.getState().clearAll();
+    const store = useBackgroundStore.getState();
+    mockState.subagentPreviews = new Map();
+    store.launch('bg-new', 'worker', 'task', conversationId);
+    store.launch('worker', 'worker', 'other task', 'other-conversation');
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    handlers.onSubAgentCompleted?.({ type: 'subagent_completed', data: {
+      execution_id: 'bg-new', subagent_id: 'worker', summary: 'done', success: true,
+    } } as any);
+    expect(useBackgroundStore.getState().executions.get('bg-new')?.status).toBe('completed');
+    expect(useBackgroundStore.getState().executions.get('worker')?.status).toBe('running');
+    useBackgroundStore.getState().clearAll();
   });
 
   it('discards late delta and thought timers after operation retirement', () => {

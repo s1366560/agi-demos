@@ -1,0 +1,8 @@
+{
+  "real_oci_fetch": true,
+  "bundle_id": "qa-marketplace-marker-bundle",
+  "version": "1.0.0",
+  "digest": "sha256:5690047548f07476e64db9b812514d7732d90fd4898f014634c1affef3637e18",
+  "archive_matches_fixture": true,
+  "registry": "http://127.0.0.1:64212"
+}

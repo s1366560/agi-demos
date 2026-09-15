@@ -1,0 +1,78 @@
+{
+  "artifact_deliveries": [],
+  "artifact_versions": [],
+  "capabilities": {
+    "allowed_actions": [
+      "send_message"
+    ],
+    "can_approve_plan": false,
+    "can_deliver_artifacts": false,
+    "can_queue_next": false,
+    "can_respond_to_hitl": false,
+    "can_review_artifacts": false,
+    "can_send_message": true,
+    "can_steer_now": false,
+    "run_actions": []
+  },
+  "conversation": {
+    "agent_config": {
+      "capability_mode": "work",
+      "llm_model_override": null,
+      "llm_route_override": null,
+      "selected_agent_id": "builtin:all-access"
+    },
+    "conversation_mode": "workspace",
+    "coordinator_agent_id": "builtin:all-access",
+    "created_at": "2026-09-14T06:34:37.302145+00:00",
+    "current_mode": "plan",
+    "execution_selection": {
+      "agent_id": null,
+      "forced_skill_id": "qa-plugin-verification",
+      "subagent_id": null
+    },
+    "focused_agent_id": "builtin:all-access",
+    "id": "local-conversation-b02b453b-8118-4e8d-88ea-2764d3a21914",
+    "linked_workspace_task_id": null,
+    "message_count": 33,
+    "metadata": {
+      "capability_mode": "work",
+      "environment": {
+        "kind": "local",
+        "label": "Local runtime"
+      },
+      "run": null,
+      "runtime": "local"
+    },
+    "participant_agents": [
+      "builtin:all-access"
+    ],
+    "project_id": "desktop-client",
+    "status": "active",
+    "summary": null,
+    "tenant_id": "northstar",
+    "title": "技能原生验收：请通过真实可用的技能加载/调用工具使用当前项目技能 qa-plugin-verification（ID 423fe993-1f04-415d-bf00-f200bf128404）",
+    "updated_at": "2026-09-14T06:34:37.302145+00:00",
+    "user_id": "local-user",
+    "workspace_id": null,
+    "workspace_name": null
+  },
+  "current_plan": null,
+  "current_run": null,
+  "evidence_summary": {
+    "artifact_delivery_count": 0,
+    "artifact_source_count": 0,
+    "artifact_version_count": 0,
+    "changes": null,
+    "checks": null,
+    "tool_invocation_count": 0,
+    "unknown_outcome_count": 0
+  },
+  "pending_hitl": [],
+  "plan_history": [],
+  "run_history": [],
+  "schema_version": 1,
+  "snapshot_revision": "1b2e029cdc5e0471264ab11627e439bca6a504bf317108e99f8d410f199b951b",
+  "tasks": [],
+  "tool_invocations": [],
+  "updated_at": "2026-09-14T06:34:37.302145+00:00"
+}

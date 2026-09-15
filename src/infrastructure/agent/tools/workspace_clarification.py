@@ -226,6 +226,7 @@ def deliver_clarification_response(envelope: WtpEnvelope) -> bool:
         },
         "required": ["task_id", "attempt_id", "leader_agent_id", "question"],
     },
+    permission="write",
 )
 async def workspace_request_clarification_tool(
     ctx: ToolContext,
@@ -349,6 +350,7 @@ async def workspace_request_clarification_tool(
             "answer",
         ],
     },
+    permission="write",
 )
 async def workspace_respond_clarification_tool(
     ctx: ToolContext,

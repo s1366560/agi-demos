@@ -124,7 +124,7 @@ test("Cloud probe publishes only actions backed by successful scoped GET authori
   assert.equal(
     requestUrl(
       calls,
-      "/api/v1/agent/conversations/conversation-1",
+      "/api/v1/agent/conversations/conversation-1/session",
     ).searchParams.get("project_id"),
     "project-1",
   );
@@ -135,18 +135,9 @@ test("Cloud probe publishes only actions backed by successful scoped GET authori
     ).searchParams.get("project_id"),
     "project-1",
   );
-  assert.ok(
-    requestUrl(
-      calls,
-      "/api/v1/agent/hitl/conversations/conversation-1/pending",
-    ),
-  );
-  assert.ok(
-    requestUrl(
-      calls,
-      "/api/v1/agent/conversations/conversation-1/participants",
-    ),
-  );
+  for (const legacy of ['/active-run', '/latest-run', '/pending', '/participants']) {
+    assert.equal(calls.some((call) => new URL(call.input).pathname.endsWith(legacy)), false);
+  }
   assert.equal(
     requestUrl(calls, "/api/v1/attachments").searchParams.get(
       "conversation_id",
@@ -620,7 +611,7 @@ function fixtureFetch(mode, calls) {
     if (path === "/api/v1/agent/conversations/conversation-1/session") {
       return mode === "local"
         ? jsonResponse(sessionProjection())
-        : jsonResponse({ detail: "not found" }, 404);
+        : jsonResponse(cloudConversationSession());
     }
     if (path.endsWith("/active-run")) {
       return jsonResponse(runEnvelope("active_run"));
@@ -700,6 +691,8 @@ function fixtureFetch(mode, calls) {
     if (path === "/api/v1/agent/runs/run-1/changes") {
       return jsonResponse({
         id: "changes-1",
+        scope: "run",
+        turn_id: null,
         run_id: "run-1",
         conversation_id: "conversation-1",
         run_revision: 4,
@@ -777,6 +770,16 @@ function workspaceContext({ projectId = "project-1", revision = 1 } = {}) {
       updated_at: "2026-08-05T00:00:00Z",
     },
     membership_role: "owner",
+  };
+}
+
+function cloudConversationSession() {
+  return {
+    schema_version: 2, projection_kind: 'workspace_session', authority_kind: 'conversation_record',
+    authority_id: 'conversation-1', conversation: {...conversation(), participant_agents: []},
+    execution: {current_run: run(), run_history: [run()]},
+    artifact_records: [], pending_hitl: sessionProjection().pending_hitl,
+    snapshot_revision: 'cloud-session-revision-1',
   };
 }
 
@@ -888,3 +891,52 @@ function jsonResponse(payload, status = 200) {
     headers: { "content-type": "application/json" },
   });
 }
+
+test("cloud journey emits only exact authorized paths", async () => {
+ const calls=[]; await createAgentWorkspaceJourneyAuthorityClient(cloudConfig,{fetchImpl:fixtureFetch('cloud',calls)}).probe();
+ const {executeVaultBoundCloudRequest}=require('/tmp/agistack-desktop-test-dist/electron/main/cloudRequestPolicy.js');
+ for(const call of calls){const url=new URL(call.input);await assert.rejects(executeVaultBoundCloudRequest({path:url.pathname+url.search,method:'GET'},{loadTrustedSession:async()=>{throw Error('policy-allowed')},fetch:async()=>{throw Error('unexpected network')}}),/policy-allowed/u,url.pathname+url.search);}
+});
+
+test('cloud aggregate rejects invalid kind/scope and does not classify terminal runs as active', async () => {
+  for (const patch of [{ projection_kind: 'local_session' }, { authority_kind: 'unknown' }, { authority_id: 'foreign-conversation' }, { conversation: {...conversation(), project_id:'foreign'} }]) {
+    const base = fixtureFetch('cloud', []);
+    const snapshot = await createAgentWorkspaceJourneyAuthorityClient(cloudConfig, {fetchImpl: async (input,init) =>
+      new URL(input).pathname.endsWith('/session') ? jsonResponse({...cloudConversationSession(),...patch}) : base(input,init)
+    }).probe();
+    assert.equal(actions(snapshot,'stream-and-run-control').includes('get-active-run'),false);
+    assert.equal(actions(snapshot,'conversation-lifecycle').includes('get-conversation'),false);
+    assert.equal(actions(snapshot,'roster-and-subagents').includes('list-participants'),false);
+  }
+  const base = fixtureFetch('cloud', []);
+  const finished = {...run(), status:'completed'};
+  const snapshot = await createAgentWorkspaceJourneyAuthorityClient(cloudConfig,{fetchImpl:async(input,init)=>
+    new URL(input).pathname.endsWith('/session') ? jsonResponse({...cloudConversationSession(),execution:{current_run:finished,run_history:[finished]}}) : base(input,init)
+  }).probe();
+  assert.equal(actions(snapshot,'stream-and-run-control').includes('get-active-run'),false);
+  assert.equal(actions(snapshot,'stream-and-run-control').includes('get-latest-run'),true);
+});
+
+test('full cloud journey reaches fixture backend through vault policy and scoped aggregate', async () => {
+  const {executeVaultBoundCloudRequest}=require('/tmp/agistack-desktop-test-dist/electron/main/cloudRequestPolicy.js');
+  const calls=[]; const base=fixtureFetch('cloud',calls);
+  const dependencies={
+    loadTrustedSession:async()=>({version:1,api_base_url:cloudConfig.apiBaseUrl,runtime_mode:'cloud',credential_kind:'cloud_bearer',credential:'test-only',expires_at:'2099-09-14T00:00:00Z'}),
+    fetch:async(input,init)=>new URL(input).pathname==='/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1'
+      ? jsonResponse({id:'workspace-1',tenant_id:'tenant-1',project_id:'project-1'}) : base(input,init),
+  };
+  const rejected=[];
+  const snapshot=await createAgentWorkspaceJourneyAuthorityClient(cloudConfig,{fetchImpl:async(input)=>{
+    const url=new URL(input);
+    try {const result=await executeVaultBoundCloudRequest({path:url.pathname+url.search,method:'GET'},dependencies);return jsonResponse(result.body,result.status);}
+    catch(error){rejected.push({path:url.pathname+url.search,error:error.message});throw error;}
+  }}).probe();
+  assert.deepEqual(rejected,[]);
+  assert.equal(snapshot.authorityRevision,1);
+  assert.ok(actions(snapshot,'conversation-lifecycle').includes('get-conversation'));
+  assert.ok(actions(snapshot,'stream-and-run-control').includes('get-active-run'));
+  assert.ok(actions(snapshot,'hitl-and-a2ui').includes('render-surface'));
+  assert.ok(actions(snapshot,'content-and-export').includes('list-attachments'));
+  const projectCatalog=calls.find(call=>new URL(call.input).pathname==='/api/v1/projects/');
+  assert.equal(new URL(projectCatalog.input).searchParams.get('tenant_id'),'tenant-1');
+});

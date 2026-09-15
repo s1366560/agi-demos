@@ -444,7 +444,7 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
-  background: var(--desktop-surface-7);
+  background: var(--desktop-chat-bg);
   container-type: inline-size;
 }
 
@@ -572,7 +572,7 @@
 
 .session-workspace-thread .session-chat-narrative .message-scroll {
   min-width: 0;
-  background: var(--desktop-surface-7);
+  background: var(--desktop-chat-bg);
 }
 
 .chat-shell .message-scroll [data-radix-scroll-area-viewport] {
@@ -1267,10 +1267,13 @@
   padding: 0 12px 12px 30px;
 }
 
+/* Web parity redesign 2026-09: thought content reads as italic secondary
+   text inside the subtle bordered card (web ThinkingBlock). */
 .thought-timeline-content .thought-content {
   color: var(--desktop-muted);
-  font-size: 11px;
-  line-height: 1.65;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.55;
 }
 
 @keyframes thought-timeline-icon-pulse {
@@ -1585,7 +1588,7 @@
   width: fit-content;
   max-width: 100%;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   margin: 22px 0 0;
   padding: 0;
   overflow: visible;
@@ -1594,9 +1597,12 @@
   background: transparent;
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 5b): user bubble is a
+   plain gray card — radius 12px, max-width 84%, right-aligned, no avatar and
+   no visible name/timestamp in the session narrative. */
 .session-chat-narrative .message.session-thread-message.user {
   width: fit-content;
-  max-width: 82%;
+  max-width: 84%;
   margin-right: 0;
   margin-left: auto;
 }
@@ -1678,35 +1684,72 @@
   height: 13px;
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 5b): assistant text spans
+   the full thread column — the prototype has no narrowed bubble column. */
 .session-chat-narrative .message.session-thread-message.agent {
   width: 100%;
+  max-width: 100%;
   background: transparent;
 }
 
+/* Web parity redesign 2026-09: 32x32 avatar chip, radius 8px, primary-tinted
+   background (10%) with a 15% ring, matching ASSISTANT_AVATAR_CLASSES. */
 .session-thread-avatar {
   display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   place-items: center;
-  border: 1px solid var(--desktop-border-13);
+  margin-top: 2px;
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.15);
   border-radius: 8px;
-  background: var(--desktop-surface-15);
-  color: var(--desktop-cyan-soft);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
+  color: var(--desktop-cyan);
 }
 
 .session-thread-avatar svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .session-thread-message.user .session-thread-avatar {
   order: 2;
-  color: var(--desktop-gray-28);
+  border-color: rgba(var(--desktop-slate-rgb), 0.2);
+  background: rgba(var(--desktop-slate-rgb), 0.1);
+  color: var(--desktop-muted);
 }
 
 .session-thread-message.runtime .session-thread-avatar {
   color: var(--desktop-gray-27);
+}
+
+/* Prototype mission-control refactor 2026-09 (phase 5b): no avatar chips and
+   no visible name/timestamp meta in the session narrative — the prototype
+   message anatomy is a bare bubble (user) and flat text (assistant). The DOM
+   contract (avatar span, identity, time, action menu) is unchanged; the
+   hover/focus action menu floats at the message edge instead. */
+.session-chat-narrative .session-thread-message .session-thread-avatar {
+  display: none;
+}
+
+.session-chat-narrative .session-thread-message .session-message-identity {
+  display: none;
+}
+
+.session-chat-narrative .session-thread-message .transcript-meta {
+  position: absolute;
+  z-index: 6;
+  top: -2px;
+  right: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.session-chat-narrative .session-thread-message.user .transcript-meta {
+  top: 50%;
+  right: calc(100% + 8px);
+  flex-direction: row;
+  transform: translateY(-50%);
 }
 
 .session-message-body {
@@ -1741,7 +1784,7 @@
   flex: 1 1 auto;
   flex-wrap: wrap;
   gap: 4px 7px;
-  color: var(--desktop-gray-24);
+  color: var(--desktop-faint);
   font-size: 10px;
   line-height: 1.3;
 }
@@ -1775,7 +1818,7 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
-  color: var(--desktop-gray-3);
+  color: var(--desktop-faint);
   white-space: nowrap;
 }
 
@@ -1789,11 +1832,25 @@
   max-width: 100%;
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 5b): user bubble = plain
+   gray card, 12px radius on all corners (no asymmetric sharp corner), 12px
+   horizontal rhythm; background/border tokens unchanged (#161d27/#2a3542). */
 .session-thread-message.user .session-message-surface {
   padding: 12px 14px;
-  border: 1px solid var(--desktop-border-14);
-  border-radius: 12px 12px 3px;
-  background: var(--desktop-surface-29);
+  border: 1px solid var(--desktop-bubble-user-border);
+  border-radius: 12px;
+  background: var(--desktop-bubble-user-bg);
+}
+
+/* Prototype mission-control refactor 2026-09 (phase 5b): assistant messages
+   render as flat markdown directly on the thread background — no bubble card,
+   no border, no shadow (the base rule stays token-driven for other hosts). */
+.session-thread-message.agent .session-message-surface {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .session-message-actions {
@@ -1906,13 +1963,15 @@
   line-height: 1.5;
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 5b): thread text follows
+   the prototype message anatomy — 12px/1.66 (ConversationDetail.css .msg-text). */
 .session-chat-narrative .session-thread-message .transcript-content {
   min-width: 0;
   max-width: 100%;
   margin-top: 0;
-  color: var(--desktop-muted);
-  font-size: 11px;
-  line-height: 1.62;
+  color: var(--desktop-text-soft);
+  font-size: 12px;
+  line-height: 1.66;
   overflow-wrap: anywhere;
 }
 
@@ -1947,7 +2006,7 @@
 }
 
 .session-chat-narrative .session-thread-message.user .transcript-content {
-  color: var(--desktop-text-pale);
+  color: var(--desktop-text-soft);
 }
 
 .forced-skill-message-badge {
@@ -2448,16 +2507,19 @@
   word-break: normal;
 }
 
+/* Web parity redesign 2026-09: links take the primary color and underline
+   only on hover (web MARKDOWN_PROSE_CLASSES: text-primary, no-underline,
+   hover:underline). */
 .markdown-content .markdown-external-link {
   color: var(--desktop-cyan);
   overflow-wrap: anywhere;
-  text-decoration: underline;
-  text-decoration-color: rgba(var(--desktop-cyan-soft-rgb), 0.38);
+  text-decoration: none;
   text-underline-offset: 2px;
 }
 
 .markdown-content .markdown-external-link:hover {
-  color: var(--desktop-cyan-spray);
+  color: var(--desktop-cyan);
+  text-decoration: underline;
   text-decoration-color: currentcolor;
 }
 
@@ -2655,11 +2717,14 @@
   gap: 8px;
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 5b): worklog group header
+   reads as the prototype session-worklog header — 11px label with 9px meta. */
 .session-chat-narrative .timeline-tool-group > summary strong,
 .session-chat-narrative .timeline-debug-group > summary strong {
   overflow: hidden;
-  color: var(--desktop-gray-37);
-  font-size: 10px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2677,6 +2742,8 @@
   color: var(--desktop-green);
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 5b): running status uses
+   the cyan "worked for" vocabulary of the prototype worklog row. */
 .session-chat-narrative .timeline-tool-group.status-running > summary em {
   color: var(--desktop-cyan);
 }
@@ -2701,17 +2768,20 @@
 .session-chat-narrative .timeline-debug-group-items {
   display: grid;
   gap: 2px;
-  padding: 2px 0 4px 26px;
+  padding: 2px 0 4px 27px;
   border-top: 0;
   background: transparent;
 }
 
+/* Web parity redesign 2026-09 phase 2: aggregated sources share the
+   execution card frame (8px radius, bubble border/surface, whisper shadow). */
 .session-chat-narrative .aggregated-sources-card {
   overflow: hidden;
   margin: 4px 6px 8px;
-  border: 1px solid rgba(var(--desktop-steel-7-rgb), 0.3);
-  border-radius: 9px;
-  background: rgba(var(--desktop-surface-34-rgb), 0.78);
+  border: 1px solid var(--desktop-bubble-agent-border);
+  border-radius: 8px;
+  background: var(--desktop-bubble-agent-bg);
+  box-shadow: var(--desktop-shadow-card);
 }
 
 .session-chat-narrative .aggregated-sources-header {
@@ -2729,8 +2799,9 @@
   min-width: 0;
   align-items: center;
   gap: 7px;
-  color: var(--desktop-gray-31);
-  font-size: 11px;
+  color: var(--desktop-text-soft);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .session-chat-narrative .aggregated-sources-title svg,
@@ -2742,7 +2813,7 @@
 
 .session-chat-narrative .aggregated-sources-metrics {
   color: var(--desktop-faint);
-  font-size: 9px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -2889,8 +2960,67 @@
   border-radius: 0;
 }
 
+/* Prototype mission-control refactor 2026-09 (phase 5b): tool-call pairs
+   inside the worklog group flatten into the prototype session-worklog row —
+   no execution card chrome, just a slim row with a hover tint. */
+.session-chat-narrative .timeline-tool-group-items .message.timeline-row.tool-call {
+  margin: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.session-chat-narrative .timeline-tool-group-items .message.timeline-row.tool-call:hover,
+.session-chat-narrative
+  .timeline-tool-group-items
+  .message.timeline-row.tool-call.is-expanded {
+  border-color: transparent;
+  background: rgba(var(--desktop-slate-rgb), 0.055);
+}
+
+/* Prototype mission-control refactor 2026-09 (phase 5b): detail blocks align
+   under the flat row title (18px icon + 8px gap). */
+.session-chat-narrative .timeline-tool-group-items .tool-call .timeline-details {
+  padding-left: 26px;
+}
+
+/* Prototype mission-control refactor 2026-09 (phase 5b): thought cards inside
+   the worklog collapse to a slim row without the card surface. */
 .session-chat-narrative .timeline-tool-group-items .thought-timeline-card {
-  margin: 6px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 6px;
+}
+
+.session-chat-narrative .timeline-tool-group-items .thought-timeline-icon {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.session-chat-narrative .timeline-tool-group-items .thought-timeline-surface {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.session-chat-narrative
+  .timeline-tool-group-items
+  .thought-timeline-card.is-streaming
+  .thought-timeline-surface {
+  border-color: transparent;
+  background: transparent;
+}
+
+.session-chat-narrative .timeline-tool-group-items .thought-timeline-toggle {
+  min-height: 30px;
+  padding: 4px 6px;
 }
 
 .session-chat-narrative
@@ -3185,17 +3315,16 @@
   color: var(--desktop-gray-9);
 }
 
+/* Web parity redesign 2026-09 phase 2: skill execution shares the execution
+   card frame (8px radius, bubble border/surface, whisper shadow); the indigo
+   icon chip keeps the skill identity. */
 .session-chat-narrative .skill-execution-card {
   margin: 18px 0 0;
   overflow: hidden;
-  border: 1px solid var(--desktop-border-6);
-  border-radius: 9px;
-  background: linear-gradient(
-    180deg,
-    rgba(var(--desktop-surface-purple-3-rgb), 0.97),
-    rgba(var(--desktop-surface-34-rgb), 0.97)
-  );
-  box-shadow: var(--desktop-shadow-raised);
+  border: 1px solid var(--desktop-bubble-agent-border);
+  border-radius: 8px;
+  background: var(--desktop-bubble-agent-bg);
+  box-shadow: var(--desktop-shadow-card);
 }
 
 .session-chat-narrative .skill-execution-card[data-status="completed"] {
@@ -3248,12 +3377,14 @@
 }
 
 .skill-execution-icon {
+  display: grid;
   width: 28px;
   height: 28px;
+  place-items: center;
   border: 1px solid rgba(var(--desktop-indigo-rgb), 0.34);
-  border-radius: 7px;
+  border-radius: 6px;
   background: rgba(var(--desktop-indigo-rgb), 0.1);
-  color: var(--desktop-indigo-pale);
+  color: var(--desktop-indigo-chip-text);
 }
 
 .skill-execution-card[data-status="executing"] .skill-execution-icon svg,
@@ -3283,15 +3414,15 @@
 .skill-execution-copy strong {
   overflow: hidden;
   color: var(--desktop-text-soft);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .skill-execution-copy small {
-  color: var(--desktop-gray-36);
-  font-size: 9px;
+  color: var(--desktop-faint);
+  font-size: 10px;
 }
 
 .skill-execution-metrics {
@@ -3314,30 +3445,27 @@
   font-style: normal;
 }
 
+/* Web parity redesign 2026-09 phase 2: skill progress matches the subagent
+   4px rounded track with an indigo fill. */
 .skill-progress {
-  height: 2px;
-  background: rgba(var(--desktop-indigo-rgb), 0.08);
+  overflow: hidden;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(var(--desktop-indigo-rgb), 0.12);
 }
 
 .skill-progress-bar {
   display: block;
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--desktop-indigo-bright),
-    var(--desktop-indigo-pale)
-  );
+  border-radius: 999px;
+  background: var(--desktop-indigo-bright);
   transform-origin: left;
   transition: transform 180ms var(--ease-out);
 }
 
 .skill-execution-card[data-status="failed"] .skill-progress-bar {
-  background: linear-gradient(
-    90deg,
-    var(--desktop-red-deep),
-    var(--desktop-red)
-  );
+  background: var(--desktop-red);
 }
 
 .skill-execution-body {
@@ -3352,19 +3480,21 @@
   gap: 3px;
 }
 
+/* Web parity redesign 2026-09 phase 2: skill section micro-labels are 10px
+   uppercase tracking-wide, matching the tool card vocabulary. */
 .skill-text-detail > span,
 .skill-section-heading > span {
-  color: var(--desktop-gray-36);
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.045em;
+  color: var(--desktop-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .skill-text-detail p {
   margin: 0;
   color: var(--desktop-muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
 }
@@ -3471,7 +3601,7 @@
 .skill-tool-step-copy strong {
   overflow: hidden;
   color: var(--desktop-gray-35);
-  font-family: Menlo, Monaco, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -3523,7 +3653,7 @@
   padding: 7px;
   border-top: 1px solid rgba(var(--desktop-indigo-dim-rgb), 0.18);
   color: var(--desktop-gray-30);
-  font-family: Menlo, Monaco, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 9px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -3734,7 +3864,7 @@
   margin: 3px 0 0;
   overflow: hidden;
   color: var(--desktop-gray-31);
-  font-family: Menlo, Monaco, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3791,7 +3921,7 @@
   padding: 7px;
   border-top: 1px solid rgba(var(--desktop-steel-4-rgb), 0.18);
   color: var(--desktop-gray-30);
-  font-family: Menlo, Monaco, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 9px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -3813,17 +3943,21 @@
   color: var(--desktop-gray-10);
 }
 
+/* Web parity redesign 2026-09 phase 2: subagent card follows the web
+   SubAgentTimeline vocabulary — 8px rounded bordered card on the bubble
+   surface with the whisper shadow; running keeps an indigo-tinted border. */
 .session-chat-narrative .timeline-subagent-group {
   margin: 18px 0 0;
   overflow: hidden;
-  border: 1px solid var(--desktop-border-13);
-  border-radius: 9px;
-  background: linear-gradient(
-    180deg,
-    rgba(var(--desktop-surface-35-rgb), 0.96),
-    rgba(var(--desktop-surface-34-rgb), 0.96)
-  );
-  box-shadow: var(--desktop-shadow-raised);
+  border: 1px solid var(--desktop-bubble-agent-border);
+  border-radius: 8px;
+  background: var(--desktop-bubble-agent-bg);
+  box-shadow: var(--desktop-shadow-card);
+}
+
+.session-chat-narrative .timeline-subagent-group.status-running,
+.session-chat-narrative .timeline-subagent-group.status-steered {
+  border-color: rgba(var(--desktop-indigo-rgb), 0.35);
 }
 
 .session-chat-narrative .timeline-subagent-group.status-success {
@@ -3875,13 +4009,17 @@
   height: 14px;
 }
 
+/* Web parity redesign 2026-09 phase 2: default subagent icon chip carries
+   the indigo accent identity (status tints below keep green/red). */
 .subagent-group-icon {
+  display: grid;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--desktop-border-20);
-  border-radius: 7px;
-  background: rgba(var(--desktop-cyan-alt-rgb), 0.08);
-  color: var(--desktop-cyan);
+  place-items: center;
+  border: 1px solid rgba(var(--desktop-indigo-rgb), 0.34);
+  border-radius: 6px;
+  background: rgba(var(--desktop-indigo-rgb), 0.1);
+  color: var(--desktop-indigo-chip-text);
 }
 
 .timeline-subagent-group.status-success .subagent-group-icon {
@@ -3909,18 +4047,28 @@
   gap: 2px;
 }
 
+/* Web parity redesign 2026-09 phase 2: subagent name renders as an indigo
+   tint chip (web SubAgentTimeline indigo identity — light #e0e7ff/#4f46e5,
+   dark rgba(99,102,241,.25)/#818cf8). */
 .subagent-group-copy strong {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
   overflow: hidden;
-  color: var(--desktop-text-soft);
-  font-size: 11px;
-  font-weight: 650;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--desktop-indigo-chip-bg);
+  color: var(--desktop-indigo-chip-text);
+  font-size: 13px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .subagent-group-copy small {
-  color: var(--desktop-gray-22);
-  font-size: 9px;
+  color: var(--desktop-faint);
+  font-size: 10px;
 }
 
 .subagent-group-metrics {
@@ -3937,20 +4085,21 @@
   font-style: normal;
 }
 
+/* Web parity redesign 2026-09 phase 2: thin 4px progress track with an
+   indigo/blue fill (web ProgressPhaseBar). */
 .subagent-progress {
-  height: 2px;
-  background: rgba(var(--desktop-cyan-frost-rgb), 0.06);
+  overflow: hidden;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(var(--desktop-indigo-rgb), 0.12);
 }
 
 .subagent-progress-bar {
   display: block;
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--desktop-cyan-strong),
-    var(--desktop-cyan)
-  );
+  border-radius: 999px;
+  background: var(--desktop-indigo-bright);
   transform-origin: left;
   transition: transform 180ms var(--ease-out);
 }
@@ -3982,10 +4131,12 @@
   font-size: 9px;
 }
 
+/* Web parity redesign 2026-09 phase 2: active lifecycle phase chip takes the
+   indigo tint (web primary-tinted lifecycle steps). */
 .subagent-phase-list span.is-active {
-  border-color: rgba(var(--desktop-cyan-frost-rgb), 0.3);
-  background: rgba(var(--desktop-cyan-frost-rgb), 0.06);
-  color: var(--desktop-cyan-spray);
+  border-color: rgba(var(--desktop-indigo-rgb), 0.3);
+  background: rgba(var(--desktop-indigo-rgb), 0.1);
+  color: var(--desktop-indigo-chip-text);
 }
 
 .subagent-live-status {
@@ -4041,17 +4192,20 @@
   gap: 3px;
 }
 
+/* Web parity redesign 2026-09 phase 2: section micro-labels are 10px
+   uppercase tracking-wide, matching the tool card vocabulary. */
 .subagent-detail > span {
-  color: var(--desktop-gray-4);
-  font-size: 9px;
-  letter-spacing: 0.04em;
+  color: var(--desktop-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .subagent-detail p {
   margin: 0;
-  color: var(--desktop-gray-30);
-  font-size: 10px;
+  color: var(--desktop-muted);
+  font-size: 12px;
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -4078,13 +4232,13 @@
 
 .session-chat-narrative .timeline-worklog-row {
   min-height: 32px;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   gap: 8px;
   padding: 4px 6px;
 }
 
 .session-chat-narrative .timeline-worklog-row.kind-command .timeline-row-title {
-  font-family: Menlo, Monaco, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-weight: 500;
 }
 
@@ -4094,6 +4248,36 @@
 
 .session-chat-narrative .timeline-worklog-row.kind-edit .timeline-row-icon {
   color: var(--desktop-blue-soft);
+}
+
+/* Prototype mission-control refactor 2026-09 (phase 5b): worklog rows follow
+   the prototype session-worklog row — 10.5px semibold title, 9.5px summary,
+   9px meta, and a bare 18px status icon instead of the 28px chip. */
+.session-chat-narrative .timeline-worklog-row .timeline-row-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.session-chat-narrative .timeline-worklog-row .timeline-row-summary {
+  font-size: 9.5px;
+}
+
+.session-chat-narrative .timeline-worklog-row .timeline-row-meta {
+  font-size: 9px;
+}
+
+.session-chat-narrative .timeline-tool-group-items .timeline-row-icon.tool-call-icon {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.session-chat-narrative .timeline-tool-group-items .timeline-row-icon.tool-call-icon svg {
+  width: 13px;
+  height: 13px;
 }
 
 .timeline-diff-count {
@@ -4111,11 +4295,166 @@
   font-style: normal;
 }
 
+/* Web parity redesign 2026-09 phase 2: worklog rows keep the shared status
+   pill chrome (web execution card status pills) instead of plain text. */
 .session-chat-narrative .timeline-worklog-row .timeline-status {
-  height: auto;
-  padding: 0;
+  font-style: normal;
+}
+
+/* Prototype mission-control refactor 2026-09 (phase 5b): HITL request rows
+   take the prototype approval-card anatomy — amber frame, "human decision"
+   eyebrow title, scope evidence box, amber instruction field and the
+   Deny / Always allow / Allow once action trio. The card stays in the
+   timeline (the desktop composer has no approval slot); after resolution it
+   collapses to a slim green/red inline row. */
+.session-chat-narrative .message.timeline-row:has(.hitl-response-card) {
+  padding: 13px 14px;
+  border: 1px solid var(--desktop-approval-border);
+  border-radius: 10px;
+  background: var(--desktop-approval-bg);
+}
+
+.session-chat-narrative .message.timeline-row:has(.hitl-response-card) .timeline-row-icon {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--desktop-approval-icon-border);
+  border-radius: 8px;
+  background: var(--desktop-approval-icon-bg);
+  color: var(--desktop-amber);
+}
+
+.session-chat-narrative .message.timeline-row:has(.hitl-response-card) .timeline-row-title {
+  color: var(--desktop-approval-eyebrow);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.session-chat-narrative .message.timeline-row:has(.hitl-response-card) .timeline-row-summary,
+.session-chat-narrative .message.timeline-row:has(.hitl-response-card) .timeline-row-meta {
+  display: none;
+}
+
+.session-chat-narrative .hitl-response-card .timeline-detail-summary {
+  color: var(--desktop-approval-title);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.session-chat-narrative .hitl-response-card .agent-run-meta {
+  color: var(--desktop-approval-text);
+  font-size: 9px;
+}
+
+.session-chat-narrative .hitl-response-card .timeline-approval-evidence {
+  border-color: var(--desktop-approval-scope-border);
+  border-radius: 6px;
+  background: var(--desktop-approval-scope-bg);
+}
+
+.session-chat-narrative .hitl-response-card .timeline-approval-evidence span,
+.session-chat-narrative .hitl-response-card .timeline-approval-evidence small,
+.session-chat-narrative .hitl-response-card .timeline-approval-evidence p {
+  color: var(--desktop-approval-scope-text);
+}
+
+.session-chat-narrative .hitl-response-card .timeline-approval-evidence strong {
+  color: var(--desktop-approval-title);
+}
+
+.session-chat-narrative .hitl-response-card .timeline-deny-feedback {
+  border-color: var(--desktop-approval-scope-border);
+  background: var(--desktop-approval-scope-bg);
+}
+
+.session-chat-narrative .hitl-response-card textarea {
+  border-color: var(--desktop-approval-scope-border);
+  background: var(--desktop-approval-field-bg);
+  color: var(--desktop-approval-field-text);
+}
+
+.session-chat-narrative .hitl-response-card .rt-TextAreaRoot {
+  border-color: var(--desktop-approval-scope-border);
+  background: var(--desktop-approval-field-bg);
+}
+
+.session-chat-narrative .hitl-response-card .rt-TextAreaInput {
+  color: var(--desktop-approval-field-text);
+}
+
+.session-chat-narrative .hitl-response-card textarea::placeholder {
+  color: var(--desktop-approval-placeholder);
+}
+
+/* Prototype mission-control refactor 2026-09 (phase 5b): action trio — solid
+   "Allow once" uses the approval primary tokens, soft "Always allow" / "Deny"
+   use the secondary action tokens with a scope-tinted inset ring. */
+.session-chat-narrative .hitl-response-card .rt-Button.rt-variant-solid {
+  border: 1px solid var(--desktop-approval-primary-border);
+  background: var(--desktop-approval-primary-bg);
+  color: var(--desktop-approval-primary-text);
+}
+
+.session-chat-narrative .hitl-response-card .rt-Button.rt-variant-soft {
+  background: var(--desktop-approval-action-bg);
+  box-shadow: inset 0 0 0 1px var(--desktop-approval-scope-border);
+  color: var(--desktop-approval-action-text);
+}
+
+/* Resolved requests collapse to the slim outcome row (green allowed, red
+   denied) appended under the card in the prototype. */
+.session-chat-narrative .message.timeline-row:has(.hitl-response-card.is-answered) {
+  padding: 6px 8px;
   border: 0;
   background: transparent;
+}
+
+.session-chat-narrative .message.timeline-row:has(.hitl-response-card.is-answered) .timeline-row-icon {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.session-chat-narrative .hitl-response-card.is-answered .timeline-detail-summary,
+.session-chat-narrative .hitl-response-card.is-answered .agent-run-meta,
+.session-chat-narrative .hitl-response-card.is-answered .timeline-approval-evidence,
+.session-chat-narrative .hitl-response-card.is-answered .timeline-approval-params {
+  display: none;
+}
+
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(var(--desktop-green-glow-rgb), 0.08);
+}
+
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response span {
+  color: var(--desktop-green);
+  font-size: 9px;
+}
+
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response strong {
+  color: var(--desktop-green);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response.is-denied {
+  background: rgba(var(--desktop-red-rgb), 0.08);
+}
+
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response.is-denied span,
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response.is-denied strong {
+  color: var(--desktop-red);
 }
 
 .session-chat-narrative .timeline-row-main,
@@ -4753,7 +5092,10 @@
   height: 28px;
   margin-left: 0;
   border-radius: var(--session-composer-control-radius);
+  /* Prototype mission-control refactor 2026-09 (phase 5b): send pill carries
+     the prototype composer's cyan ring tint. */
   background: var(--desktop-surface-cyan-5);
+  box-shadow: inset 0 0 0 1px var(--desktop-border-cyan-9);
   color: var(--desktop-cyan);
 }
 

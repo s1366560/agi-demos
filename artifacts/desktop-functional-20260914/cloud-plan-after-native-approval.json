@@ -1,0 +1,214 @@
+{
+  "current_plan": {
+    "id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+    "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+    "version": 3,
+    "status": "approved",
+    "tasks": [
+      {
+        "id": "3f4ed377-de3b-43bb-a992-5060598f603e",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "content": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+        "title": "批准后回复 NATIVE_PLAN_APPROVED_20260914_OK",
+        "description": null,
+        "estimated_duration_seconds": null,
+        "started_at": null,
+        "completed_at": null,
+        "result_summary": null,
+        "evidence_refs": [],
+        "status": "pending",
+        "priority": "high",
+        "order_index": 0,
+        "created_at": "2026-09-14T03:22:39.860534+00:00",
+        "updated_at": "2026-09-14T03:22:39.860535+00:00"
+      }
+    ],
+    "created_at": "2026-09-14T03:22:39.860269Z",
+    "approved_at": "2026-09-14T03:41:15.205890Z"
+  },
+  "execution": {
+    "current_run": {
+      "id": "bdb4d9ad-698a-4596-8743-c7fe4900de44",
+      "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "plan_version_id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+      "idempotency_key": "desktop-plan-approval-8fd2f69e-36bd-498e-93a6-cc90a77e1188",
+      "message_id": "desktop-build-8fd2f69e-36bd-498e-93a6-cc90a77e1188",
+      "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"批准后回复 NATIVE_PLAN_APPROVED_20260914_OK\",\"priority\":\"high\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+      "status": "running",
+      "revision": 1,
+      "created_at": "2026-09-14T03:41:15.205890Z",
+      "updated_at": "2026-09-14T03:41:20.395051Z",
+      "started_at": "2026-09-14T03:41:20.395051Z",
+      "completed_at": null,
+      "last_heartbeat_at": null,
+      "error": null,
+      "environment": {
+        "id": "mcp-sandbox-653501ed6a06",
+        "kind": "local",
+        "label": "mcp-sandbox-653501ed6a06",
+        "workspace_path": "/workspace",
+        "repository_root": null,
+        "branch": null,
+        "base_commit": null,
+        "source_run_id": null,
+        "created_at": "2026-09-14T03:07:48.665808Z"
+      },
+      "permission_profile": "read_only",
+      "authorization_snapshot": {
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "plan_version_id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+        "permission_profile": "read_only",
+        "environment": {
+          "id": "mcp-sandbox-653501ed6a06",
+          "kind": "local",
+          "label": "mcp-sandbox-653501ed6a06",
+          "workspace_path": "/workspace",
+          "repository_root": null,
+          "branch": null,
+          "base_commit": null,
+          "source_run_id": null,
+          "created_at": "2026-09-14T03:07:48.665808Z"
+        }
+      }
+    },
+    "run_history": [
+      {
+        "id": "bdb4d9ad-698a-4596-8743-c7fe4900de44",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "plan_version_id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+        "idempotency_key": "desktop-plan-approval-8fd2f69e-36bd-498e-93a6-cc90a77e1188",
+        "message_id": "desktop-build-8fd2f69e-36bd-498e-93a6-cc90a77e1188",
+        "request_message": "The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{\"content\":\"批准后回复 NATIVE_PLAN_APPROVED_20260914_OK\",\"priority\":\"high\"}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.",
+        "status": "running",
+        "revision": 1,
+        "created_at": "2026-09-14T03:41:15.205890Z",
+        "updated_at": "2026-09-14T03:41:20.395051Z",
+        "started_at": "2026-09-14T03:41:20.395051Z",
+        "completed_at": null,
+        "last_heartbeat_at": null,
+        "error": null,
+        "environment": {
+          "id": "mcp-sandbox-653501ed6a06",
+          "kind": "local",
+          "label": "mcp-sandbox-653501ed6a06",
+          "workspace_path": "/workspace",
+          "repository_root": null,
+          "branch": null,
+          "base_commit": null,
+          "source_run_id": null,
+          "created_at": "2026-09-14T03:07:48.665808Z"
+        },
+        "permission_profile": "read_only",
+        "authorization_snapshot": {
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "plan_version_id": "88103e2b-a0ef-4c51-b9e3-842da36e02b4",
+          "permission_profile": "read_only",
+          "environment": {
+            "id": "mcp-sandbox-653501ed6a06",
+            "kind": "local",
+            "label": "mcp-sandbox-653501ed6a06",
+            "workspace_path": "/workspace",
+            "repository_root": null,
+            "branch": null,
+            "base_commit": null,
+            "source_run_id": null,
+            "created_at": "2026-09-14T03:07:48.665808Z"
+          }
+        }
+      },
+      {
+        "id": "7d09189f-bdfa-5545-a390-ce6e709121f5",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "plan_version_id": null,
+        "idempotency_key": "client-message:e80f976b-b465-53c0-bc0d-ad1f658b9bd4",
+        "message_id": "7d09189f-bdfa-5545-a390-ce6e709121f5",
+        "request_message": "新一轮审批边界测试：请先通过 todowrite replace 发布一个 pending 任务：在批准后回复 NATIVE_PLAN_APPROVED_20260914_OK。当前只完成规划，并以“计划已就绪，等待批准”结束；不要把任务标记进行中或完成，我还没有批准执行。",
+        "status": "completed",
+        "revision": 1,
+        "created_at": "2026-09-14T03:22:01.066397Z",
+        "updated_at": "2026-09-14T03:23:08.429043Z",
+        "started_at": "2026-09-14T03:22:05.436400Z",
+        "completed_at": "2026-09-14T03:23:08.429043Z",
+        "last_heartbeat_at": null,
+        "error": null,
+        "environment": null,
+        "permission_profile": "read_only",
+        "authorization_snapshot": {
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "plan_version_id": null,
+          "permission_profile": "read_only",
+          "environment": null
+        }
+      },
+      {
+        "id": "9becbe4e-f0fc-5d4b-afe8-61762c5cb682",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "plan_version_id": null,
+        "idempotency_key": "client-message:1a178224-3def-5a28-ae1c-bf7887ef652c",
+        "message_id": "9becbe4e-f0fc-5d4b-afe8-61762c5cb682",
+        "request_message": "继续本次授权测试。请按计划流程发布仅含一个步骤的计划：批准后回复 NATIVE_CLOUD_AUTH_20260914_OK。不需要读取文件或使用其他外部工具。",
+        "status": "completed",
+        "revision": 1,
+        "created_at": "2026-09-14T03:07:43.833709Z",
+        "updated_at": "2026-09-14T03:09:10.203241Z",
+        "started_at": "2026-09-14T03:07:54.861891Z",
+        "completed_at": "2026-09-14T03:09:10.203241Z",
+        "last_heartbeat_at": null,
+        "error": null,
+        "environment": null,
+        "permission_profile": "read_only",
+        "authorization_snapshot": {
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "plan_version_id": null,
+          "permission_profile": "read_only",
+          "environment": null
+        }
+      },
+      {
+        "id": "e913f089-76ad-5951-b09b-94afbf141192",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "plan_version_id": null,
+        "idempotency_key": "client-message:desktop-plan-20cf4701-6410-4d44-843b-caa0b182172d",
+        "message_id": "e913f089-76ad-5951-b09b-94afbf141192",
+        "request_message": "Work in Plan mode. Analyze the objective without changing files or executing the solution.\n\nInspect only the context needed to make the plan concrete.\n\nPublish the final plan through the available structured task-list tool.\n\nOn MemStack cloud use todowrite with action=\"replace\". In the local desktop runtime call submit_plan with JSON input {\"tasks\":[{\"content\":\"actionable step\",\"priority\":\"high|medium|low\"}]}.\n\nEvery task must be actionable, ordered, and independently reviewable by a human.\n\nDo not start implementation until the human explicitly approves the plan.\n\nTask title: 这是授权后的原生桌面云端连通性测试。不要调用工具，只回复 NATIVE_CLOUD_AUTH_20260914_OK。\n\nObjective: 这是授权后的原生桌面云端连通性测试。不要调用工具，只回复 NATIVE_CLOUD_AUTH_20260914_OK。\n\nRequested planning context (abstract source categories, not file or directory paths): project_memory, project_files\n\nNever pass category labels such as project_memory, project_files, or web_research to file-reading tools.\n\nOnly call file-reading tools with a concrete path explicitly supplied by the user or discovered within the configured workspace root.",
+        "status": "failed",
+        "revision": 1,
+        "created_at": "2026-09-14T02:51:31.861295Z",
+        "updated_at": "2026-09-14T03:05:03.776464Z",
+        "started_at": null,
+        "completed_at": "2026-09-14T03:05:03.776464Z",
+        "last_heartbeat_at": null,
+        "error": "Agent execution failed: snapshot staging failed: RuntimeV2Error: enabled Workspace Core runtime has no data-plane factory",
+        "environment": null,
+        "permission_profile": "read_only",
+        "authorization_snapshot": {
+          "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+          "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+          "plan_version_id": null,
+          "permission_profile": "read_only",
+          "environment": null
+        }
+      }
+    ],
+    "current_attempt": null,
+    "attempt_history": []
+  },
+  "capabilities": {
+    "can_send_message": false,
+    "can_respond_to_hitl": false,
+    "can_approve_plan": false,
+    "can_control_execution": false,
+    "can_review_artifacts": false,
+    "can_deliver_artifacts": false,
+    "allowed_actions": []
+  }
+}

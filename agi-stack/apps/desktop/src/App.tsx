@@ -30,6 +30,10 @@ import {
   desktopVaultBoundCloudRequestBroker,
 } from './api/cloudRequestBroker';
 import { desktopNativeCloudAuthClient } from './api/nativeCloudAuthClient';
+import {
+  settleTrustedSessionRestoreFailure,
+  TrustedSessionAuthenticationInvalidError,
+} from './api/trustedSessionRecovery';
 import type {
   WorkspaceBindingAgentDefinition,
   WorkspaceCreateInput,
@@ -261,6 +265,7 @@ import type {
   DesktopWorkbenchViewV2,
 } from './plugins/DesktopWorkbenchSurfaceV2';
 import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
+import { useCloudSubagentControl } from './features/chat/useCloudSubagentControl';
 import {
   reconcileAgentTaskSignals,
   type AgentTaskSignal,
@@ -577,6 +582,7 @@ import {
   timelineCursorFromLast,
 } from './features/chat/appTimelineEventModel';
 import { buildWorkspaceArtifacts } from './features/session/workspaceArtifactModel';
+import { mergeCloudSubagentTraceItems } from './features/chat/cloudSubagentTraceModel';
 import {
   emptyAuthState,
   emptyDataset,
@@ -648,6 +654,8 @@ export function App() {
     initialDesktopRuntimeConfig(undefined, runsInNativeDesktop),
   );
   const [auth, setAuth] = useState<AuthState>(emptyAuthState);
+  const [sessionRestoreRetryAvailable, setSessionRestoreRetryAvailable] = useState(false);
+  const [sessionRestoreRetryRevision, setSessionRestoreRetryRevision] = useState(0);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [invitationSignInRequested, setInvitationSignInRequested] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -1868,6 +1876,7 @@ export function App() {
   const chatComposerApi = useMemo(() => {
     const client = createDesktopChatComposerCatalogClientV2({
       config,
+      conversationConfigOperationsV2: desktopConversationConfigOperationsV2,
       projectSandboxUploadOperationsV2: desktopProjectSandboxUploadOperationsV2,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
@@ -1881,6 +1890,7 @@ export function App() {
     return config.workspaceId.trim() ? client : unboundComposerCatalogClient(client);
   }, [
     config,
+    desktopConversationConfigOperationsV2,
     desktopProjectSandboxUploadOperationsV2,
     desktopPluginMarketplaceOperationsV2,
     desktopWorkspaceRosterOperationsV2,
@@ -2392,12 +2402,21 @@ export function App() {
   const sessionTimeline = useMemo<ConversationTimelineState>(
     () => ({
       ...conversationTimeline,
+      approvalAuthorityLoading:
+        sessionProjectionState.status === 'loading' &&
+        sessionProjectionState.conversationId === scopedConversationId,
       approvalRequests: displaySessionProjection?.pendingHitl ?? [],
       artifactVersions: displaySessionProjection?.artifactVersions ?? [],
       artifactDeliveries: displaySessionProjection?.artifactDeliveries ?? [],
       toolInvocations: displaySessionProjection?.toolInvocations ?? [],
     }),
-    [conversationTimeline, displaySessionProjection],
+    [
+      conversationTimeline,
+      displaySessionProjection,
+      sessionProjectionState.status,
+      sessionProjectionState.conversationId,
+      scopedConversationId,
+    ],
   );
   const selectedTask = useMemo(
     () =>
@@ -2529,14 +2548,22 @@ export function App() {
         loading: true,
       });
       try {
-        const response = await desktopSessionTimelineOperationsV2.getConversationMessages({
+        const timelineInput = {
           config: {
             ...requestConfig,
             projectId,
           },
           conversation,
           limit: 50,
-        });
+        };
+        const [messagesResult, traceResult] = await Promise.allSettled([
+          desktopSessionTimelineOperationsV2.getConversationMessages(timelineInput),
+          requestConfig.mode === 'cloud'
+            ? desktopSessionTimelineOperationsV2.getConversationSubagentRuns(timelineInput)
+            : Promise.resolve([]),
+        ]);
+        if (messagesResult.status === 'rejected') throw messagesResult.reason;
+        const response = messagesResult.value;
         if (!requestIsCurrent()) return;
         const responseItems = response.timeline ?? [];
         const restoredArtifactCanvas = replayArtifactCanvasEvents(responseItems);
@@ -2544,10 +2571,13 @@ export function App() {
         setArtifactCanvasState(restoredArtifactCanvas);
         setConversationTimeline((current) => {
           if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
-          const items =
+          const messageItems =
             current.conversationId === conversation.id
               ? mergeTimelineItems(responseItems, current.items)
               : responseItems;
+          const items = traceResult.status === 'fulfilled'
+            ? mergeCloudSubagentTraceItems(messageItems, traceResult.value)
+            : messageItems;
           return {
             conversationId: conversation.id,
             items,
@@ -2557,6 +2587,9 @@ export function App() {
             toolInvocations: response.tool_invocations ?? [],
             loading: false,
             loadingEarlier: false,
+            subagentTraceError: traceResult.status === 'rejected'
+              ? formatConnectionError(traceResult.reason, requestConfig.apiBaseUrl)
+              : null,
             error: null,
             hasMore: Boolean(response.has_more),
             firstCursor:
@@ -5086,14 +5119,16 @@ export function App() {
   );
   const currentArtifactRun = sessionProjection?.currentRun ?? null;
   currentArtifactRunRef.current = currentArtifactRun;
+  const cloudSubagentControl = useCloudSubagentControl(config, selectedConversation?.id ?? null);
   const subAgentControlAuthority = useMemo(
-    () =>
+    () => config.mode === 'cloud' ? cloudSubagentControl.authority :
       resolveSubAgentControlAuthority(
         config.mode,
         selectedConversation ?? null,
         currentArtifactRun,
+        conversationTimeline.items,
       ),
-    [config.mode, currentArtifactRun, selectedConversation],
+    [config.mode, currentArtifactRun, selectedConversation, conversationTimeline.items, cloudSubagentControl.authority],
   );
   const loadRunChanges = useRunReviewAuthorityV2({
     config,
@@ -5425,7 +5460,8 @@ export function App() {
       const capabilities = authoritativeProjection?.capabilities ?? null;
       const conversation = authoritativeProjection?.conversation ?? null;
       if (
-        authoritativeProjection?.planAuthority.kind !== 'desktop_plan_version' ||
+        (authoritativeProjection?.planAuthority.kind !== 'desktop_plan_version' &&
+          authoritativeProjection?.planAuthority.kind !== 'agent_task_list') ||
         !authoritativePlan ||
         authoritativePlan.id !== plan.id ||
         authoritativePlan.version !== plan.version ||
@@ -5663,7 +5699,11 @@ export function App() {
   const localRuntimeProviderLabel =
     runtimeProvider?.provider_type.trim() || t('providers.notAvailable');
   const localRuntimeModelLabel = runtimeProvider?.model.trim() || t('providers.notAvailable');
-  const chatRuntimeModelLabel = runtimeProvider?.model.trim() || t('chat.modelNotConfigured');
+  const chatRuntimeModelLabel =
+    runtimeProvider?.model.trim() ||
+    (scopedConversation && !config.workspaceId.trim()
+      ? t('task.projectDefaultModel')
+      : t('chat.modelNotConfigured'));
   const conversationModelEvent = useMemo(
     () =>
       conversationTimeline.conversationId === scopedConversationId
@@ -6084,6 +6124,10 @@ export function App() {
   });
 
   useEffect(() => {
+    if (auth.status === 'signed_in') {
+      setSessionRestoreRetryAvailable(false);
+      return;
+    }
     if (!runsInNativeDesktop || auth.status !== 'signed_out' || !hasNativeTrustedSessionBroker()) {
       return;
     }
@@ -6094,6 +6138,7 @@ export function App() {
 
     void (async () => {
       try {
+        setSessionRestoreRetryAvailable(false);
         setAuth((current) => ({
           ...current,
           status: 'signing_in',
@@ -6174,16 +6219,20 @@ export function App() {
         ) {
           return;
         }
+        let recovery: 'reauthenticate' | 'retry' = 'retry';
         try {
-          if (config.mode === 'local') {
-            await clearLocalTrustedSession();
-          } else {
-            await clearNativeTrustedSession();
-          }
+          recovery = await settleTrustedSessionRestoreFailure(
+            config.mode === 'local' && caught instanceof DesktopApiError && caught.status === 401
+              ? new TrustedSessionAuthenticationInvalidError()
+              : caught,
+            () => config.mode === 'local' ? clearLocalTrustedSession() : clearNativeTrustedSession(),
+          );
         } catch {
-          // The original restore failure remains the user-facing error.
+          // Vault failures preserve a manual recovery path and the original failure.
         }
-        const message = t('login.restoreFailed');
+        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+        setSessionRestoreRetryAvailable(recovery === 'retry');
+        const message = t(recovery === 'retry' ? 'login.restoreUnavailable' : 'login.restoreFailed');
         setAuth({ ...emptyAuthState, error: message });
         setConnection('error');
         setError(message);
@@ -6196,6 +6245,7 @@ export function App() {
     config.mode,
     localRuntimeAuthorityReady,
     runsInNativeDesktop,
+    sessionRestoreRetryRevision,
   ]);
 
   const switchSection = (section: WorkbenchSection) => {
@@ -6824,6 +6874,9 @@ export function App() {
           translate: t,
         })
       : [];
+  const projectSearchDestinationPath =
+    routeDiscoveryEntries.find((entry) => entry.routeId === 'project-project-search')
+      ?.destinationPath ?? null;
   const routeCommandItems: CommandPaletteItem[] = routeDiscoveryEntries.map((entry) => ({
     id: `route:${entry.routeId}`,
     kind: 'route',
@@ -7028,7 +7081,7 @@ export function App() {
           messageId: request.messageId,
         }),
       subAgentControlAuthority,
-      onSubAgentControl: socket.sendSubAgentControl,
+      onSubAgentControl: config.mode === 'cloud' ? cloudSubagentControl.sendControl : socket.sendSubAgentControl,
       onRefresh: handleChatRefresh,
       onLoadEarlier: loadEarlierTimeline,
       onRespondToHitl: respondToHitlWithSteering,
@@ -7471,6 +7524,14 @@ export function App() {
           >
             <LoginScreen
               auth={auth}
+              onRetrySavedSession={
+                sessionRestoreRetryAvailable
+                  ? () => {
+                      localResumeAttemptRef.current = '';
+                      setSessionRestoreRetryRevision((revision) => revision + 1);
+                    }
+                  : undefined
+              }
               mode={config.mode}
               localReady={localRuntimeAuthorityReady}
               localModeAvailable={runsInNativeDesktop}
@@ -7612,6 +7673,9 @@ export function App() {
             if (section === 'my-work') switchSection('board');
             if (section === 'activity') switchSection('activity');
           },
+          onOpenSearch: projectSearchDestinationPath
+            ? () => desktopProductionRouteNavigation.openPath(projectSearchDestinationPath)
+            : undefined,
           onOpenFeatureDirectory: (trigger) => openCommandPalette(trigger),
           onToggleWorkspace: toggleWorkspace,
           onRetryProject: () => void refreshRuntime(),

@@ -3,20 +3,25 @@ import {
   RuntimeV2Error,
   type ContextV2,
   type PluginDefinitionV2,
-} from '@agistack/plugin-runtime';
+} from "@agistack/plugin-runtime";
 
-import { DesktopApiClient } from '../api/client';
-import type { AgentConversation, DesktopRuntimeConfig } from '../types';
+import { DesktopApiClient } from "../api/client";
+import type { AgentConversation, DesktopRuntimeConfig } from "../types";
+import {
+  cloneExecutionSelectionPatch,
+  requireExecutionSelection,
+  type ConversationExecutionSelectionPatch,
+} from "./desktopConversationSelectionContractV2";
 import type {
   DesktopRendererGenerationActionsV2,
   DesktopRendererServiceOperationLeaseAdmissionV2,
-} from './desktopRendererGenerationContextV2';
+} from "./desktopRendererGenerationContextV2";
 
 export const DESKTOP_CONVERSATION_CONFIG_AUTHORITY_MODULE_REF_V2 =
-  'builtin://memstack/desktop/conversation-config-authority';
+  "builtin://memstack/desktop/conversation-config-authority";
 export const DESKTOP_CONVERSATION_CONFIG_AUTHORITY_SERVICE_V2 =
-  'service:desktop-renderer.conversation-config-authority';
-export const DESKTOP_CONVERSATION_CONFIG_AUTHORITY_VERSION_V2 = '1.0.0';
+  "service:desktop-renderer.conversation-config-authority";
+export const DESKTOP_CONVERSATION_CONFIG_AUTHORITY_VERSION_V2 = "1.0.0";
 
 export type DesktopConversationConfigIdentityV2 = Readonly<{
   id: string;
@@ -44,6 +49,13 @@ export type DesktopConversationConfigOperationInputV2 = Readonly<{
 }>;
 
 export interface DesktopConversationConfigAuthorityV2 {
+  readonly readExecutionSelection: (
+    identity: DesktopConversationConfigIdentityV2,
+  ) => Promise<AgentConversation>;
+  readonly updateExecutionSelection: (
+    identity: DesktopConversationConfigIdentityV2,
+    patch: ConversationExecutionSelectionPatch,
+  ) => Promise<AgentConversation>;
   readonly updateModelOverride: (
     identity: DesktopConversationConfigIdentityV2,
     mutation: DesktopConversationConfigMutationV2,
@@ -57,6 +69,15 @@ export interface DesktopConversationConfigAuthorityServiceV2 {
 }
 
 export interface DesktopConversationConfigOperationsV2 {
+  readonly readExecutionSelection: (input: {
+    config: DesktopRuntimeConfig;
+    conversation: AgentConversation;
+  }) => Promise<AgentConversation>;
+  readonly updateExecutionSelection: (input: {
+    config: DesktopRuntimeConfig;
+    conversation: AgentConversation;
+    patch: ConversationExecutionSelectionPatch;
+  }) => Promise<AgentConversation>;
   readonly updateModelOverride: (
     input: DesktopConversationConfigOperationInputV2,
   ) => Promise<AgentConversation>;
@@ -64,11 +85,11 @@ export interface DesktopConversationConfigOperationsV2 {
 
 type ServiceAdmissionRejectionV2 = Extract<
   DesktopRendererServiceOperationLeaseAdmissionV2<never>,
-  { status: 'rejected' }
+  { status: "rejected" }
 >;
 
 type GenerationActionsUnavailableV2 = Readonly<{
-  reasonCode: 'desktop_renderer_generation_actions_unavailable';
+  reasonCode: "desktop_renderer_generation_actions_unavailable";
   runtimeCode?: undefined;
 }>;
 
@@ -83,12 +104,12 @@ type PreparedConversationConfigOperationV2 = Readonly<{
 }>;
 
 export class DesktopConversationConfigAuthorityUnavailableErrorV2 extends Error {
-  readonly reasonCode: AuthorityAdmissionRejectionV2['reasonCode'];
+  readonly reasonCode: AuthorityAdmissionRejectionV2["reasonCode"];
   readonly runtimeCode: string | undefined;
 
   constructor(rejection: AuthorityAdmissionRejectionV2) {
     super(rejection.reasonCode);
-    this.name = 'DesktopConversationConfigAuthorityUnavailableErrorV2';
+    this.name = "DesktopConversationConfigAuthorityUnavailableErrorV2";
     this.reasonCode = rejection.reasonCode;
     this.runtimeCode = rejection.runtimeCode;
   }
@@ -98,10 +119,10 @@ export function applyDesktopConversationConfigAuthorityV2(
   context: ContextV2,
   config: Readonly<Record<string, unknown>>,
 ): void {
-  if (config.strategy !== 'desktop-api-client') {
+  if (config.strategy !== "desktop-api-client") {
     throw new RuntimeV2Error(
-      'desktop_conversation_config_authority_config_invalid',
-      'desktop conversation config authority requires desktop-api-client strategy',
+      "desktop_conversation_config_authority_config_invalid",
+      "desktop conversation config authority requires desktop-api-client strategy",
     );
   }
   const service: DesktopConversationConfigAuthorityServiceV2 = Object.freeze({
@@ -110,16 +131,49 @@ export function applyDesktopConversationConfigAuthorityV2(
   context.provide(DESKTOP_CONVERSATION_CONFIG_AUTHORITY_SERVICE_V2, service);
 }
 
-export const desktopConversationConfigAuthorityDefinitionV2: PluginDefinitionV2 = Object.freeze({
-  moduleRef: DESKTOP_CONVERSATION_CONFIG_AUTHORITY_MODULE_REF_V2,
-  contractDigest: generatedContractDigestV2(),
-  apply: applyDesktopConversationConfigAuthorityV2,
-});
+export const desktopConversationConfigAuthorityDefinitionV2: PluginDefinitionV2 =
+  Object.freeze({
+    moduleRef: DESKTOP_CONVERSATION_CONFIG_AUTHORITY_MODULE_REF_V2,
+    contractDigest: generatedContractDigestV2(),
+    apply: applyDesktopConversationConfigAuthorityV2,
+  });
 
 export function createDesktopConversationConfigOperationsV2(
   resolveActions: () => DesktopRendererGenerationActionsV2 | null,
 ): DesktopConversationConfigOperationsV2 {
   return Object.freeze({
+    readExecutionSelection(input: {
+      config: DesktopRuntimeConfig;
+      conversation: AgentConversation;
+    }) {
+      if (input.config.mode !== "local")
+        throw invalidConversationConfigInputV2();
+      return withDesktopConversationConfigAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        { ...input, llmModelOverride: null },
+        (authority, prepared) =>
+          authority.readExecutionSelection(prepared.identity),
+      );
+    },
+    updateExecutionSelection(input: {
+      config: DesktopRuntimeConfig;
+      conversation: AgentConversation;
+      patch: ConversationExecutionSelectionPatch;
+    }) {
+      if (input.config.mode !== "local")
+        throw invalidConversationConfigInputV2();
+      const patch = cloneExecutionSelectionPatch(input.patch);
+      return withDesktopConversationConfigAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        {
+          config: input.config,
+          conversation: input.conversation,
+          llmModelOverride: null,
+        },
+        (authority, prepared) =>
+          authority.updateExecutionSelection(prepared.identity, patch),
+      );
+    },
     updateModelOverride(input: DesktopConversationConfigOperationInputV2) {
       const actions = requireGenerationActionsV2(resolveActions());
       return withDesktopConversationConfigAuthorityOperationV2(
@@ -141,7 +195,11 @@ export function withDesktopConversationConfigAuthorityOperationV2<TResult>(
   ) => TResult | Promise<TResult>,
 ): Promise<TResult> {
   const prepared = prepareConversationConfigOperationV2(input);
-  return runDesktopConversationConfigAuthorityOperationV2(actions, prepared, operation);
+  return runDesktopConversationConfigAuthorityOperationV2(
+    actions,
+    prepared,
+    operation,
+  );
 }
 
 async function runDesktopConversationConfigAuthorityOperationV2<TResult>(
@@ -153,17 +211,19 @@ async function runDesktopConversationConfigAuthorityOperationV2<TResult>(
   ) => TResult | Promise<TResult>,
 ): Promise<TResult> {
   const admission =
-    await actions.acquireServiceOperationLease<DesktopConversationConfigAuthorityServiceV2>({
-      service: DESKTOP_CONVERSATION_CONFIG_AUTHORITY_SERVICE_V2,
-      version: DESKTOP_CONVERSATION_CONFIG_AUTHORITY_VERSION_V2,
-      scope: Object.freeze({
-        kind: 'session',
-        tenant_id: prepared.identity.tenant_id,
-        project_id: prepared.identity.project_id,
-        session_id: prepared.identity.id,
-      }),
-    });
-  if (admission.status === 'rejected') {
+    await actions.acquireServiceOperationLease<DesktopConversationConfigAuthorityServiceV2>(
+      {
+        service: DESKTOP_CONVERSATION_CONFIG_AUTHORITY_SERVICE_V2,
+        version: DESKTOP_CONVERSATION_CONFIG_AUTHORITY_VERSION_V2,
+        scope: Object.freeze({
+          kind: "session",
+          tenant_id: prepared.identity.tenant_id,
+          project_id: prepared.identity.project_id,
+          session_id: prepared.identity.id,
+        }),
+      },
+    );
+  if (admission.status === "rejected") {
     throw new DesktopConversationConfigAuthorityUnavailableErrorV2(admission);
   }
 
@@ -198,6 +258,45 @@ function createDesktopConversationConfigAuthorityV2(
   const operationConfig = cloneDesktopRuntimeConfigV2(config);
   const transport = new DesktopApiClient(operationConfig);
   return Object.freeze({
+    async readExecutionSelection(
+      identity: DesktopConversationConfigIdentityV2,
+    ) {
+      if (operationConfig.mode !== "local")
+        throw invalidConversationConfigInputV2();
+      const expected = cloneConversationIdentityV2(identity);
+      assertConversationConfigScopeV2(operationConfig, expected);
+      const session = await transport.getConversationSession(expected.id, {
+        tenantId: expected.tenant_id,
+        projectId: expected.project_id,
+        workspaceId: expected.workspace_id,
+      });
+      if (!isRecordV2(session)) throw invalidConversationConfigInputV2();
+      const conversation = validateConversationConfigResponseV2(
+        session.conversation as AgentConversation,
+        expected,
+      );
+      requireExecutionSelection(conversation);
+      return conversation;
+    },
+    async updateExecutionSelection(
+      identity: DesktopConversationConfigIdentityV2,
+      patch: ConversationExecutionSelectionPatch,
+    ) {
+      if (operationConfig.mode !== "local")
+        throw invalidConversationConfigInputV2();
+      const expected = cloneConversationIdentityV2(identity);
+      assertConversationConfigScopeV2(operationConfig, expected);
+      const conversation = validateConversationConfigResponseV2(
+        await transport.updateAgentConversationConfig(
+          expected.id,
+          { execution_selection: cloneExecutionSelectionPatch(patch) },
+          expected.project_id,
+        ),
+        expected,
+      );
+      requireExecutionSelection(conversation);
+      return conversation;
+    },
     updateModelOverride(
       identity: DesktopConversationConfigIdentityV2,
       mutation: DesktopConversationConfigMutationV2,
@@ -207,7 +306,7 @@ function createDesktopConversationConfigAuthorityV2(
       assertConversationConfigScopeV2(operationConfig, operationIdentity);
       const payload = {
         llm_model_override: operationMutation.llmModelOverride,
-        ...(operationConfig.mode === 'local'
+        ...(operationConfig.mode === "local"
           ? { llm_route_override: operationMutation.llmRouteOverride }
           : {}),
       };
@@ -217,7 +316,9 @@ function createDesktopConversationConfigAuthorityV2(
           payload,
           operationIdentity.project_id,
         )
-        .then((response) => validateConversationConfigResponseV2(response, operationIdentity));
+        .then((response) =>
+          validateConversationConfigResponseV2(response, operationIdentity),
+        );
     },
   });
 }
@@ -227,14 +328,33 @@ function createRevocableDesktopConversationConfigAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopConversationConfigAuthorityV2 {
   return Object.freeze({
+    readExecutionSelection(identity: DesktopConversationConfigIdentityV2) {
+      if (!isOperationActive())
+        throw new RuntimeV2Error(
+          "desktop_conversation_config_operation_released",
+          "desktop conversation config operation has been released",
+        );
+      return authority.readExecutionSelection(identity);
+    },
+    updateExecutionSelection(
+      identity: DesktopConversationConfigIdentityV2,
+      patch: ConversationExecutionSelectionPatch,
+    ) {
+      if (!isOperationActive())
+        throw new RuntimeV2Error(
+          "desktop_conversation_config_operation_released",
+          "desktop conversation config operation has been released",
+        );
+      return authority.updateExecutionSelection(identity, patch);
+    },
     updateModelOverride(
       identity: DesktopConversationConfigIdentityV2,
       mutation: DesktopConversationConfigMutationV2,
     ) {
       if (!isOperationActive()) {
         throw new RuntimeV2Error(
-          'desktop_conversation_config_operation_released',
-          'desktop conversation config operation has been released',
+          "desktop_conversation_config_operation_released",
+          "desktop conversation config operation has been released",
         );
       }
       return authority.updateModelOverride(identity, mutation);
@@ -258,7 +378,9 @@ function prepareConversationConfigOperationV2(
   return Object.freeze({ config, identity, mutation });
 }
 
-function cloneDesktopRuntimeConfigV2(config: DesktopRuntimeConfig): DesktopRuntimeConfig {
+function cloneDesktopRuntimeConfigV2(
+  config: DesktopRuntimeConfig,
+): DesktopRuntimeConfig {
   if (!isRecordV2(config)) {
     throw invalidConversationConfigInputV2();
   }
@@ -274,8 +396,8 @@ function cloneDesktopRuntimeConfigV2(config: DesktopRuntimeConfig): DesktopRunti
     workspaceRoot: config.workspaceRoot,
   };
   if (
-    Object.values(copy).some((value) => typeof value !== 'string') ||
-    (copy.mode !== 'cloud' && copy.mode !== 'local')
+    Object.values(copy).some((value) => typeof value !== "string") ||
+    (copy.mode !== "cloud" && copy.mode !== "local")
   ) {
     throw invalidConversationConfigInputV2();
   }
@@ -283,7 +405,10 @@ function cloneDesktopRuntimeConfigV2(config: DesktopRuntimeConfig): DesktopRunti
 }
 
 function cloneConversationIdentityV2(
-  conversation: Pick<AgentConversation, 'id' | 'project_id' | 'tenant_id' | 'workspace_id'>,
+  conversation: Pick<
+    AgentConversation,
+    "id" | "project_id" | "tenant_id" | "workspace_id"
+  >,
 ): DesktopConversationConfigIdentityV2 {
   if (
     !isRecordV2(conversation) ||
@@ -323,8 +448,8 @@ function cloneConversationConfigMutationV2(
 }
 
 function cloneRouteOverrideV2(
-  route: DesktopConversationConfigMutationV2['llmRouteOverride'],
-): DesktopConversationConfigMutationV2['llmRouteOverride'] {
+  route: DesktopConversationConfigMutationV2["llmRouteOverride"],
+): DesktopConversationConfigMutationV2["llmRouteOverride"] {
   if (route === null || route === undefined) return null;
   if (
     !isRecordV2(route) ||
@@ -333,17 +458,23 @@ function cloneRouteOverrideV2(
   ) {
     throw invalidConversationConfigInputV2();
   }
-  return Object.freeze({ provider_id: route.provider_id, model_id: route.model_id });
+  return Object.freeze({
+    provider_id: route.provider_id,
+    model_id: route.model_id,
+  });
 }
 
 function assertConversationConfigScopeV2(
   config: DesktopRuntimeConfig,
   identity: DesktopConversationConfigIdentityV2,
 ): void {
-  if (config.tenantId !== identity.tenant_id || config.projectId !== identity.project_id) {
+  if (
+    config.tenantId !== identity.tenant_id ||
+    config.projectId !== identity.project_id
+  ) {
     throw new RuntimeV2Error(
-      'desktop_conversation_config_scope_mismatch',
-      'desktop conversation config operation scope differs from the conversation identity',
+      "desktop_conversation_config_scope_mismatch",
+      "desktop conversation config operation scope differs from the conversation identity",
     );
   }
 }
@@ -364,8 +495,8 @@ function validateConversationConfigResponseV2(
     workspaceId !== identity.workspace_id
   ) {
     throw new RuntimeV2Error(
-      'desktop_conversation_config_response_scope_mismatch',
-      'desktop conversation config response differs from the requested identity',
+      "desktop_conversation_config_response_scope_mismatch",
+      "desktop conversation config response differs from the requested identity",
     );
   }
   return response as AgentConversation;
@@ -381,34 +512,37 @@ function requireGenerationActionsV2(
 ): DesktopRendererGenerationActionsV2 {
   if (actions !== null) return actions;
   throw new DesktopConversationConfigAuthorityUnavailableErrorV2({
-    reasonCode: 'desktop_renderer_generation_actions_unavailable',
+    reasonCode: "desktop_renderer_generation_actions_unavailable",
   });
 }
 
 function invalidConversationConfigInputV2(): RuntimeV2Error {
   return new RuntimeV2Error(
-    'desktop_conversation_config_input_invalid',
-    'desktop conversation config operation input is invalid',
+    "desktop_conversation_config_input_invalid",
+    "desktop conversation config operation input is invalid",
   );
 }
 
 function isRecordV2(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isCanonicalStringV2(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value === value.trim();
+  return (
+    typeof value === "string" && value.length > 0 && value === value.trim()
+  );
 }
 
 function generatedContractDigestV2(): string {
   const entry = PLUGIN_MODULE_CATALOG_V2.modules.find(
     (candidate) =>
-      candidate.module_ref === DESKTOP_CONVERSATION_CONFIG_AUTHORITY_MODULE_REF_V2,
+      candidate.module_ref ===
+      DESKTOP_CONVERSATION_CONFIG_AUTHORITY_MODULE_REF_V2,
   );
   if (entry === undefined) {
     throw new RuntimeV2Error(
-      'desktop_conversation_config_authority_catalog_missing',
-      'desktop conversation config authority is absent from the generated catalog',
+      "desktop_conversation_config_authority_catalog_missing",
+      "desktop conversation config authority is absent from the generated catalog",
     );
   }
   return entry.contract_digest;

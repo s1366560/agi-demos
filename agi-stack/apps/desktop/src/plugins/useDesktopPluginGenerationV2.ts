@@ -15,6 +15,7 @@ import {
 import type { DesktopRuntimeConfig } from '../types';
 
 import { createDesktopProductionRendererRuntimeV2 } from './desktopProductionRendererRuntimeV2';
+import { assertDesktopRendererDeliveryAvailableV2 } from './desktopRendererDeliveryStatusV2';
 
 const RENDERER_DISTRIBUTION_COMMAND_V2 = 'platform_plugin_renderer_delivery_current_v2';
 const POLL_INTERVAL_MS = 30_000;
@@ -116,6 +117,7 @@ async function fetchDesktopPluginDistributionV2(signal: AbortSignal): Promise<un
   }
   const distribution = await invoke<unknown>(RENDERER_DISTRIBUTION_COMMAND_V2);
   signal.throwIfAborted();
+  assertDesktopRendererDeliveryAvailableV2(distribution);
   return distribution ?? null;
 }
 

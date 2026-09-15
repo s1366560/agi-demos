@@ -1,0 +1,12 @@
+{
+  "type": "subagent_killed",
+  "data": {
+    "execution_id": null,
+    "run_id": "child-1",
+    "conversation_id": "conversation",
+    "subagent_id": "reader-agent",
+    "subagent_name": "Reader",
+    "kill_reason": "Cancelled by control"
+  },
+  "timestamp": "2026-09-14T15:00:00"
+}

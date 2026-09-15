@@ -460,6 +460,17 @@ def fully_unescape_hitl_text(value: str) -> str:
         candidate = unescaped
 
 
+def sanitize_permission_description(value: object) -> str | None:
+    """Keep declared permission descriptions as text, never HTML or decoded entities.
+
+    JSON consumers render this field through text nodes. Encoding at persistence
+    would display literal entities; decoding would change intentional tool text.
+    """
+    if not isinstance(value, str):
+        return None
+    return _CONTROL_CHARS_RE.sub("", value).strip() or None
+
+
 def sanitize_hitl_text(value: object) -> str | None:
     """Return a plain-text-safe HITL string or None when it becomes empty."""
     if not isinstance(value, str):

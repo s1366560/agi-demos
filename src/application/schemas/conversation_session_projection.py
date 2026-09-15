@@ -149,6 +149,14 @@ class SessionWorkspacePlanContextResponse(_ProjectionModel):
     linked_nodes: list[SessionWorkspacePlanNodeResponse]
 
 
+class SessionPermissionReviewResponse(_ProjectionModel):
+    tool_name: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    risk_level: Literal["low", "medium", "high"]
+    allow_remember: bool = Field(strict=True)
+
+
 class SessionPendingHITLResponse(_ProjectionModel):
     id: str
     conversation_id: str
@@ -162,6 +170,7 @@ class SessionPendingHITLResponse(_ProjectionModel):
     authority_revision: int = Field(ge=1)
     created_at: datetime
     expires_at: datetime
+    permission: SessionPermissionReviewResponse | None = None
 
 
 class SessionArtifactRecordResponse(_ProjectionModel):
@@ -197,13 +206,16 @@ class SessionEvidenceSummaryResponse(_ProjectionModel):
 
 
 class SessionCapabilitiesResponse(_ProjectionModel):
+    environment_kinds: list[Literal["local"]]
     can_send_message: bool
     can_respond_to_hitl: bool
     can_approve_plan: bool
     can_control_execution: bool
     can_review_artifacts: bool
     can_deliver_artifacts: bool
-    allowed_actions: list[Literal["send_message", "respond_to_hitl"]]
+    allowed_actions: list[
+        Literal["send_message", "respond_to_hitl", "approve_plan_and_start", "cancel"]
+    ]
 
 
 class ConversationSessionProjectionResponse(_ProjectionModel):

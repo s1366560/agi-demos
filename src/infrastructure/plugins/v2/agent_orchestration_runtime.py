@@ -172,6 +172,10 @@ async def create_agent_orchestrator_resource_v2(
     """Create the default production orchestrator and its DB-session disposer."""
     from redis.asyncio import Redis
 
+    from src.application.services.peer_chat_permission_v2 import (
+        preflight_session_turn_v2,
+        preflight_spawned_session_v2,
+    )
     from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
         RedisAgentMessageBusAdapter,
     )
@@ -201,6 +205,8 @@ async def create_agent_orchestrator_resource_v2(
             db_session=db_session,
             spawn_executor=spawn_executor,
             session_turn_executor=session_turn_executor,
+            spawn_preflight=preflight_spawned_session_v2,
+            session_turn_preflight=preflight_session_turn_v2,
         )
     except Exception:
         await db_session.close()

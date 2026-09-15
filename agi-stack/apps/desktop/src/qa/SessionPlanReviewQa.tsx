@@ -58,6 +58,7 @@ function SessionPlanReviewQa() {
     approved_at: approved ? '2026-07-16T09:18:00Z' : null,
   };
   const capabilities: SessionProjectionCapabilities = {
+    environmentKinds: ['local', 'worktree'],
     canSendMessage: !approved,
     canApprovePlan: canApprove,
     canRespondToHitl: false,

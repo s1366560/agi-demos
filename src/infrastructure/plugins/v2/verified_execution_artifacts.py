@@ -18,6 +18,7 @@ def attest_execution_artifacts_v2(
     target: DataPlaneTargetV2,
     resolver: PluginArtifactResolverV2,
     verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
+    resolved_overrides: Mapping[str, ResolvedPluginArtifactV2] | None = None,
 ) -> dict[str, ResolvedPluginArtifactV2]:
     for plugin_id, plugin_version, module in target_rows:
         catalog_entry = target_catalog.get(module.module_ref)
@@ -36,7 +37,9 @@ def attest_execution_artifacts_v2(
     expected = _verified_bytes(verified_archives, target)
     resolved_artifacts: dict[str, ResolvedPluginArtifactV2] = {}
     for _plugin_id, _plugin_version, module in target_rows:
-        resolved = resolver.resolve(module)
+        resolved = (resolved_overrides or {}).get(module.module_ref)
+        if resolved is None:
+            resolved = resolver.resolve(module)
         if expected is not None:
             content = expected.get(module.artifact.digest)
             if content is None:

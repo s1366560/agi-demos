@@ -450,6 +450,16 @@ async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
 
     with (
         patch(
+            "src.application.services.peer_chat_permission_v2.resolve_peer_execution_v2",
+            new=AsyncMock(
+                return_value=SimpleNamespace(
+                    created=True,
+                    conversation=conversation,
+                    run_id="peer-canonical-run",
+                )
+            ),
+        ),
+        patch(
             "src.application.services.agent.runtime_bootstrapper."
             "AgentRuntimeBootstrapper.ensure_spawned_agent_conversation",
             new=AsyncMock(return_value=conversation),
@@ -489,6 +499,8 @@ async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
         )
 
     child_requests = [call.args[0] for call in actor.chat.await_args_list]
+    assert all(request.canonical_run_id == "peer-canonical-run" for request in child_requests)
+    assert all(request.message_id == request.canonical_run_id for request in child_requests)
     assert [request.plugin_generation for request in child_requests] == [
         descriptor.to_payload(),
         descriptor.to_payload(),

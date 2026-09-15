@@ -24,6 +24,22 @@ class SpawnValidator:
         self._policy = policy
         self._registry = run_registry
 
+    async def validate_async(
+        self,
+        subagent_name: str,
+        current_depth: int,
+        conversation_id: str,
+        requester_session_id: str | None = None,
+    ) -> SpawnValidationResult:
+        from .async_run_registry_v2 import registry_transaction_v2
+
+        return await registry_transaction_v2(
+            self._registry,
+            lambda memory: SpawnValidator(self._policy, memory).validate(
+                subagent_name, current_depth, conversation_id, requester_session_id
+            ),
+        )
+
     def validate(
         self,
         subagent_name: str,

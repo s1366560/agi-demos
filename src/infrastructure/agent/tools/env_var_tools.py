@@ -610,6 +610,7 @@ def _normalize_request_env_inputs(
     },
     category="environment",
     tags=frozenset({"env", "config"}),
+    permission="system_api",
 )
 async def get_env_var_tool(
     ctx: ToolContext,
@@ -795,6 +796,7 @@ async def get_env_var_tool(
     },
     category="environment",
     tags=frozenset({"env", "config", "hitl"}),
+    permission="system_api",
 )
 async def request_env_var_tool(
     ctx: ToolContext,
@@ -1115,6 +1117,7 @@ def _normalize_hitl_env_values(
     },
     category="environment",
     tags=frozenset({"env", "config"}),
+    permission="read",
 )
 async def check_env_vars_tool(
     ctx: ToolContext,

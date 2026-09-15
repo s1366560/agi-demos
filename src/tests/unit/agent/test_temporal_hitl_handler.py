@@ -505,6 +505,6 @@ class TestPermissionStrategy:
         assert request.permission_data is not None
         assert request.permission_data.tool_name == "terminal&lt;script&gt;"
         assert request.permission_data.action == "execute&lt;script&gt;"
-        assert request.permission_data.description == "Run &lt;b&gt;command&lt;/b&gt;"
+        assert request.permission_data.description == "Run <b>command</b>"
         assert request.permission_data.details["cmd"] == "&lt;rm -rf /&gt;"
         assert request.permission_data.context["note"] == "&lt;danger&gt;"

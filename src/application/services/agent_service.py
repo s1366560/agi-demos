@@ -32,10 +32,9 @@ from src.domain.model.agent import (
     AgentExecutionEvent,
     Conversation,
     ConversationStatus,
-    ToolExecutionRecord,
 )
+from src.domain.model.agent.display_content import validate_display_content
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
-from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 from src.domain.ports.repositories.agent_repository import (
     AgentExecutionEventRepository,
     AgentExecutionRepository,
@@ -241,6 +240,7 @@ class AgentService(AgentServicePort):
         attachment_ids: list[str] | None,
         file_metadata: list[dict[str, Any]] | None,
         forced_skill_name: str | None,
+        display_content: str | None = None,
     ) -> dict[str, Any]:
         """Build the user event data dict, conditionally adding optional fields."""
         data: dict[str, Any] = {
@@ -255,6 +255,8 @@ class AgentService(AgentServicePort):
             data["file_metadata"] = file_metadata
         if forced_skill_name:
             data["forced_skill_name"] = forced_skill_name
+        if display_content is not None:
+            data["display_content"] = validate_display_content(display_content)
         return data
 
     async def _load_conversation_context(
@@ -293,6 +295,7 @@ class AgentService(AgentServicePort):
         api_auth_token: str | None = None,
         execution_message_id: str | None = None,
         canonical_run_id: str | None = None,
+        display_content: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using Ray Actors.
@@ -356,6 +359,7 @@ class AgentService(AgentServicePort):
                 attachment_ids=attachment_ids,
                 file_metadata=file_metadata,
                 forced_skill_name=forced_skill_name,
+                display_content=display_content,
             )
             admitted_event_data = dict(user_event_data)
             admitted_event_data["model_message"] = {
@@ -678,7 +682,7 @@ class AgentService(AgentServicePort):
             ):
                 last_event_time_us = event.event_time_us
                 last_event_counter = event.event_counter
-            if event_type in ("complete", "error"):
+            if event_type in ("complete", "error", "cancelled"):
                 saw_complete = True
 
         logger.info(
@@ -854,153 +858,6 @@ class AgentService(AgentServicePort):
         # Skip message events for different messages (only when filtering by message_id)
         return not (message_id and event_message_id and event_message_id != message_id)
 
-    @staticmethod
-    def _timestamp_from_event_time(event_time_us: int) -> datetime:
-        """Convert stream microsecond timestamps to UTC datetimes."""
-        if event_time_us <= 0:
-            return datetime.now(UTC)
-        return datetime.fromtimestamp(event_time_us / 1_000_000, UTC)
-
-    @staticmethod
-    def _coerce_tool_input(tool_input: Any) -> dict[str, Any]:
-        """Keep tool inputs JSON-object shaped for historical timeline APIs."""
-        sanitized_input = AgentService._sanitize_persisted_value(tool_input)
-        if isinstance(sanitized_input, Mapping):
-            return dict(sanitized_input)
-        if sanitized_input is None:
-            return {}
-        return {"value": sanitized_input}
-
-    @staticmethod
-    def _sanitize_persisted_text(value: str) -> str:
-        """Remove characters PostgreSQL text/json columns cannot store."""
-        return value.replace("\x00", "")
-
-    @staticmethod
-    def _sanitize_persisted_value(value: Any) -> Any:
-        if isinstance(value, str):
-            return AgentService._sanitize_persisted_text(value)
-        if isinstance(value, Mapping):
-            return {
-                AgentService._sanitize_persisted_text(
-                    str(key)
-                ): AgentService._sanitize_persisted_value(item)
-                for key, item in value.items()
-            }
-        if isinstance(value, list | tuple):
-            return [AgentService._sanitize_persisted_value(item) for item in value]
-        return value
-
-    @staticmethod
-    def _coerce_duration_ms(duration_ms: Any) -> int | None:
-        if duration_ms is None:
-            return None
-        try:
-            return int(duration_ms)
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _serialize_tool_result(result: Any) -> str:
-        if result is None:
-            return ""
-        if isinstance(result, str):
-            return AgentService._sanitize_persisted_text(result)
-        try:
-            serialized = json.dumps(
-                AgentService._sanitize_persisted_value(result),
-                ensure_ascii=False,
-                default=str,
-            )
-        except TypeError:
-            serialized = str(result)
-        return AgentService._sanitize_persisted_text(serialized)
-
-    @staticmethod
-    def _is_failed_tool_observation(event_data: Mapping[str, Any]) -> bool:
-        status = str(event_data.get("status") or "").lower()
-        return bool(event_data.get("error")) or status in {"error", "failed", "failure"}
-
-    async def _persist_tool_execution_event(
-        self,
-        *,
-        conversation_id: str,
-        message_id: str | None,
-        event_type: str,
-        event_data: dict[str, Any],
-        event_time_us: int,
-        event_counter: int,
-    ) -> None:
-        """Mirror live act/observe events into durable tool execution records."""
-        if event_type not in {"act", "observe"} or not message_id:
-            return
-        if self._tool_execution_record_repo is None:
-            return
-
-        record_id = event_data.get("tool_execution_id")
-        call_id = event_data.get("call_id")
-        tool_name = event_data.get("tool_name")
-        if not record_id or not call_id or not tool_name:
-            logger.debug(
-                "[AgentService] Skipping tool execution record without identity: "
-                f"type={event_type}, record_id={record_id}, call_id={call_id}, "
-                f"tool_name={tool_name}"
-            )
-            return
-
-        try:
-            event_at = self._timestamp_from_event_time(event_time_us)
-            existing = await self._tool_execution_record_repo.find_by_id(str(record_id))
-            record = existing or ToolExecutionRecord(
-                id=str(record_id),
-                conversation_id=conversation_id,
-                message_id=message_id,
-                call_id=str(call_id),
-                tool_name=str(tool_name),
-                tool_input={},
-                status=ToolExecutionStatus.RUNNING,
-                sequence_number=event_counter,
-                started_at=event_at,
-            )
-            record.conversation_id = conversation_id
-            record.message_id = message_id
-            record.call_id = str(call_id)
-            record.tool_name = str(tool_name)
-
-            if event_type == "act":
-                record.tool_input = self._coerce_tool_input(event_data.get("tool_input"))
-                record.sequence_number = event_counter
-                if record.status not in {
-                    ToolExecutionStatus.SUCCESS,
-                    ToolExecutionStatus.FAILED,
-                    ToolExecutionStatus.CANCELLED,
-                    ToolExecutionStatus.TIMEOUT,
-                    ToolExecutionStatus.PERMISSION_DENIED,
-                }:
-                    record.status = ToolExecutionStatus.RUNNING
-                if not record.started_at:
-                    record.started_at = event_at
-            else:
-                record.completed_at = event_at
-                record.duration_ms = self._coerce_duration_ms(event_data.get("duration_ms"))
-                if self._is_failed_tool_observation(event_data):
-                    record.status = ToolExecutionStatus.FAILED
-                    record.error = self._sanitize_persisted_text(
-                        str(event_data.get("error") or "Tool execution failed")
-                    )
-                else:
-                    record.status = ToolExecutionStatus.SUCCESS
-                    record.tool_output = self._serialize_tool_result(event_data.get("result"))
-                    record.error = None
-
-            await self._tool_execution_record_repo.save_and_commit(record)
-        except Exception as persist_err:
-            logger.warning(
-                "[AgentService] Failed to persist tool execution record: "
-                f"type={event_type}, call_id={call_id}, error={persist_err}",
-                exc_info=True,
-            )
-
     def _filter_live_event(
         self,
         raw_message: dict[str, Any],
@@ -1155,15 +1012,6 @@ class AgentService(AgentServicePort):
                     continue
                 event_type, event_data, evt_time_us, evt_counter = filtered
 
-                await self._persist_tool_execution_event(
-                    conversation_id=conversation_id,
-                    message_id=message_id,
-                    event_type=event_type,
-                    event_data=event_data,
-                    event_time_us=evt_time_us,
-                    event_counter=evt_counter,
-                )
-
                 yield {
                     "type": event_type,
                     "data": event_data,
@@ -1179,7 +1027,7 @@ class AgentService(AgentServicePort):
 
                 # Stop when completion is seen, but continue briefly for delayed events
                 # (title_generated, artifact_ready from background S3 uploads, etc.)
-                if event_type in ("complete", "error"):
+                if event_type in ("complete", "error", "cancelled"):
                     logger.info(
                         f"[AgentService] Stream completed from Redis Stream: type={event_type}, "
                         f"reading delayed events for up to 15 seconds"

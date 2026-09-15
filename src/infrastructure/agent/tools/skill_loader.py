@@ -204,7 +204,7 @@ def _is_skill_allowed(ctx: ToolContext, skill_name: str) -> bool:
         },
         "required": ["name"],
     },
-    permission="skill",
+    permission="read",
     category="knowledge",
     tags=frozenset({"skill", "knowledge"}),
 )
@@ -381,5 +381,8 @@ def make_skill_loader_tool(
     return replace(
         skill_loader_tool,
         execute=_BoundSkillLoaderExecutor(template=skill_loader_tool, runtime=runtime),
+        # Resource synchronization writes into the sandbox; a content-only
+        # loader does not inherit the installer's mutation permission.
+        permission="skill" if skill_sync_service is not None and sandbox_id else "read",
         sandbox_id=sandbox_id or None,
     )

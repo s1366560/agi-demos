@@ -1,4 +1,5 @@
 import { RendererDeliveryAdmissionV2 } from './rendererDeliveryAdmissionV2';
+import { desktopRendererDeliveryUnavailableV2 } from '../../src/plugins/desktopRendererDeliveryStatusV2';
 import {
   app,
   BrowserWindow,
@@ -38,6 +39,7 @@ import {
 } from './cloudAuthenticationAuthority';
 import {
   CloudRequestExecutionRegistry,
+  CloudSessionAuthenticationInvalidError,
   executeVaultBoundCloudRequest,
   projectVaultBoundCloudSession,
   authorizeVaultBoundSandboxDesktopGrant,
@@ -502,9 +504,11 @@ function nativeFileDialogAuthority(event: IpcMainInvokeEvent): NativeFileDialogA
         filters: electronDialogFilters(input.filters),
         properties: input.allowMultiple ? ['openFile', 'multiSelections'] : ['openFile'],
         title:
-          input.purpose === 'skill_package'
-            ? 'Import Skill ZIP package'
-            : 'Import attachment files',
+          input.purpose === 'plugin_package'
+            ? 'Import signed plugin package'
+            : input.purpose === 'skill_package'
+              ? 'Import Skill ZIP package'
+              : 'Import attachment files',
       });
       return result.canceled ? null : Object.freeze([...result.filePaths]);
     },
@@ -684,6 +688,11 @@ async function executeDesktopCommand(
           fetch: (url, init) => net.fetch(url, init),
           signal: lease.signal,
         });
+      } catch (error) {
+        if (error instanceof CloudSessionAuthenticationInvalidError) {
+          return { status: 'restore_error', reason: 'authentication_invalid' };
+        }
+        throw error;
       } finally {
         lease.release();
       }
@@ -787,7 +796,16 @@ async function executeDesktopCommand(
       const payload = command === 'platform_plugin_renderer_delivery_current_v2'
         ? { owner_id: owner }
         : { owner_id: owner, delivery_token: args?.delivery_token, receipt: args?.receipt };
-      const result = await sidecarSupervisor.invoke(command, payload);
+      let result: unknown;
+      try {
+        result = await sidecarSupervisor.invoke(command, payload);
+      } catch (error) {
+        const unavailable = command === 'platform_plugin_renderer_delivery_current_v2'
+          ? desktopRendererDeliveryUnavailableV2(error)
+          : null;
+        if (!unavailable) throw error;
+        result = unavailable;
+      }
       if (rendererDeliveryOwnersV2.get(ownerId) !== owner) {
         throw new Error('desktop_renderer_delivery_owner_retired');
       }

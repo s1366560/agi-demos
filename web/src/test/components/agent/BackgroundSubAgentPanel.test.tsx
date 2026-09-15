@@ -53,6 +53,26 @@ describe('BackgroundSubAgentPanel', () => {
     ]);
   });
 
+  it('shows cancellation pending without claiming completion or allowing duplicate stop', () => {
+    (useBackgroundExecutions as any).mockReturnValue([{
+      executionId: 'run-pending', conversationId: 'owner', subagentName: 'worker', task: 'task',
+      status: 'running', startedAt: Date.now(), cancellation: { status: 'pending' },
+    }]);
+    render(<BackgroundSubAgentPanel />);
+    expect(screen.getByRole('status')).toHaveTextContent('waiting for execution to stop');
+    expect(screen.getByRole('button', { name: 'Stop execution' })).toBeDisabled();
+  });
+
+  it('shows cancellation errors and allows a retry', () => {
+    (useBackgroundExecutions as any).mockReturnValue([{
+      executionId: 'run-error', conversationId: 'owner', subagentName: 'worker', task: 'task',
+      status: 'running', startedAt: Date.now(), cancellation: { status: 'failed', error: 'delivery unavailable' },
+    }]);
+    render(<BackgroundSubAgentPanel />);
+    expect(screen.getByRole('alert')).toHaveTextContent('delivery unavailable');
+    expect(screen.getByRole('button', { name: 'Stop execution' })).not.toBeDisabled();
+  });
+
   it('renders nothing when panelOpen is false', () => {
     (useBackgroundPanel as any).mockReturnValue(false);
     const { container } = render(<BackgroundSubAgentPanel />);

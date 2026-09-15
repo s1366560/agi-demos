@@ -60,6 +60,7 @@ import type {
   ChangeSnapshot,
   CodeRangeReference,
   ConversationTimelineState,
+  DesktopApprovalRequest,
   DesktopRunInput,
   HitlResponseSubmission,
   RuntimeDataset,
@@ -1511,6 +1512,46 @@ const hitlResponseEvents = [
   },
 ];
 
+/* Prototype mission-control refactor 2026-09 (phase 5b): pending permission
+   request with full authority context so the amber approval card renders its
+   complete anatomy (scope evidence + action trio) for oracle comparison. */
+const hitlApprovalTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'approval-release-deploy',
+    type: 'permission_asked',
+    eventTimeUs: 1_784_282_067_000_000,
+    eventCounter: 27,
+    requestId: 'approval-release-deploy',
+    question: 'Allow the release deploy command to run in the workspace shell?',
+    action: 'execute',
+    resource: 'terminal',
+    riskLevel: 'high',
+  },
+];
+
+const hitlApprovalRequests: DesktopApprovalRequest[] = [
+  {
+    id: 'approval-release-deploy',
+    conversation_id: 'conversation-desktop-session',
+    message_id: 'approval-release-deploy',
+    run_id: 'run-desktop-session-42',
+    run_revision: 3,
+    authority_revision: 2,
+    kind: 'permission',
+    prompt: 'Allow the release deploy command to run in the workspace shell?',
+    permission: {
+      tool_name: 'terminal.execute',
+      action: 'execute',
+      risk_level: 'high',
+      description:
+        'Runs `pnpm run deploy:release` in the workspace shell. The command writes build output and publishes the verified release bundle.',
+      allow_remember: true,
+    },
+    status: 'pending',
+    created_at: '2026-09-22T09:41:00.000Z',
+  },
+];
+
 const elicitationTimelineItems: ConversationTimelineState['items'] = [
   {
     id: 'elicitation-pending-release-channel',
@@ -2436,6 +2477,7 @@ function SessionSteeringQa() {
     searchParams.get('agent-definition-events') === '1';
   const hitlResponseEventsMode =
     searchParams.get('hitl-response-events') === '1';
+  const hitlApprovalMode = searchParams.get('hitl-approval') === '1';
   const elicitationEventsMode = searchParams.get('elicitation-events') === '1';
   const a2uiCanvasEventsMode = searchParams.get('a2ui-canvas-events') === '1';
   const a2uiCanvasDeletedEventsMode =
@@ -2684,7 +2726,12 @@ function SessionSteeringQa() {
                                                 ...timelineState.items,
                                                 ...hitlResponseTimelineItems,
                                               ]
-                                            : elicitationEventsMode
+                                            : hitlApprovalMode
+                                              ? [
+                                                  ...timelineState.items,
+                                                  ...hitlApprovalTimelineItems,
+                                                ]
+                                              : elicitationEventsMode
                                               ? [
                                                   ...timelineState.items,
                                                   ...elicitationTimelineItems,
@@ -2778,6 +2825,9 @@ function SessionSteeringQa() {
     return {
       ...timelineState,
       items,
+      approvalRequests: hitlApprovalMode
+        ? hitlApprovalRequests
+        : timelineState.approvalRequests,
       hasMore:
         historyMode === 'pagination' ||
         historyMode === 'error' ||
@@ -3134,6 +3184,7 @@ function SessionSteeringQa() {
                 httpServiceEventsMode ||
                 doomLoopEventsMode ||
                 hitlResponseEventsMode ||
+                hitlApprovalMode ||
                 elicitationEventsMode ||
                 a2uiCanvasEventsMode ||
                 a2uiCanvasDeletedEventsMode ||
@@ -3179,11 +3230,13 @@ function SessionSteeringQa() {
               promotingRunInputId={null}
               runInputAuthorityRunId="run-desktop-session-42"
               respondableHitlRequestIds={
-                a2uiCanvasEventsMode ||
-                a2uiCanvasDeletedEventsMode ||
-                a2uiCanvasIncrementalEventsMode
-                  ? ['a2ui-release-action']
-                  : []
+                hitlApprovalMode
+                  ? ['approval-release-deploy']
+                  : a2uiCanvasEventsMode ||
+                      a2uiCanvasDeletedEventsMode ||
+                      a2uiCanvasIncrementalEventsMode
+                    ? ['a2ui-release-action']
+                    : []
               }
               references={references}
               onRunInputDeliveryChange={setDelivery}

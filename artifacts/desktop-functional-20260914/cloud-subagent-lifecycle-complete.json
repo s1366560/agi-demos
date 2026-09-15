@@ -1,0 +1,383 @@
+{
+  "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+  "scenario": "complete",
+  "events": [
+    {
+      "type": "lifecycle_state_change"
+    },
+    {
+      "type": "ack",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "run_id": "8ed84e77-7905-4652-990f-7bffe682034d"
+    },
+    {
+      "type": "message",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "user_message",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "lifecycle_state_change"
+    },
+    {
+      "type": "lifecycle_state_change"
+    },
+    {
+      "type": "execution_path_decided",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "selection_trace",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "lifecycle_state_change",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "policy_filtered",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "act_delta",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "preparing"
+    },
+    {
+      "type": "act_delta",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "preparing"
+    },
+    {
+      "type": "act",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "running"
+    },
+    {
+      "type": "cost_update",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "subagent_lifecycle",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "data": {
+        "type": "subagent_spawning",
+        "data": {
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+          "subagent_name": "qa_owner_20260914",
+          "spawn_mode": "run",
+          "thread_requested": false,
+          "cleanup": "keep",
+          "model_override": null,
+          "thinking_override": null
+        },
+        "timestamp": "2026-09-14T16:03:48.230399",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef"
+      },
+      "timestamp": "2026-09-14T08:03:48.230432+00:00",
+      "event_id": "evt_a032c2fd6fad",
+      "lifecycle_sequence_id": "1789373028252-0"
+    },
+    {
+      "type": "observe",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "completed"
+    },
+    {
+      "type": "subagent_lifecycle",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "data": {
+        "type": "subagent_spawned",
+        "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "subagent_name": "qa_owner_20260914",
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep"
+      },
+      "timestamp": "2026-09-14T08:03:48.253189+00:00",
+      "event_id": "evt_6853b1bb7bfa",
+      "lifecycle_sequence_id": "1789373028269-0"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "text_start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "text_end",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "cost_update",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "status": "goal_achieved:llm_task_reconciliation"
+    },
+    {
+      "type": "complete",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "lifecycle_state_change"
+    },
+    {
+      "type": "subagent_lifecycle",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "data": {
+        "type": "subagent_ended",
+        "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "subagent_name": "qa_owner_20260914",
+        "status": "completed",
+        "summary": "QA_OWNER_COMPLETED_20260914_OK",
+        "error": "",
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep"
+      },
+      "timestamp": "2026-09-14T08:04:24.318828+00:00",
+      "event_id": "evt_995f8a7faec9",
+      "lifecycle_sequence_id": "1789373064366-0"
+    }
+  ],
+  "snapshots": [
+    [
+      {
+        "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+        "status": "running",
+        "subagent_name": "qa_owner_20260914"
+      }
+    ],
+    [
+      {
+        "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+        "status": "completed",
+        "subagent_name": "qa_owner_20260914"
+      }
+    ]
+  ],
+  "acceptance_batch": "1bc1845b-c029-473c-a868-3ae1bbb44b08",
+  "lifecycle_subscription_ack": true,
+  "final_children": [
+    {
+      "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "subagent_name": "qa_owner_20260914",
+      "task": "不调用任何工具，只回复 QA_OWNER_COMPLETED_20260914_OK。",
+      "status": "completed",
+      "created_at": "2026-09-14T08:03:48.193463+00:00",
+      "started_at": "2026-09-14T08:03:48.193484+00:00",
+      "ended_at": "2026-09-14T08:04:24.225858+00:00",
+      "summary": "QA_OWNER_COMPLETED_20260914_OK",
+      "error": null,
+      "execution_time_ms": 33303,
+      "tokens_used": 0,
+      "metadata": {
+        "session_mode": "spawn",
+        "control_plane_version": "v2",
+        "delegation_depth": 0,
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "agent_id": "qa_owner_20260914",
+        "model": null,
+        "thinking": null,
+        "run_timeout_seconds": 60,
+        "requested_subagent_name": "qa_owner_20260914",
+        "max_active_runs_per_lineage": 8,
+        "execution_protocol": "detached-owner-v1",
+        "requester_session_key": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "lineage_root_run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 3,
+          "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+        },
+        "inherited_tool_set_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 3,
+          "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+        },
+        "inherited_tool_set_owner_operation_id": "local-turn:8ed84e77-7905-4652-990f-7bffe682034d",
+        "model_override": null,
+        "thinking_override": null,
+        "announce_payload": {
+          "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "subagent_name": "qa_owner_20260914",
+          "status": "completed",
+          "outcome": "success",
+          "status_text": "completed successfully",
+          "result": "QA_OWNER_COMPLETED_20260914_OK",
+          "notes": "",
+          "execution_time_ms": 33303,
+          "tokens_used": 0,
+          "spawn_mode": "run",
+          "thread_requested": false,
+          "cleanup": "keep",
+          "model_override": null,
+          "thinking_override": null,
+          "completed_at": "2026-09-14T08:04:24.225858+00:00"
+        },
+        "announce_status": "delivered",
+        "announce_attempt_count": 1,
+        "announce_completed_at": "2026-09-14T08:04:24.275810+00:00",
+        "announce_last_error": "",
+        "announce_events": [
+          {
+            "timestamp": "2026-09-14T08:04:24.275804+00:00",
+            "type": "completion_delivered",
+            "attempt": 1,
+            "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+            "status": "completed"
+          }
+        ],
+        "announce_events_dropped": 0
+      },
+      "frozen_result_text": null,
+      "frozen_at": null,
+      "trace_id": null,
+      "parent_span_id": null,
+      "announce_state": null
+    }
+  ],
+  "fresh_history_status": 200,
+  "fresh_children": [
+    {
+      "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "subagent_name": "qa_owner_20260914",
+      "task": "不调用任何工具，只回复 QA_OWNER_COMPLETED_20260914_OK。",
+      "status": "completed",
+      "created_at": "2026-09-14T08:03:48.193463+00:00",
+      "started_at": "2026-09-14T08:03:48.193484+00:00",
+      "ended_at": "2026-09-14T08:04:24.225858+00:00",
+      "summary": "QA_OWNER_COMPLETED_20260914_OK",
+      "error": null,
+      "execution_time_ms": 33303,
+      "tokens_used": 0,
+      "metadata": {
+        "session_mode": "spawn",
+        "control_plane_version": "v2",
+        "delegation_depth": 0,
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "agent_id": "qa_owner_20260914",
+        "model": null,
+        "thinking": null,
+        "run_timeout_seconds": 60,
+        "requested_subagent_name": "qa_owner_20260914",
+        "max_active_runs_per_lineage": 8,
+        "execution_protocol": "detached-owner-v1",
+        "requester_session_key": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "lineage_root_run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 3,
+          "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+        },
+        "inherited_tool_set_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 3,
+          "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+        },
+        "inherited_tool_set_owner_operation_id": "local-turn:8ed84e77-7905-4652-990f-7bffe682034d",
+        "model_override": null,
+        "thinking_override": null,
+        "announce_payload": {
+          "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "subagent_name": "qa_owner_20260914",
+          "status": "completed",
+          "outcome": "success",
+          "status_text": "completed successfully",
+          "result": "QA_OWNER_COMPLETED_20260914_OK",
+          "notes": "",
+          "execution_time_ms": 33303,
+          "tokens_used": 0,
+          "spawn_mode": "run",
+          "thread_requested": false,
+          "cleanup": "keep",
+          "model_override": null,
+          "thinking_override": null,
+          "completed_at": "2026-09-14T08:04:24.225858+00:00"
+        },
+        "announce_status": "delivered",
+        "announce_attempt_count": 1,
+        "announce_completed_at": "2026-09-14T08:04:24.275810+00:00",
+        "announce_last_error": "",
+        "announce_events": [
+          {
+            "timestamp": "2026-09-14T08:04:24.275804+00:00",
+            "type": "completion_delivered",
+            "attempt": 1,
+            "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+            "status": "completed"
+          }
+        ],
+        "announce_events_dropped": 0
+      },
+      "frozen_result_text": null,
+      "frozen_at": null,
+      "trace_id": null,
+      "parent_span_id": null,
+      "announce_state": null
+    }
+  ],
+  "credential_revocation_status": 200
+}

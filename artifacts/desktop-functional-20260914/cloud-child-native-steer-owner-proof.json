@@ -1,0 +1,12 @@
+{
+  "observed_at": "2026-09-14T08:21:36.055237+00:00",
+  "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+  "run_id": "4663354a014a427fa43f6220cbe13722",
+  "owner": {
+    "state": "closed",
+    "heartbeat_at": "2026-09-14 08:19:03.733374+00:00",
+    "expires_at": "2026-09-14 08:19:33.733374+00:00"
+  },
+  "expected_marker": "QA_NATIVE_STEER_ACCEPTED_20260914_OK",
+  "summary_contains_marker": false
+}

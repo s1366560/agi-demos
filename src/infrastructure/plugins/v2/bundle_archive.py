@@ -9,7 +9,7 @@ import json
 import stat
 import zipfile
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 
@@ -20,7 +20,12 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from src.domain.model.plugins.artifact_attestation_v2 import artifact_digest_v2
 from src.domain.model.plugins.generated_v2 import BundleManifestV2
 
-from .protocol import PluginProtocolV2Error, parse_bundle_manifest_v2
+from .protocol import (
+    PluginProtocolV2Error,
+    bundle_manifest_v2_to_payload,
+    canonical_json_v2,
+    parse_bundle_manifest_v2,
+)
 
 BUNDLE_DESCRIPTOR_V2 = "bundle.json"
 MAX_BUNDLE_BYTES_V2 = 64 * 1024 * 1024
@@ -44,6 +49,33 @@ class VerifiedBundleArchiveV2:
     manifest: BundleManifestV2
     artifacts: Mapping[str, bytes]
     source: str
+    _signed_verification: tuple[bytes, frozenset[str]] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+
+
+def require_signed_archive_verification_v2(archive: VerifiedBundleArchiveV2) -> frozenset[str]:
+    """Require this exact parser-verified object, including its current immutable bytes."""
+    proof = archive._signed_verification
+    if proof is None or proof[0] != canonical_json_v2(
+        bundle_manifest_v2_to_payload(archive.manifest)
+    ):
+        raise BundleArchiveV2Error(
+            "bundle_signature_verification_missing",
+            "signed archive verification is missing or stale",
+        )
+    expected_ids = {item.artifact_id for item in archive.manifest.artifacts}
+    if set(archive.artifacts) != expected_ids:
+        raise BundleArchiveV2Error(
+            "bundle_artifact_coverage_missing", "verified archive artifact inventory changed"
+        )
+    for item in archive.manifest.artifacts:
+        content = archive.artifacts[item.artifact_id]
+        if len(content) != item.size_bytes or artifact_digest_v2(content) != item.digest:
+            raise BundleArchiveV2Error(
+                "bundle_artifact_digest_mismatch", "verified archive artifact changed"
+            )
+    return proof[1]
 
 
 def read_bundle_archive_v2(
@@ -105,11 +137,21 @@ def parse_bundle_archive_v2(
             "bundle_permission_not_approved",
             f"bundle {source} lacks approval for {', '.join(missing_permissions)}",
         )
-    return VerifiedBundleArchiveV2(
+    verified = VerifiedBundleArchiveV2(
         manifest=manifest,
         artifacts=MappingProxyType(artifacts),
         source=source,
     )
+    if manifest.signature is not None:
+        object.__setattr__(
+            verified,
+            "_signed_verification",
+            (
+                canonical_json_v2(bundle_manifest_v2_to_payload(manifest)),
+                frozenset(approved_permissions),
+            ),
+        )
+    return verified
 
 
 def _parse_bundle_descriptor_v2(

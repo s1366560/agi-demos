@@ -2,6 +2,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rendererRootHotReload } from './scripts/rendererRootHotReload.mjs';
 
 const desktopRoot = dirname(fileURLToPath(import.meta.url));
 
@@ -53,7 +54,7 @@ export default defineConfig(({ command }) => ({
   renderer: {
     root: desktopRoot,
     base: './',
-    plugins: [react()],
+    plugins: [rendererRootHotReload(desktopRoot), react()],
     resolve: {
       alias: {
         '@agistack/plugin-runtime': resolve(

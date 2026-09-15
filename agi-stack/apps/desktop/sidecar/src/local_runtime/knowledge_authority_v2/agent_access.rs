@@ -159,3 +159,30 @@ pub(in crate::local_runtime) fn tool_host(
         run.map(|r| r.revision),
     )))
 }
+
+/// Opaque native HTTP identity; cannot be reconstructed from renderer fields.
+#[derive(Clone)]
+pub(in crate::local_runtime) struct PluginNativeIdentityV2(Arc<RunAuthorization>);
+impl PluginNativeIdentityV2 {
+    pub(in crate::local_runtime) fn capture(
+        state: &LocalRuntimeState,
+        conversation: &LocalConversation,
+        run: Option<&DesktopRun>,
+    ) -> Option<Self> {
+        let authorization = CURRENT.try_with(Clone::clone).ok().flatten()?;
+        if !authorization.matches(conversation, run) {
+            return None;
+        }
+        authorization.ensure_current(state).ok()?;
+        Some(Self(authorization))
+    }
+    pub(in crate::local_runtime) fn auth(&self) -> &AuthenticatedContext {
+        &self.0.auth
+    }
+    pub(in crate::local_runtime) fn message_id(&self) -> &str {
+        &self.0.message_id
+    }
+    pub(in crate::local_runtime) fn current(&self, state: &LocalRuntimeState) -> bool {
+        self.0.ensure_current(state).is_ok()
+    }
+}

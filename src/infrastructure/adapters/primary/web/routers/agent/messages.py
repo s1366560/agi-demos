@@ -59,6 +59,7 @@ from src.infrastructure.plugins.v2.session_event_log import (
     SessionEventLogServiceV2,
 )
 
+from .permission_history_projection import permission_granted, permission_history_item
 from .schemas import ExecutionStatsResponse
 
 router = APIRouter()
@@ -302,7 +303,9 @@ def _build_hitl_answered_map(events: list[Any]) -> dict[str, Any]:
                 "variable_names": _safe_env_var_names(data),
             }
         elif event_type in ("permission_granted", "permission_replied"):
-            hitl_answered_map[request_id] = {"granted": data.get("granted", False)}
+            hitl_answered_map[request_id] = {
+                "granted": permission_granted(data.get("action"), data)
+            }
     return hitl_answered_map
 
 
@@ -326,6 +329,21 @@ def _build_hitl_status_map(hitl_requests: list[Any]) -> dict[str, Any]:
             "authority_revision": hitl_authority_revision(status),
             "response": req.response,
             "response_metadata": req.response_metadata or {},
+            "permission_metadata": {
+                key: value
+                for key, value in (getattr(req, "metadata", None) or {}).items()
+                if key
+                in (
+                    "tool_name",
+                    "action",
+                    "resource",
+                    "reason",
+                    "tool_display_name",
+                    "risk_level",
+                    "description",
+                    "allow_remember",
+                )
+            },
         }
     return hitl_status_map
 
@@ -422,6 +440,9 @@ def _build_user_message(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
         "role": "user",
     }
     metadata: dict[str, Any] = {}
+    if isinstance(data.get("display_content"), str):
+        item["display_content"] = data["display_content"]
+        metadata["display_content"] = data["display_content"]
     if data.get("file_metadata"):
         metadata["fileMetadata"] = data["file_metadata"]
     if data.get("forced_skill_name"):
@@ -860,34 +881,14 @@ def _build_permission_asked(
     hitl_status_map: dict[str, Any],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    request_id = data.get("request_id", "")
-    answered = False
-    granted = None
-    if request_id in hitl_answered_map:
-        answered = True
-        granted = hitl_answered_map[request_id].get("granted")
-    elif request_id in hitl_status_map:
-        status_info = hitl_status_map[request_id]
-        if status_info["status"] in ("answered", "completed"):
-            answered = True
-            granted = status_info.get("response_metadata", {}).get("granted")
-    return {
-        "requestId": request_id,
-        "action": data.get("action", ""),
-        "resource": data.get("resource", ""),
-        "reason": data.get("reason", ""),
-        "toolName": data.get("tool_name", ""),
-        "toolDisplayName": data.get("tool_display_name", ""),
-        "riskLevel": data.get("risk_level", "medium"),
-        "description": data.get("description", ""),
-        "allowRemember": data.get("allow_remember", True),
-        "answered": answered,
-        "granted": granted,
-    }
+    return permission_history_item(data, hitl_answered_map, hitl_status_map)
 
 
 def _build_permission_replied(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
-    return {"requestId": data.get("request_id", ""), "granted": data.get("granted", False)}
+    return {
+        "requestId": data.get("request_id", ""),
+        "granted": permission_granted(data.get("action"), data),
+    }
 
 
 def _build_canvas_updated(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
@@ -1204,6 +1205,13 @@ def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]
 
 def _build_agent_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
+        "payload": {
+            key: data[key]
+            for key in (
+                "child_run_id", "child_session_id", "parent_session_id", "spawn_id", "status"
+            )
+            if key in data
+        },
         "agentId": data.get("agent_id", ""),
         "agentName": data.get("agent_name"),
         "parentAgentId": data.get("parent_agent_id"),
@@ -1236,6 +1244,13 @@ def _build_agent_message_received(data: dict[str, Any], **_kwargs: Any) -> dict[
 
 def _build_agent_stopped(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
+        "payload": {
+            key: data[key]
+            for key in (
+                "child_run_id", "child_session_id", "parent_session_id", "spawn_id", "status"
+            )
+            if key in data
+        },
         "agentId": data.get("agent_id", ""),
         "agentName": data.get("agent_name"),
         "reason": data.get("reason"),

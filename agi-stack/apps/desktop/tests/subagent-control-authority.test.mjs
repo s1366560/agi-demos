@@ -7,6 +7,9 @@ const {
   resolveSubAgentControlAuthority,
   subAgentGroupControlAvailability,
 } = require("/tmp/agistack-desktop-test-dist/src/features/chat/subagentControlAuthorityModel.js");
+const {
+  timelineItemFromSocketEvent,
+} = require("/tmp/agistack-desktop-test-dist/src/features/chat/appTimelineEventModel.js");
 
 const conversation = {
   id: "conversation-1",
@@ -24,33 +27,111 @@ const group = {
   status: "running",
 };
 
-test("Cloud SubAgent controls require active revision-bound run authority", () => {
+test("SubAgent controls require active revision-bound run authority", () => {
   assert.deepEqual(
     resolveSubAgentControlAuthority("cloud", conversation, run),
+    {
+      availability: "unavailable",
+      reasonCode: "cloud_child_control_snapshot_required",
+      allowedActions: [],
+      authorityRevision: null,
+      conversationId: null,
+      participantAgentIds: [],
+    },
+  );
+  assert.deepEqual(
+    resolveSubAgentControlAuthority("local", conversation, run),
     {
       availability: "available",
       reasonCode: null,
       allowedActions: ["steer", "kill_run"],
       authorityRevision: 9,
       conversationId: "conversation-1",
-      participantAgentIds: ["reviewer-1"],
-    },
-  );
-  assert.deepEqual(
-    resolveSubAgentControlAuthority("local", conversation, run),
-    {
-      availability: "unavailable",
-      reasonCode: "subagent_control_local_unavailable",
-      allowedActions: [],
-      authorityRevision: null,
-      conversationId: null,
-      participantAgentIds: ["reviewer-1"],
+      participantAgentIds: [],
+      registeredExecutions: [],
     },
   );
 });
 
+test("Local SubAgent controls bind actual registered execution identity to the current parent", () => {
+  const started = {
+    id: "child-started",
+    type: "subagent_started",
+    conversation_id: conversation.id,
+    payload: {
+      run_id: group.runId,
+      subagent_id: group.subagentId,
+      parent_run_id: run.id,
+      parent_run_revision: run.revision,
+      control_registered: true,
+    },
+  };
+  const authority = resolveSubAgentControlAuthority(
+    "local",
+    conversation,
+    run,
+    [started],
+  );
+  assert.equal(
+    subAgentGroupControlAvailability(authority, group).available,
+    true,
+  );
+  const scopedLiveItem = timelineItemFromSocketEvent(started);
+  const liveAuthority = resolveSubAgentControlAuthority(
+    "local",
+    conversation,
+    run,
+    [scopedLiveItem],
+  );
+  assert.equal(
+    subAgentGroupControlAvailability(liveAuthority, group).available,
+    true,
+    "live timeline normalization already scopes the event and omits conversation_id",
+  );
+  assert.equal(
+    subAgentGroupControlAvailability(authority, {
+      ...group,
+      runId: "previous-child",
+    }).available,
+    false,
+  );
+  assert.equal(
+    subAgentGroupControlAvailability(authority, {
+      ...group,
+      subagentId: "other-agent",
+    }).available,
+    false,
+  );
+  for (const payload of [
+    { ...started.payload, control_registered: false },
+    { ...started.payload, parent_run_id: "previous-parent" },
+    { ...started.payload, parent_run_revision: run.revision - 1 },
+  ]) {
+    const rejected = resolveSubAgentControlAuthority(
+      "local",
+      conversation,
+      run,
+      [{ ...started, payload }],
+    );
+    assert.equal(
+      subAgentGroupControlAvailability(rejected, group).available,
+      false,
+    );
+  }
+  const staleConversation = resolveSubAgentControlAuthority(
+    "local",
+    conversation,
+    run,
+    [{ ...started, conversation_id: "other-conversation" }],
+  );
+  assert.equal(
+    subAgentGroupControlAvailability(staleConversation, group).available,
+    false,
+  );
+});
+
 test("SubAgent control fails closed for missing execution identity and roster mismatch", () => {
-  const authority = resolveSubAgentControlAuthority("cloud", conversation, run);
+  const authority = localAuthority(run);
   assert.equal(
     subAgentGroupControlAvailability(authority, { ...group, runId: "" })
       .reasonCode,
@@ -61,7 +142,7 @@ test("SubAgent control fails closed for missing execution identity and roster mi
       ...group,
       subagentId: "not-in-roster",
     }).reasonCode,
-    "subagent_control_roster_denied",
+    "subagent_control_execution_id_unavailable",
   );
   assert.equal(
     subAgentGroupControlAvailability(authority, { ...group, status: "success" })
@@ -71,7 +152,7 @@ test("SubAgent control fails closed for missing execution identity and roster mi
 });
 
 test("Queued parent runs only allow kill and steered child runs retain both actions", () => {
-  const queued = resolveSubAgentControlAuthority("cloud", conversation, {
+  const queued = localAuthority({
     ...run,
     status: "queued",
   });
@@ -80,10 +161,18 @@ test("Queued parent runs only allow kill and steered child runs retain both acti
     ["kill_run"],
   );
 
-  const running = resolveSubAgentControlAuthority("cloud", conversation, run);
+  const running = localAuthority(run);
   assert.deepEqual(
     subAgentGroupControlAvailability(running, { ...group, status: "steered" })
       .allowedActions,
     ["steer", "kill_run"],
   );
 });
+
+function localAuthority(parent) {
+  return resolveSubAgentControlAuthority('local', conversation, parent, [{
+    id: 'start', type: 'subagent_started', conversation_id: conversation.id,
+    payload: { control_registered: true, run_id: group.runId, subagent_id: group.subagentId,
+      parent_run_id: parent.id, parent_run_revision: parent.revision },
+  }]);
+}

@@ -18,6 +18,7 @@ from src.application.schemas.conversation_session_projection import (
     SessionEvidenceSummaryResponse,
     SessionExecutionResponse,
     SessionPendingHITLResponse,
+    SessionPermissionReviewResponse,
     SessionPlanRunResponse,
     SessionRunEnvironmentResponse,
     SessionToolExecutionPageResponse,
@@ -165,6 +166,7 @@ class PendingHITLAuthority:
     authority_revision: int
     created_at: datetime
     expires_at: datetime
+    permission: SessionPermissionReviewResponse | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -260,12 +262,33 @@ class ConversationSessionProjectionService:
         current_run = runs[0] if runs else None
         plans = [self._agent_plan_version(item) for item in snapshot.plan_versions]
         current_plan = plans[0] if plans else None
-        can_send_message = not snapshot.has_blocking_hitl
-        allowed_actions: list[Literal["send_message", "respond_to_hitl"]] = []
+        # Ordinary sends do not carry the separate run-input authority contract.
+        has_active_run = current_run is not None and current_run.status in {"queued", "running"}
+        can_send_message = not snapshot.has_blocking_hitl and not has_active_run
+        can_approve_plan = bool(
+            current_plan
+            and current_plan.status == "draft"
+            and current_plan.tasks
+            and snapshot.conversation.current_mode == "plan"
+            and not has_active_run
+            and not snapshot.has_blocking_hitl
+            and current_attempt is None
+        )
+        can_control_execution = (
+            has_active_run and current_attempt is None and not snapshot.has_blocking_hitl
+        )
+        allowed_actions: list[
+            Literal["send_message", "respond_to_hitl", "approve_plan_and_start", "cancel"]
+        ] = []
         if can_send_message:
             allowed_actions.append("send_message")
         if snapshot.pending_hitl:
             allowed_actions.append("respond_to_hitl")
+        if can_approve_plan:
+            allowed_actions.append("approve_plan_and_start")
+
+        if can_control_execution:
+            allowed_actions.append("cancel")
 
         projection = ConversationSessionProjectionResponse(
             authority_kind="workspace_attempt" if current_attempt else "conversation_record",
@@ -302,10 +325,11 @@ class ConversationSessionProjectionService:
                 failed_tool_execution_count=snapshot.tool_executions.failed_total,
             ),
             capabilities=SessionCapabilitiesResponse(
+                environment_kinds=["local"],
                 can_send_message=can_send_message,
                 can_respond_to_hitl=bool(snapshot.pending_hitl),
-                can_approve_plan=False,
-                can_control_execution=False,
+                can_approve_plan=can_approve_plan,
+                can_control_execution=can_control_execution,
                 can_review_artifacts=False,
                 can_deliver_artifacts=False,
                 allowed_actions=allowed_actions,
@@ -476,6 +500,7 @@ class ConversationSessionProjectionService:
             authority_revision=source.authority_revision,
             created_at=source.created_at,
             expires_at=source.expires_at,
+            permission=source.permission,
         )
 
     @staticmethod

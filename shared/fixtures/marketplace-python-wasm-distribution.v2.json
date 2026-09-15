@@ -1,0 +1,109 @@
+{
+  "schema_version": 2,
+  "descriptor": {
+    "profile_id": "marketplace-python-marker",
+    "generation": 1,
+    "digest": "9c97ae8878318b3a95f9823b6721dbdd799e5ee27a17b64b124dc23a57e144d6"
+  },
+  "snapshot": {
+    "schema_version": 2,
+    "profile_id": "marketplace-python-marker",
+    "generation": 1,
+    "manifests": [
+      {
+        "schema_version": 2,
+        "plugin_id": "qa-marketplace-marker",
+        "version": "1.0.0",
+        "runtime": "wasm",
+        "trust": "signed",
+        "modules": [
+          {
+            "module_ref": "wasm://qa-marketplace-marker/score-v1",
+            "entrypoint": "score",
+            "artifact": {
+              "digest": "sha256:efc79f6a71ebe6d1a648a9fa448df29e4abf8a61b0d00dfa834ab19a85b78ddc",
+              "source": "bundle://qa-marketplace-marker/artifacts/marker.wasm",
+              "signature": null,
+              "provenance": null
+            },
+            "targets": [
+              "python"
+            ],
+            "contract": {
+              "services": {
+                "provides": [],
+                "requires": [
+                  {
+                    "alias": "catalog",
+                    "service": "service:tool-set-catalog",
+                    "version": "1.0.0",
+                    "contributes": true
+                  }
+                ]
+              },
+              "events": {
+                "emits": [],
+                "handles": []
+              },
+              "config_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "additionalProperties": false,
+                "properties": {
+                  "tool_name": {
+                    "const": "qa_marketplace_marker"
+                  }
+                },
+                "required": [
+                  "tool_name"
+                ],
+                "type": "object"
+              }
+            },
+            "contract_digest": "sha256:395ce743a765ceed3aa05cbdfb5b0c93c2ee6f400e2569e335de25f49c560574"
+          }
+        ],
+        "permissions": [
+          "tools.execute"
+        ],
+        "quotas": {
+          "max_wasm_fuel": 10000,
+          "max_wasm_memory_bytes": 65536
+        }
+      }
+    ],
+    "entries": [
+      {
+        "entry_id": "qa-marketplace-marker",
+        "parent_entry_id": null,
+        "plugin_ref": "qa-marketplace-marker",
+        "module_ref": "wasm://qa-marketplace-marker/score-v1",
+        "enabled": true,
+        "config": {
+          "tool_name": "qa_marketplace_marker"
+        },
+        "inject": {
+          "catalog": "service:tool-set-catalog"
+        },
+        "isolate": {},
+        "scope": {
+          "kind": "root"
+        },
+        "permissions": [
+          "tools.execute"
+        ],
+        "quotas": {
+          "max_wasm_fuel": 10000,
+          "max_wasm_memory_bytes": 65536
+        },
+        "restart_policy": "hot-generation"
+      }
+    ],
+    "digest": "9c97ae8878318b3a95f9823b6721dbdd799e5ee27a17b64b124dc23a57e144d6"
+  },
+  "envelope": {
+    "version": 1,
+    "nonce": "signed-python-marker-cross-plane",
+    "snapshot_digest": "9c97ae8878318b3a95f9823b6721dbdd799e5ee27a17b64b124dc23a57e144d6",
+    "type_url": "types.memstack.ai/plugin.profile.v2"
+  }
+}

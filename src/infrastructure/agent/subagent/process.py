@@ -20,6 +20,7 @@ import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
@@ -70,7 +71,7 @@ class SubAgentProcess:
         result = process.result
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         subagent: SubAgent,
         context: SubAgentContext,
@@ -84,6 +85,7 @@ class SubAgentProcess:
         abort_signal: asyncio.Event | None = None,
         factory: ProcessorFactory | None = None,
         doom_loop_threshold: int = 3,
+        run_id: str | None = None,
     ) -> None:
         """Initialize a SubAgent process.
 
@@ -111,6 +113,7 @@ class SubAgentProcess:
         self._tools = tools
         self._abort_signal = abort_signal
         self._factory = factory
+        self._run_id = run_id
         self._doom_loop_threshold = doom_loop_threshold
         self._max_retries: int = getattr(subagent, "max_retries", 0)
         fallback_models: list[str] = getattr(subagent, "fallback_models", [])
@@ -199,7 +202,7 @@ class SubAgentProcess:
 
             try:
                 # Run the independent ReAct loop
-                session_id = f"subagent-{self._subagent.id}-{int(time.time())}"
+                trace_id = self._run_id or uuid4().hex
                 conversation_id = str(
                     self._context.metadata.get("conversation_id") or f"subagent-{self._subagent.id}"
                 )
@@ -207,11 +210,11 @@ class SubAgentProcess:
                 run_ctx = RunContext(
                     abort_signal=self._abort_signal,
                     conversation_id=conversation_id,
-                    trace_id=session_id,
+                    trace_id=trace_id,
                 )
 
                 async for domain_event in processor.process(
-                    session_id=session_id,
+                    session_id=conversation_id,
                     messages=messages,
                     run_ctx=run_ctx,
                 ):
@@ -350,6 +353,7 @@ class SubAgentProcess:
         if self._factory is not None:
             return self._factory.create_for_subagent(
                 subagent=self._subagent,
+                run_id=self._run_id,
                 tools=self._tools,
                 doom_loop_threshold=self._doom_loop_threshold,
                 model_override=model_override,

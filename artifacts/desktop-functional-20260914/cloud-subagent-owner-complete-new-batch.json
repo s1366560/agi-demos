@@ -1,0 +1,324 @@
+{
+  "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+  "scenario": "complete",
+  "events": [
+    {
+      "type": "connected"
+    },
+    {
+      "type": "ack",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "run_id": "581f0a33-90f7-4f4a-9524-d63d1d8c5036"
+    },
+    {
+      "type": "message",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "user_message",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "execution_path_decided",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "selection_trace",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "policy_filtered",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "thought_start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "thought",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "text_start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "act_delta",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "preparing"
+    },
+    {
+      "type": "act_delta",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "preparing"
+    },
+    {
+      "type": "text_end",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "act",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "running"
+    },
+    {
+      "type": "cost_update",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "observe",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "completed"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "text_start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "text_end",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "cost_update",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "status": "goal_achieved:llm_task_reconciliation"
+    },
+    {
+      "type": "suggestions",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "complete",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    }
+  ],
+  "snapshots": [
+    [
+      {
+        "run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+        "status": "running",
+        "subagent_name": "qa_owner_20260914"
+      }
+    ],
+    [
+      {
+        "run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+        "status": "completed",
+        "subagent_name": "qa_owner_20260914"
+      }
+    ]
+  ],
+  "acceptance_batch": "09730f13-c87d-49b5-824f-f32cc410927a",
+  "final_children": [
+    {
+      "run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "subagent_name": "qa_owner_20260914",
+      "task": "不调用任何工具，只回复 QA_OWNER_COMPLETED_20260914_OK。",
+      "status": "completed",
+      "created_at": "2026-09-14T07:16:01.173414+00:00",
+      "started_at": "2026-09-14T07:16:01.173434+00:00",
+      "ended_at": "2026-09-14T07:16:40.761754+00:00",
+      "summary": "QA_OWNER_COMPLETED_20260914_OK",
+      "error": null,
+      "execution_time_ms": 37416,
+      "tokens_used": 0,
+      "metadata": {
+        "session_mode": "spawn",
+        "control_plane_version": "v2",
+        "delegation_depth": 0,
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "agent_id": "qa_owner_20260914",
+        "model": null,
+        "thinking": null,
+        "run_timeout_seconds": 60,
+        "requested_subagent_name": "qa_owner_20260914",
+        "max_active_runs_per_lineage": 8,
+        "execution_protocol": "detached-owner-v1",
+        "requester_session_key": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "lineage_root_run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "5d785ac7f57417b74968844719283a71f0a3f88e16d2e549aef3a211ecda46d3"
+        },
+        "inherited_tool_set_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "5d785ac7f57417b74968844719283a71f0a3f88e16d2e549aef3a211ecda46d3"
+        },
+        "inherited_tool_set_owner_operation_id": "local-turn:581f0a33-90f7-4f4a-9524-d63d1d8c5036",
+        "model_override": null,
+        "thinking_override": null,
+        "announce_payload": {
+          "run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "subagent_name": "qa_owner_20260914",
+          "status": "completed",
+          "outcome": "success",
+          "status_text": "completed successfully",
+          "result": "QA_OWNER_COMPLETED_20260914_OK",
+          "notes": "",
+          "execution_time_ms": 37416,
+          "tokens_used": 0,
+          "spawn_mode": "run",
+          "thread_requested": false,
+          "cleanup": "keep",
+          "model_override": null,
+          "thinking_override": null,
+          "completed_at": "2026-09-14T07:16:40.761754+00:00"
+        },
+        "announce_status": "delivered",
+        "announce_attempt_count": 1,
+        "announce_completed_at": "2026-09-14T07:16:40.788852+00:00",
+        "announce_last_error": "",
+        "announce_events": [
+          {
+            "timestamp": "2026-09-14T07:16:40.788842+00:00",
+            "type": "completion_delivered",
+            "attempt": 1,
+            "run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+            "status": "completed"
+          }
+        ],
+        "announce_events_dropped": 0
+      },
+      "frozen_result_text": null,
+      "frozen_at": null,
+      "trace_id": null,
+      "parent_span_id": null,
+      "announce_state": null
+    }
+  ],
+  "fresh_history_status": 200,
+  "fresh_children": [
+    {
+      "run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "subagent_name": "qa_owner_20260914",
+      "task": "不调用任何工具，只回复 QA_OWNER_COMPLETED_20260914_OK。",
+      "status": "completed",
+      "created_at": "2026-09-14T07:16:01.173414+00:00",
+      "started_at": "2026-09-14T07:16:01.173434+00:00",
+      "ended_at": "2026-09-14T07:16:40.761754+00:00",
+      "summary": "QA_OWNER_COMPLETED_20260914_OK",
+      "error": null,
+      "execution_time_ms": 37416,
+      "tokens_used": 0,
+      "metadata": {
+        "session_mode": "spawn",
+        "control_plane_version": "v2",
+        "delegation_depth": 0,
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "agent_id": "qa_owner_20260914",
+        "model": null,
+        "thinking": null,
+        "run_timeout_seconds": 60,
+        "requested_subagent_name": "qa_owner_20260914",
+        "max_active_runs_per_lineage": 8,
+        "execution_protocol": "detached-owner-v1",
+        "requester_session_key": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "lineage_root_run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "5d785ac7f57417b74968844719283a71f0a3f88e16d2e549aef3a211ecda46d3"
+        },
+        "inherited_tool_set_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "5d785ac7f57417b74968844719283a71f0a3f88e16d2e549aef3a211ecda46d3"
+        },
+        "inherited_tool_set_owner_operation_id": "local-turn:581f0a33-90f7-4f4a-9524-d63d1d8c5036",
+        "model_override": null,
+        "thinking_override": null,
+        "announce_payload": {
+          "run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "subagent_name": "qa_owner_20260914",
+          "status": "completed",
+          "outcome": "success",
+          "status_text": "completed successfully",
+          "result": "QA_OWNER_COMPLETED_20260914_OK",
+          "notes": "",
+          "execution_time_ms": 37416,
+          "tokens_used": 0,
+          "spawn_mode": "run",
+          "thread_requested": false,
+          "cleanup": "keep",
+          "model_override": null,
+          "thinking_override": null,
+          "completed_at": "2026-09-14T07:16:40.761754+00:00"
+        },
+        "announce_status": "delivered",
+        "announce_attempt_count": 1,
+        "announce_completed_at": "2026-09-14T07:16:40.788852+00:00",
+        "announce_last_error": "",
+        "announce_events": [
+          {
+            "timestamp": "2026-09-14T07:16:40.788842+00:00",
+            "type": "completion_delivered",
+            "attempt": 1,
+            "run_id": "27ad0aba6f404ba6a9147d31c10e950d",
+            "status": "completed"
+          }
+        ],
+        "announce_events_dropped": 0
+      },
+      "frozen_result_text": null,
+      "frozen_at": null,
+      "trace_id": null,
+      "parent_span_id": null,
+      "announce_state": null
+    }
+  ],
+  "credential_revocation_status": 200
+}

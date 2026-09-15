@@ -1,0 +1,105 @@
+{
+  "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+  "scenario": "complete",
+  "events": [
+    {
+      "type": "connected"
+    },
+    {
+      "type": "ack",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "run_id": "4ff15824-c37c-4076-8794-768ba8a4f5c3"
+    },
+    {
+      "type": "message",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "user_message",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "execution_path_decided",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "selection_trace",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "policy_filtered",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "thought_start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "thought",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "text_start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "act_delta",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "preparing"
+    },
+    {
+      "type": "act_delta",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "preparing"
+    },
+    {
+      "type": "text_end",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "act",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "running"
+    },
+    {
+      "type": "cost_update",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "observe",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "completed"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    }
+  ],
+  "snapshots": [],
+  "failure_type": "HTTPStatusError",
+  "credential_revocation_status": 200
+}

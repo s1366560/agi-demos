@@ -1,0 +1,112 @@
+{
+  "client_message_id": "344afb2e-793b-44cc-a146-3fce5cbbd1ed",
+  "before": {
+    "id": "03d77d56-fcc5-5e7e-bbd4-a94409a5b599",
+    "status": "running",
+    "revision": 1,
+    "completed_at": "None"
+  },
+  "http_status": 200,
+  "response": {
+    "accepted": true,
+    "status": "cancel_requested",
+    "run": {
+      "id": "03d77d56-fcc5-5e7e-bbd4-a94409a5b599",
+      "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "plan_version_id": null,
+      "idempotency_key": "client-message:344afb2e-793b-44cc-a146-3fce5cbbd1ed",
+      "message_id": "03d77d56-fcc5-5e7e-bbd4-a94409a5b599",
+      "request_message": "\u7cbe\u786e\u53d6\u6d88\u6700\u7ec8\u56de\u5f52\u3002\u53ea\u5199\u4e00\u7bc7\u7ea63000\u5b57\u7684\u865a\u6784\u6d77\u5c9b\u6e38\u8bb0\uff0c\u4e0d\u4f7f\u7528\u5de5\u5177\uff1b\u6d4b\u8bd5\u7a0b\u5e8f\u4f1a\u53d6\u6d88\u672c\u6b21\u751f\u6210\u3002",
+      "status": "running",
+      "revision": 1,
+      "created_at": "2026-09-14T04:40:14.184037Z",
+      "updated_at": "2026-09-14T04:40:18.973971Z",
+      "started_at": "2026-09-14T04:40:18.973971Z",
+      "completed_at": null,
+      "last_heartbeat_at": null,
+      "error": null,
+      "environment": null,
+      "permission_profile": "read_only",
+      "authorization_snapshot": {
+        "source": "chat_admission",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "workspace_id": "b30bf32d-36f0-4832-bcca-252a8df18b15",
+        "permission_profile": "read_only",
+        "requested_permission_mode": null,
+        "effective_permission_mode": "ask",
+        "policy": {
+          "revision": 0,
+          "permission_mode": "ask"
+        },
+        "context_authorities": [],
+        "model_route": {
+          "provider_id": "3fe15bfc-3759-4267-b9c1-70f80b63eb7d",
+          "model_id": "MiniMax-M3"
+        },
+        "model_policy_revision": 3,
+        "cancellation_receipt": {
+          "expected_revision": 1,
+          "requested_by": "bf922bb7-290d-4252-8891-f82b97aa14b2",
+          "requested_at": "2026-09-14T04:40:19.200393+00:00"
+        }
+      }
+    }
+  },
+  "after": {
+    "id": "03d77d56-fcc5-5e7e-bbd4-a94409a5b599",
+    "status": "cancelled",
+    "revision": 2,
+    "completed_at": "2026-09-14 04:40:19.326453+00:00"
+  },
+  "retry_http_status": 200,
+  "retry_response": {
+    "accepted": true,
+    "status": "cancelled",
+    "run": {
+      "id": "03d77d56-fcc5-5e7e-bbd4-a94409a5b599",
+      "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "plan_version_id": null,
+      "idempotency_key": "client-message:344afb2e-793b-44cc-a146-3fce5cbbd1ed",
+      "message_id": "03d77d56-fcc5-5e7e-bbd4-a94409a5b599",
+      "request_message": "\u7cbe\u786e\u53d6\u6d88\u6700\u7ec8\u56de\u5f52\u3002\u53ea\u5199\u4e00\u7bc7\u7ea63000\u5b57\u7684\u865a\u6784\u6d77\u5c9b\u6e38\u8bb0\uff0c\u4e0d\u4f7f\u7528\u5de5\u5177\uff1b\u6d4b\u8bd5\u7a0b\u5e8f\u4f1a\u53d6\u6d88\u672c\u6b21\u751f\u6210\u3002",
+      "status": "cancelled",
+      "revision": 2,
+      "created_at": "2026-09-14T04:40:14.184037Z",
+      "updated_at": "2026-09-14T04:40:19.326453Z",
+      "started_at": "2026-09-14T04:40:18.973971Z",
+      "completed_at": "2026-09-14T04:40:19.326453Z",
+      "last_heartbeat_at": null,
+      "error": null,
+      "environment": null,
+      "permission_profile": "read_only",
+      "authorization_snapshot": {
+        "source": "chat_admission",
+        "conversation_id": "e9c68760-fc1c-55bd-8f87-cd4e1a884fcb",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "workspace_id": "b30bf32d-36f0-4832-bcca-252a8df18b15",
+        "permission_profile": "read_only",
+        "requested_permission_mode": null,
+        "effective_permission_mode": "ask",
+        "policy": {
+          "revision": 0,
+          "permission_mode": "ask"
+        },
+        "context_authorities": [],
+        "model_route": {
+          "provider_id": "3fe15bfc-3759-4267-b9c1-70f80b63eb7d",
+          "model_id": "MiniMax-M3"
+        },
+        "model_policy_revision": 3,
+        "cancellation_receipt": {
+          "expected_revision": 1,
+          "requested_by": "bf922bb7-290d-4252-8891-f82b97aa14b2",
+          "requested_at": "2026-09-14T04:40:19.200393+00:00"
+        }
+      }
+    }
+  },
+  "temporary_key_revoked": true
+}

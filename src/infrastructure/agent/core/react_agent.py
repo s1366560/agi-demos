@@ -481,6 +481,7 @@ class ReActAgent(
         )
         self._tool_builder = SubAgentToolBuilder(
             SubAgentToolBuilderDeps(
+                control_channel=control_channel,
                 subagent_run_registry_resolver=current_agent_subagent_run_registry_v2,
                 enable_subagent_as_tool=self._enable_subagent_as_tool,
                 max_subagent_delegation_depth=(self._max_subagent_delegation_depth),

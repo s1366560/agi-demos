@@ -152,7 +152,7 @@ class SubAgentRunnerMixin:
         """Return subagent lifecycle observability counters."""
         return cast(dict[str, int], self._session_runner.get_subagent_observability_stats())
 
-    def _runner_resolve_overrides(
+    async def _runner_resolve_overrides(
         self: _RunnerAgent,
         conversation_id: str,
         run_id: str,
@@ -165,7 +165,7 @@ class SubAgentRunnerMixin:
         """Resolve model/thinking overrides."""
         return cast(
             tuple[str | None, str | None, float],
-            self._session_runner.runner_resolve_overrides(
+            await self._session_runner.runner_resolve_overrides(
                 conversation_id=conversation_id,
                 run_id=run_id,
                 requested_model=requested_model,
@@ -176,7 +176,7 @@ class SubAgentRunnerMixin:
             ),
         )
 
-    def _runner_mark_completion(
+    async def _runner_mark_completion(
         self: _RunnerAgent,
         conversation_id: str,
         run_id: str,
@@ -188,7 +188,7 @@ class SubAgentRunnerMixin:
         started_at: float,
     ) -> None:
         """Mark a SubAgent run as completed or failed."""
-        self._session_runner.runner_mark_completion(
+        await self._session_runner.runner_mark_completion(
             conversation_id=conversation_id,
             run_id=run_id,
             result_success=result_success,
@@ -199,31 +199,31 @@ class SubAgentRunnerMixin:
             started_at=started_at,
         )
 
-    def _runner_mark_timeout(
+    async def _runner_mark_timeout(
         self: _RunnerAgent,
         conversation_id: str,
         run_id: str,
         configured_timeout: float,
     ) -> None:
         """Handle TimeoutError for a SubAgent runner."""
-        self._session_runner.runner_mark_timeout(
+        await self._session_runner.runner_mark_timeout(
             conversation_id=conversation_id,
             run_id=run_id,
             configured_timeout=configured_timeout,
         )
 
-    def _runner_mark_cancelled(
+    async def _runner_mark_cancelled(
         self: _RunnerAgent,
         conversation_id: str,
         run_id: str,
     ) -> None:
         """Handle CancelledError for a SubAgent runner."""
-        self._session_runner.runner_mark_cancelled(
+        await self._session_runner.runner_mark_cancelled(
             conversation_id=conversation_id,
             run_id=run_id,
         )
 
-    def _runner_mark_error(
+    async def _runner_mark_error(
         self: _RunnerAgent,
         conversation_id: str,
         run_id: str,
@@ -231,7 +231,7 @@ class SubAgentRunnerMixin:
         started_at: float,
     ) -> None:
         """Handle generic Exception for a SubAgent runner."""
-        self._session_runner.runner_mark_error(
+        await self._session_runner.runner_mark_error(
             conversation_id=conversation_id,
             run_id=run_id,
             exc=exc,

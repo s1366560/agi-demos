@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use agistack_core::ports::{CoreError, CoreResult, ToolHost};
+use agistack_core::ports::{CoreError, CoreResult, ToolDefinition, ToolHost};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::{json, Value};
@@ -27,8 +27,7 @@ const MAX_MCP_IDENTIFIER_BYTES: usize = 200;
 const MAX_SERVER_SLUG_BYTES: usize = 19;
 const MAX_TOOL_SLUG_BYTES: usize = 19;
 const TOOL_IDENTITY_DIGEST_HEX_BYTES: usize = 16;
-// Keep names portable to OpenAI-compatible function/tool schemas even though
-// the current core ToolHost port exposes names, not description/inputSchema.
+// Keep names portable to OpenAI-compatible function/tool schemas.
 const MAX_EXPOSED_TOOL_NAME_BYTES: usize = 64;
 
 #[derive(Clone)]
@@ -36,6 +35,7 @@ struct McpAgentTool {
     server_id: String,
     server_name: String,
     tool_name: String,
+    definition: ToolDefinition,
     metadata: ToolMetadata,
 }
 
@@ -98,6 +98,14 @@ impl McpAgentToolHost {
                         server_id: server.id.clone(),
                         server_name: server.name.clone(),
                         tool_name: tool_name.to_string(),
+                        definition: ToolDefinition {
+                            name: exposed_name.clone(),
+                            description: definition
+                                .get("description")
+                                .and_then(Value::as_str)
+                                .map(str::to_string),
+                            input_schema: definition.get("inputSchema").cloned(),
+                        },
                         metadata: ToolMetadata {
                             name: exposed_name,
                             effect: ToolEffect::Mutate,
@@ -153,6 +161,13 @@ impl McpAgentToolHost {
 
 #[async_trait]
 impl ToolHost for McpAgentToolHost {
+    fn tool_definition(&self, name: &str) -> Option<ToolDefinition> {
+        let mut definition = self.tool_by_exposed_name(name)?.definition.clone();
+        // Aliases share the discovered contract but retain their advertised identity.
+        definition.name = name.to_string();
+        Some(definition)
+    }
+
     fn list_tools(&self) -> Vec<String> {
         self.tools
             .keys()
@@ -374,6 +389,7 @@ mod tests {
                 server_id: server_id.to_string(),
                 server_name: server_name.to_string(),
                 tool_name: tool_name.to_string(),
+                definition: ToolDefinition::name_only(canonical.clone()),
                 metadata: ToolMetadata {
                     name: canonical.clone(),
                     effect: ToolEffect::Read,
@@ -409,6 +425,7 @@ mod tests {
                 server_id: "server-a".to_string(),
                 server_name: "Same".to_string(),
                 tool_name: "tool-a".to_string(),
+                definition: ToolDefinition::name_only(exposed_name.clone()),
                 metadata: ToolMetadata {
                     name: exposed_name.clone(),
                     effect: ToolEffect::Read,

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
 
 function source(relativePath) {
   const url = new URL(`../${relativePath}`, import.meta.url);
@@ -49,13 +52,37 @@ test('App owns one stable V2 session timeline generation operation port', () => 
   assert.doesNotMatch(app, /desktopSessionTimelineClientV2/u);
 });
 
-test('initial session timeline loading uses one session-scoped generation operation', () => {
+test('initial session timeline loading shares a scoped input across generation operations', async () => {
   const loader = callbackSource(app, 'loadConversationTimeline', 'loadEarlierTimeline');
-
-  assert.match(
-    loader,
-    /desktopSessionTimelineOperationsV2\.getConversationMessages\(\{[\s\S]*?config: \{[\s\S]*?\.\.\.requestConfig,[\s\S]*?projectId,[\s\S]*?\},[\s\S]*?conversation,[\s\S]*?limit: 50,[\s\S]*?\}\)/u
-  );
+  const conversation = { id: 'conversation', tenant_id: 'tenant', project_id: 'project', workspace_id: null };
+  const config = { mode: 'cloud', tenantId: 'tenant', projectId: 'old-project', apiBaseUrl: 'https://api.invalid' };
+  const calls = [];
+  let state = { items: [] };
+  const dependencies = {
+    useCallback: (fn) => fn,
+    configRef: { current: config }, timelineRequestRef: { current: 0 }, configScopeEpochRef: { current: 3 },
+    emptyConversationTimeline: { items: [] },
+    setConversationTimeline: (update) => { state = typeof update === 'function' ? update(state) : update; },
+    sessionTimelineRequestIsCurrent: (expected, current) => expected.requestId === current.requestId && expected.scopeEpoch === current.scopeEpoch,
+    desktopSessionTimelineOperationsV2: {
+      async getConversationMessages(input) { calls.push(['messages', input]); return { timeline: [{ id: 'persisted' }] }; },
+      async getConversationSubagentRuns(input) { calls.push(['trace', input]); throw new Error('trace offline'); },
+    },
+    replayArtifactCanvasEvents: () => ({}), artifactCanvasStateRef: { current: null }, setArtifactCanvasState: () => {},
+    mergeTimelineItems: (a, b) => [...a, ...b], mergeCloudSubagentTraceItems: (a, b) => [...a, ...b],
+    timelineCursorFromFirst: () => null, timelineCursorFromLast: () => null,
+    formatConnectionError: (error) => error.message,
+  };
+  const code = ts.transpileModule(`${loader}\nreturn loadConversationTimeline;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const execute = new Function(...Object.keys(dependencies), code)(...Object.values(dependencies));
+  await execute(conversation, 'project', config);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][1], calls[1][1], 'message and trace use the same captured scoped identity');
+  assert.deepEqual(calls[0][1], { config: { ...config, projectId: 'project' }, conversation, limit: 50 });
+  assert.equal(config.projectId, 'old-project', 'input capture must not mutate caller config');
+  assert.deepEqual(state.items, [{ id: 'persisted' }]);
+  assert.equal(state.error, null, 'trace failure cannot fail parent message history');
+  assert.equal(state.subagentTraceError, 'trace offline');
   assert.match(loader, /sessionTimelineRequestIsCurrent/u);
   assert.match(loader, /scopeEpoch: configScopeEpochRef\.current/u);
   assert.match(loader, /replayArtifactCanvasEvents\(responseItems\)/u);
@@ -84,7 +111,16 @@ test('session timeline authority owns only transport, identity and lease policy'
   assert.match(module, /DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2/u);
   assert.match(module, /createDesktopSessionTimelineOperationsV2/u);
   assert.match(module, /acquireServiceOperationLease/u);
-  assert.match(module, /kind: 'session'/u);
+  const scopeLiterals = [];
+  const moduleAst = ts.createSourceFile('authority.ts', module, ts.ScriptTarget.Latest, true);
+  const visit = (node) => {
+    if (ts.isPropertyAssignment(node) && node.name.getText(moduleAst) === 'kind' && ts.isStringLiteral(node.initializer)) {
+      scopeLiterals.push(node.initializer.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(moduleAst);
+  assert.ok(scopeLiterals.includes('session'), 'lease scope remains a structural session literal');
   assert.match(module, /getConversationMessages:/u);
   assert.doesNotMatch(module, forbiddenAuthorityPolicyPattern);
 });

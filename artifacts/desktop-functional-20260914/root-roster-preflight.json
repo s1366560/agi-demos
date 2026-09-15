@@ -1,0 +1,64 @@
+{
+  "checked_at_utc": "2026-09-14T02:56:33.147026+00:00",
+  "method": "repository reads in one PostgreSQL REPEATABLE READ READ ONLY transaction; rolled back",
+  "account_created": false,
+  "configuration_changed": false,
+  "publication_created": false,
+  "preflight_passed": true,
+  "checks": {
+    "latest_root_status_ready": true,
+    "latest_root_is_last_ready": true,
+    "latest_distribution_integrity_valid": true,
+    "last_ready_distribution_integrity_valid": true,
+    "current_desired_exists": true,
+    "latest_source_binding_exists": true,
+    "last_ready_source_binding_exists": true,
+    "current_desired_equals_latest_source_exactly": true,
+    "current_desired_equals_last_ready_source_exactly": true,
+    "entries_equal": true,
+    "manifests_equal": true,
+    "bundle_references_equal": true,
+    "profile_source_reference_equal": true
+  },
+  "latest_root": {
+    "publication_id": "806c8772-31f5-4e87-8b75-02c4d2d00f9d",
+    "profile_id": "memstack-default-v2",
+    "generation": 9,
+    "version": 9,
+    "digest": "aa157b9853071f5e4f2ad79e79ab60660864ddfd77392fe29e67f9f7918786e3",
+    "status": "ready",
+    "required_data_plane_ids": [
+      "python-api-v2"
+    ]
+  },
+  "last_ready_publication_id": "806c8772-31f5-4e87-8b75-02c4d2d00f9d",
+  "content": {
+    "entry_count": 439,
+    "manifest_count": 4,
+    "entries_sha256": "748773f36dd575e3ae939d9de9600d9e54204605bc913388935756416b1a5b88",
+    "manifests_sha256": "472bf74459ed92845dd87f879b7d60da6a5e8f782004ecade501768ab7f8698b"
+  },
+  "desired": {
+    "id": "memstack-default-v2",
+    "revision": 8,
+    "digest": "sha256:276fe3d8597e52b7528c6798674a83ce6d6a6ac6b8f3f778e56b778d2d2e74d4",
+    "profile_source": {
+      "source_id": "memstack-root-initialized-profile-source-v2",
+      "revision": 1,
+      "digest": "sha256:bd4cb197577b7c9d97d0690cadb942d94cd25c79d2ed9996b2597eb8a49f830b"
+    },
+    "bundle_refs": [
+      {
+        "bundle_id": "memstack-platform-base",
+        "version": "2.0.0",
+        "digest": "sha256:3fcf2b6ada27673580bb0039b975f9d26a08952f816d0973d923a257a27d15a8",
+        "source_sha256": "506b0a6d14f0202cbd2b77caa75153e2b20a9382550d0cfaf108486715a3b6c0"
+      }
+    ]
+  },
+  "limits": [
+    "Checks are a point-in-time snapshot; recheck heads after coordinated API restart before publication.",
+    "No artifact download or cryptographic signature re-verification was performed; publication recovery retains existing trusted bundle references.",
+    "No full entry configs, credentials, tokens, or passwords are included."
+  ]
+}

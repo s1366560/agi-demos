@@ -1,0 +1,16 @@
+{
+  "actual_wasm_score": 20260914,
+  "signed_archive_verified": true,
+  "wasm_sha256": "efc79f6a71ebe6d1a648a9fa448df29e4abf8a61b0d00dfa834ab19a85b78ddc",
+  "archive_sha256": "72c0cb07813e4b4b4cdc8077ab718f4ecb9059042fa0321ca5feeca11a65d7bc",
+  "negative_checks": {
+    "tampered_artifact": "bundle_artifact_size_mismatch",
+    "untrusted_signer": "bundle_signature_untrusted",
+    "permission_missing": "bundle_permission_not_approved",
+    "fuel_exhaustion": "trapped",
+    "current_production_loader": "missing_target_catalog"
+  },
+  "installed": false,
+  "native_acceptance": false,
+  "signing_private_key_persisted": false
+}

@@ -33,7 +33,7 @@ from .context_bridge import ContextBridge
 from .orphan_sweeper import OrphanSweeper
 from .process import SubAgentProcess
 from .spawn_validator import SpawnValidator
-from .state_tracker import StateTracker
+from .state_tracker import StateTracker, SubAgentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -213,21 +213,31 @@ class BackgroundExecutor:
             True if cancellation was successful.
         """
         task = self._tasks.get(execution_id)
-        if task and not task.done():
+        state = self._tracker.get_state(execution_id, conversation_id)
+        if task is None or task.done() or state is None:
+            return False
+        if not task.cancelling():
             task.cancel()
+        done, _pending = await asyncio.wait({task}, timeout=5)
+        if not done:
+            return False
+        # Usually the owning coroutine has already persisted and emitted its
+        # cancellation. A task cancelled before its first step cannot do so.
+        if state.status in {SubAgentStatus.PENDING, SubAgentStatus.RUNNING}:
             self._tracker.cancel(execution_id, conversation_id)
             await self._emit(
                 dict(
                     SubAgentKilledEvent(
-                        subagent_id="",
-                        subagent_name="",
+                        execution_id=execution_id,
+                        conversation_id=conversation_id,
+                        subagent_id=state.subagent_id,
+                        subagent_name=state.subagent_name,
                         kill_reason="Cancelled by user",
                     ).to_event_dict(),
                 ),
             )
-            logger.info(f"[BackgroundExecutor] Cancelled {execution_id}")
-            return True
-        return False
+        logger.info(f"[BackgroundExecutor] Cancelled {execution_id}")
+        return state.status is SubAgentStatus.CANCELLED
 
     def get_active(self, conversation_id: str) -> list[dict[str, Any]]:
         """Get active background executions for a conversation.
@@ -396,6 +406,8 @@ class BackgroundExecutor:
             await self._emit(
                 dict(
                     SubAgentKilledEvent(
+                        execution_id=execution_id,
+                        conversation_id=conversation_id,
                         subagent_id=subagent.id,
                         subagent_name=subagent.display_name,
                         kill_reason="Cancelled during background execution",
@@ -502,7 +514,8 @@ class BackgroundExecutor:
                     cancel_key = f"subagent:cancel:{eid}"
                     cancel_data_raw = await self._redis_client.get(cancel_key)
                     if cancel_data_raw is not None:
-                        task.cancel()
+                        if not await self.cancel(eid, state.conversation_id):
+                            continue
                         import json as _json
 
                         cancel_info = _json.loads(cancel_data_raw)
@@ -517,6 +530,8 @@ class BackgroundExecutor:
                         await self._emit(
                             dict(
                                 SubAgentKilledEvent(
+                                    execution_id=eid,
+                                    conversation_id=state.conversation_id,
                                     subagent_id=state.subagent_id,
                                     subagent_name=state.subagent_name,
                                     kill_reason=reason,
@@ -540,7 +555,8 @@ class BackgroundExecutor:
 
             elapsed = (now - state.started_at).total_seconds()
             if elapsed > self._timeout_seconds:
-                task.cancel()
+                if not await self.cancel(eid, state.conversation_id):
+                    continue
                 self._tracker.fail(
                     eid,
                     state.conversation_id,
@@ -551,6 +567,8 @@ class BackgroundExecutor:
                 await self._emit(
                     dict(
                         SubAgentKilledEvent(
+                            execution_id=eid,
+                            conversation_id=state.conversation_id,
                             subagent_id=state.subagent_id,
                             subagent_name=state.subagent_name,
                             kill_reason="orphan_sweep",

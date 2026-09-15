@@ -416,6 +416,7 @@ class LiteLLMClient(LLMClient):
         except Exception as e:
             logger.debug(f"Failed to estimate prompt tokens for {model}: {e}")
             return None
+
     @staticmethod
     def _estimate_message_chars(messages: list[dict[str, Any]]) -> int:
         """Estimate message size in characters for conservative fallback budgeting.
@@ -884,6 +885,11 @@ class LiteLLMClient(LLMClient):
 
         content = _get_attr(message, "content", "") or ""
         tool_calls = _get_attr(message, "tool_calls", None)
+        # LiteLLM returns Pydantic calls; the public generate contract is JSON.
+        tool_calls = [
+            call.model_dump(mode="json") if isinstance(call, BaseModel) else call
+            for call in (tool_calls or [])
+        ]
         finish_reason = _get_attr(choice, "finish_reason", None)
 
         result = {

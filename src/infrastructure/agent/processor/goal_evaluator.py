@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("agent_decision_audit")
 
 GOAL_COMPLETION_JUDGE_TOOL_V2 = "submit_goal_completion_judgment_v2"
+SUGGESTION_TIMEOUT_SECONDS = 5.0
 
 
 class TaskStateUnavailableError(RuntimeError):
@@ -120,6 +121,8 @@ class GoalEvaluator:
         messages: list[dict[str, Any]],
     ) -> GoalCheckResult:
         """Evaluate whether the current goal is complete."""
+        if self._runtime_context.get("effective_mode") == "plan":
+            return await self._evaluate_llm_goal(messages)
         workspace_result = await self._evaluate_workspace_goal()
         if workspace_result is not None:
             return workspace_result
@@ -142,13 +145,13 @@ class GoalEvaluator:
                     task_result,
                     messages,
                 )
-                if reconciled_result is not None:
-                    return reconciled_result
-                return task_result
+                return reconciled_result if reconciled_result is not None else task_result
         return await self._evaluate_llm_goal(messages)
 
     async def evaluate_task_completion_gate(self, session_id: str) -> GoalCheckResult | None:
         """Evaluate only persisted task state for a final completion gate."""
+        if self._runtime_context.get("effective_mode") == "plan":
+            return None
         workspace_result = await self._evaluate_workspace_goal()
         if workspace_result is not None:
             return workspace_result
@@ -206,11 +209,13 @@ class GoalEvaluator:
                 },
             ]
 
-            response = await self._llm_client.generate(
-                messages=suggestion_prompt,
-                temperature=0.7,
-                max_tokens=200,
-            )
+            # Suggestions are optional; provider stalls must not delay run settlement.
+            async with asyncio.timeout(SUGGESTION_TIMEOUT_SECONDS):
+                response = await self._llm_client.generate(
+                    messages=suggestion_prompt,
+                    temperature=0.7,
+                    max_tokens=200,
+                )
 
             content = response.get("content", "")
             suggestions = json.loads(content)
@@ -632,6 +637,7 @@ class GoalEvaluator:
     def _goal_judge_unavailable_result() -> GoalCheckResult:
         return GoalCheckResult(
             achieved=False,
+            should_stop=True,
             reason="Goal completion judge unavailable or invalid",
             source="agent_judge",
         )
@@ -640,74 +646,102 @@ class GoalEvaluator:
         """Require and audit one structured goal-completion judgment tool call."""
         input_json = {"context_summary": context_summary}
         started_at = time.perf_counter()
-        try:
-            response = await self._llm_client.generate(  # type: ignore[union-attr]
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a strict completion judge. Call "
-                            f"{GOAL_COMPLETION_JUDGE_TOOL_V2} exactly once. "
-                            "Use goal_achieved=true only when the user objective is fully "
-                            "satisfied. Do not return a prose or JSON verdict outside the tool call."
-                        ),
+        # Retry only this structured judge; never ask the main Agent to repair it.
+        max_tokens = 192
+        expanded_budget_used = False
+        for attempt in range(3):
+            # Keep two normal attempts. If the second one first reveals
+            # truncation, honor the one expanded attempt it requested.
+            if attempt == 2 and (max_tokens != 4096 or expanded_budget_used):
+                break
+            expanded_budget_used = expanded_budget_used or max_tokens == 4096
+            try:
+                response = await self._llm_client.generate(  # type: ignore[union-attr]
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a strict completion judge. Call "
+                                f"{GOAL_COMPLETION_JUDGE_TOOL_V2} exactly once. "
+                                "Use goal_achieved=true only when the user objective is fully "
+                                "satisfied. Do not return a prose or JSON verdict outside the tool call."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": json.dumps(input_json, ensure_ascii=False, sort_keys=True),
+                        },
+                    ],
+                    tools=[_goal_completion_judgment_tool_v2()],
+                    tool_choice={
+                        "type": "function",
+                        "function": {"name": GOAL_COMPLETION_JUDGE_TOOL_V2},
                     },
-                    {
-                        "role": "user",
-                        "content": json.dumps(input_json, ensure_ascii=False, sort_keys=True),
-                    },
-                ],
-                tools=[_goal_completion_judgment_tool_v2()],
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": GOAL_COMPLETION_JUDGE_TOOL_V2},
-                },
-                temperature=0.0,
-                max_tokens=192,
+                    temperature=0.0,
+                    max_tokens=max_tokens,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[GoalEvaluator] Structured goal judgment failed with %s",
+                    type(exc).__name__,
+                )
+                continue
+            if not isinstance(response, Mapping):
+                logger.warning(
+                    "[GoalEvaluator] Structured goal judgment returned an invalid envelope"
+                )
+                continue
+            # Reasoning-capable providers may exhaust the compact budget before
+            # emitting the forced call. Only an explicit truncation signal permits
+            # one larger, bounded retry; the structured verdict remains mandatory.
+            if response.get("finish_reason") == "length":
+                max_tokens = 4096
+            output_json = _extract_goal_judgment_tool_call_v2(response)
+            if output_json is None:
+                logger.warning(
+                    "[GoalEvaluator] Structured goal judgment omitted the required tool call "
+                    "(finish_reason=%s, tool_calls=%d)",
+                    response.get("finish_reason")
+                    if isinstance(response.get("finish_reason"), str)
+                    and response.get("finish_reason")
+                    in {"stop", "length", "tool_calls", "content_filter"}
+                    else "other",
+                    len(_object_list(response.get("tool_calls"))),
+                )
+                continue
+            if set(output_json) != {"goal_achieved", "rationale"}:
+                logger.warning(
+                    "[GoalEvaluator] Structured goal judgment returned invalid arguments"
+                )
+                continue
+            achieved = output_json.get("goal_achieved")
+            rationale = output_json.get("rationale")
+            if (
+                not isinstance(achieved, bool)
+                or not isinstance(rationale, str)
+                or not rationale.strip()
+            ):
+                logger.warning(
+                    "[GoalEvaluator] Structured goal judgment returned invalid arguments"
+                )
+                continue
+            normalized_output = {
+                "goal_achieved": achieved,
+                "rationale": rationale.strip(),
+            }
+            audit = GoalJudgmentAuditV2(
+                agent_id=self._goal_judge_agent_id(),
+                tool_name=GOAL_COMPLETION_JUDGE_TOOL_V2,
+                input_json=input_json,
+                output_json=normalized_output,
+                rationale=rationale.strip(),
+                latency_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
             )
-        except Exception as exc:
-            logger.warning(
-                "[GoalEvaluator] Structured goal judgment failed with %s",
-                type(exc).__name__,
-            )
-            return None
-        if not isinstance(response, Mapping):
-            logger.warning("[GoalEvaluator] Structured goal judgment returned an invalid envelope")
-            return None
-        output_json = _extract_goal_judgment_tool_call_v2(response)
-        if output_json is None:
-            logger.warning(
-                "[GoalEvaluator] Structured goal judgment omitted the required tool call"
-            )
-            return None
-        if set(output_json) != {"goal_achieved", "rationale"}:
-            logger.warning("[GoalEvaluator] Structured goal judgment returned invalid arguments")
-            return None
-        achieved = output_json.get("goal_achieved")
-        rationale = output_json.get("rationale")
-        if (
-            not isinstance(achieved, bool)
-            or not isinstance(rationale, str)
-            or not rationale.strip()
-        ):
-            logger.warning("[GoalEvaluator] Structured goal judgment returned invalid arguments")
-            return None
-        normalized_output = {
-            "goal_achieved": achieved,
-            "rationale": rationale.strip(),
-        }
-        audit = GoalJudgmentAuditV2(
-            agent_id=self._goal_judge_agent_id(),
-            tool_name=GOAL_COMPLETION_JUDGE_TOOL_V2,
-            input_json=input_json,
-            output_json=normalized_output,
-            rationale=rationale.strip(),
-            latency_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
-        )
-        audit_result = self._audit_sink(audit)
-        if inspect.isawaitable(audit_result):
-            await audit_result
-        return _GoalJudgmentV2(achieved=achieved, rationale=rationale.strip())
+            audit_result = self._audit_sink(audit)
+            if inspect.isawaitable(audit_result):
+                await audit_result
+            return _GoalJudgmentV2(achieved=achieved, rationale=rationale.strip())
+        return None
 
     def _goal_judge_agent_id(self) -> str:
         selected_agent_id = str(self._runtime_context.get("selected_agent_id", "")).strip()
@@ -755,6 +789,12 @@ class GoalEvaluator:
     def _build_goal_check_context(self, messages: list[dict[str, Any]]) -> str:
         """Build a compact context summary for the structured goal judge."""
         summary_lines: list[str] = []
+        if self._runtime_context.get("effective_mode") == "plan":
+            summary_lines.append(
+                "Plan mode is active. Judge whether the requested planning and analysis "
+                "are complete and ready for user approval. Execution tasks remain pending "
+                "until approval; do not require their execution or completed statuses."
+            )
         recent_messages = messages[-8:] if len(messages) > 8 else messages
         for msg in recent_messages:
             role = str(msg.get("role", "unknown"))

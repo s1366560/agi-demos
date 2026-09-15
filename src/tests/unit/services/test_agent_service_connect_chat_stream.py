@@ -15,7 +15,6 @@ import pytest
 
 from src.application.services.agent_service import AgentService, stream_start_id_from_cursor
 from src.domain.model.agent import ToolExecutionRecord
-from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 
 
 class _TestAgentService(AgentService):
@@ -269,7 +268,7 @@ async def test_connect_chat_stream_keeps_higher_cursor_than_replay() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_connect_chat_stream_persists_live_tool_execution_records() -> None:
+async def test_connect_chat_stream_is_read_only_for_tool_execution_records() -> None:
     tool_record_repo = _InMemoryToolExecutionRecordRepo()
     service = _build_service(tool_record_repo)
 
@@ -329,85 +328,7 @@ async def test_connect_chat_stream_persists_live_tool_execution_records() -> Non
         events.append(event)
 
     assert [event["type"] for event in events] == ["act", "observe", "complete"]
-    record = tool_record_repo.records["ter-1"]
-    assert record.conversation_id == "conv-1"
-    assert record.message_id == "m1"
-    assert record.call_id == "call-1"
-    assert record.tool_name == "bash"
-    assert record.tool_input == {"command": "git status"}
-    assert record.status == ToolExecutionStatus.SUCCESS
-    assert record.tool_output == '{"exit_code": 0, "output": "clean"}'
-    assert record.started_at == datetime.fromtimestamp(1, UTC)
-    assert record.completed_at == datetime.fromtimestamp(1.2, UTC)
-    assert record.duration_ms == 25
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_tool_execution_event_marks_failed_observations() -> None:
-    tool_record_repo = _InMemoryToolExecutionRecordRepo()
-    service = _build_service(tool_record_repo)
-
-    await service._persist_tool_execution_event(
-        conversation_id="conv-1",
-        message_id="m1",
-        event_type="observe",
-        event_data={
-            "tool_execution_id": "ter-failed",
-            "call_id": "call-failed",
-            "tool_name": "bash",
-            "error": "command failed",
-            "duration_ms": "12",
-            "status": "failed",
-        },
-        event_time_us=2_000_000,
-        event_counter=5,
-    )
-
-    record = tool_record_repo.records["ter-failed"]
-    assert record.status == ToolExecutionStatus.FAILED
-    assert record.error == "command failed"
-    assert record.completed_at == datetime.fromtimestamp(2, UTC)
-    assert record.duration_ms == 12
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_tool_execution_event_strips_nul_bytes() -> None:
-    tool_record_repo = _InMemoryToolExecutionRecordRepo()
-    service = _build_service(tool_record_repo)
-
-    await service._persist_tool_execution_event(
-        conversation_id="conv-1",
-        message_id="m1",
-        event_type="act",
-        event_data={
-            "tool_execution_id": "ter-binary",
-            "call_id": "call-binary",
-            "tool_name": "bash",
-            "tool_input": {"command": "printf '\\0'", "nested": ["a\x00b"]},
-        },
-        event_time_us=2_000_000,
-        event_counter=5,
-    )
-    await service._persist_tool_execution_event(
-        conversation_id="conv-1",
-        message_id="m1",
-        event_type="observe",
-        event_data={
-            "tool_execution_id": "ter-binary",
-            "call_id": "call-binary",
-            "tool_name": "bash",
-            "result": "binary\x00payload",
-            "status": "success",
-        },
-        event_time_us=2_100_000,
-        event_counter=6,
-    )
-
-    record = tool_record_repo.records["ter-binary"]
-    assert record.tool_input == {"command": "printf '\\0'", "nested": ["ab"]}
-    assert record.tool_output == "binarypayload"
+    assert tool_record_repo.records == {}
 
 
 @pytest.mark.unit
@@ -820,3 +741,39 @@ async def test_invalidate_conv_cache_scans_and_deletes_in_batches() -> None:
     deleted = [key for call in redis.delete_calls for key in call]
     assert sorted(deleted) == ["conv_count:p1:all", "conv_list:p1:all:0:50"]
     assert all(len(call) <= 100 for call in redis.delete_calls)
+
+
+@pytest.mark.unit
+async def test_cancelled_event_ends_live_stream_and_drains_once() -> None:
+    service = _build_service()
+    service._read_delayed_events = AsyncMock(return_value=[])
+    closed = False
+
+    async def source(*_args, **_kwargs):
+        nonlocal closed
+        try:
+            yield {
+                "id": "1-0",
+                "data": {
+                    "type": "cancelled",
+                    "event_time_us": 10,
+                    "event_counter": 1,
+                    "data": {"message_id": "m1", "run_id": "r1"},
+                },
+            }
+            pytest.fail("cancelled must terminate the live subscription")
+        finally:
+            closed = True
+
+    service._event_bus.stream_read = source
+    events = [
+        event
+        async for event in service.connect_chat_stream(
+            conversation_id="c1",
+            message_id="m1",
+            replay_from_db=False,
+        )
+    ]
+    assert [event["type"] for event in events] == ["cancelled"]
+    assert closed
+    service._read_delayed_events.assert_awaited_once()

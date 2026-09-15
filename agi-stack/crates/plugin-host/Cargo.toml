@@ -17,7 +17,17 @@ sha2 = "0.10"
 serde_jcs = "0.1"
 thiserror.workspace = true
 
+[features]
+external-wasm-v2 = ["dep:wasmtime"]
+
 [dev-dependencies]
+wat = "1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+base64 = "0.22"
+ring = "0.17.14"
+zip = { version = "4.6.1", default-features = false, features = ["deflate"] }
+wasmtime = { version = "46", optional = true, default-features = false, features = ["cranelift", "runtime", "std"] }
 
 # wasm32 (browser) needs the getrandom `wasm_js` backend feature enabled to
 # satisfy rhai/ahash's `runtime-rng` at runtime (browser has Web Crypto). Paired

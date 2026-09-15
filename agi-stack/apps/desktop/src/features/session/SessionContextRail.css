@@ -2,29 +2,29 @@
    verbatim from SessionWorkspace.css; the rail width is owned by the right
    sidebar host now. */
 
+/* prototype mission-control refactor 2026-09 (phase 5a): the rail adopts the
+   prototype's flat section anatomy — hairline-separated sections on the panel
+   background instead of a wrapped card, 8px eyebrows, dense 9-11px rows. */
+
 .session-context-rail {
   position: relative;
   min-width: 0;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 12px 12px 16px 10px;
+  padding: 12px 14px 20px;
   scrollbar-width: thin;
 }
 
 .session-context-card {
   display: grid;
   min-width: 0;
-  padding: 6px 14px 8px;
-  background: var(--desktop-surface-6);
-  border: 1px solid var(--desktop-border-soft);
-  border-radius: 16px;
 }
 
 .session-context-section {
   display: grid;
-  gap: 3px;
-  padding: 11px 0 10px;
+  gap: 9px;
+  padding: 13px 2px;
   border-bottom: 1px solid var(--desktop-border-soft);
 }
 
@@ -33,16 +33,101 @@
   border-bottom: 0;
 }
 
+.session-context-section > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-context-section h2 {
+  margin: 0;
+  color: var(--desktop-text-pale);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.session-context-section > header > em {
+  color: var(--cyan-9);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.session-context-section > header > small {
+  max-width: 124px;
+  color: var(--desktop-faint);
+  font-size: 8px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.session-context-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.session-context-progress > span {
+  overflow: hidden;
+  height: 4px;
+  background: var(--desktop-surface-14);
+  border-radius: 99px;
+}
+
+.session-context-progress > span i {
+  display: block;
+  height: 100%;
+  background: var(--cyan-9);
+  border-radius: inherit;
+}
+
+.session-context-progress > b {
+  color: var(--cyan-10);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.session-context-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.session-context-facts > div {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.session-context-facts dt {
+  color: var(--desktop-faint);
+  font-size: 9px;
+}
+
+.session-context-facts dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--desktop-text-pale);
+  font-size: 10px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-context-attention {
   --context-tone: var(--amber-9);
   display: grid;
   gap: 9px;
-  margin-bottom: 10px;
-  padding: 11px;
+  margin-bottom: 4px;
+  padding: 12px;
   color: var(--context-tone);
   background: color-mix(in srgb, var(--context-tone) 8%, var(--desktop-surface-12));
   border: 1px solid color-mix(in srgb, var(--context-tone) 30%, var(--desktop-border-soft));
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .session-context-attention.tone-danger { --context-tone: var(--red-9); }
@@ -56,7 +141,15 @@
 }
 
 .session-context-attention header svg { width: 13px; height: 13px; }
-.session-context-attention header strong { color: var(--desktop-text); font-size: 10px; }
+
+.session-context-attention header strong {
+  color: var(--context-tone);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .session-context-attention p {
   margin: 0;
   color: var(--desktop-muted);
@@ -88,12 +181,98 @@
 }
 .session-context-feedback > div { display: flex; justify-content: flex-end; gap: 5px; }
 
-.session-context-section h2 {
-  margin: 0 0 4px;
+.session-context-surfaces-list {
+  display: grid;
+}
+
+.session-context-surfaces-list > button {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 46px;
+  gap: 8px;
+  padding: 6px 4px;
   color: var(--desktop-faint);
-  font-size: 11px;
-  font-weight: 550;
-  letter-spacing: 0.01em;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--desktop-border-soft);
+  border-radius: 0;
+}
+
+.session-context-surfaces-list > button:first-child { border-top: 0; }
+
+.session-context-surfaces-list > button:hover,
+.session-context-surfaces-list > button:focus-visible {
+  color: var(--cyan-9);
+  outline: none;
+}
+
+.session-context-surfaces-list > button > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.session-context-surfaces-list > button > svg:last-child {
+  width: 11px;
+  height: 11px;
+  justify-self: end;
+}
+
+.session-context-surfaces-list button > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.session-context-surfaces-list button b {
+  overflow: hidden;
+  color: var(--desktop-text-pale);
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-surfaces-list button small {
+  overflow: hidden;
+  color: var(--desktop-faint);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-evidence-summary {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.session-context-evidence-summary > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--green-9);
+}
+
+.session-context-evidence-summary > span {
+  display: grid;
+  gap: 3px;
+}
+
+.session-context-evidence-summary b {
+  color: var(--desktop-text-pale);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.session-context-evidence-summary small {
+  color: var(--desktop-faint);
+  font-size: 8px;
+  line-height: 1.4;
 }
 
 .session-context-rows {
@@ -107,14 +286,14 @@
 .session-context-rows > li {
   display: flex;
   min-width: 0;
-  min-height: 30px;
+  min-height: 26px;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
 }
 
 .session-context-rows svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   flex: none;
   color: var(--desktop-muted);
 }
@@ -122,7 +301,7 @@
 .session-context-rows span {
   overflow: hidden;
   color: var(--desktop-text-pale);
-  font-size: 12px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -132,64 +311,8 @@
   margin-left: auto;
   padding-left: 8px;
   color: var(--desktop-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-context-surfaces { gap: 1px; }
-.session-context-surfaces h2 { margin-bottom: 4px; }
-.session-context-surfaces > button {
-  display: flex;
-  width: calc(100% + 12px);
-  min-height: 32px;
-  align-items: center;
-  gap: 9px;
-  margin: 0 -6px;
-  padding: 0 6px;
-  color: var(--desktop-faint);
-  font: inherit;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 7px;
-}
-
-.session-context-surfaces > button:hover,
-.session-context-surfaces > button:focus-visible {
-  color: var(--desktop-muted);
-  background: var(--desktop-surface-14);
-  outline: none;
-}
-
-.session-context-surfaces > button > svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-}
-
-.session-context-surfaces > button > svg:last-child {
-  width: 12px;
-  height: 12px;
-  color: var(--desktop-faint);
-}
-
-.session-context-surfaces strong {
-  overflow: hidden;
-  color: var(--desktop-text-pale);
-  font-size: 12px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-context-surfaces small {
-  overflow: hidden;
-  margin-left: auto;
-  padding-left: 8px;
-  color: var(--desktop-faint);
-  font-size: 10.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

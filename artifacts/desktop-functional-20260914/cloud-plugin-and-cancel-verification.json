@@ -1,0 +1,294 @@
+{
+  "readiness": {
+    "publication_id": "e141b9d8-29fd-4503-9132-28eb1f4535f5",
+    "profile_id": "memstack-default-v2",
+    "generation": 13,
+    "requested_version": 13,
+    "snapshot_digest": "d6492e4a72d8d78df408d50f85c784cd4fb2c4d1134b617200ecc8f008127475",
+    "nonce": "c578f902-c3e6-4ecd-86ec-75f7b2f8d601",
+    "republished_from_nonce": null,
+    "required_data_plane_ids": [
+      "python-api-v2",
+      "desktop-sidecar-v2",
+      "desktop-renderer-v2"
+    ],
+    "ack_deadline_at": "2026-09-14 04:32:46.349699+00:00",
+    "status": "ready",
+    "ready_at": "2026-09-14 04:30:58.996704+00:00",
+    "data_planes": [
+      {
+        "data_plane_id": "python-api-v2",
+        "status": "ack",
+        "requested_version": 13,
+        "requested_digest": "d6492e4a72d8d78df408d50f85c784cd4fb2c4d1134b617200ecc8f008127475",
+        "applied_version": 13,
+        "applied_digest": "d6492e4a72d8d78df408d50f85c784cd4fb2c4d1134b617200ecc8f008127475",
+        "error_code": null,
+        "error_message": null
+      },
+      {
+        "data_plane_id": "desktop-sidecar-v2",
+        "status": "ack",
+        "requested_version": 13,
+        "requested_digest": "d6492e4a72d8d78df408d50f85c784cd4fb2c4d1134b617200ecc8f008127475",
+        "applied_version": 13,
+        "applied_digest": "d6492e4a72d8d78df408d50f85c784cd4fb2c4d1134b617200ecc8f008127475",
+        "error_code": null,
+        "error_message": null
+      },
+      {
+        "data_plane_id": "desktop-renderer-v2",
+        "status": "ack",
+        "requested_version": 13,
+        "requested_digest": "d6492e4a72d8d78df408d50f85c784cd4fb2c4d1134b617200ecc8f008127475",
+        "applied_version": 13,
+        "applied_digest": "d6492e4a72d8d78df408d50f85c784cd4fb2c4d1134b617200ecc8f008127475",
+        "error_code": null,
+        "error_message": null
+      }
+    ]
+  },
+  "plugin_run": {
+    "id": "d0c8501f-6d22-58f8-bd9a-78854339c463",
+    "status": "completed",
+    "revision": 1
+  },
+  "plugin_events": [
+    {
+      "type": "act",
+      "data": {
+        "tool_name": "todoread",
+        "tool_input": {},
+        "call_id": "call_01a09e2f61397f43875fd9de",
+        "status": "running",
+        "tool_execution_id": "exec_f5022b7e6533",
+        "agent_id": "builtin:all-access",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    },
+    {
+      "type": "observe",
+      "data": {
+        "tool_name": "todoread",
+        "result": "{\n  \"session_id\": \"6032f5fb-4941-549f-ae2f-b87e5b34fa3c\",\n  \"conversation_id\": \"6032f5fb-4941-549f-ae2f-b87e5b34fa3c\",\n  \"total_count\": 1,\n  \"update_instruction\": \"For todowrite action=update, set todo_id to the exact todos[].id value returned here. Do not use order_index, display order, or list positions.\",\n  \"todos\": [\n    {\n      \"id\": \"4bed865d-8760-4d5d-b6fd-502470974007\",\n      \"conversation_id\": \"6032f5fb-4941-549f-ae2f-b87e5b34fa3c\",\n      \"content\": \"\\u83b7\\u6279\\u51c6\\u540e\\u8c03\\u7528 qa_marketplace_marker \\u5de5\\u5177\\uff0cinput \\u4e3a \\\"\\u539f\\u751f\\u63d2\\u4ef6\\u6d4b\\u8bd5\\\"\\uff0c\\u9a8c\\u8bc1\\u8fd4\\u56de score \\u4e3a 20260914\\uff0c\\u7136\\u540e\\u56de\\u590d NATIVE_MARKETPLACE_OK\",\n      \"title\": \"\\u539f\\u751f\\u5e02\\u573a\\u63d2\\u4ef6\\u9a8c\\u6536\\u8c03\\u7528\",\n      \"description\": \"\\u7b49\\u5f85\\u7528\\u6237\\u6279\\u51c6\\u540e\\uff1a1) \\u8c03\\u7528 wasm__qa-marketplace-marker__qa_marketplace_marker\\uff0cinput=\\\"\\u539f\\u751f\\u63d2\\u4ef6\\u6d4b\\u8bd5\\\"\\uff1b2) \\u68c0\\u67e5\\u8fd4\\u56de\\u503c score == 20260914\\uff1b3) \\u56de\\u590d NATIVE_MARKETPLACE_OK\",\n      \"estimated_duration_seconds\": null,\n      \"started_at\": null,\n      \"completed_at\": null,\n      \"result_summary\": null,\n      \"evidence_refs\": [],\n      \"status\": \"pending\",\n      \"priority\": \"high\",\n      \"order_index\": 0,\n      \"created_at\": \"2026-09-14T04:22:42.086819+00:00\",\n      \"updated_at\": \"2026-09-14T04:22:42.086819+00:00\"\n    }\n  ]\n}",
+        "error": null,
+        "duration_ms": 2,
+        "call_id": "call_01a09e2f61397f43875fd9de",
+        "status": "completed",
+        "tool_execution_id": "exec_f5022b7e6533",
+        "ui_metadata": null,
+        "display": null,
+        "file_metadata": null,
+        "observation": "{\n  \"session_id\": \"6032f5fb-4941-549f-ae2f-b87e5b34fa3c\",\n  \"conversation_id\": \"6032f5fb-4941-549f-ae2f-b87e5b34fa3c\",\n  \"total_count\": 1,\n  \"update_instruction\": \"For todowrite action=update, set todo_id to the exact todos[].id value returned here. Do not use order_index, display order, or list positions.\",\n  \"todos\": [\n    {\n      \"id\": \"4bed865d-8760-4d5d-b6fd-502470974007\",\n      \"conversation_id\": \"6032f5fb-4941-549f-ae2f-b87e5b34fa3c\",\n      \"content\": \"\\u83b7\\u6279\\u51c6\\u540e\\u8c03\\u7528 qa_marketplace_marker \\u5de5\\u5177\\uff0cinput \\u4e3a \\\"\\u539f\\u751f\\u63d2\\u4ef6\\u6d4b\\u8bd5\\\"\\uff0c\\u9a8c\\u8bc1\\u8fd4\\u56de score \\u4e3a 20260914\\uff0c\\u7136\\u540e\\u56de\\u590d NATIVE_MARKETPLACE_OK\",\n      \"title\": \"\\u539f\\u751f\\u5e02\\u573a\\u63d2\\u4ef6\\u9a8c\\u6536\\u8c03\\u7528\",\n      \"description\": \"\\u7b49\\u5f85\\u7528\\u6237\\u6279\\u51c6\\u540e\\uff1a1) \\u8c03\\u7528 wasm__qa-marketplace-marker__qa_marketplace_marker\\uff0cinput=\\\"\\u539f\\u751f\\u63d2\\u4ef6\\u6d4b\\u8bd5\\\"\\uff1b2) \\u68c0\\u67e5\\u8fd4\\u56de\\u503c score == 20260914\\uff1b3) \\u56de\\u590d NATIVE_MARKETPLACE_OK\",\n      \"estimated_duration_seconds\": null,\n      \"started_at\": null,\n      \"completed_at\": null,\n      \"result_summary\": null,\n      \"evidence_refs\": [],\n      \"status\": \"pending\",\n      \"priority\": \"high\",\n      \"order_index\": 0,\n      \"created_at\": \"2026-09-14T04:22:42.086819+00:00\",\n      \"updated_at\": \"2026-09-14T04:22:42.086819+00:00\"\n    }\n  ]\n}",
+        "agent_id": "builtin:all-access",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    },
+    {
+      "type": "act",
+      "data": {
+        "tool_name": "todowrite",
+        "tool_input": {
+          "action": "update",
+          "todos": [
+            {
+              "id": "4bed865d-8760-4d5d-b6fd-502470974007",
+              "status": "in_progress"
+            }
+          ],
+          "todo_id": "4bed865d-8760-4d5d-b6fd-502470974007"
+        },
+        "call_id": "call_01a09e2f67fd7492819ca12e",
+        "status": "running",
+        "tool_execution_id": "exec_ca9933308a64",
+        "agent_id": "builtin:all-access",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    },
+    {
+      "type": "observe",
+      "data": {
+        "tool_name": "todowrite",
+        "result": "{\n  \"success\": true,\n  \"action\": \"update\",\n  \"todo_id\": \"4bed865d-8760-4d5d-b6fd-502470974007\",\n  \"message\": \"Updated task 4bed865d-8760-4d5d-b6fd-502470974007\"\n}",
+        "error": null,
+        "duration_ms": 13,
+        "call_id": "call_01a09e2f67fd7492819ca12e",
+        "status": "completed",
+        "tool_execution_id": "exec_ca9933308a64",
+        "ui_metadata": null,
+        "display": null,
+        "file_metadata": null,
+        "observation": "{\n  \"success\": true,\n  \"action\": \"update\",\n  \"todo_id\": \"4bed865d-8760-4d5d-b6fd-502470974007\",\n  \"message\": \"Updated task 4bed865d-8760-4d5d-b6fd-502470974007\"\n}",
+        "agent_id": "builtin:all-access",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    },
+    {
+      "type": "act",
+      "data": {
+        "tool_name": "wasm__qa-marketplace-marker__qa_marketplace_marker",
+        "tool_input": {
+          "input": "原生插件测试"
+        },
+        "call_id": "call_01a09e2f6ca87a308e2df0a4",
+        "status": "running",
+        "tool_execution_id": "exec_bdbdccc285dd",
+        "agent_id": "builtin:all-access",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    },
+    {
+      "type": "observe",
+      "data": {
+        "tool_name": "wasm__qa-marketplace-marker__qa_marketplace_marker",
+        "result": "{\"attribution\": {\"artifact_digest\": \"sha256:efc79f6a71ebe6d1a648a9fa448df29e4abf8a61b0d00dfa834ab19a85b78ddc\", \"artifact_source\": \"bundle://qa-marketplace-marker/artifacts/marker.wasm\", \"bundle_reference\": {\"bundle_id\": \"qa-marketplace-marker-bundle\", \"digest\": \"sha256:5690047548f07476e64db9b812514d7732d90fd4898f014634c1affef3637e18\", \"source\": \"marketplace://qa-marketplace-marker-bundle/1.0.0\", \"version\": \"1.0.0\"}, \"effect\": \"pure\", \"entry_id\": \"qa-marketplace-marker\", \"module_ref\": \"wasm://qa-marketplace-marker/score-v1\", \"permission\": \"tools.execute\", \"plugin_id\": \"qa-marketplace-marker\", \"plugin_version\": \"1.0.0\", \"tool_name\": \"wasm__qa-marketplace-marker__qa_marketplace_marker\"}, \"fuel_consumed\": 2, \"input_bytes\": 30, \"score\": 20260914, \"wall_time_ms\": 0}",
+        "error": null,
+        "duration_ms": 181,
+        "call_id": "call_01a09e2f6ca87a308e2df0a4",
+        "status": "completed",
+        "tool_execution_id": "exec_bdbdccc285dd",
+        "ui_metadata": null,
+        "display": null,
+        "file_metadata": null,
+        "observation": "{\"attribution\": {\"artifact_digest\": \"sha256:efc79f6a71ebe6d1a648a9fa448df29e4abf8a61b0d00dfa834ab19a85b78ddc\", \"artifact_source\": \"bundle://qa-marketplace-marker/artifacts/marker.wasm\", \"bundle_reference\": {\"bundle_id\": \"qa-marketplace-marker-bundle\", \"digest\": \"sha256:5690047548f07476e64db9b812514d7732d90fd4898f014634c1affef3637e18\", \"source\": \"marketplace://qa-marketplace-marker-bundle/1.0.0\", \"version\": \"1.0.0\"}, \"effect\": \"pure\", \"entry_id\": \"qa-marketplace-marker\", \"module_ref\": \"wasm://qa-marketplace-marker/score-v1\", \"permission\": \"tools.execute\", \"plugin_id\": \"qa-marketplace-marker\", \"plugin_version\": \"1.0.0\", \"tool_name\": \"wasm__qa-marketplace-marker__qa_marketplace_marker\"}, \"fuel_consumed\": 2, \"input_bytes\": 30, \"score\": 20260914, \"wall_time_ms\": 0}",
+        "agent_id": "builtin:all-access",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    },
+    {
+      "type": "act",
+      "data": {
+        "tool_name": "todowrite",
+        "tool_input": {
+          "action": "update",
+          "todos": [
+            {
+              "id": "4bed865d-8760-4d5d-b6fd-502470974007",
+              "status": "completed",
+              "result_summary": "调用 wasm__qa-marketplace-marker__qa_marketplace_marker(input=\"原生插件测试\")，返回 score=20260914，与期望值一致。",
+              "evidence_refs": [
+                "wasm__qa-marketplace-marker__qa_marketplace_marker 调用返回 score=20260914"
+              ]
+            }
+          ],
+          "todo_id": "4bed865d-8760-4d5d-b6fd-502470974007"
+        },
+        "call_id": "call_01a09e2f7433773298c334ca",
+        "status": "running",
+        "tool_execution_id": "exec_0be999413982",
+        "agent_id": "builtin:all-access",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    },
+    {
+      "type": "observe",
+      "data": {
+        "tool_name": "todowrite",
+        "result": "{\n  \"success\": true,\n  \"action\": \"update\",\n  \"todo_id\": \"4bed865d-8760-4d5d-b6fd-502470974007\",\n  \"message\": \"Updated task 4bed865d-8760-4d5d-b6fd-502470974007\"\n}",
+        "error": null,
+        "duration_ms": 10,
+        "call_id": "call_01a09e2f7433773298c334ca",
+        "status": "completed",
+        "tool_execution_id": "exec_0be999413982",
+        "ui_metadata": null,
+        "display": null,
+        "file_metadata": null,
+        "observation": "{\n  \"success\": true,\n  \"action\": \"update\",\n  \"todo_id\": \"4bed865d-8760-4d5d-b6fd-502470974007\",\n  \"message\": \"Updated task 4bed865d-8760-4d5d-b6fd-502470974007\"\n}",
+        "agent_id": "builtin:all-access",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    },
+    {
+      "type": "complete",
+      "data": {
+        "result": null,
+        "trace_url": null,
+        "content": "**证据：**\n- 工具：`wasm__qa-marketplace-marker__qa_marketplace_marker`\n- 输入：`\"原生插件测试\"`（UTF-8，30 bytes）\n- 返回 `score: 20260914` ✓ 与期望值一致\n- 插件来源：`marketplace://qa-marketplace-marker-bundle/1.0.0`，纯签名 WASM，无副作用\n\nNATIVE_MARKETPLACE_OK",
+        "execution_summary": {
+          "step_count": 5,
+          "artifact_count": 0,
+          "call_count": 5,
+          "total_cost": 0.00798105,
+          "total_cost_formatted": "$0.007981",
+          "total_tokens": {
+            "input": 50675,
+            "output": 633,
+            "reasoning": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "total": 51308
+          },
+          "tasks": {
+            "total": 1,
+            "completed": 1,
+            "pending": 0,
+            "in_progress": 0,
+            "failed": 0,
+            "cancelled": 0,
+            "other": 0,
+            "remaining": 0
+          },
+          "agent_loop": {
+            "loop_id": "builtin-react",
+            "plugin_id": "memstack-kernel",
+            "scope": "builtin"
+          }
+        },
+        "skill_used": null,
+        "subagent_used": null,
+        "subagent_result": null,
+        "orchestration_mode": null,
+        "subtask_count": null,
+        "step_count": null,
+        "session_id": null,
+        "route_id": null,
+        "trace_id": null,
+        "execution_id": null,
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 2,
+          "digest": "619b56e97534c1f0281989b135985001bc85d6f93d314a1eefeb699c0efd98fc"
+        }
+      }
+    }
+  ],
+  "native_cancel": {
+    "run_id": "90349e3f-7241-527a-a195-8159cf439c34",
+    "status": "cancelled",
+    "revision": 1,
+    "completed_at": "2026-09-14 04:33:01.672640+00:00",
+    "cancellation_receipt_present": false
+  }
+}

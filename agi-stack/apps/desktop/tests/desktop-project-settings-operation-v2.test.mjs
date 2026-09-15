@@ -351,7 +351,7 @@ test('HTTP projection keeps scope observation and Settings reads together', asyn
       assert.equal(init.credentials, 'omit');
       assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer settings-session');
       assert.doesNotMatch(JSON.stringify(init), /settings-launch/u);
-      assert.equal(new URL(input).search, '');
+      assert.equal(new URL(input).search, new URL(input).pathname === '/api/v1/projects/project-1' ? '?tenant_id=tenant-1' : '');
     }
     await assert.rejects(
       createDesktopProjectSettingsHttpAuthorityV2(

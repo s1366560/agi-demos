@@ -273,7 +273,9 @@ const myWorkItems: ProjectWorkItem[] = [
     66,
     'Runtime is using policy revision 7.',
     'Apply the runtime snapshot',
-    'code',
+    // prototype mission-control refactor 2026-09: work mode so the default
+    // (work-filtered) inbox screenshot shows a populated Running group
+    'work',
   ),
   workItem(
     'migration',
@@ -295,7 +297,20 @@ const myWorkItems: ProjectWorkItem[] = [
     100,
     'Plan v3 preserves task metadata and evidence.',
     'Review plan v3',
-    'code',
+    // prototype mission-control refactor 2026-09: work mode, mirrors the
+    // oracle's populated Ready-to-review grid
+    'work',
+  ),
+  workItem(
+    'digest',
+    'Draft the launch digest',
+    'ready_review',
+    'ready_review',
+    'review_result',
+    100,
+    'Decisions, risks, and metrics are ready for sign-off.',
+    'Review the digest draft',
+    'work',
   ),
 ];
 
@@ -347,6 +362,8 @@ function MissionControlQa() {
               if (section === 'my-work') setView('my-work');
               if (section === 'home') setView('home');
             }}
+            onOpenSearch={() => undefined}
+            onOpenFeatureDirectory={() => undefined}
             onToggleWorkspace={(targetWorkspaceId) =>
               setExpandedWorkspaceIds((current) => {
                 const next = new Set(current);

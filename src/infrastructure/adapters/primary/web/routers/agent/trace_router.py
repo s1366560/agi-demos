@@ -22,6 +22,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject as DBUserProject,
     UserTenant as DBUserTenant,
 )
+from src.infrastructure.agent.subagent.async_run_registry_v2 import registry_call_v2
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.subagent_run_registry_projection import (
     current_subagent_run_registry_v2,
@@ -242,7 +243,9 @@ async def get_project_active_run_count(
         )
         return ProjectActiveRunCountResponse(
             project_id=project_id,
-            active_count=registry.count_active_runs_for_conversations(conversation_ids),
+            active_count=await registry_call_v2(
+                registry, "count_active_runs_for_conversations", conversation_ids
+            ),
         )
     except HTTPException:
         raise
@@ -279,7 +282,9 @@ async def list_project_runs(
         conversation_ids = await _list_accessible_project_conversation_ids(
             db, current_user, project_id
         )
-        runs = registry.list_runs_for_conversations(
+        runs = await registry_call_v2(
+            registry,
+            "list_runs_for_conversations",
             conversation_ids,
             statuses=parse_statuses(status),
             limit=limit,
@@ -313,7 +318,9 @@ async def get_tenant_active_run_count(
         conversation_ids = await _list_accessible_tenant_conversation_ids(
             db, current_user, tenant_id
         )
-        count = registry.count_active_runs_for_conversations(conversation_ids)
+        count = await registry_call_v2(
+            registry, "count_active_runs_for_conversations", conversation_ids
+        )
 
         return TenantActiveRunCountResponse(
             tenant_id=tenant_id,
@@ -352,7 +359,9 @@ async def list_tenant_runs(
         conversation_ids = await _list_accessible_tenant_conversation_ids(
             db, current_user, tenant_id
         )
-        runs = registry.list_runs_for_conversations(
+        runs = await registry_call_v2(
+            registry,
+            "list_runs_for_conversations",
             conversation_ids,
             statuses=statuses,
             limit=limit,
@@ -385,10 +394,12 @@ async def get_active_run_count(
 
         if conversation_id:
             conversation = await _get_accessible_conversation(db, current_user, conversation_id)
-            count = registry.count_active_runs(conversation.id)
+            count = await registry_call_v2(registry, "count_active_runs", conversation.id)
         else:
             conversation_ids = await _list_user_conversation_ids(db, current_user)
-            count = registry.count_active_runs_for_conversations(conversation_ids)
+            count = await registry_call_v2(
+                registry, "count_active_runs_for_conversations", conversation_ids
+            )
 
         return ActiveRunCountResponse(
             active_count=count,
@@ -426,13 +437,17 @@ async def list_runs(
         statuses = parse_statuses(status)
         matching_runs: list[SubAgentRun]
         if trace_id:
-            matching_runs = registry.list_trace_runs(
+            matching_runs = await registry_call_v2(
+                registry,
+                "list_trace_runs",
                 conversation.id,
                 trace_id,
                 statuses=statuses,
             )
         else:
-            matching_runs = registry.list_runs(conversation.id, statuses=statuses)
+            matching_runs = await registry_call_v2(
+                registry, "list_runs", conversation.id, statuses=statuses
+            )
 
         runs = matching_runs[:limit] if limit is not None else matching_runs
 
@@ -470,7 +485,9 @@ async def get_trace_chain(
         conversation = await _get_accessible_conversation(db, current_user, conversation_id)
         registry = current_subagent_run_registry_v2()
 
-        matching_chain = registry.list_trace_runs(
+        matching_chain = await registry_call_v2(
+            registry,
+            "list_trace_runs",
             conversation.id,
             trace_id,
             reverse=False,
@@ -513,7 +530,9 @@ async def get_descendants(
         conversation = await _get_accessible_conversation(db, current_user, conversation_id)
         registry = current_subagent_run_registry_v2()
 
-        matching_descendants: list[SubAgentRun] = registry.list_descendant_runs(
+        matching_descendants: list[SubAgentRun] = await registry_call_v2(
+            registry,
+            "list_descendant_runs",
             conversation.id,
             run_id,
             include_terminal=include_terminal,
@@ -549,7 +568,7 @@ async def get_run(
         conversation = await _get_accessible_conversation(db, current_user, conversation_id)
         registry = current_subagent_run_registry_v2()
 
-        run = registry.get_run(conversation.id, run_id)
+        run = await registry_call_v2(registry, "get_run", conversation.id, run_id)
         if run is None:
             raise HTTPException(
                 status_code=404,

@@ -174,6 +174,10 @@ async def test_operation_contributions_merge_before_one_selection_and_preserve_s
             "required": ["value"],
         },
         execute=_execute_dynamic,
+        permission="workspace_task_write",
+        permission_resolver=lambda args: "conversation_progress"
+        if args.get("value") == "kept"
+        else "workspace_task_write",
     )
     await contribute_operation_tool_definitions_v2(
         operation=operation,
@@ -194,6 +198,9 @@ async def test_operation_contributions_merge_before_one_selection_and_preserve_s
     assert tuple(tool_set.tools) == ("base_tool", "dynamic_tool")
     dynamic_resolved = next(item for item in tool_set.definitions if item.name == "dynamic_tool")
     assert dynamic_resolved.parameters == dynamic.parameters
+    assert dynamic_resolved.permission_resolver is dynamic.permission_resolver
+    assert dynamic_resolved.permission_resolver({"value": "kept"}) == "conversation_progress"
+    assert dynamic_resolved.permission_resolver({"value": "changed"}) == "workspace_task_write"
     assert await dynamic_resolved.execute(value="kept") == "kept"
 
     await operation.dispose()

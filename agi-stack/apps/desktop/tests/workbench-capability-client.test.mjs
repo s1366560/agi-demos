@@ -2956,3 +2956,23 @@ test('unclassified aggregate branch rejection still rejects the entire snapshot'
     globalThis.fetch = originalFetch;
   }
 });
+
+test('pure Local startup never invokes the implicit Electron cloud broker', async () => {
+  const originalWindow = globalThis.window;
+  const originalFetch = globalThis.fetch;
+  const cloudRequests = [];
+  globalThis.window = { __MEMSTACK_DESKTOP__: { runtime: 'electron', core: { async invoke(command, input) {
+    if (command === 'cloud_request') cloudRequests.push(input);
+    throw new Error('trusted cloud session is unavailable');
+  } } } };
+  globalThis.fetch = async () => new Response(JSON.stringify({}), {headers:{'content-type':'application/json'}});
+  try {
+    const client = createWorkbenchCapabilityClient({getAutomationCapabilities: async()=>automationContract}, {
+      ...DEFAULT_CONFIG, mode:'local', apiBaseUrl:'http://127.0.0.1:4123',apiKey:'local-session',localApiToken:'launch-capability',tenantId:'tenant-1',projectId:'project-1',workspaceId:'',
+    });
+    const snapshot = await client.loadSnapshot();
+    assert.equal(snapshot.capabilities['project-playbooks'].availability, 'unavailable');
+    assert.equal(snapshot.capabilities['project-playbooks'].reason_code, 'local_project_playbooks_cloud_authority_unavailable');
+    assert.deepEqual(cloudRequests, []);
+  } finally {globalThis.window=originalWindow;globalThis.fetch=originalFetch;}
+});

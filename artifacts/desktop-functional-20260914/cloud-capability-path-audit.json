@@ -1,0 +1,553 @@
+{
+  "requests": [
+    {
+      "factory": "createDesktopProjectAgentDashboardHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectAgentDashboardHttpAuthorityV2",
+      "path": "/api/v1/agent/trace/runs/project/project-1?limit=8",
+      "method": "GET",
+      "verdict": "rejected",
+      "vaultResult": "cloud request endpoint is not allowed",
+      "vaultReads": 0
+    },
+    {
+      "factory": "createDesktopProjectAgentDashboardHttpAuthorityV2",
+      "path": "/api/v1/agent/trace/runs/project/project-1/active/count",
+      "method": "GET",
+      "verdict": "rejected",
+      "vaultResult": "cloud request endpoint is not allowed",
+      "vaultReads": 0
+    },
+    {
+      "factory": "createDesktopProjectAgentLogsHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectAgentLogsHttpAuthorityV2",
+      "path": "/api/v1/agent/trace/runs/project/project-1?limit=100",
+      "method": "GET",
+      "verdict": "rejected",
+      "vaultResult": "cloud request endpoint is not allowed",
+      "vaultReads": 0
+    },
+    {
+      "factory": "createDesktopProjectAgentPatternsHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectAgentPatternsHttpAuthorityV2",
+      "path": "/api/v1/agent/workflows/patterns/project/project-1?page=1&page_size=100",
+      "method": "GET",
+      "verdict": "rejected",
+      "vaultResult": "cloud request endpoint is not allowed",
+      "vaultReads": 0
+    },
+    {
+      "factory": "createDesktopProjectChannelsHttpProjectionV2",
+      "path": "/api/v1/channels/tenants/tenant-1/plugins/channel-catalog",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectChannelsHttpProjectionV2",
+      "path": "/api/v1/channels/projects/project-1/configs",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectCommunitiesHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectCommunitiesHttpAuthorityV2",
+      "path": "/api/v1/graph/communities/?tenant_id=tenant-1&project_id=project-1&limit=50&offset=0",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectEntitiesHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectEntitiesHttpAuthorityV2",
+      "path": "/api/v1/graph/entities/?tenant_id=tenant-1&project_id=project-1&limit=50&offset=0",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectEntitiesHttpAuthorityV2",
+      "path": "/api/v1/graph/entities/types?tenant_id=tenant-1&project_id=project-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectGraphHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectGraphHttpAuthorityV2",
+      "path": "/api/v1/graph/memory/graph?tenant_id=tenant-1&project_id=project-1&limit=1000",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectMaintenanceHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectMaintenanceHttpAuthorityV2",
+      "path": "/api/v1/auth/me",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectMaintenanceHttpAuthorityV2",
+      "path": "/api/v1/projects/project-1/members",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectMemoriesHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectMemoriesHttpAuthorityV2",
+      "path": "/api/v1/memories/?project_id=project-1&page=1&page_size=50",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectOverviewHttpAuthorityV2",
+      "path": "/api/v1/projects/project-1?tenant_id=tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectOverviewHttpAuthorityV2",
+      "path": "/api/v1/projects/project-1/stats",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectOverviewHttpAuthorityV2",
+      "path": "/api/v1/memories/?page=1&page_size=5&project_id=project-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectSchemaHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectSchemaHttpAuthorityV2",
+      "path": "/api/v1/auth/me",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectSchemaHttpAuthorityV2",
+      "path": "/api/v1/projects/project-1/members",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectSettingsHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectSettingsHttpAuthorityV2",
+      "path": "/api/v1/auth/me",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectSettingsHttpAuthorityV2",
+      "path": "/api/v1/projects/project-1/members",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectTeamHttpAuthorityV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectTeamHttpAuthorityV2",
+      "path": "/api/v1/auth/me",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopProjectTeamHttpAuthorityV2",
+      "path": "/api/v1/projects/project-1/members",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectTeamHttpAuthorityV2",
+      "path": "/api/v1/agent/definitions?include_total=true&limit=50&offset=0&tenant_id=tenant-1&project_id=project-1",
+      "method": "GET",
+      "verdict": "rejected",
+      "vaultResult": "cloud request endpoint is not allowed",
+      "vaultReads": 0
+    },
+    {
+      "factory": "createDesktopRuntimeClustersHttpAuthorityV2",
+      "path": "/api/v1/clusters/?page=1&page_size=1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopRuntimeInstancesHttpAuthorityV2",
+      "path": "/api/v1/instances/?page=1&page_size=1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopRuntimePoolHttpAuthorityV2",
+      "path": "/api/v1/admin/pool/status?scope=tenant&tenant_id=tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantAcpHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantAcpHttpProjectionV2",
+      "path": "/api/v1/acp/tenants/tenant-1/status",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantAcpHttpProjectionV2",
+      "path": "/api/v1/acp/tenants/tenant-1/runner-pools",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantAcpHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantAgentDefinitionsHttpProjectionV2",
+      "path": "/api/v1/agent/definitions?limit=100&enabled_only=false&project_id=project-1&tenant_id=tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantAuditHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantAuditHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/audit-logs?limit=20&offset=0",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantAuditHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/audit-logs/runtime-hooks/summary",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantBillingHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantBillingHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/billing",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantBillingHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/invoices",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantDecisionRecordsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantDecisionRecordsHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/trust/decision-records?workspace_id=workspace-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantDecisionRecordsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantEventsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantEventsHttpProjectionV2",
+      "path": "/api/v1/events?tenant_id=tenant-1&page=1&page_size=20",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantEventsHttpProjectionV2",
+      "path": "/api/v1/events/types?tenant_id=tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantEventsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantEvolutionHttpProjectionV2",
+      "path": "/api/v1/skills/evolution/overview?tenant_id=tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantEvolutionHttpProjectionV2",
+      "path": "/api/v1/skills/evolution/config?tenant_id=tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantGenesHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantGenesHttpProjectionV2",
+      "path": "/api/v1/genes/?tenant_id=tenant-1&page=1&page_size=20",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantGenesHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantGovernanceHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantGovernanceHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/members",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantOrganizationSettingsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantOrganizationSettingsHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantOrganizationSettingsHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/stats",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantOrganizationSettingsHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/registries",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantOrganizationSettingsHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/smtp-config",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantOrganizationSettingsHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/gene-policies",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantOrganizationSettingsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantPatternsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantPatternsHttpProjectionV2",
+      "path": "/api/v1/agent/workflows/patterns?tenant_id=tenant-1&page=1&page_size=50",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantPatternsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantSettingsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantSettingsHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantSettingsHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/stats",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantSettingsHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantSkillDefinitionsHttpProjectionV2",
+      "path": "/api/v1/skills/?limit=100&tenant_id=tenant-1&project_id=project-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantSubAgentDefinitionsHttpProjectionV2",
+      "path": "/api/v1/subagents/?limit=100&include_filesystem=true&project_id=project-1&tenant_id=tenant-1",
+      "method": "GET",
+      "verdict": "rejected",
+      "vaultResult": "cloud request endpoint is not allowed",
+      "vaultReads": 0
+    },
+    {
+      "factory": "createDesktopTenantTrustHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantTrustHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/trust/policies?workspace_id=workspace-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantWebhooksHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopTenantWebhooksHttpProjectionV2",
+      "path": "/api/v1/tenant-webhooks/tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantWebhooksHttpProjectionV2",
+      "path": "/api/v1/events/types?tenant_id=tenant-1",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopTenantWebhooksHttpProjectionV2",
+      "path": "/api/v1/workspace-context",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopUserProfileHttpProjectionV2",
+      "path": "/api/v1/auth/me",
+      "method": "GET",
+      "verdict": "core-policy"
+    },
+    {
+      "factory": "createDesktopWorkspaceAgentPolicyHttpProjectionV2",
+      "path": "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/agent-policy",
+      "method": "GET",
+      "verdict": "allowed"
+    },
+    {
+      "factory": "createDesktopProjectMcpAppsHttpProjectionV2.listMCPAppResources",
+      "path": "/api/v1/mcp/apps/resources/list",
+      "method": "POST",
+      "body": {
+        "project_id": "project-1"
+      },
+      "verdict": "rejected",
+      "vaultResult": "cloud request endpoint is not allowed",
+      "vaultReads": 0
+    }
+  ],
+  "unresolved": [
+    {
+      "factory": "createDesktopProjectPlaybooksReadHttpAuthorityV2",
+      "error": "broker.requestJson is not a function"
+    },
+    {
+      "factory": "createDesktopTenantTemplatesHttpProjectionV2",
+      "error": "Cannot read properties of undefined (reading 'pageSize')"
+    }
+  ]
+}

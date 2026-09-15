@@ -16,11 +16,12 @@
   text-align: center;
 }
 
+/* prototype mission-control refactor 2026-09: eyebrow tracking per oracle */
 .new-thread-heading .eyebrow {
   color: var(--accent-9, var(--desktop-cyan));
   font-size: 8px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
 }
 
 .new-thread-heading h1 {
@@ -92,12 +93,14 @@
   border-top: 1px solid var(--desktop-border-7);
 }
 
+/* prototype mission-control refactor 2026-09: tighter rhythm so the control
+   row fits on one line inside the 680px composer column */
 .composer-pickers {
   display: flex;
   flex: 1;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   overflow: visible;
 }
@@ -115,7 +118,7 @@
   align-items: center;
   gap: 5px;
   height: 27px;
-  padding: 0 10px;
+  padding: 0 9px;
   border: 0;
   background: transparent;
   color: var(--desktop-gray-12);
@@ -139,7 +142,7 @@
   align-items: center;
   gap: 5px;
   height: 27px;
-  padding: 0 8px;
+  padding: 0 7px;
   border: 1px solid var(--desktop-border-10);
   border-radius: 7px;
   background: transparent;
@@ -148,8 +151,10 @@
   white-space: nowrap;
 }
 
+/* prototype mission-control refactor 2026-09: tighter value truncation so the
+   control row stays on one line inside the 680px composer column */
 .picker-chip > b {
-  max-width: 156px;
+  max-width: 120px;
   overflow: hidden;
   color: var(--desktop-text-pale);
   font-weight: 650;
@@ -313,15 +318,44 @@
   background: var(--desktop-surface-14);
 }
 
+/* prototype mission-control refactor 2026-09: 6px dots with the oracle status
+   color mapping (ready green / running cyan pulse / input amber pulse) */
 .new-thread-recent .thread-status {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--desktop-gray-4);
+  background: var(--green-9);
 }
 
-.new-thread-recent .thread-status.active {
+.new-thread-recent .thread-status.active,
+.new-thread-recent .thread-status.running,
+.new-thread-recent .thread-status.planning {
   background: var(--desktop-cyan);
+  animation: new-thread-status-pulse 2s ease-in-out infinite;
+}
+
+.new-thread-recent .thread-status.input,
+.new-thread-recent .thread-status.needs_input,
+.new-thread-recent .thread-status.needs_approval {
+  background: var(--amber-9);
+  animation: new-thread-status-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes new-thread-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .new-thread-recent .thread-status {
+    animation: none;
+  }
 }
 
 .new-thread-recent b,

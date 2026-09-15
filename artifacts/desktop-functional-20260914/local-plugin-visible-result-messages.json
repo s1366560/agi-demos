@@ -1,0 +1,174 @@
+{
+  "approval_requests": [],
+  "artifact_deliveries": [],
+  "artifact_versions": [],
+  "conversationId": "local-conversation-e10403f4-b27d-4e2f-bf70-c891f2f47f10",
+  "first_counter": 12,
+  "first_time_us": 1789367493852499,
+  "has_more": false,
+  "last_counter": 16,
+  "last_time_us": 1789367498709991,
+  "timeline": [
+    {
+      "content": "插件结果展示验收：请实际调用当前工具目录中的 qa_marketplace_marker 对应签名插件，输入 NATIVE_PLUGIN_VISIBLE_RESULT，依据真实返回只回复 score 和 input_bytes。不要读写文件，不要调用子智能体，不要编造结果；本次只做这一次只读验证，不需要后续执行计划。",
+      "conversation_id": "local-conversation-e10403f4-b27d-4e2f-bf70-c891f2f47f10",
+      "counter": 12,
+      "data": {
+        "content": "插件结果展示验收：请实际调用当前工具目录中的 qa_marketplace_marker 对应签名插件，输入 NATIVE_PLUGIN_VISIBLE_RESULT，依据真实返回只回复 score 和 input_bytes。不要读写文件，不要调用子智能体，不要编造结果；本次只做这一次只读验证，不需要后续执行计划。",
+        "plugin_generation": {
+          "digest": "f240b585a438695ee3000982fb1b1d3efd04ca2a57a4e755915246e136124134",
+          "generation": 7,
+          "profile_id": "memstack-local-knowledge-acceptance-v2",
+          "publication_version": null,
+          "target": "desktop-sidecar"
+        },
+        "role": "user"
+      },
+      "eventCounter": 12,
+      "eventTimeUs": 1789367493852499,
+      "event_counter": 12,
+      "event_time_us": 1789367493852499,
+      "event_type": "user_message",
+      "id": "user_message-1789367493852499-12",
+      "message_id": "desktop-thread-cb32ba0e-ecf1-4f40-9a33-ff3e0d7d7413",
+      "payload": {
+        "plugin_generation": {
+          "digest": "f240b585a438695ee3000982fb1b1d3efd04ca2a57a4e755915246e136124134",
+          "generation": 7,
+          "profile_id": "memstack-local-knowledge-acceptance-v2",
+          "publication_version": null,
+          "target": "desktop-sidecar"
+        }
+      },
+      "role": "user",
+      "time_us": 1789367493852499,
+      "timestamp": 1789367493852,
+      "type": "user_message"
+    },
+    {
+      "conversation_id": "local-conversation-e10403f4-b27d-4e2f-bf70-c891f2f47f10",
+      "counter": 13,
+      "data": {
+        "display": {
+          "kind": "tool"
+        },
+        "round": 0,
+        "tool_input": "{\"input\":\"NATIVE_PLUGIN_VISIBLE_RESULT\"}",
+        "tool_name": "plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e"
+      },
+      "display": {
+        "kind": "tool"
+      },
+      "eventCounter": 13,
+      "eventTimeUs": 1789367496823984,
+      "event_counter": 13,
+      "event_time_us": 1789367496823984,
+      "event_type": "act",
+      "id": "act-1789367496823984-13",
+      "message_id": null,
+      "payload": {
+        "display": {
+          "kind": "tool"
+        },
+        "round": 0,
+        "tool_input": "{\"input\":\"NATIVE_PLUGIN_VISIBLE_RESULT\"}",
+        "tool_name": "plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e"
+      },
+      "round": 0,
+      "time_us": 1789367496823984,
+      "timestamp": 1789367496823,
+      "toolInput": "{\"input\":\"NATIVE_PLUGIN_VISIBLE_RESULT\"}",
+      "toolName": "plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e",
+      "type": "act"
+    },
+    {
+      "conversation_id": "local-conversation-e10403f4-b27d-4e2f-bf70-c891f2f47f10",
+      "counter": 14,
+      "data": {
+        "display": {
+          "kind": "tool"
+        },
+        "is_error": false,
+        "observation": "{\"input_bytes\":40,\"score\":20260914}",
+        "round": 0,
+        "tool_input": "{\"input\":\"NATIVE_PLUGIN_VISIBLE_RESULT\"}",
+        "tool_name": "plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e",
+        "tool_output": "{\"input_bytes\":40,\"score\":20260914}"
+      },
+      "display": {
+        "kind": "tool"
+      },
+      "eventCounter": 14,
+      "eventTimeUs": 1789367496961790,
+      "event_counter": 14,
+      "event_time_us": 1789367496961790,
+      "event_type": "observe",
+      "id": "observe-1789367496961790-14",
+      "isError": false,
+      "message_id": null,
+      "payload": {
+        "display": {
+          "kind": "tool"
+        },
+        "is_error": false,
+        "observation": "{\"input_bytes\":40,\"score\":20260914}",
+        "round": 0,
+        "tool_input": "{\"input\":\"NATIVE_PLUGIN_VISIBLE_RESULT\"}",
+        "tool_name": "plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e",
+        "tool_output": "{\"input_bytes\":40,\"score\":20260914}"
+      },
+      "round": 0,
+      "time_us": 1789367496961790,
+      "timestamp": 1789367496961,
+      "toolInput": "{\"input\":\"NATIVE_PLUGIN_VISIBLE_RESULT\"}",
+      "toolName": "plugin__b96e9e91893a6b27fc9aae3d7c35f19b74dece1e",
+      "toolOutput": "{\"input_bytes\":40,\"score\":20260914}",
+      "type": "observe"
+    },
+    {
+      "content": "score: 20260914\ninput_bytes: 40",
+      "conversation_id": "local-conversation-e10403f4-b27d-4e2f-bf70-c891f2f47f10",
+      "counter": 15,
+      "data": {
+        "content": "score: 20260914\ninput_bytes: 40",
+        "role": "assistant"
+      },
+      "eventCounter": 15,
+      "eventTimeUs": 1789367498707486,
+      "event_counter": 15,
+      "event_time_us": 1789367498707486,
+      "event_type": "assistant_message",
+      "id": "assistant_message-1789367498707486-15",
+      "message_id": "local-assistant-d3ef1623-5aec-4d22-98b9-ce50a693ee86",
+      "payload": {},
+      "role": "assistant",
+      "time_us": 1789367498707486,
+      "timestamp": 1789367498707,
+      "type": "assistant_message"
+    },
+    {
+      "conversation_id": "local-conversation-e10403f4-b27d-4e2f-bf70-c891f2f47f10",
+      "counter": 16,
+      "data": {
+        "success": true,
+        "summary": "score: 20260914\ninput_bytes: 40"
+      },
+      "eventCounter": 16,
+      "eventTimeUs": 1789367498709991,
+      "event_counter": 16,
+      "event_time_us": 1789367498709991,
+      "event_type": "complete",
+      "id": "complete-1789367498709991-16",
+      "message_id": "desktop-thread-cb32ba0e-ecf1-4f40-9a33-ff3e0d7d7413",
+      "payload": {
+        "success": true,
+        "summary": "score: 20260914\ninput_bytes: 40"
+      },
+      "time_us": 1789367498709991,
+      "timestamp": 1789367498709,
+      "type": "complete"
+    }
+  ],
+  "tool_invocations": [],
+  "total": 5
+}

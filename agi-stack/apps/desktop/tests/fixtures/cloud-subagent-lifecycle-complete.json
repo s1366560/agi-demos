@@ -1,0 +1,67 @@
+[
+  {
+    "type": "subagent_lifecycle",
+    "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+    "data": {
+      "type": "subagent_spawning",
+      "data": {
+        "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+        "subagent_name": "qa_owner_20260914",
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "model_override": null,
+        "thinking_override": null
+      },
+      "timestamp": "2026-09-14T16:03:48.230399",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef"
+    },
+    "timestamp": "2026-09-14T08:03:48.230432+00:00",
+    "event_id": "evt_a032c2fd6fad",
+    "lifecycle_sequence_id": "1789373028252-0"
+  },
+  {
+    "type": "subagent_lifecycle",
+    "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+    "data": {
+      "type": "subagent_spawned",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "subagent_name": "qa_owner_20260914",
+      "spawn_mode": "run",
+      "thread_requested": false,
+      "cleanup": "keep"
+    },
+    "timestamp": "2026-09-14T08:03:48.253189+00:00",
+    "event_id": "evt_6853b1bb7bfa",
+    "lifecycle_sequence_id": "1789373028269-0"
+  },
+  {
+    "type": "subagent_lifecycle",
+    "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+    "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+    "data": {
+      "type": "subagent_ended",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "run_id": "5405dc8f87be4d669bdcb2aa8d42dc99",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "subagent_name": "qa_owner_20260914",
+      "status": "completed",
+      "summary": "QA_OWNER_COMPLETED_20260914_OK",
+      "error": "",
+      "spawn_mode": "run",
+      "thread_requested": false,
+      "cleanup": "keep"
+    },
+    "timestamp": "2026-09-14T08:04:24.318828+00:00",
+    "event_id": "evt_995f8a7faec9",
+    "lifecycle_sequence_id": "1789373064366-0"
+  }
+]

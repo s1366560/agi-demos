@@ -1,0 +1,236 @@
+python3 scripts/dev_disk.py
+{
+  "mode": "dry-run",
+  "root": "/Users/tiejunsun/github/agi-demos",
+  "group": "rust-build",
+  "target": "all",
+  "allocated_bytes": 19408273408,
+  "process_check": "Cargo profile flock held; process scan supplements lock; stop non-Cargo writers",
+  "size_note": "allocated blocks deduplicate hardlinks; estimate excludes hardlinked files; APFS clones may reclaim less",
+  "candidates": [
+    {
+      "path": "agi-stack/target/debug/deps",
+      "action": "would-remove",
+      "allocated_bytes": 14677549056,
+      "reclaim_estimate_bytes": 14677549056,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "agi-stack/target/debug/build",
+      "action": "would-remove",
+      "allocated_bytes": 544456704,
+      "reclaim_estimate_bytes": 544456704,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "agi-stack/target/debug/.fingerprint",
+      "action": "would-remove",
+      "allocated_bytes": 50593792,
+      "reclaim_estimate_bytes": 50593792,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "agi-stack/target/debug/incremental",
+      "action": "would-remove",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "agi-stack/target/release/deps",
+      "action": "would-remove",
+      "allocated_bytes": 1051602944,
+      "reclaim_estimate_bytes": 1051602944,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "agi-stack/target/release/build",
+      "action": "would-remove",
+      "allocated_bytes": 98029568,
+      "reclaim_estimate_bytes": 98029568,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "agi-stack/target/release/.fingerprint",
+      "action": "would-remove",
+      "allocated_bytes": 7815168,
+      "reclaim_estimate_bytes": 7815168,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "agi-stack/target/release/incremental",
+      "action": "would-remove",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/target/debug/deps",
+      "action": "would-remove",
+      "allocated_bytes": 1829896192,
+      "reclaim_estimate_bytes": 1829896192,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/target/debug/build",
+      "action": "would-remove",
+      "allocated_bytes": 76615680,
+      "reclaim_estimate_bytes": 76615680,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/target/debug/.fingerprint",
+      "action": "would-remove",
+      "allocated_bytes": 7979008,
+      "reclaim_estimate_bytes": 7979008,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/target/debug/incremental",
+      "action": "would-remove",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/target/release/deps",
+      "action": "would-remove",
+      "allocated_bytes": 990937088,
+      "reclaim_estimate_bytes": 990937088,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/target/release/build",
+      "action": "would-remove",
+      "allocated_bytes": 64598016,
+      "reclaim_estimate_bytes": 64598016,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/target/release/.fingerprint",
+      "action": "would-remove",
+      "allocated_bytes": 8200192,
+      "reclaim_estimate_bytes": 8200192,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/target/release/incremental",
+      "action": "would-remove",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "third_party/avernet-bcs/target/debug/deps",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "third_party/avernet-bcs/target/debug/build",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "third_party/avernet-bcs/target/debug/.fingerprint",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "third_party/avernet-bcs/target/debug/incremental",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "third_party/avernet-bcs/target/release/deps",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "third_party/avernet-bcs/target/release/build",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "third_party/avernet-bcs/target/release/.fingerprint",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": "third_party/avernet-bcs/target/release/incremental",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/audit-target/debug/deps",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/audit-target/debug/build",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/audit-target/debug/.fingerprint",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/audit-target/debug/incremental",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/audit-target/release/deps",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/audit-target/release/build",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/audit-target/release/.fingerprint",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    },
+    {
+      "path": ".cache/avernet-bcs/audit-target/release/incremental",
+      "action": "missing",
+      "allocated_bytes": 0,
+      "reclaim_estimate_bytes": 0,
+      "hardlinked_files": 0
+    }
+  ]
+}

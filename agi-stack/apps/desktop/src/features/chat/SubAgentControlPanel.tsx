@@ -22,7 +22,7 @@ type SubAgentControlPanelProps = {
 
 type ControlAttempt = {
   fingerprint: string;
-  idempotencyKey: string;
+  command: SubAgentControlCommand;
 };
 
 let controlSequence = 0;
@@ -60,27 +60,29 @@ export function SubAgentControlPanel({
 
   const dispatch = async (action: 'steer' | 'kill_run') => {
     const normalizedInstruction = instruction.trim();
-    const fingerprint = `${action}\u0000${group.runId}\u0000${normalizedInstruction}`;
+    const fingerprint = `${action}\u0000${authority.conversationId}\u0000${group.runId}\u0000${normalizedInstruction}`;
     if (attemptRef.current?.fingerprint !== fingerprint) {
       attemptRef.current = {
         fingerprint,
-        idempotencyKey: createControlIdempotencyKey(action, group.runId),
+        command: {
+          action,
+          conversationId: authority.conversationId ?? '',
+          runId: group.runId,
+          expectedRunRevision: authority.cloudControls ? null : authority.authorityRevision,
+          ...(authority.cloudControls ? {
+            expectedControlRevision: authority.cloudControls.find((child) => child.runId === group.runId)?.controlRevision,
+          } : {}),
+          idempotencyKey: createControlIdempotencyKey(action, group.runId),
+          ...(action === 'steer' ? { instruction: normalizedInstruction } : { cascade: false }),
+        },
       };
     }
     setBusyAction(action);
     setNotice(null);
-    const receipt = await onControl({
-      action,
-      conversationId: authority.conversationId ?? '',
-      runId: group.runId,
-      expectedRunRevision: authority.authorityRevision ?? 0,
-      idempotencyKey: attemptRef.current.idempotencyKey,
-      ...(action === 'steer'
-        ? { instruction: normalizedInstruction }
-        : { cascade: false }),
-    });
+    const receipt = await onControl(attemptRef.current.command);
     setBusyAction(null);
     setNotice({ accepted: receipt.accepted, reasonCode: receipt.reasonCode });
+    if (receipt.reasonCode === 'cloud_child_control_http_409') attemptRef.current = null;
     if (receipt.accepted) {
       attemptRef.current = null;
       if (action === 'steer') setInstruction('');
@@ -88,6 +90,7 @@ export function SubAgentControlPanel({
     }
   };
 
+  const retryPending = attemptRef.current !== null && notice?.accepted === false;
   const canSteer = availability.allowedActions.includes('steer');
   const canKill = availability.allowedActions.includes('kill_run');
   return (
@@ -101,7 +104,7 @@ export function SubAgentControlPanel({
             aria-label={t('chat.subagentSteerInstruction')}
             placeholder={t('chat.subagentSteerPlaceholder')}
             value={instruction}
-            disabled={busyAction !== null}
+            disabled={busyAction !== null || retryPending}
             onChange={(event) => {
               setInstruction(event.currentTarget.value);
               attemptRef.current = null;
@@ -116,7 +119,7 @@ export function SubAgentControlPanel({
           >
             {busyAction === 'steer'
               ? t('chat.subagentSteering')
-              : t('chat.subagentSteer')}
+              : retryPending && attemptRef.current?.command.action === 'steer' ? t('common.retry') : t('chat.subagentSteer')}
           </Button>
         </div>
       ) : null}

@@ -166,7 +166,7 @@ async fn attached_subagent_selection_with_null_allowlist_remains_a_real_delegati
                 answer: CHILD_ANSWER.to_string(),
             }])),
             4,
-        )
+        ).await
         .expect("build SubAgent delegation host")
         .expect("attached SubAgent must expose delegation");
     assert_eq!(host.list_tools(), ["subagent"]);
@@ -245,8 +245,8 @@ async fn attached_subagent_selection_with_null_allowlist_remains_a_real_delegati
     assert!(!serialized_timeline.contains("result_digest"));
 }
 
-#[test]
-fn invalid_authorized_subagent_profile_is_reported_instead_of_silently_hidden() {
+#[tokio::test]
+async fn invalid_authorized_subagent_profile_is_reported_instead_of_silently_hidden() {
     let state = test_state("invalid-subagent-profile-secret");
     let (conversation, run) = seed_controlled_run(&state, "invalid-subagent-profile");
     state
@@ -290,7 +290,7 @@ fn invalid_authorized_subagent_profile_is_reported_instead_of_silently_hidden() 
             answer: "must not run".to_string(),
         }])),
         4,
-    ) {
+    ).await {
         Ok(_) => panic!("invalid authorized target must fail host construction"),
         Err(error) => error,
     };

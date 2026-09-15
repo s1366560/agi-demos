@@ -6556,7 +6556,7 @@
       },
       "contract_digest": "sha256:26aedc0c468d577213e4c2cc73fd323baa753cce5511ef7638fb91ff9e94bc19",
       "artifact": {
-        "digest": "sha256:2cfc295a210f8b9291e1e3036a4e7e1843e6c7abb8ecf300f5b66e753324560c",
+        "digest": "sha256:8ad6dfd2a43fb678c8ade0db79406646531d037037c6cc9e5c9ba6c6dbf70795",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_subagent_control_services.py"
       }
     },
@@ -6731,7 +6731,7 @@
       },
       "contract_digest": "sha256:68664cd7a56ddb25e75c2d55df30d89a86be1a07a67f3cb85e4f671310e2d3eb",
       "artifact": {
-        "digest": "sha256:d97e6c4f0a15f664153caf3c0e41c761d90ff3d3f67d4f60b598d8110f0a500f",
+        "digest": "sha256:3bfee6632acef53d8612ee7023d3c2ce20a1bc7e62debe18da8ffe92226c1eeb",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_turn_services.py"
       }
     },
@@ -6845,7 +6845,7 @@
       },
       "contract_digest": "sha256:c1a4c303223c4279469c2cffa142d3c8e216924b920b1d9b11bceabb4833a38c",
       "artifact": {
-        "digest": "sha256:d97e6c4f0a15f664153caf3c0e41c761d90ff3d3f67d4f60b598d8110f0a500f",
+        "digest": "sha256:3bfee6632acef53d8612ee7023d3c2ce20a1bc7e62debe18da8ffe92226c1eeb",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_turn_services.py"
       }
     },
@@ -7929,7 +7929,7 @@
       },
       "contract_digest": "sha256:568933aa717c88b00bafc3a2a482f47503aabcb930c5cd812acc202df73044b3",
       "artifact": {
-        "digest": "sha256:b239e3235054bf29359a999469c77f8e0e726ec46323f3f439d1dc5b84cd7199",
+        "digest": "sha256:0569b2cc125d6bf4371c521ee9b571cbcc84e50ec601c89251130bd03c936af2",
         "source": "repo+python://src/infrastructure/plugins/v2/subagent_run_registry_service.py"
       }
     },
@@ -7981,7 +7981,7 @@
       },
       "contract_digest": "sha256:1ebbc48941dde702b3e9c436d32ce2751b068751e844fdad19504c7630f8b61b",
       "artifact": {
-        "digest": "sha256:2a885eb80f53b0023a47a98561262f490be816d666df309e6a0dc55d4913f7b7",
+        "digest": "sha256:d94f980f7bf2aee3c6065366995d5bb9e84f97d8ae1d9a1e2d48270d28f90213",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_orchestration_runtime.py"
       }
     },
@@ -8020,7 +8020,7 @@
       },
       "contract_digest": "sha256:a86b36ff716fcadb1f9913e34ead253cdfcc9fe5cced9e756adb103126529833",
       "artifact": {
-        "digest": "sha256:e15757ee24b33d521c71bc5656f59a81616640737e4ef448df4ad10055896d55",
+        "digest": "sha256:0468eed0f951c12ba022ca6fd357abca0fa22261b82a92aaafca2d6e349100d1",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_agent_http_routes.py"
       }
     },
@@ -13480,7 +13480,7 @@
       },
       "contract_digest": "sha256:f82b7609f4092641c08a22dbe8e98e715ea65d0fafd03581fdc3ef4e569a772c",
       "artifact": {
-        "digest": "sha256:c0d94c3a7286108ab0aaa0018897d4c4e5468b40ee8b0bd6f3ee884d93af487e",
+        "digest": "sha256:d1cb6f9aa2c9c84c21972dc3fd5159bdeb30ee9f2918194420bf26300a042b51",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_runtime.py"
       }
     },

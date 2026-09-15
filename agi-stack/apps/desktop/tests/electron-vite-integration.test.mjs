@@ -89,7 +89,7 @@ test('electron-vite reuses the existing React renderer and isolates its output',
   assert.match(configSource, /root:\s*desktopRoot/);
   assert.match(configSource, /input:\s*resolve\(desktopRoot,\s*'index\.html'\)/);
   assert.match(configSource, /outDir:\s*resolve\(desktopRoot,\s*'out\/renderer'\)/);
-  assert.match(configSource, /plugins:\s*\[react\(\)\]/);
+  assert.match(configSource, /plugins:\s*\[rendererRootHotReload\(desktopRoot\), react\(\)\]/);
   assert.match(ciWorkflow, /node-version: '22'/);
   assert.match(ciWorkflow, /run: make desktop-bundle/);
   assert.match(ciWorkflow, /apps\/desktop\/release\/\*\.dmg/u);

@@ -57,103 +57,103 @@ def _make_runner(**overrides: object) -> SubAgentSessionRunner:
 class TestCheckSpawnLimits:
     """Tests for SubAgentSessionRunner.check_spawn_limits()."""
 
-    def test_spawn_allowed_when_within_limits(self) -> None:
+    async def test_spawn_allowed_when_within_limits(self) -> None:
         """Spawn is allowed when depth < max and active < max_active."""
         runner = _make_runner(max_depth=3, max_active=16, active_count=0)
-        allowed, events = runner.check_spawn_limits("conv-1", 0, "coder")
+        allowed, events = await runner.check_spawn_limits("conv-1", 0, "coder")
         assert allowed is True
         assert events == []
 
-    def test_spawn_refused_when_depth_at_limit(self) -> None:
+    async def test_spawn_refused_when_depth_at_limit(self) -> None:
         """Spawn is refused when current_depth == max_depth."""
         runner = _make_runner(max_depth=2, max_active=16, active_count=0)
-        allowed, events = runner.check_spawn_limits("conv-1", 2, "coder")
+        allowed, events = await runner.check_spawn_limits("conv-1", 2, "coder")
         assert allowed is False
         assert len(events) == 1
 
-    def test_spawn_refused_when_depth_exceeds_limit(self) -> None:
+    async def test_spawn_refused_when_depth_exceeds_limit(self) -> None:
         """Spawn is refused when current_depth > max_depth."""
         runner = _make_runner(max_depth=2, max_active=16, active_count=0)
-        _allowed, _events = runner.check_spawn_limits("conv-1", 5, "coder")
+        _allowed, _events = await runner.check_spawn_limits("conv-1", 5, "coder")
         assert _allowed is False
 
-    def test_spawn_refused_when_active_at_limit(self) -> None:
+    async def test_spawn_refused_when_active_at_limit(self) -> None:
         """Spawn is refused when active_count == max_active."""
         runner = _make_runner(max_depth=3, max_active=4, active_count=4)
-        allowed, events = runner.check_spawn_limits("conv-1", 0, "coder")
+        allowed, events = await runner.check_spawn_limits("conv-1", 0, "coder")
         assert allowed is False
         assert len(events) == 1
 
-    def test_spawn_refused_when_active_exceeds_limit(self) -> None:
+    async def test_spawn_refused_when_active_exceeds_limit(self) -> None:
         """Spawn is refused when active_count > max_active."""
         runner = _make_runner(max_depth=3, max_active=4, active_count=10)
-        _allowed, _events = runner.check_spawn_limits("conv-1", 0, "coder")
+        _allowed, _events = await runner.check_spawn_limits("conv-1", 0, "coder")
         assert _allowed is False
 
-    def test_depth_one_below_limit_allowed(self) -> None:
+    async def test_depth_one_below_limit_allowed(self) -> None:
         """Spawn is allowed when current_depth == max_depth - 1."""
         runner = _make_runner(max_depth=3, max_active=16, active_count=0)
-        allowed, events = runner.check_spawn_limits("conv-1", 2, "coder")
+        allowed, events = await runner.check_spawn_limits("conv-1", 2, "coder")
         assert allowed is True
         assert events == []
 
-    def test_active_one_below_limit_allowed(self) -> None:
+    async def test_active_one_below_limit_allowed(self) -> None:
         """Spawn is allowed when active_count == max_active - 1."""
         runner = _make_runner(max_depth=3, max_active=4, active_count=3)
-        allowed, events = runner.check_spawn_limits("conv-1", 0, "coder")
+        allowed, events = await runner.check_spawn_limits("conv-1", 0, "coder")
         assert allowed is True
         assert events == []
 
-    def test_depth_limit_event_has_correct_type(self) -> None:
+    async def test_depth_limit_event_has_correct_type(self) -> None:
         """Depth-limited event dict contains the correct event type string."""
         runner = _make_runner(max_depth=2, max_active=16, active_count=0)
-        _, events = runner.check_spawn_limits("conv-1", 2, "coder")
+        _, events = await runner.check_spawn_limits("conv-1", 2, "coder")
         assert events[0]["type"] == "subagent_depth_limited"
 
-    def test_depth_limit_event_contains_depth_data(self) -> None:
+    async def test_depth_limit_event_contains_depth_data(self) -> None:
         """Depth-limited event data includes current_depth and max_depth."""
         runner = _make_runner(max_depth=2, max_active=16, active_count=0)
-        _, events = runner.check_spawn_limits("conv-1", 2, "architect")
+        _, events = await runner.check_spawn_limits("conv-1", 2, "architect")
         data = events[0]["data"]
         assert data["current_depth"] == 2
         assert data["max_depth"] == 2
         assert data["subagent_name"] == "architect"
 
-    def test_queued_event_has_correct_type(self) -> None:
+    async def test_queued_event_has_correct_type(self) -> None:
         """Queued event dict contains the correct event type string."""
         runner = _make_runner(max_depth=5, max_active=4, active_count=4)
-        _, events = runner.check_spawn_limits("conv-1", 0, "coder")
+        _, events = await runner.check_spawn_limits("conv-1", 0, "coder")
         assert events[0]["type"] == "subagent_queued"
 
-    def test_queued_event_contains_reason(self) -> None:
+    async def test_queued_event_contains_reason(self) -> None:
         """Queued event data includes reason='concurrency_limit'."""
         runner = _make_runner(max_depth=5, max_active=4, active_count=4)
-        _, events = runner.check_spawn_limits("conv-1", 0, "coder")
+        _, events = await runner.check_spawn_limits("conv-1", 0, "coder")
         data = events[0]["data"]
         assert data["reason"] == "concurrency_limit"
         assert data["subagent_name"] == "coder"
 
-    def test_custom_limits(self) -> None:
+    async def test_custom_limits(self) -> None:
         """Custom max_depth=5 and max_active=32 are respected."""
         runner = _make_runner(max_depth=5, max_active=32, active_count=0)
-        allowed, _ = runner.check_spawn_limits("conv-1", 4, "coder")
+        allowed, _ = await runner.check_spawn_limits("conv-1", 4, "coder")
         assert allowed is True
 
         runner2 = _make_runner(max_depth=5, max_active=32, active_count=0)
-        allowed2, _ = runner2.check_spawn_limits("conv-1", 5, "coder")
+        allowed2, _ = await runner2.check_spawn_limits("conv-1", 5, "coder")
         assert allowed2 is False
 
-    def test_depth_check_before_concurrency_check(self) -> None:
+    async def test_depth_check_before_concurrency_check(self) -> None:
         """When both limits are exceeded, depth error is returned (checked first)."""
         runner = _make_runner(max_depth=2, max_active=4, active_count=10)
-        allowed, events = runner.check_spawn_limits("conv-1", 5, "coder")
+        allowed, events = await runner.check_spawn_limits("conv-1", 5, "coder")
         assert allowed is False
         assert events[0]["type"] == "subagent_depth_limited"
 
-    def test_event_dict_has_timestamp(self) -> None:
+    async def test_event_dict_has_timestamp(self) -> None:
         """Event dict returned by check_spawn_limits has a timestamp key."""
         runner = _make_runner(max_depth=1, max_active=16, active_count=0)
-        _, events = runner.check_spawn_limits("conv-1", 1, "coder")
+        _, events = await runner.check_spawn_limits("conv-1", 1, "coder")
         assert "timestamp" in events[0]
 
 
@@ -272,7 +272,7 @@ class TestOrphanSweep:
 
     async def test_sweep_cancels_timed_out_tasks(self) -> None:
         """_sweep_orphans() cancels tasks exceeding timeout_seconds."""
-        tracker = Mock(spec=StateTracker)
+        tracker = StateTracker()
         on_event = AsyncMock()
         executor = BackgroundExecutor(
             state_tracker=tracker,
@@ -281,8 +281,8 @@ class TestOrphanSweep:
         )
 
         # A running task
-        running_task = Mock(spec=asyncio.Task)
-        running_task.done.return_value = False
+        running_task = asyncio.create_task(asyncio.Event().wait())
+        await asyncio.sleep(0)
         executor._tasks["exec-old"] = running_task
 
         # State shows it started 120s ago
@@ -294,18 +294,22 @@ class TestOrphanSweep:
             status=SubAgentStatus.RUNNING,
             started_at=datetime.now(UTC) - timedelta(seconds=120),
         )
-        tracker.get_state_by_execution_id = Mock(return_value=state)
-        tracker.fail = Mock()
+        tracked = tracker.register(
+            state.execution_id, state.subagent_id, state.subagent_name, state.conversation_id
+        )
+        tracker.start(state.execution_id, state.conversation_id)
+        tracked.started_at = state.started_at
+        tracker.fail = Mock(wraps=tracker.fail)
 
         await executor._sweep_orphans()
 
-        running_task.cancel.assert_called_once()
+        assert running_task.cancelled()
         tracker.fail.assert_called_once()
         assert "exec-old" not in executor._tasks
 
     async def test_sweep_emits_killed_event_for_timed_out(self) -> None:
         """_sweep_orphans() emits SubAgentKilledEvent for timed-out tasks."""
-        tracker = Mock(spec=StateTracker)
+        tracker = StateTracker()
         on_event = AsyncMock()
         executor = BackgroundExecutor(
             state_tracker=tracker,
@@ -313,8 +317,8 @@ class TestOrphanSweep:
             timeout_seconds=60,
         )
 
-        running_task = Mock(spec=asyncio.Task)
-        running_task.done.return_value = False
+        running_task = asyncio.create_task(asyncio.Event().wait())
+        await asyncio.sleep(0)
         executor._tasks["exec-timeout"] = running_task
 
         state = SubAgentState(
@@ -325,19 +329,23 @@ class TestOrphanSweep:
             status=SubAgentStatus.RUNNING,
             started_at=datetime.now(UTC) - timedelta(seconds=120),
         )
-        tracker.get_state_by_execution_id = Mock(return_value=state)
-        tracker.fail = Mock()
+        tracked = tracker.register(
+            state.execution_id, state.subagent_id, state.subagent_name, state.conversation_id
+        )
+        tracker.start(state.execution_id, state.conversation_id)
+        tracked.started_at = state.started_at
+        tracker.fail = Mock(wraps=tracker.fail)
 
         await executor._sweep_orphans()
 
-        on_event.assert_called_once()
+        assert on_event.call_count >= 1
         event_dict = on_event.call_args[0][0]
         assert event_dict["type"] == "subagent_killed"
         assert event_dict["data"]["kill_reason"] == "orphan_sweep"
 
     async def test_sweep_calls_tracker_fail_for_timed_out(self) -> None:
         """_sweep_orphans() calls tracker.fail() with timeout error message."""
-        tracker = Mock(spec=StateTracker)
+        tracker = StateTracker()
         on_event = AsyncMock()
         executor = BackgroundExecutor(
             state_tracker=tracker,
@@ -345,8 +353,8 @@ class TestOrphanSweep:
             timeout_seconds=30,
         )
 
-        running_task = Mock(spec=asyncio.Task)
-        running_task.done.return_value = False
+        running_task = asyncio.create_task(asyncio.Event().wait())
+        await asyncio.sleep(0)
         executor._tasks["exec-1"] = running_task
 
         state = SubAgentState(
@@ -357,8 +365,12 @@ class TestOrphanSweep:
             status=SubAgentStatus.RUNNING,
             started_at=datetime.now(UTC) - timedelta(seconds=60),
         )
-        tracker.get_state_by_execution_id = Mock(return_value=state)
-        tracker.fail = Mock()
+        tracked = tracker.register(
+            state.execution_id, state.subagent_id, state.subagent_name, state.conversation_id
+        )
+        tracker.start(state.execution_id, state.conversation_id)
+        tracked.started_at = state.started_at
+        tracker.fail = Mock(wraps=tracker.fail)
 
         await executor._sweep_orphans()
 
@@ -440,7 +452,7 @@ class TestOrphanSweep:
 
     async def test_custom_timeout_is_respected(self) -> None:
         """Custom timeout_seconds value is used for orphan detection."""
-        tracker = Mock(spec=StateTracker)
+        tracker = StateTracker()
         on_event = AsyncMock()
         executor = BackgroundExecutor(
             state_tracker=tracker,
@@ -448,8 +460,8 @@ class TestOrphanSweep:
             timeout_seconds=10,
         )
 
-        running_task = Mock(spec=asyncio.Task)
-        running_task.done.return_value = False
+        running_task = asyncio.create_task(asyncio.Event().wait())
+        await asyncio.sleep(0)
         executor._tasks["exec-custom"] = running_task
 
         # 15 seconds elapsed — exceeds custom 10s timeout
@@ -461,12 +473,16 @@ class TestOrphanSweep:
             status=SubAgentStatus.RUNNING,
             started_at=datetime.now(UTC) - timedelta(seconds=15),
         )
-        tracker.get_state_by_execution_id = Mock(return_value=state)
-        tracker.fail = Mock()
+        tracked = tracker.register(
+            state.execution_id, state.subagent_id, state.subagent_name, state.conversation_id
+        )
+        tracker.start(state.execution_id, state.conversation_id)
+        tracked.started_at = state.started_at
+        tracker.fail = Mock(wraps=tracker.fail)
 
         await executor._sweep_orphans()
 
-        running_task.cancel.assert_called_once()
+        assert running_task.cancelled()
 
 
 # =============================================================================

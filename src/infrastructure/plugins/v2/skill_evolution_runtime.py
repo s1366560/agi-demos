@@ -130,12 +130,18 @@ class SkillEvolutionGenerationSchedulerV2:
     def _require_active(self) -> None:
         self.runtime.require_activated_generation(self.token)
 
+    def _require_capture(self, payload: Mapping[str, Any]) -> None:
+        from .skill_evolution_capture_admission_v2 import require_worker_skill_capture_v2
+
+        if self.token not in self.runtime._activated_tokens:
+            require_worker_skill_capture_v2(self, payload)
+
     async def record_tool_event(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        self._require_active()
+        self._require_capture(payload)
         return await self.runtime.record_tool_event(payload)
 
     async def capture_turn(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        self._require_active()
+        self._require_capture(payload)
         return await self.runtime.capture_turn(payload)
 
     def schedule_evolution(

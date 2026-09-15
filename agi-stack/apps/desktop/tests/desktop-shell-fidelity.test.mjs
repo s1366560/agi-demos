@@ -878,8 +878,9 @@ test('session chrome never renders raw placeholder or mislabeled copy', () => {
     /viewModel\.workspaceLabel \?\? t\('session\.notAvailable'\)/,
   );
   // The run snapshot labels the execution-mode row as a mode, not as the stage.
-  // (The snapshot rows moved to SessionContextRail with the rail migration.)
-  assert.match(contextRailSource, /<span>\{t\('session\.runMode'\)\}<\/span>/);
+  // (The snapshot rows moved to SessionContextRail with the rail migration;
+  // prototype mission-control refactor 2026-09: snapshot rows are now <dt>/<dd>.)
+  assert.match(contextRailSource, /<dt>\{t\('session\.runMode'\)\}<\/dt>/);
   assert.doesNotMatch(contextRailSource, /<span>\{t\('session\.currentStage'\)\}<\/span>/);
   // An untitled session falls back to localized copy instead of a hardcoded English literal.
   assert.match(sessionWorkspaceSource, /viewModel\.title \|\| t\('session\.untitled'\)/);

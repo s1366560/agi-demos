@@ -45,6 +45,7 @@ export function HitlResponseCard({
   canRespond,
   a2uiActionView,
   approvalRequest,
+  approvalAuthorityLoading = false,
 }: {
   item: AgentTimelineItem;
   hitlType: HitlType;
@@ -52,6 +53,7 @@ export function HitlResponseCard({
   canRespond: boolean;
   a2uiActionView?: A2UIActionView;
   approvalRequest?: DesktopApprovalRequest;
+  approvalAuthorityLoading?: boolean;
 }) {
   const { t } = useI18n();
   const decisionView = hitlDecisionView(item);
@@ -142,7 +144,7 @@ export function HitlResponseCard({
   };
 
   return (
-    <div className="timeline-details">
+    <div className={`timeline-details hitl-response-card${answered ? ' is-answered' : ''}`}>
       <Text as="p" size="2" className="timeline-detail-summary">
         {browserConsentTitle ?? question}
       </Text>
@@ -190,7 +192,13 @@ export function HitlResponseCard({
       </div>
 
       {responsePresentation ? (
-        <div className="timeline-hitl-response" role="status" aria-readonly="true">
+        <div
+          className={`timeline-hitl-response${
+            responsePresentation.valueKey === 'chat.response.denied' ? ' is-denied' : ''
+          }`}
+          role="status"
+          aria-readonly="true"
+        >
           <span>{t(responsePresentation.labelKey)}</span>
           <strong>
             {responsePresentation.valueKey
@@ -269,6 +277,15 @@ export function HitlResponseCard({
             })}
           </small>
         </div>
+      ) : approvalAuthorityLoading &&
+        !approvalRequest &&
+        !answered &&
+        !browserOrigin &&
+        !browserCapability &&
+        (hitlType === 'permission' || hitlType === 'decision') ? (
+        <Text size="1" role="status">
+          {t('approval.syncing')}
+        </Text>
       ) : !answered && !browserOrigin && !browserCapability && (hitlType === 'permission' || hitlType === 'decision') ? (
         <Text size="1" color="red">
           {t('approval.incomplete', {

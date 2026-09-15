@@ -81,8 +81,11 @@ mod browser_run_tool_host;
 mod changes;
 mod composer_context;
 mod conversation_llm_route;
+mod conversation_history;
+mod message_display;
 mod execution_profile;
 mod execution_selection;
+mod execution_selection_patch;
 mod fan_out_tool_host;
 mod knowledge_authority_v2;
 #[cfg(test)]
@@ -98,6 +101,8 @@ mod mcp_supervisor_tests;
 mod parity_routes;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
+mod local_plugin_routes_v2;
+mod local_plugin_tool_host_v2;
 mod platform_plugin_route_admission_v2;
 #[cfg(test)]
 mod platform_plugin_route_admission_v2_tests;
@@ -116,7 +121,9 @@ mod search_projection;
 mod session_projection;
 mod session_store;
 mod steering;
+mod subagent_control;
 mod subagent_agent_tool_host;
+mod skill_discovery_tool_host;
 mod subagent_runtime;
 mod subagent_scope;
 mod task_session;
@@ -745,6 +752,7 @@ struct PlanModeToolHost {
     inner: Arc<dyn ToolHost>,
     session_store: DesktopSessionStore,
     conversation_id: String,
+    dynamic_reads: BTreeSet<String>,
 }
 
 impl PlanModeToolHost {
@@ -757,11 +765,20 @@ impl PlanModeToolHost {
             inner,
             session_store,
             conversation_id,
+            dynamic_reads: BTreeSet::new(),
         }
+    }
+
+    fn with_dynamic_metadata(mut self, metadata: &std::collections::BTreeMap<String, tool_authority::ToolMetadata>) -> Self {
+        self.dynamic_reads = metadata.iter().filter(|(name, item)| item.name == **name && item.effect == tool_authority::ToolEffect::Read).map(|(name, _)| name.clone()).collect();
+        self
     }
 
     fn is_allowed(tool: &str) -> bool {
         PLAN_MODE_TOOL_NAMES.contains(&tool) || tool == SUBMIT_PLAN_TOOL_NAME
+    }
+    fn accepts_tool(&self, tool: &str) -> bool {
+        Self::is_allowed(tool) || self.dynamic_reads.contains(tool)
     }
 
     fn submit_plan(&self, input_json: &str) -> CoreResult<String> {
@@ -831,9 +848,16 @@ struct LocalRuntimeState {
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
+    subagent_controls: subagent_control::SubagentControls,
     workspace_core_generation: AtomicU64,
     workspace_core_authority: Mutex<Option<Arc<workspace_core_bridge::WorkspaceCoreAuthority>>>,
     platform_plugin_authority_v2: platform_plugin_authority_v2::PlatformPluginAuthorityV2,
+    local_plugin_signing_keys: Result<
+        Vec<agistack_plugin_host::protocol_v2::signed_archive::TrustedEd25519KeyV2>,
+        String,
+    >,
+    local_plugin_changes: tokio::sync::Notify,
+    local_plugin_activation_error: Mutex<Option<String>>,
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
@@ -1125,10 +1149,14 @@ impl LocalRuntimeState {
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
+            subagent_controls: subagent_control::SubagentControls::default(),
             workspace_core_generation: AtomicU64::new(0),
             workspace_core_authority: Mutex::new(None),
             platform_plugin_authority_v2:
                 platform_plugin_authority_v2::PlatformPluginAuthorityV2::default(),
+            local_plugin_signing_keys: crate::local_plugin_packages_v2::trusted_keys(),
+            local_plugin_changes: tokio::sync::Notify::new(),
+            local_plugin_activation_error: Mutex::new(None),
             automation_worker: Mutex::new(None),
             browser_bridge: Mutex::new(None),
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
@@ -1348,10 +1376,13 @@ impl LocalRuntimeState {
     }
 
     fn release_agent_run(&self, conversation_id: &str) {
-        self.agent_runs
+        let released = self.agent_runs
             .lock()
             .expect("local agent runs")
             .remove(conversation_id);
+        if let Some(released) = released {
+            self.subagent_controls.release_parent(&released.control);
+        }
     }
 
     fn release_agent_run_if_control(&self, conversation_id: &str, control: &Arc<LocalRunControl>) {
@@ -1361,6 +1392,10 @@ impl LocalRuntimeState {
             .is_some_and(|active| Arc::ptr_eq(&active.control, control));
         if owns_claim {
             runs.remove(conversation_id);
+        }
+        drop(runs);
+        if owns_claim {
+            self.subagent_controls.release_parent(control);
         }
     }
 
@@ -1449,11 +1484,12 @@ impl LocalRuntimeState {
             None => true,
         };
         if needs_seed {
-            let checkpoint = SessionState::new(
+            let checkpoint = self.conversation_turn_checkpoint(
                 conversation_id,
+                run.project_id.as_str(),
+                run.message_id.as_str(),
                 run.request_message.as_str(),
-                Some(run.project_id.as_str()),
-            );
+            )?;
             self.checkpoints
                 .save(&checkpoint)
                 .await
@@ -1803,6 +1839,7 @@ impl LocalRuntimeState {
             authoritative_run_id,
             claimed_control,
             Some(plugin_generation),
+            None,
         )
         .await;
     }
@@ -1839,6 +1876,7 @@ impl LocalRuntimeState {
             authoritative_run_id,
             claimed_control,
             plugin_generation,
+            None,
         )
         .await;
     }
@@ -1854,6 +1892,7 @@ impl LocalRuntimeState {
         authoritative_run_id: Option<String>,
         claimed_control: Option<Arc<LocalRunControl>>,
         plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+        display_content: Option<String>,
     ) {
         let generation_descriptor = plugin_generation
             .as_ref()
@@ -1959,13 +1998,17 @@ impl LocalRuntimeState {
         };
         let authoritative_revision = authoritative_run.as_ref().map(|run| run.revision);
 
+        let mut user_payload = json!({ "plugin_generation": generation_descriptor });
+        if let Some(display) = display_content {
+            user_payload["display_content"] = json!(display);
+        }
         let user_item = self.timeline_item(
             "user_message",
             conversation_id.clone(),
             Some(message_id.clone()),
             Some("user"),
             Some(message.clone()),
-            json!({ "plugin_generation": generation_descriptor }),
+            user_payload,
         );
         self.append_timeline(&conversation_id, user_item);
 
@@ -2005,8 +2048,8 @@ impl LocalRuntimeState {
             profile,
             message.clone(),
         ));
-        let engine = match self
-            .agent_engine_for_role(&conversation, authoritative_run.as_ref(), workload_role)
+        let (engine, plugin_metadata) = match self
+            .agent_engine_for_role_with_plugin_metadata(&conversation, authoritative_run.as_ref(), workload_role)
             .await
         {
             Ok(engine) => engine,
@@ -2040,6 +2083,7 @@ impl LocalRuntimeState {
                 return;
             }
         };
+        observer.set_plugin_metadata(plugin_metadata);
         let checkpoint_cleanup = match self.checkpoints.load(&conversation_id).await {
             Ok(Some(checkpoint))
                 if matches!(
@@ -2052,6 +2096,19 @@ impl LocalRuntimeState {
                     .map_err(CoreError::Checkpoint)
             }
             Ok(_) => Ok(()),
+            Err(error) => Err(error),
+        };
+        let checkpoint_cleanup = match checkpoint_cleanup {
+            Ok(()) => match self.checkpoints.load(&conversation_id).await {
+                Ok(None) => match self.conversation_turn_checkpoint(
+                    &conversation_id, &project_id, &message_id, &message,
+                ) {
+                    Ok(checkpoint) => self.checkpoints.save(&checkpoint).await,
+                    Err(error) => Err(CoreError::Checkpoint(error)),
+                },
+                Ok(Some(_)) => Ok(()),
+                Err(error) => Err(error),
+            },
             Err(error) => Err(error),
         };
         let result = match checkpoint_cleanup {
@@ -2187,6 +2244,16 @@ impl LocalRuntimeState {
         run: Option<&DesktopRun>,
         workload_role: Option<LlmWorkloadRole>,
     ) -> Result<ReActEngine, String> {
+        self.agent_engine_for_role_with_plugin_metadata(conversation, run, workload_role)
+            .await.map(|(engine, _)| engine)
+    }
+
+    async fn agent_engine_for_role_with_plugin_metadata(
+        self: &Arc<Self>,
+        conversation: &LocalConversation,
+        run: Option<&DesktopRun>,
+        workload_role: Option<LlmWorkloadRole>,
+    ) -> Result<(ReActEngine, local_plugin_tool_host_v2::PluginTimelineMetadataV2), String> {
         #[cfg(test)]
         self.agent_engine_attempts.fetch_add(1, Ordering::SeqCst);
         let profile = self.execution_profile(conversation)?;
@@ -2233,6 +2300,17 @@ impl LocalRuntimeState {
         }
         let mut dynamic_metadata =
             std::collections::BTreeMap::<String, tool_authority::ToolMetadata>::new();
+        let mut plugin_metadata = local_plugin_tool_host_v2::PluginTimelineMetadataV2::default();
+        let plugin_host = match run {
+            Some(run) => local_plugin_tool_host_v2::LocalPluginToolHostV2::new(self, conversation, run).await?,
+            None => local_plugin_tool_host_v2::LocalPluginToolHostV2::new_plan(self, conversation).await?,
+        };
+        if let Some(host) = plugin_host {
+            let host = Arc::new(host);
+            dynamic_metadata.extend(host.metadata());
+            plugin_metadata = host.timeline_metadata();
+            tool_hosts.push(host);
+        }
         if let Some(run) = run {
             let mcp_host = mcp_agent_tool_host::McpAgentToolHost::new(
                 Arc::clone(&self.mcp_supervisor),
@@ -2297,7 +2375,16 @@ impl LocalRuntimeState {
                     })
             })
             .unwrap_or(8);
+        let skill_available: Arc<dyn ToolHost> = if run.is_none() {
+            Arc::new(PlanModeToolHost::new(profiled_tool_host.clone(), self.session_store.clone(), conversation.id.clone()).with_dynamic_metadata(&dynamic_metadata))
+        } else { profiled_tool_host.clone() };
         let mut profiled_tool_hosts = vec![profiled_tool_host];
+        if let Some(host) = skill_discovery_tool_host::SkillDiscoveryToolHost::new(self, conversation, run, &profile, skill_available)? {
+            for name in ["skill_list", "skill_loader"] {
+                if let Some(metadata) = authorized_tool_host::tool_metadata(name) { dynamic_metadata.insert(name.into(),metadata); }
+            }
+            profiled_tool_hosts.push(Arc::new(host));
+        }
         if conversation.current_mode == ConversationRunMode::Build {
             let run = run.ok_or_else(|| {
                 "build mode requires an authoritative run for tool execution".to_string()
@@ -2309,7 +2396,7 @@ impl LocalRuntimeState {
                 &child_base_tool_hosts,
                 Arc::clone(&base_llm),
                 max_rounds,
-            )? {
+            ).await? {
                 dynamic_metadata.extend(subagent_host.authority_metadata_by_name());
                 profiled_tool_hosts.push(Arc::new(subagent_host));
             }
@@ -2321,7 +2408,7 @@ impl LocalRuntimeState {
                 combined_tool_host,
                 self.session_store.clone(),
                 conversation.id.clone(),
-            )),
+            ).with_dynamic_metadata(&dynamic_metadata)),
             ConversationRunMode::Build => Arc::new(
                 AuthorizedRunToolHost::with_dynamic_metadata(
                     combined_tool_host,
@@ -2336,14 +2423,16 @@ impl LocalRuntimeState {
         };
         let llm: Arc<dyn LlmPort> =
             Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile));
-        Ok(
+        let plugin_metadata = plugin_metadata.restrict_to(&tool_host.list_tools());
+        Ok((
             ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
                 .with_max_rounds(max_rounds)
                 .with_terminal_tools(
                     (conversation.current_mode == ConversationRunMode::Plan)
                         .then_some(SUBMIT_PLAN_TOOL_NAME),
                 ),
-        )
+            plugin_metadata,
+        ))
     }
 
     fn execution_profile(
@@ -2545,8 +2634,8 @@ impl LocalRuntimeState {
             profile,
             goal.clone(),
         ));
-        let engine = match self
-            .agent_engine(&conversation, authoritative_run.as_ref())
+        let (engine, plugin_metadata) = match self
+            .agent_engine_for_role_with_plugin_metadata(&conversation, authoritative_run.as_ref(), None)
             .await
         {
             Ok(engine) => engine,
@@ -2580,6 +2669,7 @@ impl LocalRuntimeState {
                 return;
             }
         };
+        observer.set_plugin_metadata(plugin_metadata);
         let result = engine
             .run_observed_controlled(
                 &conversation_id,
@@ -2800,6 +2890,7 @@ impl LocalRuntimeState {
     }
 
     fn conversation_value(&self, conversation: &LocalConversation) -> Value {
+        let execution_selection = self.session_store.execution_selection(&conversation.id).ok().flatten().unwrap_or_default();
         let selected_agent_id = self
             .session_store
             .execution_selection(&conversation.id)
@@ -2850,6 +2941,7 @@ impl LocalRuntimeState {
                 "llm_model_override": llm_model_override,
                 "llm_route_override": llm_route_override,
             },
+            "execution_selection": execution_selection,
             "metadata": {
                 "runtime": "local",
                 "capability_mode": conversation.capability_mode,
@@ -2861,9 +2953,11 @@ impl LocalRuntimeState {
             "workspace_id": conversation.workspace_id,
             "linked_workspace_task_id": null,
             "workspace_name": workspace_name,
-            "participant_agents": ["local-agent"],
-            "coordinator_agent_id": "local-agent",
-            "focused_agent_id": "local-agent",
+            "participant_agents": std::iter::once(selected_agent_id.clone())
+                .chain(self.subagent_controls.participants(&conversation.id))
+                .collect::<Vec<_>>(),
+            "coordinator_agent_id": selected_agent_id,
+            "focused_agent_id": selected_agent_id,
         })
     }
 }
@@ -3219,6 +3313,7 @@ fn local_router_with_generation_admission(
         .route("/mcp/tools/list", get(mcp_tools_list))
         .route("/mcp/tools/call", post(mcp_tools_call))
         .merge(platform_plugin_marketplace_v2::router())
+        .merge(local_plugin_routes_v2::router())
         .merge(knowledge_authority_v2::router())
         .merge(parity_routes::router())
         .fallback(workspace_core_bridge::proxy_workspace_fallback)
@@ -5972,6 +6067,8 @@ struct ConversationModeBody {
 
 #[derive(Default, Deserialize)]
 struct ConversationConfigBody {
+    #[serde(default, deserialize_with = "execution_selection_patch::deserialize_patch")]
+    execution_selection: Option<execution_selection_patch::ExecutionSelectionPatch>,
     #[serde(default)]
     selected_agent_id: Option<String>,
     #[serde(default)]
@@ -6039,6 +6136,12 @@ async fn update_conversation_config(
     Path(conversation_id): Path<String>,
     Json(body): Json<ConversationConfigBody>,
 ) -> LocalJsonResult {
+    if let Some(patch) = body.execution_selection {
+        if body.selected_agent_id.is_some() || body.llm_model_override.is_some() || body.llm_route_override.is_some() {
+            return Err(local_bad_request("execution_selection must be updated independently".into()));
+        }
+        return execution_selection_patch::update(&state,&authenticated,&conversation_id,patch);
+    }
     let llm_route =
         normalized_conversation_llm_route(body.llm_model_override, body.llm_route_override)
             .map_err(local_bad_request)?;
@@ -6290,6 +6393,8 @@ async fn conversation_messages(
 #[derive(Deserialize)]
 struct RunConversationBody {
     message: String,
+    #[serde(default, deserialize_with = "message_display::deserialize")]
+    display_content: Option<String>,
     message_id: Option<String>,
     project_id: Option<String>,
     #[serde(default)]
@@ -6305,6 +6410,7 @@ fn client_turn_payload_hash(
     message: &str,
     workload_role: Option<LlmWorkloadRole>,
     selection: &execution_selection::ExecutionSelection,
+    display_content: Option<&str>,
 ) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"agistack-local-client-turn:v2\0");
@@ -6319,6 +6425,12 @@ fn client_turn_payload_hash(
     ] {
         hasher.update((value.len() as u64).to_be_bytes());
         hasher.update(value.as_bytes());
+    }
+    // Omitted metadata keeps the legacy request fingerprint for persisted retries.
+    if let Some(display) = display_content {
+        hasher.update(b"display_content\0");
+        hasher.update((display.len() as u64).to_be_bytes());
+        hasher.update(display.as_bytes());
     }
     format!("{:x}", hasher.finalize())
 }
@@ -6369,6 +6481,7 @@ async fn run_conversation_message(
         &body.message,
         body.workload_role,
         &selection,
+        body.display_content.as_deref(),
     );
     let created = state
         .session_store
@@ -6418,6 +6531,7 @@ async fn run_conversation_message(
                     None,
                     None,
                     plugin_generation,
+                    body.display_content,
                 )
                 .await;
         })
@@ -6587,6 +6701,7 @@ async fn approve_plan_and_start(
                         Some(run_id),
                         None,
                         plugin_generation,
+                        None,
                     )
                     .await;
             })
@@ -7096,19 +7211,29 @@ async fn promote_run_input_to_plan(
         let message_id = format!("promoted-{}", input.id);
         let control = claimed_control.expect("new promotion reserves the conversation");
         let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+        let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
+            authenticated.clone(),
+            plugin_generation.clone(),
+            &conversation,
+            &message_id,
+            None,
+        );
         tokio::spawn(async move {
-            run_state
-                .run_agent_message_for_role_with_generation(
-                    conversation_id,
-                    project_id,
-                    message,
-                    message_id,
-                    None,
-                    None,
-                    Some(control),
-                    plugin_generation,
-                )
-                .await;
+            knowledge_authority_v2::agent_access::scope(native_authorization, async move {
+                run_state
+                    .run_agent_message_for_role_with_generation(
+                        conversation_id,
+                        project_id,
+                        message,
+                        message_id,
+                        None,
+                        None,
+                        Some(control),
+                        plugin_generation,
+                        None,
+                    )
+                    .await;
+            }).await;
         });
     }
     Ok(Json(json!({
@@ -7347,17 +7472,26 @@ async fn review_artifact_version(
             let runtime = Arc::clone(&state);
             let running_for_task = running.clone();
             let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+            let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
+                authenticated.clone(),
+                plugin_generation.clone(),
+                &conversation,
+                &message_id,
+                Some(&running.id),
+            );
             tokio::spawn(async move {
-                runtime
-                    .continue_after_hitl_with_generation(
-                        conversation,
-                        message_id,
-                        goal,
-                        Some(running_for_task),
-                        control,
-                        plugin_generation,
-                    )
-                    .await;
+                knowledge_authority_v2::agent_access::scope(native_authorization, async move {
+                    runtime
+                        .continue_after_hitl_with_generation(
+                            conversation,
+                            message_id,
+                            goal,
+                            Some(running_for_task),
+                            control,
+                            plugin_generation,
+                        )
+                        .await;
+                }).await;
             });
             Ok(Json(json!({
                 "accepted": true,
@@ -8095,17 +8229,26 @@ async fn respond_to_hitl(
         .unwrap_or_else(|| format!("local-resume-{}", request.id));
     let run_state = Arc::clone(&state);
     let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+    let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
+        authenticated.clone(),
+        plugin_generation.clone(),
+        &conversation,
+        &message_id,
+        authoritative_run.as_ref().map(|run| run.id.as_str()),
+    );
     tokio::spawn(async move {
-        run_state
-            .continue_after_hitl_with_generation(
-                conversation,
-                message_id,
-                goal,
-                authoritative_run,
-                control,
-                plugin_generation,
-            )
-            .await;
+        knowledge_authority_v2::agent_access::scope(native_authorization, async move {
+            run_state
+                .continue_after_hitl_with_generation(
+                    conversation,
+                    message_id,
+                    goal,
+                    authoritative_run,
+                    control,
+                    plugin_generation,
+                )
+                .await;
+        }).await;
     });
     Ok(Json(response))
 }
@@ -8780,6 +8923,14 @@ async fn agent_socket_loop(
                         }
                         continue;
                     }
+                    let display_content = match message_display::parse(value.get("display_content")) {
+                        Ok(display) => display,
+                        Err(message) => {
+                            let error = json!({"type":"error", "code":"invalid_display_content", "message":message, "conversation_id":conversation_id});
+                            if sender.send(Message::Text(error.to_string())).await.is_err() { break; }
+                            continue;
+                        }
+                    };
                     let conversation = state
                         .session_store
                         .conversation(&conversation_id)
@@ -8830,7 +8981,39 @@ async fn agent_socket_loop(
                             continue;
                         }
                     };
-                    let message_id = value["message_id"].as_str().map(ToString::to_string).unwrap_or_else(|| format!("local-message-{}", Uuid::new_v4()));
+                    let message_id = match value.get("message_id") {
+                        None => format!("local-message-{}", Uuid::new_v4()),
+                        Some(Value::String(id)) if !id.trim().is_empty() && id.chars().count() <= 255 => id.clone(),
+                        Some(_) => {
+                            let error = json!({"type":"error", "code":"INVALID_MESSAGE_ID", "message":"message_id must be a non-empty string of at most 255 characters", "conversation_id":conversation_id});
+                            if sender.send(Message::Text(error.to_string())).await.is_err() { break; }
+                            continue;
+                        }
+                    };
+                    let payload_hash = client_turn_payload_hash(
+                        &conversation_id, &conversation.project_id, &message, None,
+                        &selection, display_content.as_deref(),
+                    );
+                    let created = match state.session_store.claim_client_turn(
+                        &conversation_id, &message_id, &payload_hash, &now_iso(),
+                    ) {
+                        Ok(created) => created,
+                        Err(error) => {
+                            let (code, message) = match error {
+                                DesktopClientTurnClaimError::PayloadConflict => ("MESSAGE_ID_CONFLICT", "message_id is already bound to a different request"),
+                                DesktopClientTurnClaimError::Storage(_) => ("CLIENT_TURN_UNAVAILABLE", "could not register the client message"),
+                            };
+                            let error = json!({"type":"error", "code":code, "message":message, "conversation_id":conversation_id, "message_id":message_id});
+                            if sender.send(Message::Text(error.to_string())).await.is_err() { break; }
+                            continue;
+                        }
+                    };
+                    if !created {
+                        conversations.insert(conversation_id.clone());
+                        let ack = json!({"type":"ack", "action":"send_message", "conversation_id":conversation_id, "message_id":message_id, "created":false, "replayed":true});
+                        if sender.send(Message::Text(ack.to_string())).await.is_err() { break; }
+                        continue;
+                    }
                     if let Err(message) = state.session_store.save_execution_selection(
                         &conversation_id,
                         &message_id,
@@ -8855,28 +9038,44 @@ async fn agent_socket_loop(
                         "conversation_id": conversation_id,
                         "message_id": message_id,
                     });
-                    if sender.send(Message::Text(ack.to_string())).await.is_err() {
-                        break;
-                    }
+                    // A claimed turn must still be dispatched if the acknowledgement is lost.
+                    // A reconnect replays the durable claim instead of launching a second turn.
+                    let acknowledgement_sent = sender.send(Message::Text(ack.to_string())).await.is_ok();
                     let run_state = Arc::clone(&state);
+                    let native_authorization = knowledge_authority_v2::agent_access::RunAuthorization::capture(
+                        authenticated.clone(),
+                        plugin_generation.clone(),
+                        &conversation,
+                        &message_id,
+                        None,
+                    );
                     let project_id = conversation.project_id;
                     // The socket owns one lease, and every derived operation clones it so closing
                     // the socket cannot release the generation while a turn is still running.
                     let operation_generation = plugin_generation.clone();
                     tokio::spawn(async move {
-                        run_state
-                            .run_agent_message_for_role_with_generation(
-                                conversation_id,
-                                project_id,
-                                message,
-                                message_id,
-                                None,
-                                None,
-                                None,
-                                operation_generation,
-                            )
-                            .await;
+                        knowledge_authority_v2::agent_access::scope(native_authorization, async move {
+                            run_state
+                                .run_agent_message_for_role_with_generation(
+                                    conversation_id,
+                                    project_id,
+                                    message,
+                                    message_id,
+                                    None,
+                                    None,
+                                    None,
+                                    operation_generation,
+                                    display_content,
+                                )
+                                .await;
+                        }).await;
                     });
+                    if !acknowledgement_sent { break; }
+                } else if kind == "steer" || kind == "kill_run" {
+                    let receipt = subagent_control::handle_command(&state, &authenticated, &value).await;
+                    if sender.send(Message::Text(receipt.to_string())).await.is_err() {
+                        break;
+                    }
                 } else if kind == "subscribe" {
                     let Some(conversation_id) = value["conversation_id"].as_str() else {
                         continue;
@@ -9482,6 +9681,8 @@ struct LocalTimelineObserver {
     message_id: String,
     profile: execution_profile::ExecutionProfile,
     goal: String,
+    mcp_metadata: std::collections::BTreeMap<String, tool_authority::ToolMetadata>,
+    plugin_metadata: Mutex<local_plugin_tool_host_v2::PluginTimelineMetadataV2>,
     tool_calls: AtomicU64,
     profile_completed: std::sync::atomic::AtomicBool,
 }
@@ -9494,17 +9695,58 @@ impl LocalTimelineObserver {
         profile: execution_profile::ExecutionProfile,
         goal: String,
     ) -> Self {
+        // Capture the scoped catalog and server allow-list used for execution.
+        // A failed catalog lookup keeps dynamic aliases unavailable in the timeline.
+        let mcp_metadata = state
+            .session_store
+            .conversation(&conversation_id)
+            .ok()
+            .flatten()
+            .and_then(|conversation| {
+                mcp_agent_tool_host::McpAgentToolHost::new(
+                    Arc::clone(&state.mcp_supervisor),
+                    mcp_supervisor::McpScope {
+                        tenant_id: conversation.tenant_id,
+                        project_id: conversation.project_id,
+                    },
+                    message_id.clone(),
+                    Some(&profile.allowed_mcp_servers),
+                )
+                .ok()
+            })
+            .map(|host| host.authority_metadata_by_name())
+            .unwrap_or_default();
         let observer = Self {
             state,
             conversation_id,
             message_id,
             profile,
             goal,
+            mcp_metadata,
+            plugin_metadata: Mutex::new(Default::default()),
             tool_calls: AtomicU64::new(0),
             profile_completed: std::sync::atomic::AtomicBool::new(false),
         };
         observer.publish_profile_start();
         observer
+    }
+
+    fn set_plugin_metadata(&self, metadata: local_plugin_tool_host_v2::PluginTimelineMetadataV2) {
+        if let Ok(mut current) = self.plugin_metadata.lock() { *current = metadata; }
+    }
+
+    fn redact_tool_payload(&self, tool: &str, payload: &str) -> String {
+        let Ok(metadata) = self.plugin_metadata.lock() else { return "[UNAVAILABLE]".into(); };
+        if let Some(redacted) = metadata.redact(tool, payload) { return redacted; }
+        let Some(metadata) = self.mcp_metadata.get(tool) else {
+            return authorized_tool_host::redact_tool_payload(tool, payload);
+        };
+        let Ok(value) = serde_json::from_str::<Value>(payload) else {
+            return "[UNPARSEABLE]".into();
+        };
+        let redacted =
+            tool_authority::redact_sensitive_fields(&value, &metadata.sensitive_input_fields);
+        serde_json::to_string(&redacted).unwrap_or_else(|_| "[UNAVAILABLE]".into())
     }
 
     fn publish_profile_start(&self) {
@@ -9590,7 +9832,7 @@ impl ReActObserver for LocalTimelineObserver {
         input_json: &str,
     ) -> CoreResult<()> {
         let tool_call_count = self.tool_calls.fetch_add(1, Ordering::AcqRel) + 1;
-        let redacted_input = authorized_tool_host::redact_tool_payload(tool, input_json);
+        let redacted_input = self.redact_tool_payload(tool, input_json);
         let mut item = self.state.timeline_item(
             "act",
             self.conversation_id.clone(),
@@ -9638,8 +9880,8 @@ impl ReActObserver for LocalTimelineObserver {
         input_json: &str,
         output_json: &str,
     ) -> CoreResult<()> {
-        let redacted_input = authorized_tool_host::redact_tool_payload(tool, input_json);
-        let redacted_output = authorized_tool_host::redact_tool_payload(tool, output_json);
+        let redacted_input = self.redact_tool_payload(tool, input_json);
+        let redacted_output = self.redact_tool_payload(tool, output_json);
         let mut item = self.state.timeline_item(
             "observe",
             self.conversation_id.clone(),
@@ -9745,8 +9987,8 @@ impl ReActObserver for LocalTimelineObserver {
         input_json: &str,
         error: &CoreError,
     ) -> CoreResult<()> {
-        let redacted_input = authorized_tool_host::redact_tool_payload(tool, input_json);
-        let redacted_error = authorized_tool_host::redact_tool_payload(
+        let redacted_input = self.redact_tool_payload(tool, input_json);
+        let redacted_error = self.redact_tool_payload(
             tool,
             &json!({ "error": error.to_string() }).to_string(),
         );
@@ -10020,6 +10262,10 @@ mod tests {
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
 
+    mod conversation_history_tests {
+        include!("conversation_history_tests.rs");
+    }
+
     mod conversation_llm_route_tests {
         use super::*;
         include!("conversation_llm_route_tests.rs");
@@ -10038,6 +10284,11 @@ mod tests {
     mod subagent_runtime_tests {
         use super::*;
         include!("subagent_runtime_tests.rs");
+    }
+
+    mod subagent_control_tests {
+        use super::*;
+        include!("subagent_control_tests.rs");
     }
 
     #[derive(Debug, PartialEq, Eq)]

@@ -757,6 +757,7 @@ impl DesktopSessionStore {
         super::resource_registry::initialize_resource_registry(&connection)?;
         super::execution_selection::initialize_schema(&connection)?;
         super::search_projection::initialize_schema(&connection)?;
+        crate::local_plugin_installations_v2::initialize(&connection)?;
         connection
             .pragma_update(None, "user_version", DESKTOP_SESSION_SCHEMA_VERSION)
             .map_err(|error| error.to_string())?;

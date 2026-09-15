@@ -45,6 +45,7 @@ from typing import Any, cast
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
     AgentLifecycleNotifierProtocolV2,
 )
@@ -905,6 +906,7 @@ class ProjectReActAgent:
         plan_mode: bool = False,
         llm_overrides: dict[str, Any] | None = None,
         model_override: str | None = None,
+        model_route_override: ModelRouteRef | None = None,
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
         tenant_agent_config_data: dict[str, Any] | None = None,
@@ -990,6 +992,7 @@ class ProjectReActAgent:
                 plan_mode=plan_mode,
                 llm_overrides=llm_overrides,
                 model_override=model_override,
+                model_route_override=model_route_override,
                 agent_id=agent_id,
                 tenant_agent_config_data=tenant_agent_config_data,
                 preferred_language=preferred_language,

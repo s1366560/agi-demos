@@ -69,3 +69,27 @@ async def test_build_execution_summary_includes_task_and_usage_counts() -> None:
         "other": 0,
         "remaining": 1,
     }
+
+
+@pytest.mark.unit
+async def test_execution_summary_omits_unobserved_usage_instead_of_reporting_zero() -> None:
+    processor = SessionProcessor(config=ProcessorConfig(model="test-model"), tools=[])
+    processor._step_count = 2
+    summary = await processor._build_execution_summary("session-unknown")
+    assert summary["step_count"] == 2
+    assert summary["call_count"] == 0
+    assert "total_tokens" not in summary
+    assert "total_cost" not in summary
+    assert "total_cost_formatted" not in summary
+
+
+@pytest.mark.unit
+async def test_execution_summary_preserves_explicitly_observed_zero_usage() -> None:
+    processor = SessionProcessor(config=ProcessorConfig(model="test-model"), tools=[])
+    processor.cost_tracker.calculate(
+        usage={"input_tokens": 0, "output_tokens": 0}, model_name="test-model"
+    )
+    summary = await processor._build_execution_summary("session-zero")
+    assert summary["call_count"] == 1
+    assert summary["total_tokens"]["input"] == 0
+    assert summary["total_cost"] == 0

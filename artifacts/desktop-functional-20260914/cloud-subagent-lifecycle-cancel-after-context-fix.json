@@ -1,0 +1,420 @@
+{
+  "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+  "scenario": "cancel",
+  "events": [
+    {
+      "type": "lifecycle_state_change"
+    },
+    {
+      "type": "ack",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "run_id": "9612c8a1-48f5-4391-b764-8b84cd685446"
+    },
+    {
+      "type": "message",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "user_message",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "lifecycle_state_change"
+    },
+    {
+      "type": "lifecycle_state_change"
+    },
+    {
+      "type": "execution_path_decided",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "lifecycle_state_change",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "selection_trace",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "policy_filtered",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "act_delta",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "preparing"
+    },
+    {
+      "type": "act_delta",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "preparing"
+    },
+    {
+      "type": "act",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "running"
+    },
+    {
+      "type": "cost_update",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "subagent_lifecycle",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "data": {
+        "type": "subagent_spawning",
+        "data": {
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+          "subagent_name": "qa_owner_20260914",
+          "spawn_mode": "run",
+          "thread_requested": false,
+          "cleanup": "keep",
+          "model_override": null,
+          "thinking_override": null
+        },
+        "timestamp": "2026-09-14T16:14:42.517640",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef"
+      },
+      "timestamp": "2026-09-14T08:14:42.517672+00:00",
+      "event_id": "evt_05d6d7e60cf9",
+      "lifecycle_sequence_id": "1789373682542-0"
+    },
+    {
+      "type": "observe",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "tool_name": "sessions_spawn",
+      "status": "completed"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "subagent_lifecycle",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "data": {
+        "type": "subagent_spawned",
+        "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "subagent_name": "qa_owner_20260914",
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep"
+      },
+      "timestamp": "2026-09-14T08:14:42.544338+00:00",
+      "event_id": "evt_2bd63a5066e0",
+      "lifecycle_sequence_id": "1789373682562-0"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "subagent_lifecycle",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "data": {
+        "type": "subagent_killed",
+        "data": {
+          "execution_id": null,
+          "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "subagent_id": "43821768-32c0-4d1f-a1b3-90998facb590",
+          "subagent_name": "QA Owner 20260914",
+          "kill_reason": "Cancelled by control"
+        },
+        "timestamp": "2026-09-14T16:14:43.803491",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef"
+      },
+      "timestamp": "2026-09-14T08:14:43.803590+00:00",
+      "event_id": "evt_9bea2c5a887b",
+      "lifecycle_sequence_id": "1789373683822-0"
+    },
+    {
+      "type": "subagent_lifecycle",
+      "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+      "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+      "data": {
+        "type": "subagent_ended",
+        "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+        "project_id": "738ace12-0d21-48ca-847d-cd0c2802816d",
+        "tenant_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "subagent_name": "qa_owner_20260914",
+        "status": "cancelled",
+        "summary": "",
+        "error": "Cancelled by control tool",
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep"
+      },
+      "timestamp": "2026-09-14T08:14:43.854474+00:00",
+      "event_id": "evt_b6f65ef0bc9f",
+      "lifecycle_sequence_id": "1789373683875-0"
+    },
+    {
+      "type": "text_start",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "text_end",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "cost_update",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "model_message_committed",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "context_status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "status",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "status": "goal_achieved:llm_task_reconciliation"
+    },
+    {
+      "type": "suggestions",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "complete",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7"
+    },
+    {
+      "type": "lifecycle_state_change"
+    }
+  ],
+  "snapshots": [
+    [
+      {
+        "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+        "status": "running",
+        "subagent_name": "qa_owner_20260914"
+      }
+    ],
+    [
+      {
+        "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+        "status": "cancelled",
+        "subagent_name": "qa_owner_20260914"
+      }
+    ]
+  ],
+  "acceptance_batch": "b5871964-e1c4-4f15-8715-1709f897780b",
+  "lifecycle_subscription_ack": true,
+  "cancel_http_status": 200,
+  "cancel_response": {
+    "execution_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+    "cancelled": false,
+    "cancel_requested": true,
+    "message": "Cancellation requested; awaiting execution owner acknowledgement."
+  },
+  "final_children": [
+    {
+      "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "subagent_name": "qa_owner_20260914",
+      "task": "不调用任何工具，用中文详细解释分布式系统一致性，至少五千字。",
+      "status": "cancelled",
+      "created_at": "2026-09-14T08:14:42.471384+00:00",
+      "started_at": "2026-09-14T08:14:42.471406+00:00",
+      "ended_at": "2026-09-14T08:14:43.791393+00:00",
+      "summary": null,
+      "error": "Cancelled by control tool",
+      "execution_time_ms": null,
+      "tokens_used": null,
+      "metadata": {
+        "session_mode": "spawn",
+        "control_plane_version": "v2",
+        "delegation_depth": 0,
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "agent_id": "qa_owner_20260914",
+        "model": null,
+        "thinking": null,
+        "run_timeout_seconds": 60,
+        "requested_subagent_name": "qa_owner_20260914",
+        "max_active_runs_per_lineage": 8,
+        "execution_protocol": "detached-owner-v1",
+        "requester_session_key": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "lineage_root_run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 3,
+          "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+        },
+        "inherited_tool_set_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 3,
+          "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+        },
+        "inherited_tool_set_owner_operation_id": "local-turn:9612c8a1-48f5-4391-b764-8b84cd685446",
+        "model_override": null,
+        "thinking_override": null,
+        "cancel_requested": true,
+        "cancel_requested_by": "bf922bb7-290d-4252-8891-f82b97aa14b2",
+        "announce_payload": {
+          "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "subagent_name": "qa_owner_20260914",
+          "status": "cancelled",
+          "outcome": "cancelled",
+          "status_text": "cancelled",
+          "result": "(not available)",
+          "notes": "Cancelled by control tool",
+          "execution_time_ms": null,
+          "tokens_used": null,
+          "spawn_mode": "run",
+          "thread_requested": false,
+          "cleanup": "keep",
+          "model_override": null,
+          "thinking_override": null,
+          "completed_at": "2026-09-14T08:14:43.791393+00:00"
+        },
+        "announce_status": "delivered",
+        "announce_attempt_count": 1,
+        "announce_completed_at": "2026-09-14T08:14:43.837132+00:00",
+        "announce_last_error": "",
+        "announce_events": [
+          {
+            "timestamp": "2026-09-14T08:14:43.837125+00:00",
+            "type": "completion_delivered",
+            "attempt": 1,
+            "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+            "status": "cancelled"
+          }
+        ],
+        "announce_events_dropped": 0
+      },
+      "frozen_result_text": null,
+      "frozen_at": null,
+      "trace_id": null,
+      "parent_span_id": null,
+      "announce_state": null
+    }
+  ],
+  "fresh_history_status": 200,
+  "fresh_children": [
+    {
+      "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+      "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+      "subagent_name": "qa_owner_20260914",
+      "task": "不调用任何工具，用中文详细解释分布式系统一致性，至少五千字。",
+      "status": "cancelled",
+      "created_at": "2026-09-14T08:14:42.471384+00:00",
+      "started_at": "2026-09-14T08:14:42.471406+00:00",
+      "ended_at": "2026-09-14T08:14:43.791393+00:00",
+      "summary": null,
+      "error": "Cancelled by control tool",
+      "execution_time_ms": null,
+      "tokens_used": null,
+      "metadata": {
+        "session_mode": "spawn",
+        "control_plane_version": "v2",
+        "delegation_depth": 0,
+        "spawn_mode": "run",
+        "thread_requested": false,
+        "cleanup": "keep",
+        "agent_id": "qa_owner_20260914",
+        "model": null,
+        "thinking": null,
+        "run_timeout_seconds": 60,
+        "requested_subagent_name": "qa_owner_20260914",
+        "max_active_runs_per_lineage": 8,
+        "execution_protocol": "detached-owner-v1",
+        "requester_session_key": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+        "lineage_root_run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+        "plugin_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 3,
+          "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+        },
+        "inherited_tool_set_generation": {
+          "profile_id": "memstack-default-v2",
+          "generation": 3,
+          "digest": "ac2075cc258ec3be68768003add51f805ce23c85ab5d86b6091f68b465f13ee2"
+        },
+        "inherited_tool_set_owner_operation_id": "local-turn:9612c8a1-48f5-4391-b764-8b84cd685446",
+        "model_override": null,
+        "thinking_override": null,
+        "cancel_requested": true,
+        "cancel_requested_by": "bf922bb7-290d-4252-8891-f82b97aa14b2",
+        "announce_payload": {
+          "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+          "conversation_id": "7e29b916-4c4a-4137-8bc4-e16274ff45d7",
+          "subagent_name": "qa_owner_20260914",
+          "status": "cancelled",
+          "outcome": "cancelled",
+          "status_text": "cancelled",
+          "result": "(not available)",
+          "notes": "Cancelled by control tool",
+          "execution_time_ms": null,
+          "tokens_used": null,
+          "spawn_mode": "run",
+          "thread_requested": false,
+          "cleanup": "keep",
+          "model_override": null,
+          "thinking_override": null,
+          "completed_at": "2026-09-14T08:14:43.791393+00:00"
+        },
+        "announce_status": "delivered",
+        "announce_attempt_count": 1,
+        "announce_completed_at": "2026-09-14T08:14:43.837132+00:00",
+        "announce_last_error": "",
+        "announce_events": [
+          {
+            "timestamp": "2026-09-14T08:14:43.837125+00:00",
+            "type": "completion_delivered",
+            "attempt": 1,
+            "run_id": "5ecc31031dad45bcb86c5008c42d1d5e",
+            "status": "cancelled"
+          }
+        ],
+        "announce_events_dropped": 0
+      },
+      "frozen_result_text": null,
+      "frozen_at": null,
+      "trace_id": null,
+      "parent_span_id": null,
+      "announce_state": null
+    }
+  ],
+  "credential_revocation_status": 200
+}

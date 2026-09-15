@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "payload": {
+    "schema_version": 2,
+    "atomic_creation": true,
+    "initial_conversation_mode": "workspace",
+    "initial_plan_mode": "plan",
+    "workspace_agent_policy": true,
+    "workspace_authority": "avernet",
+    "capability_version": "avernet-task-session-v1"
+  }
+}

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from .plans import _execute_approved_plan
 from .run_authority_common import _explicit_change_payloads, _load_scoped_run
+from .run_cancellation_authority import router as run_cancellation_router
 from .run_input_authority import (
     _PROMOTED_RUN_TASKS,
     _RUN_INPUT_DISPATCH_LEASE,
@@ -31,6 +32,7 @@ from .run_review_authority import (
 )
 
 router = APIRouter()
+router.include_router(run_cancellation_router)
 router.include_router(run_input_router)
 router.include_router(run_review_router)
 

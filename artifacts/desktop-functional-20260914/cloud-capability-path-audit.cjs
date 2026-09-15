@@ -1,0 +1,21 @@
+const fs=require('fs'),path=require('path');const repo=process.cwd();const ts=require(repo+'/agi-stack/apps/desktop/node_modules/typescript');const cache={};
+function load(file){if(cache[file])return cache[file].exports;const m={exports:{}};cache[file]=m;let output=ts.transpileModule(fs.readFileSync(file,'utf8'),{fileName:file,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;new Function('require','module','exports',output)(id=>id.startsWith('.')?load(resolve(path.resolve(path.dirname(file),id))):require(id),m,m.exports);return m.exports;}
+function resolve(p){if(fs.existsSync(p)&&!fs.statSync(p).isDirectory())return p;for(const e of ['.ts','.tsx','/index.ts'])if(fs.existsSync(p+e))return p+e;throw Error('unresolved '+p);}
+const {executeVaultBoundCloudRequest}=load(repo+'/agi-stack/apps/desktop/electron/main/cloudRequestPolicy.ts');
+const {authorizeCloudProductEndpoint}=load(repo+'/agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts');const {DEFAULT_CONFIG}=load(repo+'/agi-stack/apps/desktop/src/types.ts');
+const config={...DEFAULT_CONFIG,mode:'cloud',apiKey:'fixture',apiBaseUrl:'https://audit.test',tenantId:'tenant-1',projectId:'project-1',workspaceId:'workspace-1'};const rows=[];let current;
+global.fetch=async(input,init={})=>{const url=new URL(input);const req={method:init.method??'GET',...(init.body?{body:JSON.parse(init.body)}:{})};let verdict;try{verdict=authorizeCloudProductEndpoint(req,url)?'allowed':'rejected';}catch{verdict='rejected';}const scopeContext=url.pathname==='/api/v1/workspace-context';const identity=url.pathname==='/api/v1/auth/me';rows.push({factory:current,path:url.pathname+url.search,method:req.method,...(req.body?{body:req.body}:{}),verdict:scopeContext||identity?'core-policy':verdict});let body=scopeContext?{context:{tenant_id:'tenant-1',project_id:'project-1',workspace_id:'workspace-1',revision:1},membership_role:'owner'}:identity?{id:'user-1',user_id:'user-1',is_active:true}:{};return new Response(JSON.stringify(body),{headers:{'content-type':'application/json'}});};
+(async()=>{
+const dir=repo+'/agi-stack/apps/desktop/src/plugins';const files=fs.readdirSync(dir).filter(x=>/HttpProjectionV2\.ts$/.test(x));const results=[];
+for(const file of files){if(/Upload|CloudMemory|Sandbox|Voice|Attachment|Artifact|Messaging/.test(file))continue;let mod;try{mod=load(dir+'/'+file);}catch(e){results.push({file,loadError:String(e.message)});continue;}
+for(const [name,factory]of Object.entries(mod)){if(!name.startsWith('create')||typeof factory!=='function')continue;current=name;let object;for(const scope of [{authority:'cloud',tenantId:'tenant-1',projectId:'project-1'},{authority:'cloud',tenantId:'tenant-1'},{authority:'cloud',tenantId:'tenant-1',projectId:'project-1',workspaceId:'workspace-1'}]){try{object=factory(config,scope);break;}catch{}}
+if(!object)continue;const method=['probe','load','observe'].find(x=>typeof object[x]==='function');if(!method)continue;const before=rows.length;try{await object[method](...(name.endsWith('ProjectionV2')||name.includes('PlaybooksRead')?[{authority:'cloud',tenantId:'tenant-1',projectId:'project-1',workspaceId:'workspace-1'}]:[]));}catch(e){if(rows.length===before)results.push({factory:name,error:String(e.message)});}
+}}
+current='createDesktopProjectMcpAppsHttpProjectionV2.listMCPAppResources';
+const mcp=load(dir+'/desktopProjectMcpAppsHttpProjectionV2.ts').createDesktopProjectMcpAppsHttpProjectionV2(config);
+try{await mcp.execute('listMCPAppResources',{config,scope:{authority:'cloud',tenantId:'tenant-1',projectId:'project-1'},args:['project-1',null]});}catch(e){results.push({factory:current,error:e.message});}
+for(const row of rows.filter(r=>r.verdict==='rejected')){
+let vaultReads=0;try{await executeVaultBoundCloudRequest({path:row.path,method:row.method,...(row.body?{body:row.body}:{})},{loadTrustedSession:async()=>{vaultReads++;throw Error('unexpected vault access');},fetch:async()=>{throw Error('unexpected network');}});row.vaultResult='unexpectedly accepted';}catch(e){row.vaultResult=e.message;}row.vaultReads=vaultReads;
+}
+console.log(JSON.stringify({requests:rows,unresolved:results},null,2));
+})().catch(e=>{console.error(e);process.exitCode=1;});

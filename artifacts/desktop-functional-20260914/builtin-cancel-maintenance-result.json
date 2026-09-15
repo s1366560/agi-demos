@@ -1,0 +1,32 @@
+{
+  "target_digest": "sha256:0025671cf9fdb779738e415665d3b16253e672ba18cb336215ca1fc098681fab",
+  "applied": true,
+  "scopes": [
+    {
+      "kind": "root",
+      "before_revision": 11,
+      "after_revision": 12,
+      "profile_source_preserved": true
+    },
+    {
+      "kind": "session",
+      "before_revision": 2,
+      "after_revision": 3,
+      "profile_source_preserved": true
+    },
+    {
+      "kind": "session",
+      "before_revision": 1,
+      "after_revision": 2,
+      "profile_source_preserved": true
+    },
+    {
+      "kind": "session",
+      "before_revision": 1,
+      "after_revision": 2,
+      "profile_source_preserved": true
+    }
+  ],
+  "actor_id": "da216191-a5a4-4033-9c4a-0384ded10bd3",
+  "temporary_identity_deactivated": true
+}

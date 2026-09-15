@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from src.application.services.publication_archive_loader_v2 import load_agent_generation_archives_v2
+
 if TYPE_CHECKING:
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
     from src.infrastructure.agent.core.project_react_agent import (
@@ -52,6 +54,9 @@ async def _run(request_file: Path) -> int:
     from src.infrastructure.agent.actor.execution import execute_project_chat
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
     from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
+    from src.infrastructure.plugins.v2.agent_worker_lifecycle_transport_v2 import (
+        AgentWorkerLifecycleTransportV2,
+    )
     from src.infrastructure.plugins.v2.agent_worker_runtime import (
         agent_worker_graph_runtime_factory_v2,
         agent_worker_redis_runtime_factory_v2,
@@ -83,11 +88,13 @@ async def _run(request_file: Path) -> int:
         _attach_plan_repository(agent)
         admission = DataPlaneGenerationAdmissionV2(
             builtin_runtime_definitions_v2(
+                agent_lifecycle_connection_manager=AgentWorkerLifecycleTransportV2(),
                 graph_runtime_factory=agent_worker_graph_runtime_factory_v2(config.tenant_id),
                 redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
                 sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
                 workspace_core_runtime_factory=agent_worker_workspace_core_runtime_factory_v2,
-            )
+            ),
+            archive_loader=load_agent_generation_archives_v2,
         )
         try:
             async with admission.admit(
@@ -112,7 +119,12 @@ async def _run(request_file: Path) -> int:
                         "message_id": request.message_id,
                     },
                 },
-            ):
+            ) as operation:
+                from src.application.services.wasm_operation_authority_v2 import (
+                    prepare_agent_wasm_tools_v2,
+                )
+
+                await prepare_agent_wasm_tools_v2(operation)
                 await bootstrapper._ensure_local_runtime_bootstrapped()
                 initialized = await agent.initialize()
                 if not initialized:

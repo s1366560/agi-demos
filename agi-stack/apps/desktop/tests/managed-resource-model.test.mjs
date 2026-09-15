@@ -10,9 +10,11 @@ const {
   managedResourceSnapshotIsCurrent,
   managedResourceCapabilityGroups,
   managedResourceFacts,
+  managedResourceFactValueKey,
   managedResourceView,
   resolveManagedResourceSelection,
   resourceIsActive,
+  resourceIsImmutable,
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings/managedResourceModel.js');
 
 const skill = {
@@ -97,6 +99,19 @@ test('managed resource activity follows explicit structural status fields', () =
   );
   assert.equal(resourceIsActive('subagents', subagent), true);
   assert.equal(resourceIsActive('subagents', { ...subagent, enabled: false }), false);
+});
+
+test('revoked installed plugins can be uninstalled without becoming runnable', () => {
+  const revoked = { ...plugin, revoked: true };
+  for (const mode of ['local', 'cloud']) {
+    assert.equal(resourceIsImmutable('plugins', revoked, mode), false);
+    assert.equal(resourceIsActive('plugins', revoked), false);
+    assert.equal(managedResourceAction('plugins', revoked, true, mode), null);
+    assert.equal(
+      resourceIsImmutable('plugins', { ...revoked, install_status: 'uninstalled' }, mode),
+      true,
+    );
+  }
 });
 
 test('search uses only declared public fields and never hidden prompt or arbitrary JSON', () => {
@@ -196,6 +211,7 @@ test('facts and capability groups are separated and derive only from response fi
     { key: 'publisher', value: 'MemStack Labs' },
     { key: 'version', value: '2.1.0' },
     { key: 'installStatus', value: 'installed' },
+    { key: 'revocationStatus', value: 'notRevoked' },
     { key: 'securityScan', value: 'passed' },
   ]);
   assert.deepEqual(managedResourceCapabilityGroups('plugins', plugin), [
@@ -299,7 +315,11 @@ test('status actions honor permission and immutable system resources', () => {
 test('resource management permissions match local and cloud endpoint allow-lists', () => {
   assert.equal(managedResourceManagementAllowed('local', ['owner'], 'agents', agent), true);
   assert.equal(managedResourceManagementAllowed('local', ['member'], 'skills', skill), false);
-  assert.equal(managedResourceManagementAllowed('cloud', ['owner'], 'plugins', plugin), true);
+  assert.equal(managedResourceManagementAllowed('cloud', ['owner'], 'plugins', plugin), false);
+  assert.equal(managedResourceManagementAllowed('cloud', ['admin'], 'plugins', plugin, false), false);
+  assert.equal(managedResourceManagementAllowed('cloud', ['member'], 'plugins', plugin, true), true);
+  assert.equal(managedResourceManagementAllowed('local', ['owner'], 'plugins', plugin), true);
+  assert.equal(managedResourceManagementAllowed('local', ['member'], 'plugins', plugin, true), false);
   assert.equal(managedResourceManagementAllowed('cloud', ['owner'], 'agents', agent), true);
   assert.equal(managedResourceManagementAllowed('cloud', ['owner'], 'subagents', subagent), true);
   assert.equal(managedResourceManagementAllowed('cloud', ['member'], 'subagents', subagent), false);
@@ -311,4 +331,24 @@ test('resource management permissions match local and cloud endpoint allow-lists
     true,
   );
   assert.equal(managedResourceManagementAllowed('cloud', ['member'], 'skills', skill), false);
+});
+
+test('catalog history keeps independent install and revocation facts with explicit localized states', () => {
+  const history = { ...plugin, install_status: 'uninstalled', revoked: true };
+  const facts = managedResourceFacts('plugins', history);
+  assert.ok(facts.some((fact) => fact.key === 'installStatus' && fact.value === 'uninstalled'));
+  assert.ok(facts.some((fact) => fact.key === 'revocationStatus' && fact.value === 'revoked'));
+  assert.equal(resourceIsActive('plugins', history), false);
+  assert.deepEqual(filterManagedResources('plugins', [history], '', 'all'), [history]);
+  for (const status of ['installed', 'uninstalled', 'verified']) {
+    assert.equal(managedResourceFactValueKey('installStatus', status), `settings.pluginInstallStatus.${status}`);
+  }
+  for (const status of ['revoked', 'notRevoked']) {
+    assert.equal(managedResourceFactValueKey('revocationStatus', status), `settings.pluginRevocationStatus.${status}`);
+  }
+  for (const status of [null, '', 'future-status']) {
+    assert.equal(managedResourceFactValueKey('installStatus', status), 'settings.pluginInstallStatus.unknown');
+    assert.equal(managedResourceFactValueKey('revocationStatus', status), 'settings.pluginRevocationStatus.unknown');
+  }
+  assert.equal(managedResourceFactValueKey('publisher', 'Example'), null);
 });

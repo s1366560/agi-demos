@@ -1,0 +1,32 @@
+{
+  "descriptor": {
+    "profile_id": "memstack-default-v2",
+    "generation": 9,
+    "digest": "aa157b9853071f5e4f2ad79e79ab60660864ddfd77392fe29e67f9f7918786e3"
+  },
+  "entry_count": 439,
+  "entry_shape": [
+    "entry_id",
+    "parent_entry_id",
+    "plugin_ref",
+    "module_ref",
+    "enabled",
+    "config",
+    "inject",
+    "isolate",
+    "scope",
+    "permissions",
+    "quotas",
+    "restart_policy"
+  ],
+  "manifest_shape": [
+    "schema_version",
+    "plugin_id",
+    "version",
+    "runtime",
+    "trust",
+    "modules",
+    "permissions",
+    "quotas"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "before": {
+    "PLUGIN_V2_REQUIRED_DATA_PLANE_IDS": null,
+    "PLUGIN_V2_ACK_DEADLINE_SECONDS": null
+  },
+  "after": {
+    "PLUGIN_V2_REQUIRED_DATA_PLANE_IDS": "python-api-v2,desktop-sidecar-v2,desktop-renderer-v2",
+    "PLUGIN_V2_ACK_DEADLINE_SECONDS": "120"
+  }
+}

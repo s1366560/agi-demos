@@ -849,8 +849,8 @@ test('identity catalogs exhaust every authoritative page before resolving contex
     const page = Number(url.searchParams.get('page'));
     const pageSize = Number(url.searchParams.get('page_size'));
     const start = (page - 1) * pageSize;
-    const items = url.pathname.endsWith('/tenants') ? tenants : projects;
-    const key = url.pathname.endsWith('/tenants') ? 'tenants' : 'projects';
+    const items = url.pathname.endsWith('/tenants/') ? tenants : projects;
+    const key = url.pathname.endsWith('/tenants/') ? 'tenants' : 'projects';
     return new Response(
       JSON.stringify({
         [key]: items.slice(start, start + pageSize),
@@ -879,16 +879,16 @@ test('identity catalogs exhaust every authoritative page before resolving contex
         pageSize: url.searchParams.get('page_size'),
       })),
       [
-        { path: '/api/v1/tenants', tenantId: null, page: '1', pageSize: '100' },
-        { path: '/api/v1/tenants', tenantId: null, page: '2', pageSize: '100' },
+        { path: '/api/v1/tenants/', tenantId: null, page: '1', pageSize: '100' },
+        { path: '/api/v1/tenants/', tenantId: null, page: '2', pageSize: '100' },
         {
-          path: '/api/v1/projects',
+          path: '/api/v1/projects/',
           tenantId: 'tenant-101',
           page: '1',
           pageSize: '100',
         },
         {
-          path: '/api/v1/projects',
+          path: '/api/v1/projects/',
           tenantId: 'tenant-101',
           page: '2',
           pageSize: '100',

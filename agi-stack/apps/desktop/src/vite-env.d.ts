@@ -60,7 +60,7 @@ type DesktopDisplayCapture = {
   width: number;
 };
 
-type DesktopFileOpenPurpose = 'attachment' | 'skill_package';
+type DesktopFileOpenPurpose = 'attachment' | 'skill_package' | 'plugin_package';
 
 type DesktopFilePayload = Readonly<{
   filename: string;

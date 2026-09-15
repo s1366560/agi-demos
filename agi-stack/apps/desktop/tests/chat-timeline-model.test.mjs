@@ -6210,6 +6210,7 @@ test("SubAgent lifecycle events become one structured execution group", () => {
         progress: 100,
         statusMessage: "Running the concurrent regression suite",
         toolCallsCount: 4,
+        toolActivity: [],
         phases: {
           routed: true,
           started: true,
@@ -6339,6 +6340,7 @@ test("SubAgent delegation and doom-loop events preserve child identity and termi
     progress: null,
     statusMessage: "",
     toolCallsCount: null,
+    toolActivity: [],
     phases: {
       routed: true,
       started: true,
@@ -6509,4 +6511,22 @@ test("Desktop renders SubAgent groups as structured first-class timeline cards",
     2,
     "SubAgent group labels must cover both locales",
   );
+});
+
+test('persisted completion usage overrides stale last-call metrics and survives reload', () => {
+  const summary = {
+    call_count: 2, total_cost: 0.0030936, total_cost_formatted: '$0.003094',
+    total_tokens: { input: 20108, output: 129, reasoning: 0, total: 20237 },
+  };
+  const item = {
+    id: 'native-complete', type: 'assistant_message', role: 'assistant',
+    eventTimeUs: 1789359336485358, eventCounter: 0,
+    metadata: {
+      execution_summary: summary,
+      costTracking: { inputTokens: 10126, outputTokens: 10, reasoningTokens: 0, totalTokens: 10136, costUsd: 0.0015249, model: 'MiniMax-M3' },
+    },
+  };
+  const expected = { inputTokens: 20108, outputTokens: 129, reasoningTokens: 0, totalTokens: 20237, costUsd: 0.0030936, model: 'MiniMax-M3' };
+  assert.deepEqual(assistantCostTracking(item), expected);
+  assert.deepEqual(assistantCostTracking({ ...item, metadata: { execution_summary: summary } }), { ...expected, model: '' });
 });

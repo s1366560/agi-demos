@@ -1,3 +1,4 @@
+import { userMessageForDisplay } from './messageDisplayModel';
 import type { AgentTimelineItem } from '../../types';
 import { foldAssistantExecutionDuplicatesForDisplay } from './assistantDuplicateDisplayModel';
 import { foldHitlResponseTimelineItems } from './hitlResponseEventModel';
@@ -198,7 +199,7 @@ export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimeli
     ) {
       return [];
     }
-    if (item.type !== 'message') return [item];
+    if (item.type !== 'message') return [userMessageForDisplay(item)];
     const message = channelInboundMessageForDisplay(item);
     return message ? [message] : [];
   });
@@ -787,7 +788,21 @@ export function mergeCostUpdateEvent(
 
 export function assistantCostTracking(item: AgentTimelineItem): AgentCostTracking | null {
   const metadata = isRecord(item.metadata) ? item.metadata : null;
-  const raw = metadata?.costTracking ?? metadata?.cost_tracking;
+  const tracking = metadata?.costTracking ?? metadata?.cost_tracking;
+  const summary = metadata?.executionSummary ?? metadata?.execution_summary;
+  const totals = isRecord(summary) ? summary.totalTokens ?? summary.total_tokens : null;
+  // Completion persists the run-wide breakdown. Live tracking may represent a
+  // partially received run and must never override the authoritative totals.
+  const raw = isRecord(totals) && totals.input !== undefined && totals.output !== undefined
+    ? {
+        inputTokens: totals.input,
+        outputTokens: totals.output,
+        reasoningTokens: totals.reasoning,
+        totalTokens: totals.total,
+        costUsd: isRecord(summary) ? summary.totalCost ?? summary.total_cost : undefined,
+        model: isRecord(tracking) ? tracking.model : '',
+      }
+    : tracking;
   if (!isRecord(raw)) return null;
 
   const inputTokens = optionalFiniteNumber(raw.inputTokens ?? raw.input_tokens);

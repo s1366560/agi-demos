@@ -220,9 +220,14 @@ export const subagentAPI = {
    */
   cancelExecution: async (
     executionId: string,
-    conversationId?: string,
+    conversationId: string,
     reason?: string
-  ): Promise<{ execution_id: string; cancelled: boolean; message: string }> => {
+  ): Promise<{
+    execution_id: string;
+    cancelled: boolean;
+    cancel_requested?: boolean;
+    message: string;
+  }> => {
     return await api.post(`/agent/subagent/${executionId}/cancel`, {
       conversation_id: conversationId,
       reason: reason,

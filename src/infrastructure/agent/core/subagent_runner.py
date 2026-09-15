@@ -32,6 +32,13 @@ from src.domain.events.agent_events import (
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 from src.domain.model.agent.subagent_run import SubAgentRunStatus
+from src.infrastructure.agent.subagent.async_run_registry_v2 import (
+    AsyncSubAgentRunRegistryV2,
+    registry_call_v2,
+    registry_transaction_v2,
+)
+from src.infrastructure.agent.subagent.owner_control_v2 import SubAgentOwnerControlV2
+from src.infrastructure.agent.subagent.owner_lease_v2 import SubAgentExecutionOwnerV2
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
 from src.infrastructure.plugins.v2.agent_operation_tool_contributions import (
@@ -206,6 +213,12 @@ class SubAgentSessionRunner:
             subagent,
             inherited_tool_set=inherited_tool_set,
         )
+        from src.infrastructure.plugins.v2.subagent_wasm_tool_leases_v2 import (
+            rebind_inherited_wasm_tool_leases_v2,
+        )
+
+        filtered_tools = await rebind_inherited_wasm_tool_leases_v2(filtered_tools)
+        existing_tool_names = {definition.name for definition in filtered_tools}
         allowed_rebindable_names = frozenset(
             existing_tool_names & inherited_tool_set.rebindable_tool_names
         )
@@ -309,7 +322,7 @@ class SubAgentSessionRunner:
     # Core execution
     # ------------------------------------------------------------------
 
-    async def execute_subagent(
+    async def execute_subagent(  # noqa: PLR0913
         self,
         subagent: SubAgent,
         available_subagents: Sequence[SubAgent],
@@ -323,6 +336,7 @@ class SubAgentSessionRunner:
         model_override: str | None = None,
         thinking_override: str | None = None,
         inherited_tool_set: InheritedToolSetV2 | None = None,
+        run_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute a SubAgent in an independent ReAct loop.
 
@@ -366,6 +380,7 @@ class SubAgentSessionRunner:
 
         process = SubAgentProcess(
             subagent=subagent,
+            run_id=run_id,
             context=subagent_context,
             tools=filtered_tools,
             base_model=(model_override or self.deps.model),
@@ -696,7 +711,7 @@ class SubAgentSessionRunner:
     # Runner state-machine helpers
     # ------------------------------------------------------------------
 
-    def runner_resolve_overrides(
+    async def runner_resolve_overrides(
         self,
         conversation_id: str,
         run_id: str,
@@ -713,7 +728,9 @@ class SubAgentSessionRunner:
         resolved_model = requested_model
         resolved_thinking = requested_thinking
         configured_timeout = 0.0
-        run_state = self.deps.subagent_run_registry.get_run(
+        run_state = await registry_call_v2(
+            self.deps.subagent_run_registry,
+            "get_run",
             conversation_id,
             run_id,
         )
@@ -743,7 +760,9 @@ class SubAgentSessionRunner:
                 ).strip()
                 or None
             )
-        self.deps.subagent_run_registry.attach_metadata(
+        await registry_call_v2(
+            self.deps.subagent_run_registry,
+            "attach_metadata",
             conversation_id=conversation_id,
             run_id=run_id,
             metadata={
@@ -756,7 +775,7 @@ class SubAgentSessionRunner:
         )
         return resolved_model, resolved_thinking, configured_timeout
 
-    def runner_mark_completion(
+    async def runner_mark_completion(
         self,
         conversation_id: str,
         run_id: str,
@@ -768,7 +787,9 @@ class SubAgentSessionRunner:
         started_at: float,
     ) -> None:
         """Mark a SubAgent run as completed or failed in the registry."""
-        current = self.deps.subagent_run_registry.get_run(
+        current = await registry_call_v2(
+            self.deps.subagent_run_registry,
+            "get_run",
             conversation_id,
             run_id,
         )
@@ -785,7 +806,9 @@ class SubAgentSessionRunner:
             SubAgentRunStatus.RUNNING,
         ]
         if result_success:
-            self.deps.subagent_run_registry.mark_completed(
+            await registry_call_v2(
+                self.deps.subagent_run_registry,
+                "mark_completed",
                 conversation_id=conversation_id,
                 run_id=run_id,
                 summary=summary,
@@ -794,7 +817,9 @@ class SubAgentSessionRunner:
                 expected_statuses=expected,
             )
         else:
-            self.deps.subagent_run_registry.mark_failed(
+            await registry_call_v2(
+                self.deps.subagent_run_registry,
+                "mark_failed",
                 conversation_id=conversation_id,
                 run_id=run_id,
                 error=result_error or "SubAgent session failed",
@@ -802,14 +827,16 @@ class SubAgentSessionRunner:
                 expected_statuses=expected,
             )
 
-    def runner_mark_timeout(
+    async def runner_mark_timeout(
         self,
         conversation_id: str,
         run_id: str,
         configured_timeout: float,
     ) -> None:
         """Handle TimeoutError for a SubAgent runner."""
-        current = self.deps.subagent_run_registry.get_run(
+        current = await registry_call_v2(
+            self.deps.subagent_run_registry,
+            "get_run",
             conversation_id,
             run_id,
         )
@@ -817,7 +844,9 @@ class SubAgentSessionRunner:
             SubAgentRunStatus.PENDING,
             SubAgentRunStatus.RUNNING,
         }:
-            self.deps.subagent_run_registry.mark_timed_out(
+            await registry_call_v2(
+                self.deps.subagent_run_registry,
+                "mark_timed_out",
                 conversation_id=conversation_id,
                 run_id=run_id,
                 reason=(f"SubAgent session exceeded timeout ({configured_timeout}s)"),
@@ -828,13 +857,15 @@ class SubAgentSessionRunner:
                 ],
             )
 
-    def runner_mark_cancelled(
+    async def runner_mark_cancelled(
         self,
         conversation_id: str,
         run_id: str,
     ) -> None:
         """Handle CancelledError for a SubAgent runner."""
-        current = self.deps.subagent_run_registry.get_run(
+        current = await registry_call_v2(
+            self.deps.subagent_run_registry,
+            "get_run",
             conversation_id,
             run_id,
         )
@@ -842,7 +873,9 @@ class SubAgentSessionRunner:
             SubAgentRunStatus.PENDING,
             SubAgentRunStatus.RUNNING,
         }:
-            self.deps.subagent_run_registry.mark_cancelled(
+            await registry_call_v2(
+                self.deps.subagent_run_registry,
+                "mark_cancelled",
                 conversation_id=conversation_id,
                 run_id=run_id,
                 reason="Cancelled by control tool",
@@ -852,7 +885,7 @@ class SubAgentSessionRunner:
                 ],
             )
 
-    def check_spawn_limits(
+    async def check_spawn_limits(
         self,
         conversation_id: str,
         current_depth: int,
@@ -875,7 +908,9 @@ class SubAgentSessionRunner:
             return (False, [dict(event.to_event_dict())])
 
         # Concurrency limit check
-        active_count = self.deps.subagent_run_registry.count_active_runs(
+        active_count = await registry_call_v2(
+            self.deps.subagent_run_registry,
+            "count_active_runs",
             conversation_id,
         )
         max_active = self.deps.max_subagent_active_runs
@@ -889,7 +924,7 @@ class SubAgentSessionRunner:
 
         return (True, [])
 
-    def runner_mark_error(
+    async def runner_mark_error(
         self,
         conversation_id: str,
         run_id: str,
@@ -897,7 +932,9 @@ class SubAgentSessionRunner:
         started_at: float,
     ) -> None:
         """Handle generic Exception for a SubAgent runner."""
-        current = self.deps.subagent_run_registry.get_run(
+        current = await registry_call_v2(
+            self.deps.subagent_run_registry,
+            "get_run",
             conversation_id,
             run_id,
         )
@@ -905,7 +942,9 @@ class SubAgentSessionRunner:
             SubAgentRunStatus.PENDING,
             SubAgentRunStatus.RUNNING,
         }:
-            self.deps.subagent_run_registry.mark_failed(
+            await registry_call_v2(
+                self.deps.subagent_run_registry,
+                "mark_failed",
                 conversation_id=conversation_id,
                 run_id=run_id,
                 error=str(exc),
@@ -937,31 +976,32 @@ class SubAgentSessionRunner:
         resolved_thinking_override: str | None,
     ) -> None:
         """Finalize a SubAgent runner: persist announce, emit hook, cleanup."""
-        if not cancelled_by_control:
-            try:
-                await self.persist_subagent_completion_announce(
-                    conversation_id=conversation_id,
-                    run_id=run_id,
-                    fallback_summary=summary,
-                    fallback_tokens_used=tokens_used,
-                    fallback_execution_time_ms=execution_time_ms,
-                    spawn_mode=normalized_spawn_mode,
-                    thread_requested=bool(thread_requested),
-                    cleanup=normalized_cleanup,
-                    model_override=resolved_model_override,
-                    thinking_override=resolved_thinking_override,
-                    max_retries=(self.deps.subagent_announce_max_retries),
-                )
-            except Exception:
-                logger.warning(
-                    "Failed to persist completion announce metadata",
-                    extra={
-                        "conversation_id": conversation_id,
-                        "run_id": run_id,
-                    },
-                    exc_info=True,
-                )
-        final_run = self.deps.subagent_run_registry.get_run(
+        try:
+            await self.persist_subagent_completion_announce(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                fallback_summary=summary,
+                fallback_tokens_used=tokens_used,
+                fallback_execution_time_ms=execution_time_ms,
+                spawn_mode=normalized_spawn_mode,
+                thread_requested=bool(thread_requested),
+                cleanup=normalized_cleanup,
+                model_override=resolved_model_override,
+                thinking_override=resolved_thinking_override,
+                max_retries=(self.deps.subagent_announce_max_retries),
+            )
+        except Exception:
+            logger.warning(
+                "Failed to persist completion announce metadata",
+                extra={
+                    "conversation_id": conversation_id,
+                    "run_id": run_id,
+                },
+                exc_info=True,
+            )
+        final_run = await registry_call_v2(
+            self.deps.subagent_run_registry,
+            "get_run",
             conversation_id,
             run_id,
         )
@@ -1104,7 +1144,7 @@ class SubAgentSessionRunner:
         )
 
     @staticmethod
-    def _record_launch_failure(
+    async def _record_launch_failure(
         registry: SubAgentRunRegistry,
         *,
         conversation_id: str,
@@ -1119,14 +1159,18 @@ class SubAgentSessionRunner:
             isinstance(error, RuntimeV2Error) and error.code == "detached_subagent_launch_cancelled"
         )
         if launch_cancelled:
-            _ = registry.mark_cancelled(
+            _ = await registry_call_v2(
+                registry,
+                "mark_cancelled",
                 conversation_id=conversation_id,
                 run_id=run_id,
                 reason="Detached SubAgent launch was cancelled",
                 expected_statuses=expected_statuses,
             )
         elif isinstance(error, Exception):
-            _ = registry.mark_failed(
+            _ = await registry_call_v2(
+                registry,
+                "mark_failed",
                 conversation_id=conversation_id,
                 run_id=run_id,
                 error=str(error),
@@ -1175,6 +1219,7 @@ class SubAgentSessionRunner:
         model_override: str | None,
         thinking_override: str | None,
         inherited_tool_set: InheritedToolSetV2,
+        run_id: str | None = None,
     ) -> tuple[str, int | None, int | None, bool, str | None]:
         """Consume subagent events and extract completion results.
 
@@ -1189,6 +1234,7 @@ class SubAgentSessionRunner:
 
         async for evt in self.execute_subagent(
             subagent=subagent,
+            run_id=run_id,
             available_subagents=available_subagents,
             user_message=user_message,
             conversation_context=conversation_context,
@@ -1233,7 +1279,7 @@ class SubAgentSessionRunner:
     ) -> bool:
         """Validate spawn and emit rejection event if denied. Returns True if rejected."""
         assert self.deps.spawn_validator is not None
-        validation = self.deps.spawn_validator.validate(
+        validation = await self.deps.spawn_validator.validate_async(
             subagent_name=subagent.display_name,
             current_depth=0,
             conversation_id=conversation_id,
@@ -1259,7 +1305,7 @@ class SubAgentSessionRunner:
         await self.emit_subagent_lifecycle_hook(payload)
         return True
 
-    async def launch_subagent_session(  # noqa: C901,PLR0913,PLR0915
+    async def launch_subagent_session(  # noqa: C901,PLR0912,PLR0913,PLR0915
         self,
         run_id: str,
         subagent: SubAgent,
@@ -1310,7 +1356,9 @@ class SubAgentSessionRunner:
         if run_metadata:
             metadata: dict[str, object] = dict(run_metadata)
             try:
-                session_registry.attach_metadata(
+                await registry_call_v2(
+                    session_registry,
+                    "attach_metadata",
                     conversation_id=conversation_id,
                     run_id=run_id,
                     metadata=metadata,
@@ -1322,12 +1370,37 @@ class SubAgentSessionRunner:
                     exc_info=True,
                 )
 
+        from src.application.services.approved_run_tool_permission_v2 import (
+            current_approved_run_guard_v2,
+            inherit_approved_run_guard_v2,
+        )
+        from src.application.services.chat_run_tool_permission_v2 import (
+            current_chat_run_guard_v2,
+            inherit_chat_run_guard_v2,
+        )
+
+        parent_chat_guard = current_chat_run_guard_v2()
+        if parent_chat_guard is not None:
+            if await parent_chat_guard.decision("delegate", "", {}) != "allow":
+                raise RuntimeV2Error("chat_tool_permission_denied", "Chat delegation is not valid")
+            await registry_call_v2(
+                session_registry, "bind_chat_permission_authority", conversation_id, run_id,
+                chat_run_id=parent_chat_guard.run_id, mode=parent_chat_guard.mode,
+            )
+        parent_permission_guard = current_approved_run_guard_v2()
+        if parent_permission_guard is not None:
+            await parent_permission_guard.require("delegate")
+            await registry_call_v2(
+                session_registry, "bind_approved_plan_authority", conversation_id, run_id,
+                approved_run_id=parent_permission_guard.run_id,
+                ceiling=parent_permission_guard.profile,
+            )
         reservation = await self.deps.operation_reserver()
         try:
             parent_tool_set.validate_generation(reservation.descriptor)
         except BaseException as exc:
             await reservation.release()
-            self._record_launch_failure(
+            await self._record_launch_failure(
                 session_registry,
                 conversation_id=conversation_id,
                 run_id=run_id,
@@ -1340,7 +1413,9 @@ class SubAgentSessionRunner:
             "inherited_tool_set_owner_operation_id": parent_tool_set.owner_operation_id,
         }
         try:
-            updated_run = session_registry.attach_metadata(
+            updated_run = await registry_call_v2(
+                session_registry,
+                "attach_metadata",
                 conversation_id=conversation_id,
                 run_id=run_id,
                 metadata=generation_metadata,
@@ -1352,7 +1427,7 @@ class SubAgentSessionRunner:
                 )
         except BaseException as exc:
             await reservation.release()
-            self._record_launch_failure(
+            await self._record_launch_failure(
                 session_registry,
                 conversation_id=conversation_id,
                 run_id=run_id,
@@ -1362,6 +1437,9 @@ class SubAgentSessionRunner:
 
         start_gate = asyncio.Event()
         admission: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+
+        owner_control: SubAgentOwnerControlV2 | None = None
+        execution_owner: SubAgentExecutionOwnerV2 | None = None
 
         async def _run_admitted_session() -> None:
             started_at = time.time()
@@ -1381,7 +1459,7 @@ class SubAgentSessionRunner:
                     resolved_model_override,
                     resolved_thinking_override,
                     configured_timeout,
-                ) = self.runner_resolve_overrides(
+                ) = await self.runner_resolve_overrides(
                     conversation_id=conversation_id,
                     run_id=run_id,
                     requested_model=requested_model_override,
@@ -1405,12 +1483,15 @@ class SubAgentSessionRunner:
                         (time.time() - lane_wait_start) * 1000,
                     )
                     if lane_wait_ms > 0:
-                        self.deps.subagent_run_registry.attach_metadata(
+                        await registry_call_v2(
+                            self.deps.subagent_run_registry,
+                            "attach_metadata",
                             conversation_id=conversation_id,
                             run_id=run_id,
                             metadata={"lane_wait_ms": lane_wait_ms},
                         )
                     consume_coro = self.runner_consume_and_extract(
+                        run_id=run_id,
                         subagent=subagent,
                         available_subagents=available_subagents,
                         user_message=user_message,
@@ -1438,7 +1519,7 @@ class SubAgentSessionRunner:
                         result_error,
                     ) = result
 
-                self.runner_mark_completion(
+                await self.runner_mark_completion(
                     conversation_id,
                     run_id,
                     result_success,
@@ -1449,13 +1530,15 @@ class SubAgentSessionRunner:
                     started_at,
                 )
             except TimeoutError:
-                self.runner_mark_timeout(
+                await self.runner_mark_timeout(
                     conversation_id,
                     run_id,
                     configured_timeout,
                 )
                 timeout_payload = dict(
                     SubAgentKilledEvent(
+                        run_id=run_id,
+                        conversation_id=conversation_id,
                         subagent_id=subagent.id,
                         subagent_name=subagent.display_name,
                         kill_reason=f"Timed out after {configured_timeout}s",
@@ -1465,21 +1548,19 @@ class SubAgentSessionRunner:
                 timeout_payload["tenant_id"] = tenant_id
                 await self.emit_subagent_lifecycle_hook(timeout_payload)
             except asyncio.CancelledError:
-                cancelled_by_control = True
-                self.runner_mark_cancelled(conversation_id, run_id)
-                cancelled_payload = dict(
-                    SubAgentKilledEvent(
-                        subagent_id=subagent.id,
-                        subagent_name=subagent.display_name,
-                        kill_reason="Cancelled by control",
-                    ).to_event_dict(),
+                cancelled_by_control = await self._settle_owner_cancellation(
+                    conversation_id,
+                    run_id,
+                    project_id,
+                    tenant_id,
+                    subagent,
+                    started_at,
+                    (execution_owner.failure if execution_owner else None)
+                    or (owner_control.failure if owner_control else None),
                 )
-                cancelled_payload["project_id"] = project_id
-                cancelled_payload["tenant_id"] = tenant_id
-                await self.emit_subagent_lifecycle_hook(cancelled_payload)
                 raise
             except Exception as exc:
-                self.runner_mark_error(
+                await self.runner_mark_error(
                     conversation_id,
                     run_id,
                     exc,
@@ -1504,6 +1585,7 @@ class SubAgentSessionRunner:
                 )
 
         async def _runner() -> None:
+            nonlocal owner_control, execution_owner
             try:
                 operation_services: dict[str, object] = {}
                 async with AsyncExitStack() as stack:
@@ -1522,6 +1604,8 @@ class SubAgentSessionRunner:
                         },
                         services=operation_services,
                     ) as child_operation:
+                        inherit_approved_run_guard_v2(parent_permission_guard, child_operation)
+                        inherit_chat_run_guard_v2(parent_chat_guard, child_operation)
                         parent_tool_set.validate_generation(child_operation.descriptor)
                         child_registry = self.deps.subagent_run_registry
                         if child_registry is not session_registry:
@@ -1529,9 +1613,20 @@ class SubAgentSessionRunner:
                                 "subagent_registry_generation_mismatch",
                                 "detached SubAgent resolved a different generation registry",
                             )
-                        if not admission.done():
-                            admission.set_result(None)
-                        await _run_admitted_session()
+                        async with AsyncExitStack() as execution_stack:
+                            if isinstance(child_registry, AsyncSubAgentRunRegistryV2):
+                                execution_owner = await execution_stack.enter_async_context(
+                                    child_registry.own_execution(conversation_id, run_id)
+                                )
+                            if not admission.done():
+                                admission.set_result(None)
+                            async with SubAgentOwnerControlV2(
+                                lambda: self.deps.subagent_run_registry,
+                                conversation_id,
+                                run_id,
+                                self.deps.factory.control_channel if self.deps.factory else None,
+                            ) as owner_control:
+                                await _run_admitted_session()
             except BaseException as exc:
                 if not admission.done():
                     admission.set_exception(exc)
@@ -1586,7 +1681,7 @@ class SubAgentSessionRunner:
                     "detached SubAgent task stopped before its launch gate opened",
                 )
         except BaseException as exc:
-            self._record_launch_failure(
+            await self._record_launch_failure(
                 session_registry,
                 conversation_id=conversation_id,
                 run_id=run_id,
@@ -1702,60 +1797,66 @@ class SubAgentSessionRunner:
 
         for attempt in range(max_retries + 1):
             attempts_used = attempt + 1
-            run = self.deps.subagent_run_registry.get_run(
-                conversation_id,
-                run_id,
-            )
-            if not run or run.status not in terminal_statuses:
-                return
 
-            payload = self.build_subagent_completion_payload(
-                run=run,
-                fallback_summary=fallback_summary,
-                fallback_tokens_used=fallback_tokens_used,
-                fallback_execution_time_ms=fallback_execution_time_ms,
-                spawn_mode=spawn_mode,
-                thread_requested=thread_requested,
-                cleanup=cleanup,
-                model_override=model_override,
-                thinking_override=thinking_override,
-            )
-            announce_events = run.metadata.get("announce_events")
-            if not isinstance(announce_events, list):
-                announce_events = []
-            dropped_count = int(
-                run.metadata.get("announce_events_dropped") or 0,
-            )
+            def deliver(
+                memory: SubAgentRunRegistry,
+                attempt: int = attempt,
+                attempts_used: int = attempts_used,
+                last_error: str = last_error,
+            ) -> object:
+                run = memory.get_run(
+                    conversation_id,
+                    run_id,
+                )
+                if not run or run.status not in terminal_statuses:
+                    return True
 
-            if attempt > 0:
-                retry_event = {
+                payload = self.build_subagent_completion_payload(
+                    run=run,
+                    fallback_summary=fallback_summary,
+                    fallback_tokens_used=fallback_tokens_used,
+                    fallback_execution_time_ms=fallback_execution_time_ms,
+                    spawn_mode=spawn_mode,
+                    thread_requested=thread_requested,
+                    cleanup=cleanup,
+                    model_override=model_override,
+                    thinking_override=thinking_override,
+                )
+                announce_events = run.metadata.get("announce_events")
+                if not isinstance(announce_events, list):
+                    announce_events = []
+                dropped_count = int(
+                    run.metadata.get("announce_events_dropped") or 0,
+                )
+
+                if attempt > 0:
+                    retry_event = {
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "type": "completion_retry",
+                        "attempt": attempt,
+                        "run_id": run_id,
+                        "reason": last_error,
+                    }
+                    announce_events, dropped_count = self.append_capped_announce_event(
+                        announce_events,
+                        dropped_count,
+                        retry_event,
+                    )
+
+                delivered_event = {
                     "timestamp": datetime.now(UTC).isoformat(),
-                    "type": "completion_retry",
-                    "attempt": attempt,
+                    "type": "completion_delivered",
+                    "attempt": attempts_used,
                     "run_id": run_id,
-                    "reason": last_error,
+                    "status": payload["status"],
                 }
                 announce_events, dropped_count = self.append_capped_announce_event(
                     announce_events,
                     dropped_count,
-                    retry_event,
+                    delivered_event,
                 )
 
-            delivered_event = {
-                "timestamp": datetime.now(UTC).isoformat(),
-                "type": "completion_delivered",
-                "attempt": attempts_used,
-                "run_id": run_id,
-                "status": payload["status"],
-            }
-            announce_events, dropped_count = self.append_capped_announce_event(
-                announce_events,
-                dropped_count,
-                delivered_event,
-            )
-
-            try:
-                updated_run = self.deps.subagent_run_registry.attach_metadata(
+                return memory.attach_metadata(
                     conversation_id=conversation_id,
                     run_id=run_id,
                     metadata={
@@ -1768,6 +1869,11 @@ class SubAgentSessionRunner:
                         "announce_events_dropped": dropped_count,
                     },
                     expected_statuses=terminal_statuses,
+                )
+
+            try:
+                updated_run = await registry_transaction_v2(
+                    self.deps.subagent_run_registry, deliver, write=True
                 )
             except Exception as exc:
                 updated_run = None
@@ -1784,53 +1890,88 @@ class SubAgentSessionRunner:
 
             if updated_run is not None:
                 return
-            if not last_error:
-                last_error = "announce metadata update conflict"
+            last_error = last_error or "announce metadata update conflict"
 
             if attempt < max_retries:
                 delay_seconds = (self.deps.subagent_announce_retry_delay_ms * (2**attempt)) / 1000.0
                 await asyncio.sleep(delay_seconds)
 
-        run = self.deps.subagent_run_registry.get_run(
-            conversation_id,
-            run_id,
+        def giveup(memory: SubAgentRunRegistry) -> None:
+            run = memory.get_run(
+                conversation_id,
+                run_id,
+            )
+            if not run or run.status not in terminal_statuses:
+                return
+            announce_events = run.metadata.get("announce_events")
+            if not isinstance(announce_events, list):
+                announce_events = []
+            dropped_count = int(
+                run.metadata.get("announce_events_dropped") or 0,
+            )
+            giveup_event = {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "type": "completion_giveup",
+                "attempt": attempts_used,
+                "run_id": run_id,
+                "reason": last_error,
+            }
+            announce_events, dropped_count = self.append_capped_announce_event(
+                announce_events,
+                dropped_count,
+                giveup_event,
+            )
+            memory.attach_metadata(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                metadata={
+                    "announce_status": "giveup",
+                    "announce_attempt_count": attempts_used,
+                    "announce_last_error": last_error,
+                    "announce_events": announce_events,
+                    "announce_events_dropped": dropped_count,
+                },
+                expected_statuses=terminal_statuses,
+            )
+
+        await registry_transaction_v2(self.deps.subagent_run_registry, giveup, write=True)
+
+    async def _settle_owner_cancellation(
+        self,
+        conversation_id: str,
+        run_id: str,
+        project_id: str,
+        tenant_id: str,
+        subagent: SubAgent,
+        started_at: float,
+        failure: Exception | None,
+    ) -> bool:
+        if failure is not None:
+            await self.runner_mark_error(conversation_id, run_id, failure, started_at)
+            return False
+        await self.runner_mark_cancelled(conversation_id, run_id)
+        payload = dict(
+            SubAgentKilledEvent(
+                run_id=run_id,
+                conversation_id=conversation_id,
+                subagent_id=subagent.id,
+                subagent_name=subagent.display_name,
+                kill_reason="Cancelled by control",
+            ).to_event_dict()
         )
-        if not run or run.status not in terminal_statuses:
-            return
-        announce_events = run.metadata.get("announce_events")
-        if not isinstance(announce_events, list):
-            announce_events = []
-        dropped_count = int(
-            run.metadata.get("announce_events_dropped") or 0,
-        )
-        giveup_event = {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "type": "completion_giveup",
-            "attempt": attempts_used,
-            "run_id": run_id,
-            "reason": last_error,
-        }
-        announce_events, dropped_count = self.append_capped_announce_event(
-            announce_events,
-            dropped_count,
-            giveup_event,
-        )
-        self.deps.subagent_run_registry.attach_metadata(
-            conversation_id=conversation_id,
-            run_id=run_id,
-            metadata={
-                "announce_status": "giveup",
-                "announce_attempt_count": attempts_used,
-                "announce_last_error": last_error,
-                "announce_events": announce_events,
-                "announce_events_dropped": dropped_count,
-            },
-            expected_statuses=terminal_statuses,
-        )
+        payload["project_id"] = project_id
+        payload["tenant_id"] = tenant_id
+        await self.emit_subagent_lifecycle_hook(payload)
+        return True
 
     async def cancel_subagent_session(self, run_id: str) -> bool:
         """Cancel a detached SubAgent session by run_id."""
-        return self.deps.detached_subagent_task_supervisor.cancel(run_id)
+        supervisor = self.deps.detached_subagent_task_supervisor
+        task = supervisor.task_for(run_id)
+        if task is None or not supervisor.cancel(run_id):
+            return False
+        done, _ = await asyncio.wait({task}, timeout=5)
+        return task in done
 
     @staticmethod
     def topological_sort_subtasks(subtasks: list[Any]) -> list[Any]:

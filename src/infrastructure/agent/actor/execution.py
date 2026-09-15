@@ -21,6 +21,12 @@ if TYPE_CHECKING:
 
 import redis.asyncio as aioredis
 
+from src.application.services.agent.run_cancellation_signal import (
+    CancellationSignalStore,
+    RunCancellationIdentity,
+    start_run_cancellation_monitor,
+)
+from src.application.services.agent.runtime_model_route import resolve_run_model_route
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.ports.services.agent_message_bus_port import AgentMessageType
@@ -76,15 +82,17 @@ async def _mark_root_run_authority_running(
     project_id: str,
     conversation_id: str,
     run_id: str,
-) -> None:
+) -> bool:
     async with async_session_factory() as session:
-        await mark_agent_run_running(
+        run = await mark_agent_run_running(
             session,
             run_id=run_id,
             tenant_id=tenant_id,
             project_id=project_id,
             conversation_id=conversation_id,
         )
+
+        return run is not None and isinstance(run.authorization_snapshot.get("cancellation_receipt"), dict)
 
 
 async def _settle_root_run_authority(
@@ -103,27 +111,42 @@ async def _settle_root_run_authority(
         if (
             run is None
             or run.run_kind != "chat"
+            or run.status not in {"queued", "running", "completed", "failed", "cancelled"}
             or run.tenant_id != tenant_id
             or run.project_id != project_id
             or run.conversation_id != conversation_id
         ):
             return
-        completed_at = datetime.now(UTC)
-        run.status = {
-            "success": "completed",
-            "cancelled": "cancelled",
-        }.get(outcome, "failed")
-        run.completed_at = completed_at
-        run.updated_at = completed_at
-        run.error = error
-        await settle_agent_run(
-            session,
-            run=run,
-            started_at=run.started_at or run.created_at,
-            succeeded=outcome == "success",
-            completed_at=completed_at,
-        )
-        await session.commit()
+        if run.status in {"queued", "running"}:
+            completed_at = datetime.now(UTC)
+            run.status = {
+                "success": "completed",
+                "cancelled": "cancelled",
+            }.get(outcome, "failed")
+            receipt = run.authorization_snapshot.get("cancellation_receipt")
+            if outcome == "cancelled" and isinstance(receipt, dict):
+                expected_revision = receipt.get("expected_revision")
+                if type(expected_revision) is int and expected_revision == run.revision:
+                    run.revision += 1
+            run.completed_at = completed_at
+            run.updated_at = completed_at
+            run.error = error
+            await settle_agent_run(
+                session,
+                run=run,
+                started_at=run.started_at or run.created_at,
+                succeeded=outcome == "success",
+                completed_at=completed_at,
+            )
+            await session.commit()
+
+    # Terminal observations must not depend on a still-running parent model.
+    from .peer_terminal_projection_v2 import publish_settled_peer_terminal_v2
+
+    try:
+        await publish_settled_peer_terminal_v2(run_id)
+    except Exception:
+        logger.warning("Failed to project settled peer terminal run=%s", run_id, exc_info=True)
 
 
 async def _run_session_lifecycle(project_id: str) -> None:
@@ -342,7 +365,9 @@ def _extract_event_side_effects(event: dict[str, Any]) -> _EventSideEffects:
     side = _EventSideEffects()
     event_type = event.get("type")
 
-    if event_type == "complete":
+    if event_type in {"act", "observe"} or event_type in _HITL_REQUEST_EVENT_TYPES:
+        side.should_flush_events = True
+    elif event_type == "complete":
         side.final_content = event.get("data", {}).get("content", "")
     elif event_type == "error":
         side.is_error = True
@@ -915,6 +940,36 @@ async def _load_persisted_agent_config(conversation_id: str) -> dict[str, Any] |
     return None
 
 
+async def _open_chat_cancellation_monitor(
+    *,
+    request: ProjectChatRequest,
+    tenant_id: str,
+    project_id: str,
+    persisted_cancellation: bool,
+) -> asyncio.Task[None] | None:
+    if persisted_cancellation is True:
+        raise asyncio.CancelledError
+    if request.parent_session_id:
+        return None
+    return await start_run_cancellation_monitor(
+        # redis-py stubs type the pooled asyncio client's get() synchronously;
+        # at runtime it is a coroutine satisfying CancellationSignalStore.
+        cast(CancellationSignalStore, await _get_redis_client()),
+        RunCancellationIdentity(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            conversation_id=request.conversation_id,
+            run_id=request.canonical_run_id or request.message_id,
+        ),
+    )
+
+
+async def _close_chat_cancellation_monitor(monitor: asyncio.Task[None] | None) -> None:
+    if monitor is not None:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
 async def execute_project_chat(  # noqa: PLR0915
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
@@ -940,7 +995,7 @@ async def execute_project_chat(  # noqa: PLR0915
     )
     run_authority_id = request.canonical_run_id or request.message_id
 
-    await _mark_root_run_authority_running(
+    persisted_cancellation = await _mark_root_run_authority_running(
         tenant_id=agent.config.tenant_id,
         project_id=agent.config.project_id,
         conversation_id=request.conversation_id,
@@ -953,8 +1008,27 @@ async def execute_project_chat(  # noqa: PLR0915
     time_gen = EventTimeGenerator(last_time_us, last_counter)
     llm_overrides, model_override = await _resolve_chat_runtime_overrides(request)
 
+    cancellation_monitor: asyncio.Task[None] | None = None
     try:
+        cancellation_monitor = await _open_chat_cancellation_monitor(
+            request=request,
+            tenant_id=agent.config.tenant_id,
+            project_id=agent.config.project_id,
+            persisted_cancellation=persisted_cancellation,
+        )
         redis_client = await _get_redis_client()
+        model_route_override = None
+        if not request.parent_session_id and not _is_workspace_runtime_context(
+            request.app_model_context
+        ):
+            model_route_override = await resolve_run_model_route(
+                tenant_id=agent.config.tenant_id,
+                project_id=agent.config.project_id,
+                conversation_id=request.conversation_id,
+                run_id=run_authority_id,
+            )
+            if model_route_override is not None:
+                model_override = model_route_override.model_id
         pending_delta_events: list[tuple[dict[str, Any], int, int]] = []
         last_delta_flush = time_module.time()
 
@@ -982,6 +1056,7 @@ async def execute_project_chat(  # noqa: PLR0915
             plan_mode=request.plan_mode,
             llm_overrides=llm_overrides,
             model_override=model_override,
+            model_route_override=model_route_override,
             image_attachments=request.image_attachments,
             agent_id=request.agent_id,
             tenant_agent_config_data=request.tenant_agent_config,
@@ -990,6 +1065,9 @@ async def execute_project_chat(  # noqa: PLR0915
             canonical_run_id=run_authority_id,
             plugin_generation=request.plugin_generation,
         ):
+            if event.get("type") in {"complete", "error", "cancelled"} and cancellation_monitor is not None:
+                await _close_chat_cancellation_monitor(cancellation_monitor)
+                cancellation_monitor = None
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
             event["event_counter"] = evt_counter
@@ -1122,6 +1200,29 @@ async def execute_project_chat(  # noqa: PLR0915
             run_id=run_authority_id,
             outcome="cancelled",
         )
+        event_time_us, event_counter = time_gen.next()
+        cancelled_event = {
+            "type": "cancelled",
+            "data": {"run_id": run_authority_id, "status": "cancelled"},
+            "event_time_us": event_time_us,
+            "event_counter": event_counter,
+        }
+        ss.events.append(cancelled_event)
+        await _flush_remaining_events(
+            ss.events,
+            ss.persisted_count,
+            request.conversation_id,
+            request.message_id,
+            request.correlation_id,
+        )
+        await _publish_event_to_stream(
+            conversation_id=request.conversation_id,
+            event=cancelled_event,
+            message_id=request.message_id,
+            event_time_us=event_time_us,
+            event_counter=event_counter,
+            correlation_id=request.correlation_id,
+        )
         raise
     except Exception as e:
         pending = await maybe_park_legacy_hitl(
@@ -1163,6 +1264,7 @@ async def execute_project_chat(  # noqa: PLR0915
         )
         return result
     finally:
+        await _close_chat_cancellation_monitor(cancellation_monitor)
         await clear_agent_running(request.conversation_id, request.message_id)
 
 

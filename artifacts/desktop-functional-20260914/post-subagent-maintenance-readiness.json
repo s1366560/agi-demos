@@ -1,0 +1,49 @@
+{
+  "publication_id": "71019242-375f-4271-8d2d-84c6b2223962",
+  "profile_id": "memstack-default-v2",
+  "generation": 14,
+  "requested_version": 14,
+  "snapshot_digest": "bf66bdce4d3095b8ec43ea44d55ad6fd808a6e4ab9a650c7e772a04411e8ba38",
+  "nonce": "63afdf1e-3086-463c-a55b-3d56262967f7",
+  "republished_from_nonce": null,
+  "required_data_plane_ids": [
+    "python-api-v2",
+    "desktop-sidecar-v2",
+    "desktop-renderer-v2"
+  ],
+  "ack_deadline_at": "2026-09-14 05:25:42.306933+00:00",
+  "status": "ready",
+  "ready_at": "2026-09-14 05:23:54.172157+00:00",
+  "data_planes": [
+    {
+      "data_plane_id": "python-api-v2",
+      "status": "ack",
+      "requested_version": 14,
+      "requested_digest": "bf66bdce4d3095b8ec43ea44d55ad6fd808a6e4ab9a650c7e772a04411e8ba38",
+      "applied_version": 14,
+      "applied_digest": "bf66bdce4d3095b8ec43ea44d55ad6fd808a6e4ab9a650c7e772a04411e8ba38",
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "data_plane_id": "desktop-sidecar-v2",
+      "status": "ack",
+      "requested_version": 14,
+      "requested_digest": "bf66bdce4d3095b8ec43ea44d55ad6fd808a6e4ab9a650c7e772a04411e8ba38",
+      "applied_version": 14,
+      "applied_digest": "bf66bdce4d3095b8ec43ea44d55ad6fd808a6e4ab9a650c7e772a04411e8ba38",
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "data_plane_id": "desktop-renderer-v2",
+      "status": "ack",
+      "requested_version": 14,
+      "requested_digest": "bf66bdce4d3095b8ec43ea44d55ad6fd808a6e4ab9a650c7e772a04411e8ba38",
+      "applied_version": 14,
+      "applied_digest": "bf66bdce4d3095b8ec43ea44d55ad6fd808a6e4ab9a650c7e772a04411e8ba38",
+      "error_code": null,
+      "error_message": null
+    }
+  ]
+}

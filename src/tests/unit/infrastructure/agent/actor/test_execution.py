@@ -19,6 +19,8 @@ from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMIT
 
 @pytest.fixture(autouse=True)
 def root_run_authority_mocks(monkeypatch: pytest.MonkeyPatch) -> tuple[AsyncMock, AsyncMock]:
+    monkeypatch.setattr(execution, "resolve_run_model_route", AsyncMock(return_value=None))
+    monkeypatch.setattr(execution, "start_run_cancellation_monitor", AsyncMock(return_value=None))
     mark = AsyncMock()
     settle = AsyncMock()
     monkeypatch.setattr(execution, "_mark_root_run_authority_running", mark)
@@ -442,8 +444,12 @@ async def test_execute_project_chat_persists_cancelled_then_reraises() -> None:
         automation_run_id="run-1",
     )
     project_terminal = AsyncMock()
+    persist = AsyncMock()
+    publish = AsyncMock()
 
     with (
+        patch.object(execution, "_flush_remaining_events", new=persist),
+        patch.object(execution, "_publish_event_to_stream", new=publish),
         patch.object(execution, "set_agent_running", new=AsyncMock()),
         patch.object(execution, "clear_agent_running", new=AsyncMock()),
         patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
@@ -456,6 +462,10 @@ async def test_execute_project_chat_persists_cancelled_then_reraises() -> None:
         await execution.execute_project_chat(agent=agent, request=request)
 
     assert project_terminal.await_args.kwargs["outcome"] == "cancelled"
+
+    assert persist.await_args.args[0][-1]["type"] == "cancelled"
+    assert publish.await_args.kwargs["event"]["data"]["run_id"] == "run-1"
+    assert publish.await_args.kwargs["conversation_id"] == "conv-1"
 
 
 @pytest.mark.unit
@@ -1353,3 +1363,88 @@ async def test_execute_project_chat_flushes_deltas_on_interval(
     # not trigger another flush because the buffer was already empty.
     assert pipeline.execute_calls == 2
     assert len(pipeline.xadd_calls) == 2
+
+
+@pytest.mark.unit
+async def test_execute_project_chat_passes_frozen_exact_model_route(monkeypatch):
+    from src.infrastructure.agent.model_route import ModelRouteRef
+
+    route = ModelRouteRef(provider_id="exact-provider-config", model_id="chosen-model")
+    resolve = AsyncMock(return_value=route)
+    monkeypatch.setattr(execution, "resolve_run_model_route", resolve)
+    agent = _FakeAgent()
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="message-1",
+        canonical_run_id="approved-run-1",
+        user_message="Execute",
+        user_id="user-1",
+    )
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(agent, request)
+    assert result.is_error is False
+    resolve.assert_awaited_once_with(
+        tenant_id="tenant-1", project_id="proj-1", conversation_id="conv-1", run_id="approved-run-1"
+    )
+    assert agent.execute_chat_kwargs["model_override"] == "chosen-model"
+    assert agent.execute_chat_kwargs["model_route_override"] is route
+
+
+@pytest.mark.unit
+async def test_run_signal_interrupts_model_await_and_publishes_cancelled(monkeypatch):
+    from src.application.services.agent.run_cancellation_signal import (
+        RunCancellationIdentity,
+        start_run_cancellation_monitor,
+    )
+
+    started = asyncio.Event()
+
+    class BlockedAgent(_FakeAgent):
+        async def execute_chat(self, **kwargs):
+            started.set()
+            await asyncio.Event().wait()
+            yield {"type": "complete", "data": {}}
+
+    store = AsyncMock()
+    store.get.return_value = None
+    publish = AsyncMock()
+    settle = AsyncMock()
+    for name in (
+        "set_agent_running",
+        "clear_agent_running",
+        "_project_automation_runtime_running",
+        "_project_automation_stream_terminal",
+        "_flush_remaining_events",
+    ):
+        monkeypatch.setattr(execution, name, AsyncMock())
+    monkeypatch.setattr(execution, "_settle_root_run_authority", settle)
+    monkeypatch.setattr(execution, "_publish_event_to_stream", publish)
+    monkeypatch.setattr(execution, "_get_redis_client", AsyncMock(return_value=store))
+    monkeypatch.setattr(execution, "_get_last_db_event_time", AsyncMock(return_value=(0, 0)))
+    monkeypatch.setattr(
+        execution, "_resolve_chat_runtime_overrides", AsyncMock(return_value=(None, None))
+    )
+    monkeypatch.setattr(execution, "start_run_cancellation_monitor", start_run_cancellation_monitor)
+    request = ProjectChatRequest(
+        conversation_id="c", message_id="m", canonical_run_id="r", user_message="hello", user_id="u"
+    )
+    task = asyncio.create_task(execution.execute_project_chat(BlockedAgent(), request))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    store.get.return_value = RunCancellationIdentity(
+        tenant_id="tenant-1", project_id="proj-1", conversation_id="c", run_id="r"
+    ).payload()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=1)
+    assert settle.await_args.kwargs["outcome"] == "cancelled"
+    assert settle.await_args.kwargs["run_id"] == "r"
+    assert publish.await_args.kwargs["event"]["type"] == "cancelled"

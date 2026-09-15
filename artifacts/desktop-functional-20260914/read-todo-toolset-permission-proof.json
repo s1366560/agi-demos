@@ -1,0 +1,12 @@
+{
+  "todowrite": {
+    "permission": "workspace_task_write",
+    "resolver_retained": true,
+    "progress_update": "conversation_progress",
+    "content_update": "workspace_task_write"
+  },
+  "read": {
+    "permission": "ask",
+    "resolver_retained": true
+  }
+}
