@@ -1,10 +1,11 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckIcon, CopyIcon } from '@radix-ui/react-icons';
+import { CheckIcon, CopyIcon, OpenInNewWindowIcon } from '@radix-ui/react-icons';
 import hljs from 'highlight.js/lib/common';
 
 import { useI18n } from '../../i18n';
 import { formatToastErrorDetail } from '../feedback/toastModel';
 import { useToast } from '../feedback/ToastCenter';
+import { publishSnippetCanvasRequest } from './snippetCanvasModel';
 
 // highlight.js token colors are themed in ChatTimeline.css (`.hljs-*`) so code in
 // chat matches the desktop dark palette instead of a stock theme.
@@ -108,6 +109,15 @@ export const CodeBlockFrame = memo(function CodeBlockFrame({
     copyResetRef.current = window.setTimeout(() => setCopied(false), 1400);
   };
 
+  const openInCanvas = () => {
+    const delivered = publishSnippetCanvasRequest({
+      code,
+      language: resolvedLanguage,
+      title: t('chat.canvasSnippetTitle', { language: resolvedLanguage }),
+    });
+    if (!delivered) showToast('error', t('chat.openInCanvasUnavailable'));
+  };
+
   return (
     <div
       className={`code-block-frame${collapsed ? ' is-collapsed' : ''}${wrap ? ' is-wrapped' : ''}${
@@ -117,6 +127,16 @@ export const CodeBlockFrame = memo(function CodeBlockFrame({
       {isShortSnippet ? null : (
         <div className="code-block-head">
           <span className="code-block-lang">{resolvedLanguage}</span>
+          <button
+            type="button"
+            className="code-block-open-canvas"
+            aria-label={t('chat.openInCanvas')}
+            title={t('chat.openInCanvasHint')}
+            onClick={openInCanvas}
+          >
+            <OpenInNewWindowIcon aria-hidden="true" />
+            <span>{t('chat.openInCanvas')}</span>
+          </button>
           <button
             type="button"
             className="code-block-copy"

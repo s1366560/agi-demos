@@ -606,6 +606,8 @@ const enUS: Record<string, string> = {
   'workspaceTree.inactive': 'Inactive',
   'workspaceTree.offline': 'Offline',
   'workspaceTree.unknown': 'Status unavailable',
+  'workspaceTree.staleStatusHint':
+    '{status} · Last known status — updates are paused while disconnected',
   'workspaceCreate.open': 'New workspace',
   'workspaceCreate.title': 'Create workspace',
   'workspaceCreate.description':
@@ -1104,6 +1106,22 @@ const enUS: Record<string, string> = {
     'Remove this exact plugin version from the desired V2 bundle set.',
   'settings.pluginManager.uninstallConfirmation': 'Remove this plugin from the runtime?',
   'settings.pluginManager.confirmUninstall': 'Uninstall permanently',
+  'settings.pluginManager.install': 'Install',
+  'settings.pluginManager.installDescription':
+    'Verify the signed V2 bundle and add this exact plugin version to the desired set.',
+  'settings.pluginManager.confirmInstall': 'Install plugin',
+  'settings.pluginManager.declaredPermissions': 'Declared permissions',
+  'settings.pluginManager.noDeclaredPermissions': 'This plugin declares no permissions.',
+  'settings.pluginManager.approveTenantPermissions':
+    'Approve all declared permissions for this tenant',
+  'settings.pluginManager.installUnavailable.revoked':
+    'Revoked package · install unavailable',
+  'settings.pluginManager.installUnavailable.scan_pending':
+    'Security scan has not passed · install unavailable',
+  'settings.pluginManager.installUnavailable.unsigned':
+    'Catalog entry lacks verifiable signature material · install unavailable',
+  'settings.pluginManager.installUnavailable.local_unavailable':
+    'Marketplace install is unavailable in local mode',
   'settings.platformPluginUi.title': 'Builtin plugin UI slots',
   'settings.platformPluginUi.loading': 'Loading canonical plugin UI…',
   'settings.platformPluginUi.unavailable': 'Canonical plugin UI unavailable',
@@ -2811,6 +2829,11 @@ const enUS: Record<string, string> = {
   'session.changesReason.git_diff_failed': 'Git could not produce a read-only diff for this run.',
   'session.changesReason.change_attribution_not_recorded':
     'No authoritative file or hunk attribution was recorded for this scope.',
+  'session.changesReason.session_baseline_unavailable':
+    'No recorded run in this session captured a workspace baseline, so a session-wide diff cannot be produced.',
+  'session.changesReason.session_baseline_environment_mismatch':
+    'Runs in this session touched different workspaces, so a single session-wide diff cannot be produced.',
+  'session.changesBackToRunScope': "View this run's changes",
   'session.changesReason.unknown': 'No authoritative reason was supplied.',
   'session.branchUnavailable': 'branch unavailable',
   'session.changedFiles': '{count} changed files',
@@ -2820,6 +2843,23 @@ const enUS: Record<string, string> = {
   'session.collapseAllChanges': 'Collapse all',
   'session.expandChangeFile': 'Expand {path}',
   'session.collapseChangeFile': 'Collapse {path}',
+  'session.revertChangeFile': 'Revert changes to {path}',
+  'session.revertChangeHunk': 'Revert hunk {hunk} of {path}',
+  'session.revertConfirmTitle': 'Revert recorded changes?',
+  'session.revertConfirmBody':
+    'This reverse-applies {target} in the workspace. All other changes are kept. The revert itself is recorded and cannot be undone from this panel.',
+  'session.revertConfirmAction': 'Revert',
+  'session.revertCancelAction': 'Keep changes',
+  'session.revertPending': 'Reverting…',
+  'session.revertNotice.stale':
+    'The changes snapshot changed since you reviewed it. Refresh to see the current state before reverting.',
+  'session.revertNotice.unavailable':
+    'Reverting is unavailable right now: no running Cloud workspace can accept the write.',
+  'session.revertNotice.failed': 'The revert failed; no workspace change was applied.',
+  'session.revertRefreshAction': 'Refresh changes',
+  'session.dismissChangeRevertNotice': 'Dismiss revert notice',
+  'session.revertUnavailableLocal':
+    'Reverting changes is unavailable in local mode; the local diff is read-only.',
   'session.addChangeComment': 'Comment on this line',
   'session.changeCommentPlaceholder': 'Leave an inline review comment…',
   'session.saveChangeComment': 'Add comment',
@@ -2845,6 +2885,8 @@ const enUS: Record<string, string> = {
     'The response could not be stopped because the live Agent connection is unavailable.',
   'session.stopResponseFailed': 'The Agent runtime could not stop this response. Try again.',
   'session.stopResponseNotRunning': 'This response is no longer running.',
+  'session.stopResponseDisconnectedHint':
+    'Live Agent connection unavailable. Stop is disabled until the connection recovers.',
   'session.conversationSummaryTitle': 'Conversation summary',
   'session.conversationSummaryCollapse': 'Collapse',
   'session.conversationSummaryShow': 'Show',
@@ -3299,6 +3341,11 @@ const enUS: Record<string, string> = {
   'chat.jumpToPinnedMessage': 'Jump to pinned message',
   'chat.retryNoUserMessage': 'No earlier user message is available to retry.',
   'chat.copyCode': 'Copy code',
+  'chat.openInCanvas': 'Open in canvas',
+  'chat.openInCanvasHint':
+    'Open this snippet as a local scratch tab in the canvas (not saved as an artifact)',
+  'chat.canvasSnippetTitle': '{language} snippet',
+  'chat.openInCanvasUnavailable': 'The canvas is unavailable right now.',
   'chat.copied': 'Copied',
   'chat.mermaid.copySource': 'Copy Mermaid source',
   'chat.mermaid.copied': 'Copied',
@@ -3818,6 +3865,10 @@ const enUS: Record<string, string> = {
   'artifact.downloadFailed': 'Artifact could not be downloaded.',
   'artifact.save': 'Save',
   'artifact.saveUnavailable': 'Saving is unavailable because no write authority was provided.',
+  'artifact.localBadge': 'Local scratch',
+  'artifact.localCanvasDescription': 'Local scratch view — not persisted as an artifact',
+  'artifact.localSaveUnavailable':
+    'Local scratch tabs cannot be saved to the artifact store.',
   'artifact.saving': 'Saving…',
   'artifact.saved': 'Artifact saved.',
   'artifact.saveFailed': 'Artifact could not be saved.',
@@ -4274,6 +4325,8 @@ const enUS: Record<string, string> = {
   'task.legacyApprovalReconcileRequired':
     'The pending approval no longer matches this exact task list. Return to the session and refresh its authority before retrying.',
   'task.planEditsSubmitted': '{count} reviewed plan edits were submitted.',
+  'task.sessionConflictEditUnblocksHint':
+    'This brief still matches the earlier conflicting task, so submission is paused. Edit any field above to unblock plan generation.',
 };
 
 const zhCN: Record<string, string> = {
@@ -4727,6 +4780,7 @@ const zhCN: Record<string, string> = {
   'workspaceTree.inactive': '未激活',
   'workspaceTree.offline': '离线',
   'workspaceTree.unknown': '状态不可用',
+  'workspaceTree.staleStatusHint': '{status} · 最后已知状态——连接已断开,更新暂停',
   'workspaceCreate.open': '新建工作空间',
   'workspaceCreate.title': '新建工作空间',
   'workspaceCreate.description': '为“{project}”创建独立工作空间，创建后即可发起任务。',
@@ -5170,6 +5224,18 @@ const zhCN: Record<string, string> = {
   'settings.pluginManager.uninstallDescription': '从 V2 期望 Bundle 集中移除此精确插件版本。',
   'settings.pluginManager.uninstallConfirmation': '从运行时移除此插件？',
   'settings.pluginManager.confirmUninstall': '永久卸载',
+  'settings.pluginManager.install': '安装',
+  'settings.pluginManager.installDescription':
+    '验证签名的 V2 Bundle，并将此精确插件版本加入期望 Bundle 集。',
+  'settings.pluginManager.confirmInstall': '安装插件',
+  'settings.pluginManager.declaredPermissions': '声明的权限',
+  'settings.pluginManager.noDeclaredPermissions': '此插件未声明任何权限。',
+  'settings.pluginManager.approveTenantPermissions': '为此租户批准全部声明的权限',
+  'settings.pluginManager.installUnavailable.revoked': '已撤销的包 · 无法安装',
+  'settings.pluginManager.installUnavailable.scan_pending': '安全扫描未通过 · 无法安装',
+  'settings.pluginManager.installUnavailable.unsigned':
+    '目录条目缺少可验证的签名材料 · 无法安装',
+  'settings.pluginManager.installUnavailable.local_unavailable': '本地模式不提供应用市场安装',
   'settings.platformPluginUi.title': '内置插件 UI 插槽',
   'settings.platformPluginUi.loading': '正在加载规范插件 UI…',
   'settings.platformPluginUi.unavailable': '规范插件 UI 不可用',
@@ -6735,6 +6801,11 @@ const zhCN: Record<string, string> = {
   'session.changesReason.worktree_identity_mismatch': '持久化的 Worktree 标识已不再匹配当前运行。',
   'session.changesReason.git_diff_failed': 'Git 无法为此运行生成只读差异。',
   'session.changesReason.change_attribution_not_recorded': '此范围未记录权威的文件或代码块归属。',
+  'session.changesReason.session_baseline_unavailable':
+    '此会话中没有运行记录过工作区基线，无法生成会话级差异。',
+  'session.changesReason.session_baseline_environment_mismatch':
+    '此会话中的运行涉及不同的工作区，无法生成统一的会话级差异。',
+  'session.changesBackToRunScope': '查看本轮改动',
   'session.changesReason.unknown': '后端没有提供权威原因。',
   'session.branchUnavailable': '分支不可用',
   'session.changedFiles': '{count} 个变更文件',
@@ -6744,6 +6815,20 @@ const zhCN: Record<string, string> = {
   'session.collapseAllChanges': '全部折叠',
   'session.expandChangeFile': '展开 {path}',
   'session.collapseChangeFile': '折叠 {path}',
+  'session.revertChangeFile': '回退 {path} 的改动',
+  'session.revertChangeHunk': '回退 {path} 的第 {hunk} 个片段',
+  'session.revertConfirmTitle': '回退已记录的改动?',
+  'session.revertConfirmBody':
+    '这将在工作区中反向应用 {target}。其余改动保持不变。回退本身会被记录,且无法在此面板中撤销。',
+  'session.revertConfirmAction': '回退',
+  'session.revertCancelAction': '保留改动',
+  'session.revertPending': '正在回退…',
+  'session.revertNotice.stale': '变更快照在你审查后已更新。请先刷新查看最新状态,再执行回退。',
+  'session.revertNotice.unavailable': '当前无法回退:没有可写入的在线 Cloud 工作区。',
+  'session.revertNotice.failed': '回退失败,工作区未被修改。',
+  'session.revertRefreshAction': '刷新变更',
+  'session.dismissChangeRevertNotice': '关闭回退提示',
+  'session.revertUnavailableLocal': '本地模式不支持回退;本地 diff 为只读。',
   'session.addChangeComment': '评论此行',
   'session.changeCommentPlaceholder': '写下行内审查评论…',
   'session.saveChangeComment': '添加评论',
@@ -6767,6 +6852,7 @@ const zhCN: Record<string, string> = {
   'session.stopResponseDisconnected': '实时 Agent 连接不可用，无法停止当前回复。',
   'session.stopResponseFailed': 'Agent 运行时无法停止当前回复，请重试。',
   'session.stopResponseNotRunning': '当前回复已不再运行。',
+  'session.stopResponseDisconnectedHint': '实时 Agent 连接不可用，连接恢复前停止按钮保持禁用。',
   'session.conversationSummaryTitle': '会话摘要',
   'session.conversationSummaryCollapse': '收起',
   'session.conversationSummaryShow': '显示',
@@ -7194,6 +7280,10 @@ const zhCN: Record<string, string> = {
   'chat.jumpToPinnedMessage': '跳转到置顶消息',
   'chat.retryNoUserMessage': '没有可用于重试的上一条用户消息。',
   'chat.copyCode': '复制代码',
+  'chat.openInCanvas': '在画布中打开',
+  'chat.openInCanvasHint': '将此代码片段作为本地草稿页在画布中打开(不会保存为产物)',
+  'chat.canvasSnippetTitle': '{language} 代码片段',
+  'chat.openInCanvasUnavailable': '画布当前不可用。',
   'chat.copied': '已复制',
   'chat.mermaid.copySource': '复制 Mermaid 源码',
   'chat.mermaid.copied': '已复制',
@@ -7702,6 +7792,9 @@ const zhCN: Record<string, string> = {
   'artifact.downloadFailed': '无法下载产物。',
   'artifact.save': '保存',
   'artifact.saveUnavailable': '未提供写入权限，暂时无法保存。',
+  'artifact.localBadge': '本地草稿',
+  'artifact.localCanvasDescription': '本地草稿视图——不会持久化为产物',
+  'artifact.localSaveUnavailable': '本地草稿页无法保存到产物库。',
   'artifact.saving': '正在保存…',
   'artifact.saved': '已保存产物。',
   'artifact.saveFailed': '无法保存产物。',
@@ -8112,6 +8205,8 @@ const zhCN: Record<string, string> = {
   'task.legacyApprovalReconcileRequired':
     '待确认批准已不再匹配当前完整任务列表。请返回会话并刷新权威状态后再重试。',
   'task.planEditsSubmitted': '已提交 {count} 项经审查的计划修改。',
+  'task.sessionConflictEditUnblocksHint':
+    '当前任务说明仍与较早冲突的任务完全一致，提交已暂停。修改上方任意字段即可恢复生成计划。',
 };
 
 export function I18nProvider({ children }: { children: ReactNode }) {

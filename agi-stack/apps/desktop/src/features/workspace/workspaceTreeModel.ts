@@ -59,7 +59,30 @@ export type WorkspaceTreeStatusTone =
 export type WorkspaceTreeStatusPresentation = {
   tone: WorkspaceTreeStatusTone;
   labelKey: string;
+  /**
+   * True when the dot shows a last-known non-terminal run state while the
+   * agent socket is disconnected: the value is not live and must be rendered
+   * with the degraded (dimmed/hollow) treatment plus the stale tooltip.
+   */
+  stale?: boolean;
 };
+
+// Run states that imply live progress; while the socket is down these become
+// last-known values and must not masquerade as live. Terminal and record
+// states (completed/failed/cancelled/ready_review/disconnected/interrupted/
+// archived/active/...) stay truthful without fresh events, so they never
+// degrade. Mirrors LIVE_RUN_GROUP_STATUSES in my-work/myWorkModel.ts.
+const LIVE_RUN_STATUSES: ReadonlySet<string> = new Set([
+  'queued',
+  'running',
+  'paused',
+  'needs_input',
+  'needs_approval',
+]);
+
+export function workspaceTreeStatusIsLiveRun(status: string | null | undefined): boolean {
+  return LIVE_RUN_STATUSES.has(status?.trim().toLowerCase() ?? '');
+}
 
 export const UNBOUND_CONVERSATIONS_KEY = '';
 
@@ -448,16 +471,40 @@ export function conversationTreeStatusPresentation(
   );
 }
 
+/**
+ * Connection-aware presentation for a conversation status dot. While the
+ * agent socket is disconnected, non-terminal run states are last-known values
+ * whose freshness cannot be trusted, so they are flagged `stale` for the
+ * degraded rendering; terminal states and any status shown while connected
+ * are returned unchanged.
+ */
+export function conversationTreeStatusPresentationForConnection(
+  status: string | null | undefined,
+  socketConnected: boolean,
+): WorkspaceTreeStatusPresentation {
+  const presentation = conversationTreeStatusPresentation(status);
+  if (socketConnected || !workspaceTreeStatusIsLiveRun(status)) return presentation;
+  return { ...presentation, stale: true };
+}
+
+const LIVE_AGGREGATE_TONES: ReadonlySet<WorkspaceTreeStatusTone> = new Set([
+  'active',
+  'queued',
+  'paused',
+  'attention',
+]);
+
 export function workspaceTreeRootStatusPresentation(
   officeStatus: string | null | undefined,
   conversations: AgentConversation[],
+  socketConnected = true,
 ): WorkspaceTreeStatusPresentation {
   const rawOfficePresentation =
     officeStatus?.trim().toLowerCase() === 'online'
       ? { tone: 'active' as const, labelKey: 'workspaceTree.online' }
       : conversationTreeStatusPresentation(officeStatus);
   const officePresentation = rootAggregatePresentation(rawOfficePresentation);
-  return conversations.reduce((current, conversation) => {
+  const aggregate = conversations.reduce((current, conversation) => {
     const runStatus = conversationTreeRunStatusValue(conversation);
     if (!runStatus) return current;
     const candidate = rootAggregatePresentation(conversationTreeStatusPresentation(runStatus));
@@ -465,6 +512,17 @@ export function workspaceTreeRootStatusPresentation(
       ? candidate
       : current;
   }, officePresentation);
+  if (socketConnected) return aggregate;
+  // The aggregate dot only claims live activity when a child run is in a
+  // non-terminal state; while disconnected that claim is last-known, so the
+  // aggregate degrades too. Tones that terminal states produce (danger,
+  // completed, ready, offline) stay truthful and are left untouched.
+  const claimsLiveActivity = conversations.some((conversation) =>
+    workspaceTreeStatusIsLiveRun(conversationTreeRunStatusValue(conversation)),
+  );
+  if (!claimsLiveActivity) return aggregate;
+  if (!LIVE_AGGREGATE_TONES.has(aggregate.tone)) return aggregate;
+  return { ...aggregate, stale: true };
 }
 
 function rootAggregatePresentation(

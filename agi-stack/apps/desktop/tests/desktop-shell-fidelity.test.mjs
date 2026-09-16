@@ -474,7 +474,7 @@ test('workspace tree keeps status out of subtitles while preserving an accessibl
   assert.doesNotMatch(workspaceDockSource, /\{sessionSummary\}\s*·\s*\{rootStatusLabel\}/);
   assert.match(
     workspaceDockSource,
-    /data-status=\{rootStatus\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{rootStatusLabel\}[\s\S]*title=\{rootStatusLabel\}/,
+    /data-status=\{rootStatus\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{rootStatusTitle\}[\s\S]*title=\{rootStatusTitle\}/,
   );
   assert.doesNotMatch(
     workspaceDockSource,
@@ -482,7 +482,7 @@ test('workspace tree keeps status out of subtitles while preserving an accessibl
   );
   assert.match(
     workspaceDockSource,
-    /className="workspace-tree-session-status"[\s\S]*data-status=\{statusPresentation\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{statusLabel\}[\s\S]*title=\{statusLabel\}/,
+    /className="workspace-tree-session-status"[\s\S]*data-status=\{statusPresentation\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{statusTitle\}[\s\S]*title=\{statusTitle\}/,
   );
 });
 
@@ -761,6 +761,16 @@ test('primary work canvases keep governance identifiers out of the user narrativ
   assert.doesNotMatch(sessionTerminalSource, /terminal\.run_id|terminal\.environment_id/);
   assert.doesNotMatch(sessionEvidenceSource, /· r\{(?:row|missing)\.revision\}/);
   assert.doesNotMatch(appSource, /<code>\{selectedVersion\.source_artifact_id\}<\/code>/);
+});
+
+test('changes canvas offers an explicit run-scope fallback for unavailable session scope', () => {
+  assert.match(sessionChangesSource, /changeScopeFallbackTarget\(snapshot, scope, availableScopes\)/);
+  assert.match(sessionChangesSource, /scopeFallback \? \([\s\S]*?onScopeChange\(scopeFallback\)/);
+  assert.match(sessionChangesSource, /t\('session\.changesBackToRunScope'\)/);
+  assert.match(
+    sessionChangesSource,
+    /t\(`session\.changesReason\.\$\{snapshot\.reason \?\? 'unknown'\}`\)/,
+  );
 });
 
 test('session activity separates authoritative live state from recorded agent reports', () => {

@@ -71,11 +71,18 @@ test('command palette and recovery affordances use localized, accurate copy', ()
 });
 
 test('Cloud Changes structural reason codes are localized in both locales', () => {
-  const key = 'session.changesReason.change_attribution_not_recorded';
-  assert.equal(
-    (i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length,
-    2,
-  );
+  for (const key of [
+    'session.changesReason.change_attribution_not_recorded',
+    'session.changesReason.session_baseline_unavailable',
+    'session.changesReason.session_baseline_environment_mismatch',
+    'session.changesBackToRunScope',
+  ]) {
+    assert.equal(
+      (i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length,
+      2,
+      `${key} must exist in en and zh`,
+    );
+  }
 });
 
 test('session history exposes keyboard recovery and preserves manual reading position', () => {

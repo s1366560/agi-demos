@@ -257,6 +257,18 @@
   background: var(--desktop-red);
 }
 
+/* Stale last-known status while the socket is disconnected: the tone color
+   stays (it is the last known state) but the live pulse stops, the dot dims,
+   and a dashed ring marks it as not-live. Uses theme vars, so both themes
+   degrade identically. */
+.workspace-tree-session-status[data-stale='true'],
+.workspace-tree-workspace-action > i[data-stale='true'] {
+  animation: none;
+  opacity: 0.45;
+  outline: 1px dashed var(--desktop-faint);
+  outline-offset: 1px;
+}
+
 .workspace-tree-session-actions {
   position: absolute;
   z-index: 5;

@@ -12,6 +12,7 @@ import {
 import { useI18n } from '../../i18n';
 import { Skeleton, SkeletonGroup } from '../../components/Skeleton';
 import { treeSkeletonRows } from '../../components/skeletonModel';
+import { useAgentSocketConnected } from '../../hooks/useAgentSocket';
 import type {
   AgentConversation,
   RuntimeNodeLoadState,
@@ -21,7 +22,7 @@ import {
   buildWorkspaceTree,
   conversationRecencyGroup,
   conversationTreeMetadataSummary,
-  conversationTreeStatusPresentation,
+  conversationTreeStatusPresentationForConnection,
   conversationTreeStatusValue,
   groupConversationsByRecency,
   isWorkspaceConversationSelected,
@@ -32,6 +33,7 @@ import {
   workspaceTreeSessionAvailability,
   type ConversationRecencyGroup,
   type WorkspaceTreeSelectionMode,
+  type WorkspaceTreeStatusPresentation,
 } from './workspaceTreeModel';
 import {
   ConversationLifecycleDialogs,
@@ -97,6 +99,9 @@ export function WorkspaceDock({
   onCreateWorkspace,
 }: WorkspaceDockProps) {
   const { t } = useI18n();
+  // Live socket state: while disconnected, non-terminal run dots degrade to a
+  // last-known-stale treatment instead of implying live progress.
+  const socketConnected = useAgentSocketConnected();
   const navigationRef = useRef<HTMLElement>(null);
   const workspaceToggleRefs = useRef(new Map<string, HTMLButtonElement>());
   const conversationActionRefs = useRef(new Map<string, HTMLElement>());
@@ -128,6 +133,7 @@ export function WorkspaceDock({
       key={conversation.id}
       conversation={conversation}
       now={now}
+      socketConnected={socketConnected}
       selected={isWorkspaceConversationSelected(
         currentConversationId,
         conversation.id,
@@ -263,7 +269,13 @@ export function WorkspaceDock({
                   </span>
                   <i
                     data-status={
-                      workspaceTreeRootStatusPresentation(null, unboundConversations).tone
+                      workspaceTreeRootStatusPresentation(null, unboundConversations, socketConnected).tone
+                    }
+                    data-stale={
+                      workspaceTreeRootStatusPresentation(null, unboundConversations, socketConnected)
+                        .stale
+                        ? 'true'
+                        : undefined
                     }
                     aria-hidden="true"
                   />
@@ -365,8 +377,10 @@ export function WorkspaceDock({
               const rootStatus = workspaceTreeRootStatusPresentation(
                 workspace.office_status,
                 conversations,
+                socketConnected,
               );
               const rootStatusLabel = t(rootStatus.labelKey);
+              const rootStatusTitle = workspaceTreeStatusTitle(rootStatus, rootStatusLabel, t);
               const sessionSummary =
                 sessionAvailability === 'deferred'
                   ? t('workspaceTree.sessionsDeferred')
@@ -428,9 +442,10 @@ export function WorkspaceDock({
                       </span>
                       <i
                         data-status={rootStatus.tone}
+                        data-stale={rootStatus.stale ? 'true' : undefined}
                         role="img"
-                        aria-label={rootStatusLabel}
-                        title={rootStatusLabel}
+                        aria-label={rootStatusTitle}
+                        title={rootStatusTitle}
                       />
                     </button>
                   </div>
@@ -535,6 +550,7 @@ const recencyGroupLabels: Record<ConversationRecencyGroup, string> = {
 function ConversationTreeRow({
   conversation,
   now,
+  socketConnected,
   selected,
   onSelect,
   actionRef,
@@ -543,6 +559,7 @@ function ConversationTreeRow({
 }: {
   conversation: AgentConversation;
   now: Date;
+  socketConnected: boolean;
   selected: boolean;
   onSelect: () => void;
   actionRef: (element: HTMLElement | null) => void;
@@ -551,8 +568,12 @@ function ConversationTreeRow({
 }) {
   const { t, locale } = useI18n();
   const status = conversationTreeStatusValue(conversation);
-  const statusPresentation = conversationTreeStatusPresentation(status);
+  const statusPresentation = conversationTreeStatusPresentationForConnection(
+    status,
+    socketConnected,
+  );
   const statusLabel = t(statusPresentation.labelKey);
+  const statusTitle = workspaceTreeStatusTitle(statusPresentation, statusLabel, t);
   const sessionSummary = conversationTreeMetadataSummary(conversation);
   const activityAt = conversation.updated_at ?? conversation.created_at;
   const recencyGroup = conversationRecencyGroup(activityAt, now);
@@ -572,9 +593,10 @@ function ConversationTreeRow({
         <i
           className="workspace-tree-session-status"
           data-status={statusPresentation.tone}
+          data-stale={statusPresentation.stale ? 'true' : undefined}
           role="img"
-          aria-label={statusLabel}
-          title={statusLabel}
+          aria-label={statusTitle}
+          title={statusTitle}
         />
         <span>
           <strong>{title}</strong>
@@ -626,6 +648,16 @@ function ConversationTreeRow({
       ) : null}
     </div>
   );
+}
+
+function workspaceTreeStatusTitle(
+  presentation: WorkspaceTreeStatusPresentation,
+  statusLabel: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return presentation.stale
+    ? t('workspaceTree.staleStatusHint', { status: statusLabel })
+    : statusLabel;
 }
 
 function recencyTimeLabel(

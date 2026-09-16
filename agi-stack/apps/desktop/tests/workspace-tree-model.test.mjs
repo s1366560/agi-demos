@@ -17,6 +17,7 @@ const {
   buildWorkspaceTree,
   conversationTreeMetadataSummary,
   conversationTreeStatusPresentation,
+  conversationTreeStatusPresentationForConnection,
   conversationTreeStatusValue,
   conversationRecencyGroup,
   filterUnboundConversations,
@@ -38,6 +39,7 @@ const {
   workspaceTreeRefreshFailed,
   workspaceTreeSessionAvailability,
   workspaceTreeAvailability,
+  workspaceTreeStatusIsLiveRun,
 } = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
@@ -917,4 +919,119 @@ test('workspace root status escalates structured child attention before runtime 
     tone: 'active',
     labelKey: 'workspaceTree.online',
   });
+});
+
+test('non-terminal run statuses degrade to stale while the socket is disconnected', () => {
+  const liveStatuses = ['queued', 'running', 'paused', 'needs_input', 'needs_approval'];
+  for (const status of liveStatuses) {
+    assert.equal(workspaceTreeStatusIsLiveRun(status), true, `${status} is a live run state`);
+    const connected = conversationTreeStatusPresentationForConnection(status, true);
+    assert.equal(connected.stale, undefined, `${status} connected must not be stale`);
+    assert.deepEqual(connected, conversationTreeStatusPresentation(status));
+    const disconnected = conversationTreeStatusPresentationForConnection(status, false);
+    assert.equal(disconnected.stale, true, `${status} disconnected must degrade to stale`);
+    // Tone and label stay — it is still the last known status, just not live.
+    assert.equal(disconnected.tone, connected.tone);
+    assert.equal(disconnected.labelKey, connected.labelKey);
+  }
+});
+
+test('terminal and record statuses never degrade while the socket is disconnected', () => {
+  const terminalStatuses = [
+    'ready_review',
+    'completed',
+    'failed',
+    'disconnected',
+    'interrupted',
+    'cancelled',
+    'archived',
+    'active',
+    'inactive',
+    'offline',
+  ];
+  for (const status of terminalStatuses) {
+    assert.equal(workspaceTreeStatusIsLiveRun(status), false, `${status} is not a live run state`);
+    const presentation = conversationTreeStatusPresentationForConnection(status, false);
+    assert.equal(presentation.stale, undefined, `${status} must stay truthful while disconnected`);
+    assert.deepEqual(presentation, conversationTreeStatusPresentation(status));
+  }
+  // Unknown or missing statuses have nothing live to misrepresent.
+  for (const status of [null, undefined, '', 'mystery']) {
+    assert.equal(
+      conversationTreeStatusPresentationForConnection(status, false).stale,
+      undefined,
+    );
+  }
+});
+
+test('root aggregate dot degrades only when a child claims live activity while disconnected', () => {
+  const running = conversation('conversation-running', 'Running', '2026-07-14T09:30:00Z');
+  running.metadata = { run: { status: 'running' } };
+  const failed = conversation('conversation-failed', 'Failed', '2026-07-14T09:31:00Z');
+  failed.metadata = { run: { status: 'failed' } };
+  const completed = conversation('conversation-completed', 'Done', '2026-07-14T09:32:00Z');
+  completed.metadata = { run: { status: 'completed' } };
+
+  // Disconnected + live child claim → stale aggregate, tone preserved.
+  assert.deepEqual(workspaceTreeRootStatusPresentation('online', [running], false), {
+    tone: 'active',
+    labelKey: 'workspaceTree.online',
+    stale: true,
+  });
+  assert.deepEqual(workspaceTreeRootStatusPresentation(null, [running], false), {
+    tone: 'active',
+    labelKey: 'workspaceTree.running',
+    stale: true,
+  });
+  // Connected → unchanged legacy shape (no stale key).
+  assert.deepEqual(workspaceTreeRootStatusPresentation('online', [running], true), {
+    tone: 'active',
+    labelKey: 'workspaceTree.online',
+  });
+  assert.deepEqual(workspaceTreeRootStatusPresentation(null, [running]), {
+    tone: 'active',
+    labelKey: 'workspaceTree.running',
+  });
+  // Terminal-only children stay truthful while disconnected.
+  assert.deepEqual(workspaceTreeRootStatusPresentation('online', [completed], false), {
+    tone: 'active',
+    labelKey: 'workspaceTree.online',
+  });
+  assert.deepEqual(workspaceTreeRootStatusPresentation(null, [completed], false), {
+    tone: 'completed',
+    labelKey: 'workspaceTree.completed',
+  });
+  // Terminal failure outranks a stale live claim and stays authoritative.
+  assert.deepEqual(workspaceTreeRootStatusPresentation(null, [running, failed], false), {
+    tone: 'danger',
+    labelKey: 'workspaceTree.issue',
+  });
+});
+
+test('workspace dock renders connected run dots without the stale treatment by default', () => {
+  const running = conversation('conversation-live', 'Live task', '2026-07-04T00:00:00Z');
+  running.metadata = { run: { status: 'running' } };
+  const markup = renderWorkspaceDock(
+    {
+      projects: { 'project-1': { loading: false, error: null } },
+      workspaces: { 'workspace-a': { loading: false, error: null } },
+    },
+    { 'workspace-a': [{ ...running, workspace_id: 'workspace-a' }] }
+  );
+
+  assert.match(markup, /data-status="active"/);
+  assert.doesNotMatch(markup, /data-stale/);
+  assert.doesNotMatch(markup, /Last known status/);
+});
+
+test('workspace dock wires the live socket state into status dot presentation', () => {
+  assert.match(workspaceDockSource, /useAgentSocketConnected/);
+  assert.match(workspaceDockSource, /conversationTreeStatusPresentationForConnection/);
+  assert.match(workspaceDockSource, /data-stale=\{/);
+  assert.match(workspaceDockSource, /workspaceTree\.staleStatusHint/);
+  assert.equal(
+    (i18nSource.match(/'workspaceTree\.staleStatusHint'/g) ?? []).length,
+    2,
+    'staleStatusHint must exist in both the English and Chinese dictionaries'
+  );
 });

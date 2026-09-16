@@ -6,6 +6,12 @@ export type LiveArtifactCanvasTab = {
   language: string | null;
   mimeType?: string;
   sizeBytes?: number;
+  /**
+   * True for local scratch tabs opened from a code block ("Open in canvas").
+   * These have no backend artifact identity: they must never be loaded from,
+   * saved to, or downloaded through the artifact client.
+   */
+  local?: boolean;
 };
 
 export type LiveArtifactCanvasState = {

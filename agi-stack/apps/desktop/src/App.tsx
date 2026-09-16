@@ -52,6 +52,7 @@ import type { CloudSessionProjection } from './api/cloudSessionProjectionClient'
 import { useResizablePanelWidth } from './components/ResizeHandle';
 import type { RunChangeScope } from './features/agent-authority/agentAuthorityTypes';
 import { useRunReviewAuthorityV2 } from './features/session/useRunReviewAuthorityV2';
+import { useRunChangeRevert } from './features/session/useRunChangeRevert';
 import {
   createDesktopAgentAuthorityProviderV2,
 } from './features/agent-authority/desktopAgentAuthorityProviderV2';
@@ -278,6 +279,10 @@ import {
   selectArtifactCanvasTab,
   type LiveArtifactCanvasState,
 } from './features/chat/artifactCanvasEventModel';
+import {
+  openSnippetCanvasTab,
+  subscribeSnippetCanvasRequests,
+} from './features/chat/snippetCanvasModel';
 import { createDesktopChatComposerCatalogClientV2 } from './features/chat/desktopChatComposerCatalogClientV2';
 import { unboundComposerCatalogClient } from './features/chat/composerCatalogModel';
 import {
@@ -894,12 +899,32 @@ export function App() {
   const currentArtifactRunRef = useRef<DesktopRun | null>(null);
   const artifactCanvasStateRef = useRef(artifactCanvasState);
   const mcpAppCanvasStateRef = useRef(mcpAppCanvasState);
+  const snippetCanvasSequenceRef = useRef(0);
   const terminalRunScopeKeyRef = useRef('');
   const workbenchRef = useRef<HTMLElement>(null);
   const settingsRouteCloseNavigationRef = useRef<(() => void) | null>(null);
   const productionRouteRefreshRef = useRef<
     ((nextConfig: DesktopRuntimeConfig, projects: ProjectSummary[]) => Promise<boolean>) | null
   >(null);
+  // Code blocks publish "open in canvas" requests over a module-level channel
+  // because they render deep inside ChatPanel; each snippet becomes a local
+  // scratch tab in the artifact canvas (no backend artifact identity) and the
+  // canvas panel is revealed.
+  useEffect(
+    () =>
+      subscribeSnippetCanvasRequests((request) => {
+        snippetCanvasSequenceRef.current += 1;
+        const sequence = snippetCanvasSequenceRef.current;
+        setArtifactCanvasState((current) => {
+          const result = openSnippetCanvasTab(current, request, sequence);
+          artifactCanvasStateRef.current = result.state;
+          return result.state;
+        });
+        setReviewTab('artifacts');
+        openRightCanvasPanel();
+      }),
+    [openRightCanvasPanel],
+  );
   const projectSearchRouteBindingProviderV2 = useMemo(
     () => createProjectSearchRouteBindingProviderV2(),
     [],
@@ -5145,6 +5170,13 @@ export function App() {
     setError: setChangeSnapshotError,
     setReferences: setRunInputReferences,
   });
+  const changeRevert = useRunChangeRevert({
+    config,
+    conversation: selectedConversation ?? null,
+    run: currentArtifactRun,
+    snapshot: changeSnapshot,
+    onReverted: () => void loadRunChanges(),
+  });
   const sessionUsageSummary = useMemo(
     () => deriveSessionUsage(conversationTimeline.items),
     [conversationTimeline],
@@ -7111,7 +7143,17 @@ export function App() {
     },
   });
 
-  const createWorkspaceWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+  const createWorkspaceWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => {
+    // Frontend-only gate alias: the autonomy-attention capability contract
+    // (desktopWorkspaceAutonomyAttentionContractV2 / types.ts) exposes no
+    // distinct resolve capability, so resolve deliberately reuses the retry
+    // gate (superuser or WORKSPACE_AUTONOMY_RETRY_ROLES membership). The
+    // backend re-checks authorization on every operation, so this flag only
+    // shows or hides the control. If the contract ever grows a separate
+    // resolve capability, wire it here instead of this alias so a future
+    // role divergence cannot silently mis-gate resolution.
+    const canResolveWorkspaceAutonomyAttention = canRetryWorkspaceAutonomyAttention;
+    return {
     kind: 'workspace',
     overview: {
       workspace: selectedWorkspace,
@@ -7129,7 +7171,7 @@ export function App() {
       liveActivity: workspaceLiveActivity,
       autonomyAttentions: workspaceAutonomyAttentions,
       canRetryAutonomyAttention: canRetryWorkspaceAutonomyAttention,
-      canResolveAutonomyAttention: canRetryWorkspaceAutonomyAttention,
+      canResolveAutonomyAttention: canResolveWorkspaceAutonomyAttention,
       retryingAutonomyAttentionId: retryingWorkspaceAutonomyAttentionId,
       resolvingAutonomyAttentionId: resolvingWorkspaceAutonomyAttentionId,
       newTaskDisabledReason,
@@ -7158,7 +7200,8 @@ export function App() {
             authorityInvalidation: workspaceCollaborationAuthorityInvalidation,
           }
         : null,
-  });
+    };
+  };
 
   const openMyWorkSession = async (item: ProjectWorkItem) => {
     const workspaceId = item.workspace_id ?? '';
@@ -7439,6 +7482,7 @@ export function App() {
         changeSnapshot?.conversation_id,
       ),
       changeReferences: runInputReferences,
+      changeRevert,
       changeScope,
       changeSnapshot,
       changeSnapshotError,

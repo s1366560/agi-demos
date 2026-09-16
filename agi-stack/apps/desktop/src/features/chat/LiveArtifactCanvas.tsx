@@ -103,9 +103,12 @@ export function LiveArtifactCanvas({
 
   const activeId = active?.id ?? null;
   const activeContentType = active?.contentType ?? null;
+  // Local scratch tabs have no backend artifact identity; never fetch
+  // authority content for them.
+  const activeIsLocal = active?.local === true;
 
   useEffect(() => {
-    if (!artifactClient || !activeId || activeContentType === 'a2ui_surface') {
+    if (!artifactClient || !activeId || activeContentType === 'a2ui_surface' || activeIsLocal) {
       return undefined;
     }
     const controller = new AbortController();
@@ -128,7 +131,7 @@ export function LiveArtifactCanvas({
         if (controller.signal.aborted || isAbortError(error)) return;
       });
     return () => controller.abort();
-  }, [activeContentType, activeId, artifactClient]);
+  }, [activeContentType, activeId, activeIsLocal, artifactClient]);
 
   const saveActive = useCallback(async () => {
     if (!artifactClient || !activeId) return;
@@ -242,7 +245,7 @@ export function LiveArtifactCanvas({
   const downloadActiveContent = async () => {
     setNotice(null);
     try {
-      if (artifactClient) {
+      if (artifactClient && !active.local) {
         const blob = await artifactClient.download(active.id);
         const result = await triggerArtifactDownload(blob, active.title);
         if (result.status === 'cancelled') return;
@@ -330,10 +333,17 @@ export function LiveArtifactCanvas({
           <FileTextIcon aria-hidden="true" />
           <span>
             <strong>{title}</strong>
-            <small>{t('artifact.liveCanvasDescription')}</small>
+            <small>
+              {active.local ? t('artifact.localCanvasDescription') : t('artifact.liveCanvasDescription')}
+            </small>
           </span>
         </span>
         <div className="artifact-canvas-header-actions">
+          {active.local ? (
+            <Badge color="gray" variant="soft">
+              {t('artifact.localBadge')}
+            </Badge>
+          ) : null}
           <Badge color="cyan" variant="soft">
             {language}
           </Badge>
@@ -352,7 +362,13 @@ export function LiveArtifactCanvas({
           <button
             type="button"
             disabled={!canSave}
-            title={canSave ? t('artifact.save') : t('artifact.saveUnavailable')}
+            title={
+              active.local
+                ? t('artifact.localSaveUnavailable')
+                : canSave
+                  ? t('artifact.save')
+                  : t('artifact.saveUnavailable')
+            }
             onClick={() => void saveActive()}
           >
             {savingArtifactId === active.id ? t('artifact.saving') : t('artifact.save')}
@@ -484,7 +500,7 @@ export function LiveArtifactCanvas({
               }}
             />
           ) : (
-            artifactClient ? (
+            artifactClient && !active.local ? (
               <ArtifactPreviewSurface
                 key={`${active.id}:${active.mimeType ?? active.contentType}`}
                 artifactId={active.id}
