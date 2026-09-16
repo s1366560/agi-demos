@@ -16,6 +16,7 @@ const {
   deliverAgentStopSession,
   deliverAgentRunMessage,
   enqueuePendingAgentRunMessage,
+  ensureAgentMessageSubscription,
   eventCursor,
   flushPendingAgentRunMessages,
   pendingAgentRunQueueScopeKey,
@@ -317,6 +318,126 @@ test("steer outcome reads acks, durable echoes, and steer error codes", () => {
     ),
     null,
   );
+});
+
+test("the router's unattributed unknown-type error rejects the in-flight steer immediately", () => {
+  const messageId = "desktop-steer-prompt-1";
+  // The current backend registers no steer_message handler; MessageRouter
+  // answers unknown types with an error that carries neither code nor
+  // message_id. With one steer in flight per panel this must resolve the
+  // steer at once instead of stalling until the ack timeout.
+  assert.equal(
+    agentSteerMessageOutcome(
+      {
+        type: "error",
+        data: { message: "Unknown message type: steer_message" },
+      },
+      messageId,
+    ),
+    "rejected",
+  );
+  // Unknown-type errors for other message types never resolve the steer.
+  assert.equal(
+    agentSteerMessageOutcome(
+      {
+        type: "error",
+        data: { message: "Unknown message type: subscribe_status" },
+      },
+      messageId,
+    ),
+    null,
+  );
+  // Unattributed generic errors are not steer verdicts.
+  assert.equal(
+    agentSteerMessageOutcome(
+      { type: "error", data: { message: "Temporary database failure" } },
+      messageId,
+    ),
+    null,
+  );
+  assert.equal(
+    agentSteerMessageOutcome(
+      { type: "error", message: "Unknown message type: steer_message" },
+      messageId,
+    ),
+    "rejected",
+  );
+  // An error attributed to a different message id never falls back to text.
+  assert.equal(
+    agentSteerMessageOutcome(
+      {
+        type: "error",
+        message_id: "other-message",
+        data: { message: "Unknown message type: steer_message" },
+      },
+      messageId,
+    ),
+    null,
+  );
+  // Non-error events with no message id stay unresolved.
+  assert.equal(
+    agentSteerMessageOutcome({ type: "text_delta" }, messageId),
+    null,
+  );
+});
+
+test("messaging a new conversation subscribes the live socket immediately", () => {
+  const state = createAgentSocketContextState();
+  const sent = [];
+
+  assert.equal(
+    ensureAgentMessageSubscription(state, " conversation-9 ", (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    true,
+  );
+  assert.deepEqual(sent, [
+    { type: "subscribe", conversation_id: "conversation-9" },
+  ]);
+  assert.deepEqual([...state.subscribedConversations], ["conversation-9"]);
+
+  // Already-tracked conversations never produce a duplicate subscribe frame.
+  assert.equal(
+    ensureAgentMessageSubscription(state, "conversation-9", (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    false,
+  );
+  assert.equal(sent.length, 1);
+
+  // A recorded cursor rides along so replay resumes after the last seen event.
+  state.conversationCursors.set("conversation-10", {
+    conversationId: "conversation-10",
+    timeUs: 1000,
+    counter: 4,
+  });
+  assert.equal(
+    ensureAgentMessageSubscription(state, "conversation-10", (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    true,
+  );
+  assert.deepEqual(sent[1], {
+    type: "subscribe",
+    conversation_id: "conversation-10",
+    from_time_us: 1000,
+    from_counter: 5,
+  });
+
+  // Blank ids are ignored; a closed socket still records the subscription so
+  // the reconnect resubscribe picks it up.
+  assert.equal(
+    ensureAgentMessageSubscription(state, "   ", () => true),
+    false,
+  );
+  assert.equal(
+    ensureAgentMessageSubscription(state, "conversation-11", () => false),
+    false,
+  );
+  assert.equal(state.subscribedConversations.has("conversation-11"), true);
 });
 
 test("only an authenticated cloud socket may retain a turn for reconnect", () => {

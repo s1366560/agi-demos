@@ -251,6 +251,39 @@ function agentRunSocketMessage(
   };
 }
 
+/**
+ * Subscribe the live socket to a conversation the user just messaged, when it
+ * is not yet in the local subscription set. The backend only streams
+ * conversation events to explicitly subscribed sessions; the send_message
+ * handler's implicit auto-subscribe does not cover frames that are deferred,
+ * queued, or rejected, so the subscribe frame must go out immediately rather
+ * than waiting for the active-conversation transition or a reconnect.
+ * Returns true when a subscribe frame was sent (or attempted) for a newly
+ * tracked conversation.
+ */
+export function ensureAgentMessageSubscription(
+  state: AgentSocketContextState,
+  conversationId: string,
+  send: (payload: Record<string, unknown>) => boolean,
+): boolean {
+  const normalizedConversationId = conversationId.trim();
+  if (
+    !normalizedConversationId ||
+    state.subscribedConversations.has(normalizedConversationId)
+  ) {
+    return false;
+  }
+  state.subscribedConversations.add(normalizedConversationId);
+  const cursor = state.conversationCursors.get(normalizedConversationId);
+  return send({
+    type: "subscribe",
+    conversation_id: normalizedConversationId,
+    ...(cursor
+      ? { from_time_us: cursor.timeUs, from_counter: cursor.counter + 1 }
+      : {}),
+  });
+}
+
 export function deliverAgentRunMessage(
   queue: PendingAgentMessageQueue,
   message: AgentRunMessage,
@@ -311,10 +344,33 @@ export function deliverAgentSteerMessage(
 }
 
 /**
+ * The current backend router has no steer_message handler: it answers unknown
+ * message types with an unattributed error (no code, no message_id echo), e.g.
+ * `{type:"error", data:{message:"Unknown message type: steer_message"}}`.
+ * ChatPanel keeps at most one steer in flight per conversation panel, so this
+ * router response unambiguously rejects the pending steer. Detecting it lets
+ * the compose-ahead queue fall back to plain queue semantics immediately
+ * instead of stalling until the ack timeout.
+ */
+function agentSteerUnsupportedRouterError(
+  payload: Record<string, unknown>,
+): boolean {
+  const text = nestedStringField(payload, ["message"]);
+  if (!text) return false;
+  const normalized = text.trim().toLowerCase();
+  return (
+    normalized.startsWith("unknown message type:") &&
+    normalized.includes("steer_message")
+  );
+}
+
+/**
  * Interpret a socket event as the outcome of a previously sent steer message.
  * Accepted: an ack for `steer_message` or a durable user message echoing the
- * steer message id. Rejected: a steer ack with a non-accepted outcome or an
- * error event carrying a steer-specific code for the same message id.
+ * steer message id. Rejected: a steer ack with a non-accepted outcome, an
+ * error event carrying a steer-specific code for the same message id, or the
+ * router's unattributed unknown-type error for `steer_message` (the current
+ * backend does not register a steer_message handler).
  */
 export function agentSteerMessageOutcome(
   event: unknown,
@@ -328,7 +384,13 @@ export function agentSteerMessageOutcome(
     "message_id",
     "messageId",
   ]);
-  if (eventMessageId !== normalizedMessageId) return null;
+  if (eventMessageId !== normalizedMessageId) {
+    return eventMessageId === null &&
+      eventType === "error" &&
+      agentSteerUnsupportedRouterError(payload)
+      ? "rejected"
+      : null;
+  }
   if (eventType === "ack" && payload.action === "steer_message") {
     return nestedStringField(payload, ["outcome"]) === "accepted"
       ? "accepted"
@@ -560,7 +622,11 @@ export function useAgentSocket(
     (message: AgentRunMessage) => {
       const conversationId = message.conversationId.trim();
       if (!conversationId) return false;
-      contextStateRef.current.subscribedConversations.add(conversationId);
+      ensureAgentMessageSubscription(
+        contextStateRef.current,
+        conversationId,
+        sendSocketMessage,
+      );
       return deliverAgentRunMessage(
         pendingAgentMessagesRef.current,
         message,
