@@ -12,7 +12,7 @@ const DESKTOP_CONVERSATION_RENDERER_SRC_DOC_V2 = `<!doctype html>
     <meta charset="utf-8">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'sha256-jaO7hFDfdjXzq8vHHc4PezUMZXZHq42ua3bm7MZy7jQ='; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     >
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>

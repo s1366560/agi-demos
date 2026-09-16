@@ -155,7 +155,7 @@ test("complete ChatPanel restores binding and awaits successful clear while acti
     onWorkflowSelect: noop,
     imagePreviewClient: null,
     voiceSessionOperations: {},
-    voiceTranscriptionConfig: {
+    desktopRuntimeConfig: {
       mode: "local",
       apiBaseUrl: "http://localhost",
       apiKey: "",

@@ -7040,7 +7040,7 @@ export function App() {
         tenantId: config.tenantId,
         projectId: config.projectId,
       },
-      voiceTranscriptionConfig: config,
+      desktopRuntimeConfig: config,
       voiceSessionOperations: desktopVoiceSessionOperationsV2,
       composerVariant: selectedConversation ? 'session' : 'workspace',
       composerResetKey: selectedConversation?.id ?? config.workspaceId,

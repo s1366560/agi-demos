@@ -3711,6 +3711,10 @@ impl DesktopSessionStore {
         Ok(HitlResponseCommitOutcome::Committed(request))
     }
 
+    // Test-only storage probe: production grant admission is run-scoped inside
+    // `authorize_and_prepare_tool_invocation`; historical workspace grants must
+    // not broaden an approved plan's profile (permission admission v2).
+    #[cfg(test)]
     pub(super) fn workspace_tool_grant_active(
         &self,
         conversation_id: &str,

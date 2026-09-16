@@ -255,7 +255,7 @@ type ChatPanelProps = {
     tenantId: string;
     projectId: string;
   };
-  voiceTranscriptionConfig?: DesktopRuntimeConfig;
+  desktopRuntimeConfig?: DesktopRuntimeConfig;
   voiceSessionOperations: DesktopVoiceSessionOperationsV2;
   activityPresence: SessionActivityPresence;
   activityStructuredEvidence: SessionActivityStructuredEvidence | null;
@@ -407,7 +407,7 @@ export const ChatPanel = memo(function ChatPanel({
   sessionTitle,
   scopeLabel,
   turnCollapseRuntime = DEFAULT_TURN_COLLAPSE_RUNTIME,
-  voiceTranscriptionConfig,
+  desktopRuntimeConfig,
   voiceSessionOperations,
   activityPresence,
   activityStructuredEvidence,
@@ -1937,7 +1937,7 @@ export const ChatPanel = memo(function ChatPanel({
             responseStreaming={responseStreaming}
             stopResponseAvailable={Boolean(onStopResponse)}
             stopResponseStatus={stopRequest.status}
-            voiceTranscriptionConfig={voiceTranscriptionConfig}
+            desktopRuntimeConfig={desktopRuntimeConfig}
             voiceSessionOperations={voiceSessionOperations}
           />
           {messageDeleteRequest ? (
@@ -2059,7 +2059,7 @@ type ChatComposerProps = {
   responseStreaming: boolean;
   stopResponseAvailable: boolean;
   stopResponseStatus: AgentStopRequestState['status'];
-  voiceTranscriptionConfig?: DesktopRuntimeConfig;
+  desktopRuntimeConfig?: DesktopRuntimeConfig;
   voiceSessionOperations: DesktopVoiceSessionOperationsV2;
 };
 
@@ -2114,7 +2114,7 @@ function ChatComposer({
   responseStreaming,
   stopResponseAvailable,
   stopResponseStatus,
-  voiceTranscriptionConfig,
+  desktopRuntimeConfig,
   voiceSessionOperations,
 }: ChatComposerProps) {
   const { t } = useI18n();
@@ -2150,7 +2150,8 @@ function ChatComposer({
   }, []);
   const executionBinding = useConversationExecutionSelection({
     api, conversation: promptTemplateConversation,
-    enabled: voiceTranscriptionConfig?.mode === 'local' && Boolean(activeConversationId),
+    // Execution selection persistence is a local-runtime authority; enable only in local mode.
+    enabled: desktopRuntimeConfig?.mode === 'local' && Boolean(activeConversationId),
     sending, onResolved: applyExecutionSelection,
   });
   useEffect(() => { setContextItems([]); }, [activeConversationId]);
@@ -2161,34 +2162,34 @@ function ChatComposer({
   }, [executionBinding.remove]);
   const voiceConnection = useMemo<VoiceTranscriptionConnection>(
     () =>
-      voiceTranscriptionConfig
+      desktopRuntimeConfig
         ? resolveVoiceTranscriptionConnection(
-            voiceTranscriptionConfig,
+            desktopRuntimeConfig,
             promptTemplateConversation?.project_id ??
-              voiceTranscriptionConfig.projectId,
+              desktopRuntimeConfig.projectId,
             promptTemplateConversation?.id ?? activeConversationId,
           )
         : { availability: 'local_runtime' },
     [
       activeConversationId,
       promptTemplateConversation,
-      voiceTranscriptionConfig,
+      desktopRuntimeConfig,
     ],
   );
   const voiceCallConnection = useMemo<VoiceCallConnection>(
     () =>
-      voiceTranscriptionConfig
+      desktopRuntimeConfig
         ? resolveVoiceCallConnection(
-            voiceTranscriptionConfig,
+            desktopRuntimeConfig,
             promptTemplateConversation?.project_id ??
-              voiceTranscriptionConfig.projectId,
+              desktopRuntimeConfig.projectId,
             promptTemplateConversation?.id ?? activeConversationId,
           )
         : { availability: 'local_runtime' },
     [
       activeConversationId,
       promptTemplateConversation,
-      voiceTranscriptionConfig,
+      desktopRuntimeConfig,
     ],
   );
   const voiceDraftRef = useRef(initialVoiceTranscriptDraft(''));
@@ -2205,14 +2206,14 @@ function ChatComposer({
   );
   const voice = useVoiceTranscription({
     connection: voiceConnection,
-    config: voiceTranscriptionConfig ?? null,
+    config: desktopRuntimeConfig ?? null,
     operations: voiceSessionOperations,
     onInterim: (text) => applyVoiceMessage({ kind: 'interim', text }),
     onFinal: (text) => applyVoiceMessage({ kind: 'final', text }),
   });
   const voiceCall = useVoiceCall({
     connection: voiceCallConnection,
-    config: voiceTranscriptionConfig ?? null,
+    config: desktopRuntimeConfig ?? null,
     operations: voiceSessionOperations,
   });
   const voiceActive =
@@ -2331,7 +2332,7 @@ function ChatComposer({
       });
     onSend(content, contextItems, () => {
       setInput('');
-      setContextItems((current) => voiceTranscriptionConfig?.mode === 'local' ? current.filter(isExecutionContext) : []);
+      setContextItems((current) => desktopRuntimeConfig?.mode === 'local' ? current.filter(isExecutionContext) : []);
     });
   }, [
     canSendNow,
@@ -2344,7 +2345,7 @@ function ChatComposer({
     onSend,
     t,
     voice.stop,
-    voiceTranscriptionConfig?.mode,
+    desktopRuntimeConfig?.mode,
   ]);
   const setComposeAheadDefaultIntent = useCallback(
     (intent: ComposeAheadIntent) => {
@@ -2360,7 +2361,7 @@ function ChatComposer({
     onStopResponse();
     onSend(content, contextItems, () => {
       setInput('');
-      setContextItems((current) => voiceTranscriptionConfig?.mode === 'local' ? current.filter(isExecutionContext) : []);
+      setContextItems((current) => desktopRuntimeConfig?.mode === 'local' ? current.filter(isExecutionContext) : []);
     });
   }, [
     contextItems,
@@ -2372,7 +2373,7 @@ function ChatComposer({
     onStopResponse,
     sending,
     voice.stop,
-    voiceTranscriptionConfig?.mode,
+    desktopRuntimeConfig?.mode,
   ]);
   const handleSteerFallback = useCallback(
     (scope: string, promptId: string) => {
@@ -2897,7 +2898,7 @@ function ChatComposer({
             />
           ) : null}
           <Flex align="center" gap="2" className="composer-right-actions">
-            {voiceTranscriptionConfig ? (
+            {desktopRuntimeConfig ? (
               <button
                 className={`composer-voice-button is-${voice.state}`}
                 type="button"
@@ -2932,7 +2933,7 @@ function ChatComposer({
                 ) : null}
               </button>
             ) : null}
-            {voiceTranscriptionConfig ? (
+            {desktopRuntimeConfig ? (
               <button
                 className={`composer-voice-button composer-call-button is-${voiceCall.status}`}
                 type="button"

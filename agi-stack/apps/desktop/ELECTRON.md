@@ -16,6 +16,28 @@ make -C agi-stack desktop-bundle
 `make -C agi-stack run-desktop-electron` remains only as a compatibility alias for
 `make -C agi-stack run-desktop`.
 
+## Cloud mode in local development
+
+Cloud surfaces are delivered through platform-plugin renderer delivery, which requires two
+protocol-v2 data-plane grants (`desktop-sidecar-v2` and `desktop-renderer-v2`). The main process
+imports them once at startup from the `AGISTACK_PLUGIN_DATA_PLANE_*_V2` and
+`AGISTACK_PLUGIN_RENDERER_DATA_PLANE_*_V2` environment variables into the application vault; an
+empty vault has no other import path and cloud mode fails closed with the
+`renderer_credential_required` gate.
+
+`make -C agi-stack run-desktop` provisions these grants automatically when the local backend is
+reachable: `agi-stack/scripts/ensure-desktop-grants.sh` mints 24-hour credentials through the
+development-only `scripts/bootstrap-local-desktop-grants.py` bootstrap (a temporary platform
+identity that is retired after issuance) and stores shell exports in the mode-`0600`
+`agi-stack/.local/desktop-grants/grants.env`, which the target sources before launch. Stored
+grants are revalidated against `/api/v1/platform-plugins/v2/distribution` and reprovisioned when
+the backend rejects them; `make -C agi-stack desktop-grants` forces a refresh. When the backend
+is unreachable or provisioning fails, the target continues without grants so local mode keeps
+working. The bootstrap is guarded to `environment == development` with loopback API and database
+hosts, and the grant directory is git-ignored, so this path cannot mint or leak production
+credentials.
+
+
 For native QA that must not read or mutate the normal application vault, create a private
 temporary directory whose basename starts with `agistack-desktop-qa-`, then launch through the
 same canonical target:

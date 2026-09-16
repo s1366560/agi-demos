@@ -10,6 +10,30 @@ The dated observations below are historical records, not current commands or acc
 
 # Desktop QA Log
 
+## Native cloud gate, plan authority, and renderer CSP fixes: 2026-09-15
+
+- Cloud login against `http://localhost:8000` authenticated but stalled on the full-screen
+  `renderer_credential_required` / `desktop_renderer_generation_unavailable` gate: the renderer
+  data-plane credential is imported only from `AGISTACK_PLUGIN_RENDERER_DATA_PLANE_*_V2` at
+  startup and `run-desktop` never provisioned it. The target now provisions and revalidates
+  24-hour `desktop-sidecar-v2` + `desktop-renderer-v2` grants through
+  `agi-stack/scripts/ensure-desktop-grants.sh` (graceful no-op when the backend is unreachable)
+  and sources the mode-`0600` `agi-stack/.local/desktop-grants/grants.env` before launch;
+  `make -C agi-stack desktop-grants` forces reissuance. Verified natively via CDP: after cloud
+  login the gate is gone and the authenticated shell loads (screenshot
+  `.tmp/desktop-qa-20260915/fix-p0-cloud-shell.png`).
+- Local plan submission failed with `tool 'submit_plan' has no authority metadata` whenever the
+  call crossed the run-scoped `AuthorizedRunToolHost`: `submit_plan` was absent from the static
+  tool-effect roster. It is now declared read-only like the rest of the plan-mode roster —
+  persisting a plan for human review never executes it and must not consume a mutation grant —
+  with a roster-wide regression test.
+- Plugin renderer sandbox iframes logged inline-script CSP violations at `about:srcdoc`:
+  `about:srcdoc` documents inherit the embedder's CSP list, so the shell `script-src 'self'`
+  blocked the builtin modules' inline bootstrap despite their own `script-src 'unsafe-inline'`
+  meta. Both bootstrap scripts are now pinned by exact sha256 in the module meta policies and in
+  the shell `index.html` policy (no `unsafe-inline` for scripts anywhere), with a hash-sync test
+  keeping the three declarations in lockstep.
+
 ## Desktop/Web parity completion audit: 2026-07-29
 
 - This historical audit used parity merge `1fb5636ae76eaebbccca9b3c236dfc403ed7d154`

@@ -64,7 +64,7 @@
 }
 
 /* prototype mission-control refactor 2026-09: StatusBadge pill (dot + label)
-   with amber / cyan / green tints, matching ConversationDetail.css. */
+   with amber / cyan / green tints, matching the mission-control prototype. */
 .session-status-badge {
   display: inline-flex;
   flex: 0 0 auto;

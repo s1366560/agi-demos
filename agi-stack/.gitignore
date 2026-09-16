@@ -11,3 +11,6 @@ docs/.obsidian/
 *.db-shm
 *.db-wal
 
+# Local development secrets (desktop data-plane grants minted by scripts/ensure-desktop-grants.sh)
+/.local/
+

@@ -53,7 +53,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons run-desktop run-desktop-electron desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-deps desktop-frontend desktop-electron-frontend desktop-icons run-desktop run-desktop-electron desktop-grants desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -128,7 +128,11 @@ run-desktop: desktop-deps ## 启动 Electron 原生客户端与 Rust sidecar
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 	$(CARGO) build -p agistack-desktop-sidecar
 	cd $(DESKTOP_APP_DIR) && $(PNPM) exec install-electron --no
-	cd $(DESKTOP_APP_DIR) && $(PNPM) run dev:electron
+	@./scripts/ensure-desktop-grants.sh
+	cd $(DESKTOP_APP_DIR) && { [ ! -f $(CURDIR)/.local/desktop-grants/grants.env ] || . $(CURDIR)/.local/desktop-grants/grants.env; } && $(PNPM) run dev:electron
+
+desktop-grants: ## 桌面:强制重新发放云端数据平面授权(24h 有效,仅本地开发)
+	@AGISTACK_DESKTOP_GRANTS_FORCE=1 ./scripts/ensure-desktop-grants.sh
 
 run-desktop-electron: run-desktop ## 启动 Electron 原生客户端(兼容别名)
 

@@ -479,6 +479,11 @@ static SENSITIVE_INPUT_FIELDS: LazyLock<BTreeSet<&'static str>> = LazyLock::new(
 const READ_ONLY_TOOLS: &[&str] = &[
     "skill_list",
     "skill_loader",
+    // Plan submission only persists the proposed plan into the runtime's own
+    // session store for human review; it never executes the plan or touches
+    // the workspace, so it carries read authority like the rest of the
+    // plan-mode roster and never requires a mutation grant.
+    "submit_plan",
     "knowledge_search",
     "knowledge_source",
     "read",
@@ -896,6 +901,26 @@ mod tests {
                 "mutating browser tool {tool} must stay out of plan mode"
             );
         }
+    }
+
+    #[test]
+    fn plan_mode_roster_and_submit_plan_carry_read_authority_metadata() {
+        // The fail-closed run boundary rejects undeclared tools with
+        // "no authority metadata"; every plan-mode tool must stay declared.
+        for tool in super::super::PLAN_MODE_TOOL_NAMES {
+            assert_eq!(
+                tool_effect(tool),
+                Some(ToolEffect::Read),
+                "plan-mode tool {tool} is missing read authority metadata"
+            );
+        }
+        let metadata = tool_metadata("submit_plan").expect("submit_plan authority metadata");
+        assert_eq!(metadata.name, "submit_plan");
+        assert_eq!(metadata.effect, ToolEffect::Read);
+        assert!(
+            !metadata.requires_grant(),
+            "submitting a plan for review must not consume a mutation grant"
+        );
     }
 
     #[test]

@@ -428,7 +428,7 @@ function VoiceTranscriptionQa() {
               promotingRunInputId={null}
               runInputAuthorityRunId={null}
               references={[]}
-              voiceTranscriptionConfig={cloudConfig}
+              desktopRuntimeConfig={cloudConfig}
               voiceSessionOperations={voiceSessionOperations}
               onRunInputDeliveryChange={() => undefined}
               onPromoteRunInput={() => undefined}

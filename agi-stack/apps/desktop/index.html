@@ -4,9 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#080c12" />
+    <!--
+      script-src 'self' is inherited by the opaque-origin plugin renderer srcdoc
+      iframes (CSP initialization copies the embedder's policy list into
+      about:srcdoc documents). The two sha256 source expressions pin the exact
+      inline bootstrap scripts of the builtin plugin renderer modules so their
+      sandbox bridges can run without granting 'unsafe-inline' to the shell.
+      Keep in sync with src/plugins/desktopConversationRendererModuleV2.ts and
+      src/plugins/desktopToolResultRendererModuleV2.ts (enforced by
+      tests/desktop-renderer-csp-hash-v2.test.mjs).
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; font-src 'self' data:; frame-src 'self' blob: https: http://127.0.0.1:* http://localhost:*; img-src 'self' blob: data:; object-src 'none'; base-uri 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+      content="default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; font-src 'self' data:; frame-src 'self' blob: https: http://127.0.0.1:* http://localhost:*; img-src 'self' blob: data:; object-src 'none'; base-uri 'self'; script-src 'self' 'sha256-jaO7hFDfdjXzq8vHHc4PezUMZXZHq42ua3bm7MZy7jQ=' 'sha256-WsCtDY0vTMxL7kd4gtzIo+Rq6QB7cSsnJxysAb1AcHk='; style-src 'self' 'unsafe-inline'"
     />
     <title>agi-stack Desktop</title>
     <script src="/theme-init.js"></script>
