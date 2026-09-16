@@ -279,7 +279,20 @@ test('tag releases fail closed and publish the requested state after package ver
   assert.ok(exactRemoteIndex < publishPrereleaseIndex);
   assert.ok(publishPrereleaseIndex < assertPrereleaseIndex);
   assert.equal(releaseWorkflow.match(/gh release create/gu)?.length, 1);
-  assert.equal(releaseWorkflow.match(/actions\/download-artifact@\S+/gu)?.length, 3);
+  // 3 platform package downloads + 3 platform wave-8 evidence downloads
+  assert.equal(releaseWorkflow.match(/actions\/download-artifact@\S+/gu)?.length, 6);
+  // Wave 8 native gates: per-platform install-launch smoke + update drill +
+  // v3 evidence compose in build; stage-draft verifies all three platforms'
+  // evidence for the exact tag before creating or publishing the release.
+  assert.match(releaseWorkflow, /node scripts\/install-launch-smoke\.mjs/u);
+  assert.match(releaseWorkflow, /node scripts\/smoke-update-drill\.mjs/u);
+  assert.match(releaseWorkflow, /release-evidence\.mjs compose/u);
+  assert.match(releaseWorkflow, /name:\s*desktop-release-evidence-macOS/u);
+  assert.match(releaseWorkflow, /name:\s*desktop-release-evidence-Windows/u);
+  assert.match(releaseWorkflow, /name:\s*desktop-release-evidence-Linux/u);
+  assert.match(releaseWorkflow, /release-evidence\.mjs verify-tag/u);
+  const verifyTagIndex = releaseWorkflow.indexOf('release-evidence.mjs verify-tag');
+  assert.ok(draftJobIndex < verifyTagIndex && verifyTagIndex < createDraftIndex);
   assert.doesNotMatch(releaseWorkflow, /uses:\s+\S+@v\d+/u);
   assert.match(releaseWorkflow, /name:\s*agistack-desktop-macOS/u);
   assert.match(releaseWorkflow, /name:\s*agistack-desktop-Windows/u);

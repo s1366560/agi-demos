@@ -27,17 +27,22 @@ Current desired contract: 2026-07-29
 - Its build attestation records `web_pnpm` from the Web project directory and `desktop_pnpm` from
   the Desktop project directory. The two independently pinned Corepack versions must not be
   collapsed into one runner-level pnpm value.
-- Tag CI emits immutable `desktop-release-evidence-v2` with
-  `evidence_scope: package_artifacts_only`,
+- Tag CI emits immutable `desktop-release-evidence-v3` with `evidence_scope` covering
+  `package_artifact_verification`, `install_launch_smoke`, and `update_transaction_drill`,
   `blockmap_verification_scope: blockmap_structure_and_coverage_only`, and
-  `release_disposition: draft_only`. It verifies package signatures, notarization/stapling status,
-  exact installer metadata and digests, packaged sidecar integrity, and supported extraction
-  checks. It checks blockmap structure and declared size coverage without recomputing chunk
-  checksums or executing an updater, then stages the exact assets in a GitHub draft and asserts
-  that the release remains a draft.
-- Package-artifact evidence is not native release evidence. The current workflow does not install
-  or launch each package, apply a real update, or exercise failed-update rollback; Wave 8 must add
-  those cross-platform gates before any release promotion.
+  `release_disposition: draft_until_wave8_native_gates_pass`. It verifies package signatures,
+  notarization/stapling status, exact installer metadata and digests, packaged sidecar integrity,
+  and supported extraction checks. It checks blockmap structure and declared size coverage without
+  recomputing chunk checksums, then installs and launches each package on its native runner,
+  requires the packaged sidecar to spawn and answer the HMAC-authenticated health handshake, and
+  runs a synthetic update apply plus failed-update rollback drill through the transactional updater
+  and the real recovery helper before staging the exact assets in a GitHub draft. Older tags remain
+  described by `desktop-release-evidence-v2` with `evidence_scope: package_artifacts_only`.
+- The Wave 8 gates close the install/launch/apply/rollback gap, but the evidence remains explicit
+  about its limits: no hosted `electron-updater` feed is contacted, no differential blockmap apply
+  runs, the drill's N and N+1 are synthetic markers over identical binaries, and renderer
+  interactive flows are not asserted. Promotion remains blocked unless every platform's v3 evidence
+  binds to the exact tag.
 - `parity-manifest.v1.json` is retained as read-only compatibility input for one version.
 
 Historical v1 contract: 2026-07-28

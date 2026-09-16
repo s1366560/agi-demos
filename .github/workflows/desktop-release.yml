@@ -400,6 +400,43 @@ jobs:
           AGISTACK_REQUIRE_NOTARIZATION: ${{ runner.os == 'macOS' && '1' || '0' }}
           WIN_CSC_SHA1: ${{ secrets.WIN_CSC_SHA1 }}
 
+      - name: Install headless Linux runtime dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb libgtk-3-0 libnss3 libxss1 libasound2t64
+
+      - name: Wave 8 gate - install and launch smoke
+        run: node scripts/install-launch-smoke.mjs
+        env:
+          AGISTACK_EXPECTED_VERSION: ${{ env.AGISTACK_RELEASE_VERSION }}
+          AGISTACK_EXPECTED_TAG: ${{ github.ref_name }}
+          AGISTACK_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/desktop-release-evidence
+
+      - name: Wave 8 gate - update apply and rollback drill
+        run: node scripts/smoke-update-drill.mjs
+        env:
+          AGISTACK_EXPECTED_VERSION: ${{ env.AGISTACK_RELEASE_VERSION }}
+          AGISTACK_EXPECTED_TAG: ${{ github.ref_name }}
+          AGISTACK_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/desktop-release-evidence
+
+      - name: Compose desktop-release-evidence-v3
+        run: node scripts/release-evidence.mjs compose
+        env:
+          AGISTACK_EXPECTED_VERSION: ${{ env.AGISTACK_RELEASE_VERSION }}
+          AGISTACK_EXPECTED_TAG: ${{ github.ref_name }}
+          AGISTACK_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/desktop-release-evidence
+
+      - name: Upload Wave 8 gate evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-release-evidence-${{ runner.os }}
+          path: ${{ runner.temp }}/desktop-release-evidence/desktop-release-evidence-v3.json
+          if-no-files-found: error
+
       - name: Remove App Store Connect API key
         if: always() && runner.os == 'macOS'
         shell: node {0}
@@ -483,6 +520,28 @@ jobs:
 
       - name: Validate the combined release asset set
         run: node agi-stack/apps/desktop/scripts/release-draft-validation.mjs validate-combined
+
+      - name: Download macOS Wave 8 gate evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-release-evidence-macOS
+          path: gate-evidence/macos
+
+      - name: Download Windows Wave 8 gate evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-release-evidence-Windows
+          path: gate-evidence/windows
+
+      - name: Download Linux Wave 8 gate evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-release-evidence-Linux
+          path: gate-evidence/linux
+
+      - name: Assert Wave 8 gate evidence binds to this tag
+        working-directory: agi-stack/apps/desktop
+        run: node scripts/release-evidence.mjs verify-tag "${GITHUB_WORKSPACE}/gate-evidence"
 
       - name: Create or recover the verified draft release
         shell: bash

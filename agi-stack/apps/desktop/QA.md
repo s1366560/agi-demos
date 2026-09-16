@@ -10,6 +10,80 @@ The dated observations below are historical records, not current commands or acc
 
 # Desktop QA Log
 
+## Follow-up roadmap P0-P3 implementation: 2026-09-17
+
+- The 2026-09-16 follow-up roadmap (`desktop-followup-roadmap.md`) was executed in full.
+  P0-1: the backend landed a real `steer_message` WS handler reusing the run-input authority
+  plane (persistence + idempotency + revision guard + `RedisControlChannel` dispatch), the
+  message router's unknown-type error is now typed (`UNKNOWN_MESSAGE_TYPE` + message_id echo),
+  owner steers inject as durable user-role messages with `injected_via` metadata, and the
+  desktop deleted its text-matching fallback (regression-pinned). P0-2: the session projection
+  now derives `execution_stage` server-side (pure rule table over persisted statuses, additive
+  field, schema_version stays 2, joins the snapshot digest); the desktop threads it to the
+  stepper with `'unavailable'` fallback, closing honesty risk R4.
+- P1: Changes panel gained the run/session scope toggle backed by a server-side session
+  baseline anchor (first workspace-touching run's recorded base commit; fail-closed
+  `session_baseline_unavailable` / `session_baseline_environment_mismatch`), and per-file +
+  per-hunk revert in cloud mode (server-recomputed snapshot, `git apply --check --reverse`
+  all-or-nothing via the sandbox, snapshot-digest pinning, idempotent receipts, replay
+  deduction, HITL-style destructive confirmation; local mode fail-closed). Plugin marketplace
+  install shipped in-app on both desktop and web (superuser-gated install with declared-
+  permission approval dialog, quarantine/unsigned/unavailable honest states; local mode
+  fail-closed; approve/revoke client-pinned for a future governance UI).
+- P2 robustness batch: sidebar tree degrades non-terminal run dots to a stale treatment while
+  disconnected (R1 resolved); composer stop disables while disconnected (R2 resolved);
+  NewTaskFlow idempotency dead-end gained an inline unblock hint; the workspace autonomy
+  resolve alias is named and documented; A2UI kind aliases replaced remapping and registry
+  mutation moved out of render; updater contract failures are retryable and keep the original
+  error; MCP supervisor recovery failures log structured warnings; browser-tool transport
+  errors restore the once-permission; MCP lease indeterminate semantics are documented.
+  Code blocks gained an honest "open in canvas" local scratch tab (no fabricated artifact
+  identity). P3: Wave 8 native release gates — see the entry above.
+- Also repaired pre-existing HEAD drift: builtin agent route parity test (97→100, commit
+  0f88e0d91 added routes without the test), six stale websocket unit tests, the contract
+  runtime expectation (`external_builtin_collision` preflight ordering), and refreshed the v2
+  artifact digests (agent-routes + marketplace authority modules).
+- Verification on the final tree: `node tests/run.mjs` 4854 pass / 3 env-gated skips / 0 fail;
+  `corepack pnpm run build:electron` pass; `make -C agi-stack desktop-browser-qa` 8/8;
+  sidecar `cargo test -p agistack-desktop-sidecar` 929 passed / 2 intentionally ignored;
+  backend targeted suites 322 + 53 passed (websocket, session projection, change revert,
+  run authority, plugin v2); web vitest 620 passed + `tsc --noEmit` clean; native
+  `make -C agi-stack run-desktop` CDP smoke re-verified (conversation rail anatomy renders,
+  no renderer errors, stage stepper correctly hidden in local mode).
+
+## Wave 8 native release gates: 2026-09-17
+
+- The tag workflow now runs real-install gates per platform after package-artifact verification:
+  `scripts/install-launch-smoke.mjs` installs the verified package (macOS dmg mount + private
+  install root, Windows NSIS `/S` silent install + uninstall, Linux AppImage extraction and deb
+  `dpkg` install/remove), launches the installed app, requires it to survive an observation window,
+  and requires the packaged sidecar to spawn as a descendant of the app process.
+  `scripts/sidecar-health-probe.mjs` then drives the real initialize/ready handshake against the
+  packaged sidecar (nonce + HMAC proof verified), round-trips `local_runtime_status`, and requires
+  a clean exit. Linux runs headless under `xvfb-run` with `--no-sandbox`, recorded in the evidence.
+- `scripts/smoke-update-drill.mjs` stages synthetic N/N+1 installations from the staged sidecar and
+  Workspace Core binaries, snapshots N through the real `--update-recovery-prepare` helper, applies
+  N+1 via `applyUpdateWithRollback` with the real sidecar probe as post-apply validation, asserts
+  the candidate version is reported, and proves failed-update rollback for both a corrupt version
+  marker and a corrupt sidecar binary. This complements the existing `smoke:update-recovery`
+  journal-helper step, which still runs in the build job.
+- Evidence is now materialized: each gate writes a fragment and `scripts/release-evidence.mjs
+  compose` emits `desktop-release-evidence-v3` (`evidence_scope`: `package_artifact_verification`,
+  `install_launch_smoke`, `update_transaction_drill`; `release_disposition`:
+  `draft_until_wave8_native_gates_pass`; blockmap scope unchanged). The draft-staging job downloads
+  all three platform evidence documents and fails closed unless each passes and binds to the exact
+  tag, so a gate failure leaves the release a draft. Older tags keep `desktop-release-evidence-v2`
+  with `package_artifacts_only`.
+- Honest scope limits recorded in the v3 evidence: no hosted `electron-updater` feed is contacted,
+  no differential blockmap apply runs, the drill versions are synthetic markers over identical
+  binaries rather than two genuinely signed builds, the installed app does not self-update and
+  restart into itself, and renderer content/sign-in/cloud-grant flows are not asserted.
+- Contract coverage: `tests/release-gates.test.mjs` exercises the probe handshake against a fake
+  sidecar (including forged-proof and dying-sidecar rejection), process-table/descendant detection,
+  the drill's apply and both rollback modes through the real `applyUpdateWithRollback`, and the v3
+  composer's fail-closed fragment/tag/platform assertions. Local run: 14/14 pass, plus the existing
+  release-artifact-verifier (19) and updater-transaction (2) tests unchanged and green.
+
 ## Conversation-flow web alignment + capability audit: 2026-09-16
 
 - Full audit of workspace, chat, skills, plugins, tool calls, and agent/subagent capability
@@ -108,11 +182,12 @@ The dated observations below are historical records, not current commands or acc
   AppImage/deb extraction, exact installer metadata and digests, and immutable per-platform
   `desktop-release-evidence-v2` scoped to `package_artifacts_only`. Blockmap validation is recorded
   as `blockmap_structure_and_coverage_only`; it does not recompute chunk checksums or execute an
-  updater.
+  updater. (Superseded by the 2026-09-17 Wave 8 native release gates entry above.)
 - The workflow only creates or restores the exact-tag GitHub draft, uploads the verified asset set,
   and asserts that the release remains a draft. It does not install or launch the packages, apply a
   real update, or prove failed-update rollback. Those native release gates and any promotion remain
-  Wave 8 work; the current tag CI cannot satisfy them.
+  Wave 8 work; the current tag CI cannot satisfy them. (Superseded by the 2026-09-17 Wave 8 entry
+  above: install/launch smoke, update apply + rollback drills, and v3 evidence now run per tag.)
 - The worktree at the time also contained pre-existing concurrent
   Sidebar/Session/Workspace/ResizeHandle edits. They were not parity-completion evidence and were
   intentionally excluded from that audit commit.
@@ -142,6 +217,8 @@ The dated observations below are historical records, not current commands or acc
 - Tag CI release evidence is separately scoped to static package artifacts. Its v2 contract records
   `package_artifacts_only`, `draft_only`, and the missing native checks; it cannot authorize
   publication without Wave 8 installation, launch, updater-application, and rollback evidence.
+  (Superseded for new tags by the 2026-09-17 Wave 8 entry above: v3 evidence adds install/launch
+  and update-drill scopes while keeping the v2 string valid for older tags.)
 - Web and Desktop packages, ordinary CI, E2E, and release CI use pnpm `11.15.1` with
   integrity-qualified package-manager declarations and Node 22. pnpm 11 intentionally records
   Desktop package-manager dependencies in a separate YAML document at the start of
@@ -217,7 +294,8 @@ The dated observations below are historical records, not current commands or acc
   macOS bundles use an explicitly ad-hoc signed development package; the tag workflow requires
   Developer ID, notarization, and Windows Authenticode credentials to verify and stage production
   package artifacts in a GitHub draft. Those credentials do not authorize promotion, which remains
-  blocked pending Wave 8 native release evidence.
+  blocked pending Wave 8 native release evidence (delivered 2026-09-17; see the Wave 8 entry
+  above).
 - Desktop credentials never use Keychain; cloud sessions and Provider API keys persist through the
   Rust sidecar's application-managed encrypted vault.
 - The encrypted vault stores only AES-256-GCM ciphertext in SQLite and keeps its random installation
