@@ -192,6 +192,16 @@ class FakeConnectionManager:
     ) -> None:
         self.broadcasts.append((conversation_id, event))
 
+    async def broadcast_agent_stream_event(
+        self,
+        conversation_id: str,
+        event: dict[str, Any],
+        *,
+        message_id: str | None = None,
+    ) -> int:
+        self.broadcasts.append((conversation_id, event))
+        return 1
+
     async def send_to_session(self, session_id: str, event: dict[str, Any]) -> None:
         self.broadcasts.append((session_id, event))
 

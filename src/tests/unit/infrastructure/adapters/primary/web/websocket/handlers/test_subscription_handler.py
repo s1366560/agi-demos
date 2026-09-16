@@ -186,10 +186,12 @@ async def test_subscribe_starts_recovery_bridge_when_running(monkeypatch) -> Non
         conversation_id: str,
         bridge_message_id: str | None = None,
         task_factory,
+        replace_existing: bool = False,
     ) -> bool:
         assert session_id == "session-1"
         assert conversation_id == "conv-1"
         assert bridge_message_id == "msg-1"
+        assert replace_existing is True
         task_factory()
         return True
 
@@ -280,10 +282,12 @@ async def test_subscribe_keeps_client_recovery_cursor(monkeypatch) -> None:
         conversation_id: str,
         bridge_message_id: str | None = None,
         task_factory,
+        replace_existing: bool = False,
     ) -> bool:
         assert session_id == "session-1"
         assert conversation_id == "conv-1"
         assert bridge_message_id == "msg-1"
+        assert replace_existing is True
         task_factory()
         return True
 

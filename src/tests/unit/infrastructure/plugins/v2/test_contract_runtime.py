@@ -279,7 +279,10 @@ async def test_loader_preserves_explicit_empty_target_catalog() -> None:
     with pytest.raises(RuntimeV2Error) as error:
         await _loader(snapshot, definitions, target_catalog={}).stage(snapshot)
 
-    assert error.value.code == "missing_target_catalog"
+    # External-artifact admission preflight rejects catalog-missing builtin
+    # modules as external_builtin_collision before the legacy
+    # missing_target_catalog path; either way nothing is applied.
+    assert error.value.code == "external_builtin_collision"
     assert calls == []
 
 

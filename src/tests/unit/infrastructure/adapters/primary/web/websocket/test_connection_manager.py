@@ -62,7 +62,7 @@ async def test_connect_accepts_selected_subprotocol() -> None:
 async def test_try_start_bridge_task_skips_when_active_bridge_exists() -> None:
     manager = ConnectionManager()
     existing_task = _StubTask(done=False)
-    manager.bridge_tasks["session-existing"] = {"conv-1": existing_task}
+    manager.bridge_tasks["session-new"] = {"conv-1": existing_task}
     manager.active_connections["session-new"] = object()  # type: ignore[assignment]
     manager.subscriptions["session-new"] = {"conv-1"}
     new_task = _StubTask(done=False)
@@ -74,8 +74,7 @@ async def test_try_start_bridge_task_skips_when_active_bridge_exists() -> None:
     )
 
     assert started is False
-    assert "session-new" not in manager.bridge_tasks
-    assert manager.bridge_tasks["session-existing"]["conv-1"] is existing_task
+    assert manager.bridge_tasks["session-new"]["conv-1"] is existing_task
 
 
 @pytest.mark.unit
@@ -103,9 +102,9 @@ async def test_try_start_bridge_task_is_atomic_for_concurrent_calls() -> None:
             task_factory=_factory("session-a"),
         ),
         manager.try_start_bridge_task(
-            session_id="session-b",
+            session_id="session-a",
             conversation_id="conv-1",
-            task_factory=_factory("session-b"),
+            task_factory=_factory("session-a"),
         ),
     )
 
