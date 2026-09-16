@@ -317,6 +317,7 @@ export interface User {
   name: string;
   roles: string[];
   is_active: boolean;
+  is_superuser?: boolean | undefined;
   created_at: string;
   must_change_password?: boolean | undefined;
   tenant_id?: string | undefined; // Keep for compatibility if needed, but backend removed it from response? No, backend removed it.
