@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:ceb7deb9ad22f56f3777ea75beb290914aa98363ad3924b2d37f8d154a',
-  '2262d5","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:c642f5b183f17319c9af664171ac59d95aa013c8c6588cfd994c6fc1a0',
+  'ff9fcd","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1879,8 +1879,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'fff5e86060a1c344bdea7a998","entrypoint":"applyDesktopNewThreadCreationAuthorityV2","',
   'module_ref":"builtin://memstack/desktop/new-thread-creation-authority","plugin_id":"',
   'memstack-renderer-target-hosts","plugin_version":"2.0.0","targets":["desktop-rendere',
-  'r"]},{"artifact_digest":"sha256:a982d9c9d89ad9089b2025d21405c4368ddb69718889ad31b595',
-  '9cd6c3a12b93","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugin',
+  'r"]},{"artifact_digest":"sha256:cfa5917423bf08f1f811354b9069f23d13a746c017e8e44687bd',
+  'f85625c6ed32","artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugin',
   's/desktopPluginMarketplaceAuthorityModulesV2.ts","contract":{"config_schema":{"$sche',
   'ma":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"pro',
   'perties":{"strategy":{"const":"desktop-api-client","type":"string"}},"required":["st',
@@ -1890,8 +1890,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'bb8c4f08e9fa8591102d5ab6","entrypoint":"applyDesktopPluginMarketplaceCatalogAuthorit',
   'yV2","module_ref":"builtin://memstack/desktop/plugin-marketplace-catalog-authority",',
   '"plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.0.0","targets":["de',
-  'sktop-renderer"]},{"artifact_digest":"sha256:a982d9c9d89ad9089b2025d21405c4368ddb697',
-  '18889ad31b5959cd6c3a12b93","artifact_source":"repo+typescript://agi-stack/apps/deskt',
+  'sktop-renderer"]},{"artifact_digest":"sha256:cfa5917423bf08f1f811354b9069f23d13a746c',
+  '017e8e44687bdf85625c6ed32","artifact_source":"repo+typescript://agi-stack/apps/deskt',
   'op/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts","contract":{"config_sc',
   'hema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPropertie',
   's":false,"properties":{"strategy":{"const":"desktop-api-client","type":"string"}},"r',
@@ -2990,8 +2990,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '5fc2e9b99b1f492629e9ed96b3592c6c048d4","entrypoint":"src.infrastructure.plugins.v2.b',
   'uiltin_agent_pool_http_routes:builtin_agent_pool_http_routes_definition_v2","module_',
   'ref":"builtin://memstack/http/agent-pool-routes","plugin_id":"memstack-runtime-kerne',
-  'l","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:0468eed',
-  '0f951c12ba022ca6fd357abca0fa22261b82a92aaafca2d6e349100d1","artifact_source":"repo+p',
+  'l","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:25e20fe',
+  '7c63916d924ab3321173b91c7b9ab4e9b82803ad1be6638bdeb591985","artifact_source":"repo+p',
   'ython://src/infrastructure/plugins/v2/builtin_agent_http_routes.py","contract":{"con',
   'fig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPro',
   'perties":false,"properties":{},"type":"object"},"events":{"emits":[],"handles":[]},"',
@@ -4816,4 +4816,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:ceb7deb9ad22f56f3777ea75beb290914aa98363ad3924b2d37f8d154a2262d5' as const;
+  'sha256:c642f5b183f17319c9af664171ac59d95aa013c8c6588cfd994c6fc1a0ff9fcd' as const;

@@ -8020,7 +8020,7 @@
       },
       "contract_digest": "sha256:a86b36ff716fcadb1f9913e34ead253cdfcc9fe5cced9e756adb103126529833",
       "artifact": {
-        "digest": "sha256:0468eed0f951c12ba022ca6fd357abca0fa22261b82a92aaafca2d6e349100d1",
+        "digest": "sha256:25e20fe7c63916d924ab3321173b91c7b9ab4e9b82803ad1be6638bdeb591985",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_agent_http_routes.py"
       }
     },

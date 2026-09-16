@@ -1,5 +1,14 @@
 # 桌面客户端遗留事项 — 设计与规划
 
+> **执行状态（2026-09-17 更新）：全部已交付。** P0-1 / P0-2 / P1-1 / P1-2 / P1-3 / P2-1 至
+> P2-10 / P3-1 均已实施并验证（验证口径见 `agi-stack/apps/desktop/QA.md` 2026-09-17 条目）。
+> P1-3 产品决策：**端内安装，做**（云端真实安装、超管门控、本地 fail-closed、双端 parity）。
+> 实施中发现代码库部分区域已领先于缺口文档（P1-1 的 scope 端点骨架已存在，实际增量为
+> 会话基线锚点语义与失败关闭）。P2-3 画布打开以本地草稿语义落地（不伪造 artifact 身份）。
+> P1-2 的 stage 语义与本地模式 revert、P3 的托管更新源双签名演练为后续项。
+>
+> 以下为原始规划，保留作设计依据。
+
 > 输入：2026-09-16 桌面端全面审计（`desktop-capability-audit-report.md`、
 > `desktop-capability-audit-2.md`、`desktop-capability-audit-3.md`、
 > `desktop-conversation-flow-parity-audit.md`）及既有文档
