@@ -61,6 +61,9 @@ import {
   SessionChangesCanvas,
 } from './SessionChangesCanvas';
 import {
+  type ChangeRevertSurface,
+} from './useRunChangeRevert';
+import {
   SessionContextWindowCanvas,
 } from './SessionContextWindowCanvas';
 import {
@@ -196,6 +199,7 @@ export function WorkspaceReviewPanel({
   changeSnapshot,
   changeSnapshotLoading,
   changeSnapshotError,
+  changeRevert,
   changeScope,
   availableChangeScopes,
   changeReferences,
@@ -259,6 +263,7 @@ export function WorkspaceReviewPanel({
   changeSnapshot: ChangeSnapshot | null;
   changeSnapshotLoading: boolean;
   changeSnapshotError: string | null;
+  changeRevert: ChangeRevertSurface;
   changeScope: RunChangeScope;
   availableChangeScopes: readonly RunChangeScope[];
   changeReferences: CodeRangeReference[];
@@ -849,6 +854,7 @@ export function WorkspaceReviewPanel({
             error={changeSnapshotError}
             references={changeReferences}
             comments={changeComments}
+            revert={changeRevert}
             onRefresh={onRefreshChanges}
             scope={changeScope}
             availableScopes={availableChangeScopes}

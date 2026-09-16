@@ -261,12 +261,72 @@ class RunChangesResponse(_AuthorityModel):
     attribution: list[RunChangeAttribution]
 
 
+class RunChangeRevertSelector(_AuthorityModel):
+    path: str = Field(min_length=1, max_length=4096)
+    hunk_indices: list[int] | None = Field(default=None, max_length=512)
+
+
+class RevertRunChangesRequest(_AuthorityModel):
+    expected_run_revision: int = Field(ge=1)
+    scope: Literal["turn", "run", "session"] = "run"
+    turn_id: str | None = Field(default=None, max_length=255)
+    snapshot_digest: str = Field(min_length=1, max_length=255)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    selectors: list[RunChangeRevertSelector] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _validate_selector_shape(self) -> Self:
+        paths = [item.path for item in self.selectors]
+        if len(set(paths)) != len(paths):
+            raise ValueError("selectors cannot contain duplicate paths")
+        for item in self.selectors:
+            if item.hunk_indices is None:
+                continue
+            if not item.hunk_indices:
+                raise ValueError("hunk_indices cannot be empty; omit it to revert a whole file")
+            if len(set(item.hunk_indices)) != len(item.hunk_indices):
+                raise ValueError("hunk_indices cannot contain duplicates")
+            if any(index < 0 for index in item.hunk_indices):
+                raise ValueError("hunk_indices must be non-negative")
+        if self.scope == "turn" and not self.turn_id:
+            raise ValueError("turn_id is required for turn scope")
+        if self.scope != "turn" and self.turn_id is not None:
+            raise ValueError("turn_id is only valid for turn scope")
+        return self
+
+
+class RunChangeRevertResult(_AuthorityModel):
+    path: str
+    patch_digest: str
+    hunk_indices: list[int] | None
+    deleted_file: bool
+
+
+class RevertRunChangesResponse(_AuthorityModel):
+    accepted: Literal[True] = True
+    created: bool
+    run_id: str
+    conversation_id: str
+    run_revision: int
+    scope: Literal["turn", "run", "session"]
+    turn_id: str | None
+    snapshot_digest: str
+    reverted: list[RunChangeRevertResult]
+    head_commit: str | None
+    idempotency_key: str
+    reverted_at: datetime
+
+
 __all__ = [
     "ActiveRunResponse",
     "CreateRunInputRequest",
     "LatestRunResponse",
     "PromoteRunInputRequest",
     "PromoteRunInputResponse",
+    "RevertRunChangesRequest",
+    "RevertRunChangesResponse",
+    "RunChangeRevertResult",
+    "RunChangeRevertSelector",
     "RunChangesResponse",
     "RunInputAck",
     "RunInputListResponse",

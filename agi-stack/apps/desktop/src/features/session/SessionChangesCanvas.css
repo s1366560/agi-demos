@@ -372,3 +372,86 @@
   display: inline-flex;
   gap: 4px;
 }
+
+.session-change-file-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-change-file-row .session-change-file-toggle {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-change-revert-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--gray-11);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.session-change-revert-trigger:hover {
+  color: var(--red-11);
+  background: var(--red-3);
+}
+
+.session-change-revert-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.session-change-revert-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin: 4px 0;
+  border: 1px solid var(--red-6);
+  border-radius: 6px;
+  background: var(--red-2);
+}
+
+.session-change-revert-confirm p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--gray-12);
+}
+
+.session-change-revert-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.session-change-revert-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 4px 0;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--amber-2);
+  border: 1px solid var(--amber-6);
+}
+
+.session-change-revert-notice.is-failed {
+  background: var(--red-2);
+  border-color: var(--red-6);
+}
+
+.session-change-revert-notice span {
+  flex: 1;
+}
+
+.session-change-revert-notice button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}

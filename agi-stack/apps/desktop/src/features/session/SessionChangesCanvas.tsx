@@ -9,6 +9,7 @@ import {
   Cross2Icon,
   PaperPlaneIcon,
   ReloadIcon,
+  ResetIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -20,10 +21,16 @@ import type {
   CodeRangeReference,
 } from '../../types';
 import {
+  changeScopeFallbackTarget,
   referenceForChangeLine,
   runInputReferenceKey,
   runInputReferenceLabel,
 } from './sessionChangesModel';
+import {
+  revertTargetLabel,
+  type ChangeRevertSelector,
+} from './sessionChangesRevertModel';
+import type { ChangeRevertSurface } from './useRunChangeRevert';
 import type { ChangeReviewComment } from './sessionChangesReviewModel';
 import {
   collapseAllChangeFiles,
@@ -57,6 +64,7 @@ type SessionChangesCanvasProps = {
   references: CodeRangeReference[];
   comments: ChangeReviewComment[];
   decision?: ReactNode;
+  revert: ChangeRevertSurface;
   onToggleReference: (reference: CodeRangeReference) => void;
   onAddComment: (comment: ChangeReviewComment) => void;
   onRemoveComment: (commentId: string) => void;
@@ -74,6 +82,7 @@ export function SessionChangesCanvas({
   references,
   comments,
   decision,
+  revert,
   onToggleReference,
   onAddComment,
   onRemoveComment,
@@ -86,6 +95,9 @@ export function SessionChangesCanvas({
   const { t } = useI18n();
   const [expandedPaths, setExpandedPaths] = useState<string[]>([]);
   const [draft, setDraft] = useState<CommentDraft | null>(null);
+  const [revertTarget, setRevertTarget] = useState<ChangeRevertSelector | null>(
+    null,
+  );
   const files = snapshot?.files ?? [];
   const selectedKeys = useMemo(
     () => new Set(references.map(runInputReferenceKey)),
@@ -111,7 +123,9 @@ export function SessionChangesCanvas({
     // A refresh rebinds the snapshot: anchors from an older patch digest no
     // longer resolve, so any open editor is discarded with it.
     setDraft(null);
+    setRevertTarget(null);
   }, [snapshot?.id]);
+  const scopeFallback = changeScopeFallbackTarget(snapshot, scope, availableScopes);
 
   const review: ReviewInteraction = {
     commentsByAnchor,
@@ -200,6 +214,17 @@ export function SessionChangesCanvas({
         <ChangesState
           title={t(`session.changesStatus.${snapshot.status}`)}
           body={t(`session.changesReason.${snapshot.reason ?? 'unknown'}`)}
+          action={
+            scopeFallback ? (
+              <Button
+                size="1"
+                variant="surface"
+                onClick={() => onScopeChange(scopeFallback)}
+              >
+                {t('session.changesBackToRunScope')}
+              </Button>
+            ) : null
+          }
         />
       ) : snapshot.files.length === 0 ? (
         <ChangesState
@@ -269,40 +294,126 @@ export function SessionChangesCanvas({
             className="session-change-files-list"
             aria-label={t('session.changedFileTabs')}
           >
+            {revert.notice ? (
+              <div
+                className={`session-change-revert-notice is-${revert.notice.kind}`}
+                role={revert.notice.kind === 'failed' ? 'alert' : 'status'}
+              >
+                <span>{t(`session.revertNotice.${revert.notice.kind}`)}</span>
+                {revert.notice.kind === 'stale' ? (
+                  <Button
+                    size="1"
+                    variant="soft"
+                    onClick={() => {
+                      revert.dismissNotice();
+                      onRefresh();
+                    }}
+                  >
+                    {t('session.revertRefreshAction')}
+                  </Button>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label={t('session.dismissChangeRevertNotice')}
+                  onClick={revert.dismissNotice}
+                >
+                  <Cross2Icon />
+                </button>
+              </div>
+            ) : null}
+            {revertTarget ? (
+              <div
+                className="session-change-revert-confirm"
+                role="alertdialog"
+                aria-label={t('session.revertConfirmTitle')}
+              >
+                <strong>{t('session.revertConfirmTitle')}</strong>
+                <p>
+                  {t('session.revertConfirmBody', {
+                    target: revertTargetLabel(revertTarget),
+                  })}
+                </p>
+                <div className="session-change-revert-confirm-actions">
+                  <Button
+                    size="1"
+                    color="red"
+                    disabled={revert.pending}
+                    onClick={() => {
+                      revert.requestRevert(revertTarget);
+                      setRevertTarget(null);
+                    }}
+                  >
+                    {revert.pending
+                      ? t('session.revertPending')
+                      : t('session.revertConfirmAction')}
+                  </Button>
+                  <Button
+                    size="1"
+                    variant="surface"
+                    disabled={revert.pending}
+                    onClick={() => setRevertTarget(null)}
+                  >
+                    {t('session.revertCancelAction')}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             {snapshot.files.map((file) => {
               const expanded = expandedPaths.includes(file.path);
               return (
                 <div className="session-change-file-item" key={file.path}>
-                  <button
-                    type="button"
-                    className={`session-change-file-toggle ${expanded ? 'is-expanded' : ''}`}
-                    aria-expanded={expanded}
-                    aria-label={t(
-                      expanded
-                        ? 'session.collapseChangeFile'
-                        : 'session.expandChangeFile',
-                      { path: file.path },
-                    )}
-                    onClick={() =>
-                      setExpandedPaths((current) =>
-                        toggleExpandedChangeFile(current, file.path),
-                      )
-                    }
-                  >
-                    {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-                    <CodeIcon />
-                    <span>{file.path}</span>
-                    <em>
-                      +{file.additions} −{file.deletions}
-                    </em>
-                  </button>
+                  <div className="session-change-file-row">
+                    <button
+                      type="button"
+                      className={`session-change-file-toggle ${expanded ? 'is-expanded' : ''}`}
+                      aria-expanded={expanded}
+                      aria-label={t(
+                        expanded
+                          ? 'session.collapseChangeFile'
+                          : 'session.expandChangeFile',
+                        { path: file.path },
+                      )}
+                      onClick={() =>
+                        setExpandedPaths((current) =>
+                          toggleExpandedChangeFile(current, file.path),
+                        )
+                      }
+                    >
+                      {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                      <CodeIcon />
+                      <span>{file.path}</span>
+                      <em>
+                        +{file.additions} −{file.deletions}
+                      </em>
+                    </button>
+                    {revert.available ? (
+                      <button
+                        type="button"
+                        className="session-change-revert-trigger"
+                        aria-label={t('session.revertChangeFile', {
+                          path: file.path,
+                        })}
+                        disabled={revert.pending}
+                        onClick={() => setRevertTarget({ path: file.path })}
+                      >
+                        <ResetIcon />
+                      </button>
+                    ) : null}
+                  </div>
                   {expanded ? (
                     <ChangeFileView
                       snapshot={snapshot}
                       file={file}
                       selectedKeys={selectedKeys}
                       review={review}
+                      revert={revert}
                       onToggleReference={onToggleReference}
+                      onRequestHunkRevert={(hunkIndex) =>
+                        setRevertTarget({
+                          path: file.path,
+                          hunkIndices: [hunkIndex],
+                        })
+                      }
                     />
                   ) : null}
                 </div>
@@ -323,13 +434,17 @@ function ChangeFileView({
   file,
   selectedKeys,
   review,
+  revert,
   onToggleReference,
+  onRequestHunkRevert,
 }: {
   snapshot: ChangeSnapshot;
   file: ChangeFile;
   selectedKeys: Set<string>;
   review: ReviewInteraction;
+  revert: ChangeRevertSurface;
   onToggleReference: (reference: CodeRangeReference) => void;
+  onRequestHunkRevert: (hunkIndex: number) => void;
 }) {
   const { t } = useI18n();
   if (file.binary) {
@@ -347,7 +462,27 @@ function ChangeFileView({
           className="session-change-hunk"
           key={`${hunk.header}-${hunkIndex}`}
         >
-          <summary>{hunk.header}</summary>
+          <summary>
+            <span>{hunk.header}</span>
+            {revert.available ? (
+              <button
+                type="button"
+                className="session-change-revert-trigger is-hunk"
+                aria-label={t('session.revertChangeHunk', {
+                  path: file.path,
+                  hunk: hunkIndex + 1,
+                })}
+                disabled={revert.pending}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRequestHunkRevert(hunkIndex);
+                }}
+              >
+                <ResetIcon />
+              </button>
+            ) : null}
+          </summary>
           <div role="table" aria-label={`${file.path} ${hunk.header}`}>
             {hunk.lines.map((line, lineIndex) => {
               const reference = referenceForChangeLine(snapshot, file, line);
@@ -470,12 +605,21 @@ function ChangeLineRow({
   );
 }
 
-function ChangesState({ title, body }: { title: string; body: string }) {
+function ChangesState({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="session-changes-state" role="status">
       <CodeIcon />
       <strong>{title}</strong>
       <p>{body}</p>
+      {action}
     </div>
   );
 }

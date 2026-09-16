@@ -23,6 +23,7 @@ from src.infrastructure.adapters.primary.web.routers.agent import (
     patterns,
     plans,
     run_cancellation_authority as run_cancellation,
+    run_change_revert_authority as run_change_revert,
     run_input_authority as run_input,
     run_review_authority as run_review,
     schemas,
@@ -278,6 +279,12 @@ _AGENT_ROUTE_SPECS_V2: tuple[AgentRouteSpecV2, ...] = (
     (plans.get_tasks, plans.TaskListResponse, "GET", "/plan/tasks/{conversation_id}"),
     (plans.approve_plan_and_start, dict[str, Any], "POST", "/plans/approve-and-start"),
     (run_cancellation.cancel_run, run_cancellation.CancelRunResponse, "POST", "/runs/{run_id}/cancel"),
+    (
+        run_change_revert.revert_run_changes,
+        run_schemas.RevertRunChangesResponse,
+        "POST",
+        "/runs/{run_id}/changes/revert",
+    ),
     (run_input.create_run_input, run_schemas.RunInputAck, "POST", "/runs/{run_id}/inputs"),
     (run_input.list_run_inputs, run_schemas.RunInputListResponse, "GET", "/runs/{run_id}/inputs"),
     (

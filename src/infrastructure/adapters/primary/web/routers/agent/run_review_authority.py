@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,6 +19,11 @@ from src.application.schemas.agent_run_authority import (
     RunChangesResponse,
     RunSummaryResponse,
 )
+from src.application.services.agent.run_change_revert import (
+    CHANGE_REVERTED_EVENT_TYPE,
+    apply_change_revert_exclusions,
+    change_revert_exclusions,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -33,7 +38,14 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.i18n import gettext as _
 
-from .run_authority_common import _canonical_hash, _explicit_change_payloads, _load_scoped_run
+from .run_authority_common import (
+    SessionBaseline,
+    SessionBaselineFailure,
+    _canonical_hash,
+    _explicit_change_payloads,
+    _load_scoped_run,
+    resolve_session_baseline,
+)
 
 router = APIRouter()
 _ACTIVE_RUN_STATUSES = frozenset({"queued", "running"})
@@ -319,26 +331,33 @@ def _change_file_from_payload(payload: dict[str, Any]) -> ChangeFileResponse | N
         return None
 
 
-@router.get("/runs/{run_id}/changes", response_model=RunChangesResponse)
-async def get_run_changes(
-    run_id: str,
-    scope: Literal["turn", "run", "session"] = Query(...),
-    turn_id: str | None = Query(default=None),
-    expected_revision: int = Query(..., ge=1),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> RunChangesResponse:
-    """Return only structurally attributed file/hunk events for the requested scope."""
-
-    run, _conversation = await _load_scoped_run(
-        db,
-        run_id=run_id,
-        user_id=current_user.id,
+async def _load_session_baseline(
+    db: AsyncSession,
+    run: AgentRunAuthorityModel,
+) -> SessionBaseline | SessionBaselineFailure:
+    result = await db.execute(
+        refresh_select_statement(
+            select(AgentRunAuthorityModel)
+            .where(
+                AgentRunAuthorityModel.conversation_id == run.conversation_id,
+                AgentRunAuthorityModel.project_id == run.project_id,
+            )
+            .order_by(
+                AgentRunAuthorityModel.created_at.asc(),
+                AgentRunAuthorityModel.id.asc(),
+            )
+        )
     )
-    if expected_revision != run.revision:
-        raise HTTPException(status_code=409, detail=_("Agent run revision conflict"))
-    if scope == "turn" and not turn_id:
-        raise HTTPException(status_code=422, detail=_("turn_id is required for turn scope"))
+    return resolve_session_baseline(list(result.scalars().all()))
+
+
+async def _load_change_events(
+    db: AsyncSession,
+    *,
+    run: AgentRunAuthorityModel,
+    scope: Literal["turn", "run", "session"],
+    turn_id: str | None,
+) -> list[AgentExecutionEvent]:
     statement = select(AgentExecutionEvent).where(
         AgentExecutionEvent.conversation_id == run.conversation_id
     )
@@ -354,7 +373,12 @@ async def get_run_changes(
             )
         )
     )
-    events = result.scalars().all()
+    return list(result.scalars().all())
+
+
+def _collect_change_attributions(
+    events: list[AgentExecutionEvent],
+) -> tuple[list[RunChangeAttribution], list[ChangeFileResponse]]:
     changes: list[RunChangeAttribution] = []
     files: list[ChangeFileResponse] = []
     for event in events:
@@ -379,10 +403,59 @@ async def get_run_changes(
             change_file = _change_file_from_payload(payload)
             if change_file is not None:
                 files.append(change_file)
+    return changes, files
+
+
+async def _load_change_revert_events(
+    db: AsyncSession,
+    run: AgentRunAuthorityModel,
+) -> list[AgentExecutionEvent]:
+    """Load recorded revert markers so replay subtracts reverted selectors."""
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(AgentExecutionEvent)
+            .where(
+                AgentExecutionEvent.conversation_id == run.conversation_id,
+                AgentExecutionEvent.event_type == CHANGE_REVERTED_EVENT_TYPE,
+            )
+            .order_by(
+                AgentExecutionEvent.event_time_us.asc(),
+                AgentExecutionEvent.event_counter.asc(),
+            )
+        )
+    )
+    return list(result.scalars().all())
+
+
+def _snapshot_environment(
+    run: AgentRunAuthorityModel,
+    *,
+    scope: Literal["turn", "run", "session"],
+    session_baseline: SessionBaseline | None,
+) -> dict[str, Any]:
+    if scope == "session":
+        # A session view must describe the session baseline, not this run's
+        # environment; without an anchor there is no honest environment at all.
+        if session_baseline is None:
+            return {}
+        return {
+            "id": session_baseline.environment_id,
+            "repository_root": session_baseline.repository_root,
+            "workspace_path": session_baseline.workspace_path,
+            "branch": session_baseline.branch,
+            "base_commit": session_baseline.base_revision,
+        }
     environment_raw = run.authorization_snapshot.get("environment")
-    environment = environment_raw if isinstance(environment_raw, dict) else {}
-    captured_at = (
-        max(
+    return environment_raw if isinstance(environment_raw, dict) else {}
+
+
+def _snapshot_captured_at(
+    run: AgentRunAuthorityModel,
+    events: list[AgentExecutionEvent],
+) -> datetime:
+    if events:
+        return max(
             (
                 event.created_at.replace(tzinfo=UTC)
                 if event.created_at.tzinfo is None
@@ -390,15 +463,52 @@ async def get_run_changes(
             )
             for event in events
         )
-        if events
-        else (
-            run.updated_at.replace(tzinfo=UTC)
-            if run.updated_at.tzinfo is None
-            else run.updated_at.astimezone(UTC)
-        )
-    )
-    snapshot_status: Literal["ready", "unattributed"] = "ready" if files else "unattributed"
-    reason = None if files else "change_attribution_not_recorded"
+    if run.updated_at.tzinfo is None:
+        return run.updated_at.replace(tzinfo=UTC)
+    return run.updated_at.astimezone(UTC)
+
+
+async def _compute_changes_snapshot(
+    db: AsyncSession,
+    *,
+    run: AgentRunAuthorityModel,
+    scope: Literal["turn", "run", "session"],
+    turn_id: str | None,
+) -> tuple[dict[str, Any], str]:
+    """Replay recorded change events (minus recorded reverts) into a snapshot.
+
+    Returns the unsigned payload and its canonical digest; shared by the
+    read-only GET and the revert mutation so a digest pinned by the client
+    always names exactly what the server replays here.
+    """
+
+    session_baseline: SessionBaseline | None = None
+    session_failure: SessionBaselineFailure | None = None
+    if scope == "session":
+        resolution = await _load_session_baseline(db, run)
+        if isinstance(resolution, SessionBaseline):
+            session_baseline = resolution
+        else:
+            session_failure = resolution
+    events: list[AgentExecutionEvent] = []
+    if session_failure is None:
+        events = await _load_change_events(db, run=run, scope=scope, turn_id=turn_id)
+    changes, files = _collect_change_attributions(events)
+    revert_events = await _load_change_revert_events(db, run)
+    files = apply_change_revert_exclusions(files, change_revert_exclusions(revert_events))
+    environment = _snapshot_environment(run, scope=scope, session_baseline=session_baseline)
+    captured_at = _snapshot_captured_at(run, events)
+    snapshot_status: Literal["ready", "unattributed", "unavailable"]
+    reason: str | None
+    if session_failure is not None:
+        snapshot_status = "unavailable"
+        reason = session_failure
+    elif files:
+        snapshot_status = "ready"
+        reason = None
+    else:
+        snapshot_status = "unattributed"
+        reason = "change_attribution_not_recorded"
     unsigned = {
         "run_id": run.id,
         "conversation_id": run.conversation_id,
@@ -421,7 +531,35 @@ async def get_run_changes(
         "turn_id": turn_id,
         "attribution": [item.model_dump(mode="json") for item in changes],
     }
-    revision = _canonical_hash(unsigned)
+    return unsigned, _canonical_hash(unsigned)
+
+
+@router.get("/runs/{run_id}/changes", response_model=RunChangesResponse)
+async def get_run_changes(
+    run_id: str,
+    scope: Literal["turn", "run", "session"] = Query(default="run"),
+    turn_id: str | None = Query(default=None),
+    expected_revision: int = Query(..., ge=1),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RunChangesResponse:
+    """Return only structurally attributed file/hunk events for the requested scope."""
+
+    run, _conversation = await _load_scoped_run(
+        db,
+        run_id=run_id,
+        user_id=current_user.id,
+    )
+    if expected_revision != run.revision:
+        raise HTTPException(status_code=409, detail=_("Agent run revision conflict"))
+    if scope == "turn" and not turn_id:
+        raise HTTPException(status_code=422, detail=_("turn_id is required for turn scope"))
+    unsigned, revision = await _compute_changes_snapshot(
+        db,
+        run=run,
+        scope=scope,
+        turn_id=turn_id,
+    )
     return RunChangesResponse.model_validate(
         {
             "id": f"cloud-change-{revision[:24]}",
@@ -432,6 +570,7 @@ async def get_run_changes(
 
 
 __all__ = [
+    "_compute_changes_snapshot",
     "get_active_run",
     "get_latest_run",
     "get_run_changes",

@@ -1,3 +1,4 @@
+import type { RunChangeScope } from '../agent-authority/agentAuthorityTypes';
 import type {
   ChangeFile,
   ChangeLine,
@@ -86,4 +87,18 @@ export function snapshotMatchesRun(
       typeof runRevision === 'number' &&
       snapshot.run_revision === runRevision,
   );
+}
+
+/**
+ * When a session-scoped snapshot comes back without renderable changes the
+ * panel must not fabricate a scope: it shows the honest backend reason and
+ * offers the run scope as the explicit fallback target.
+ */
+export function changeScopeFallbackTarget(
+  snapshot: ChangeSnapshot | null,
+  scope: RunChangeScope,
+  availableScopes: readonly RunChangeScope[],
+): RunChangeScope | null {
+  if (scope !== 'session' || !snapshot || snapshot.status === 'ready') return null;
+  return availableScopes.includes('run') ? 'run' : null;
 }

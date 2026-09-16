@@ -13,7 +13,10 @@ from fastapi.routing import APIRoute
 
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
-from src.infrastructure.adapters.primary.web.routers.agent import router as legacy_agent_router
+from src.infrastructure.adapters.primary.web.routers.agent import (
+    router as legacy_agent_router,
+    subagent_execution_control as legacy_child_control,
+)
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.plugins.v2 import builtin_agent_http_routes as subject
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
@@ -104,6 +107,8 @@ _EXPECTED_ROUTES: tuple[ExpectedRoute, ...] = (
     ("GET", "/plan/mode/{conversation_id}", "get_mode"),
     ("GET", "/plan/tasks/{conversation_id}", "get_tasks"),
     ("POST", "/plans/approve-and-start", "approve_plan_and_start"),
+    ("POST", "/runs/{run_id}/cancel", "cancel_run"),
+    ("POST", "/runs/{run_id}/changes/revert", "revert_run_changes"),
     ("POST", "/runs/{run_id}/inputs", "create_run_input"),
     ("GET", "/runs/{run_id}/inputs", "list_run_inputs"),
     ("POST", "/runs/{run_id}/inputs/{input_id}/promote", "promote_run_input"),
@@ -113,6 +118,16 @@ _EXPECTED_ROUTES: tuple[ExpectedRoute, ...] = (
     ("GET", "/runs/{run_id}/changes", "get_run_changes"),
     ("GET", "/conversations/{conversation_id}/session", "get_conversation_session_projection"),
     ("POST", "/subagent/{execution_id}/cancel", "cancel_subagent_execution"),
+    (
+        "GET",
+        "/conversations/{conversation_id}/subagent-controls",
+        "get_child_controls",
+    ),
+    (
+        "POST",
+        "/conversations/{conversation_id}/subagents/{run_id}/control",
+        "control_child_execution",
+    ),
     ("POST", "/bindings", "create_binding"),
     ("GET", "/bindings", "list_bindings"),
     ("DELETE", "/bindings/{binding_id}", "delete_binding"),
@@ -172,12 +187,12 @@ def _dependant_signature(dependant: Dependant) -> DependencySignature:
 
 def _dependency_signatures(
     app: FastAPI,
-) -> tuple[tuple[str, str, DependencySignature], ...]:
-    return tuple(
-        (route.path, next(iter(route.methods)), _dependant_signature(route.dependant))
+) -> dict[tuple[str, str], DependencySignature]:
+    return {
+        (route.path, next(iter(route.methods))): _dependant_signature(route.dependant)
         for route in app.router.routes
         if isinstance(route, APIRoute)
-    )
+    }
 
 
 def _immediate_dependency_ids(app: FastAPI) -> list[str]:
@@ -189,10 +204,28 @@ def _immediate_dependency_ids(app: FastAPI) -> list[str]:
     ]
 
 
+def _legacy_baseline_app() -> FastAPI:
+    """Rebuild the legacy wiring the v2 table replaces.
+
+    The aggregate ``routers.agent`` router predates the 0f88e0d91 subagent
+    execution-control routes, which ship only through the v2 table, so the
+    child-control router is included explicitly with the aggregate's own
+    prefix and tag to keep parity coverage complete.
+    """
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app.include_router(legacy_agent_router)
+    app.include_router(
+        legacy_child_control.router,
+        prefix=_PREFIX,
+        tags=["agent"],
+    )
+    return app
+
+
 def _legacy_route_map() -> dict[tuple[str, str], APIRoute]:
     return {
         (next(iter(route.methods)), route.path): route
-        for route in legacy_agent_router.routes
+        for route in _legacy_baseline_app().router.routes
         if isinstance(route, APIRoute)
     }
 
@@ -251,7 +284,7 @@ def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
     definitions = subject.agent_route_definitions_v2()
     legacy = _legacy_route_map()
 
-    assert len(definitions) == 97
+    assert len(definitions) == 101
     assert tuple(_route_signature(definition) for definition in definitions) == _EXPECTED_ROUTES
     assert len(legacy) == len(definitions)
     for definition in definitions:
@@ -263,9 +296,9 @@ def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
         assert definition.deprecated == route.deprecated
     assert Counter(definition.methods[0] for definition in definitions) == {
         "DELETE": 7,
-        "GET": 55,
+        "GET": 56,
         "PATCH": 7,
-        "POST": 23,
+        "POST": 26,
         "PUT": 5,
     }
     assert {definition.owner_entry_id for definition in definitions} == {
@@ -279,7 +312,7 @@ def test_agent_row_is_a_complete_explicit_v2_contribution() -> None:
         f"{_PREFIX}/conversations/{{conversation_id}}/generate-title"
     ]
     assert Counter(definition.tags for definition in definitions) == {
-        ("agent",): 93,
+        ("agent",): 97,
         ("agent", "plan"): 4,
     }
     source = inspect.getsource(subject)
@@ -297,8 +330,7 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.agent_route_definitions_v2(),
     )
-    legacy_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    legacy_app.include_router(legacy_agent_router)
+    legacy_app = _legacy_baseline_app()
     claimed_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     install_route_definitions_v2(claimed_app, subject.agent_route_definitions_v2())
 
@@ -325,18 +357,18 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         "src.infrastructure.adapters.primary.web.agent_definition_management_http_application_authority_v2.agent_definition_management_http_application_authority_dependency_v2": 6,
         "src.infrastructure.adapters.primary.web.agent_graph_http_application_authority_v2.agent_graph_http_application_authority_dependency_v2": 9,
         "src.infrastructure.adapters.primary.web.agent_message_history_http_application_authority_v2.agent_message_history_http_application_authority_dependency_v2": 2,
-        "src.infrastructure.adapters.primary.web.agent_subagent_control_http_application_authority_v2.agent_subagent_control_http_application_authority_dependency_v2": 1,
+        "src.infrastructure.adapters.primary.web.agent_subagent_control_http_application_authority_v2.agent_subagent_control_http_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.agent_execution_resume_http_application_authority_v2.agent_execution_resume_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.agent_workflow_status_http_application_authority_v2.agent_workflow_status_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2.agent_execution_query_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.routers.agent.binding_router.agent_binding_http_application_authority_dependency_v2": 6,
-        "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 90,
+        "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 94,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user_tenant": 29,
         "src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2.project_access_create_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2.project_access_query_http_application_authority_dependency_v2": 9,
         "src.infrastructure.adapters.primary.web.routers.agent.definitions_router._get_selected_definition_tenant_id": 6,
         "src.infrastructure.adapters.primary.web.workflow_pattern_application_authority_v2.workflow_pattern_application_authority_dependency_v2": 5,
-        "src.infrastructure.adapters.secondary.persistence.database.get_db": 43,
+        "src.infrastructure.adapters.secondary.persistence.database.get_db": 48,
     }
     assert claimed.v2_owned_row_ids == ("agent",)
 

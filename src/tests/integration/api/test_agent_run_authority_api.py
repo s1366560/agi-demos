@@ -646,6 +646,20 @@ async def test_changes_scope_uses_structural_turn_attribution(
     test_user,
 ) -> None:
     run = await _add_run(test_db, test_project_db, test_user)
+    authority = await test_db.get(AgentRunAuthorityModel, run.id)
+    assert authority is not None
+    authority.authorization_snapshot = {
+        "environment": {
+            "id": "run-authority-environment",
+            "kind": "sandbox",
+            "label": "Workspace",
+            "workspace_path": "/workspace",
+            "repository_root": "/repo",
+            "branch": "main",
+            "base_commit": "session-base-1",
+            "created_at": "2026-01-01T00:00:00Z",
+        }
+    }
     test_db.add_all(
         [
             AgentExecutionEvent(
@@ -713,6 +727,210 @@ async def test_changes_scope_uses_structural_turn_attribution(
         "run-change-event",
         "other-turn-change-event",
     ]
+    assert session_scope.json()["scope"] == "session"
+    assert session_scope.json()["base_revision"] == "session-base-1"
+    assert session_scope.json()["environment_id"] == "run-authority-environment"
+
+
+async def test_changes_session_scope_anchors_to_the_first_workspace_run(
+    authenticated_async_client,
+    test_db,
+    test_project_db,
+    test_user,
+) -> None:
+    run = await _add_run(test_db, test_project_db, test_user)
+    now = datetime.now(UTC)
+    anchor_run = AgentRunAuthorityModel(
+        id="run-authority-anchor-run",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        conversation_id=run.conversation_id,
+        run_kind="chat",
+        plan_run_id=None,
+        plan_version_id=None,
+        idempotency_key="run-authority-anchor",
+        message_id="run-authority-anchor-message",
+        request_message="Anchor run",
+        status="succeeded",
+        revision=2,
+        permission_profile="workspace_write",
+        authorization_snapshot={
+            "environment": {
+                "id": "anchor-environment",
+                "kind": "sandbox",
+                "label": "Workspace",
+                "workspace_path": "/workspace",
+                "repository_root": "/repo",
+                "branch": "main",
+                "base_commit": "session-base-anchor",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        },
+        created_at=now - timedelta(minutes=5),
+        updated_at=now - timedelta(minutes=4),
+    )
+    authority = await test_db.get(AgentRunAuthorityModel, run.id)
+    assert authority is not None
+    authority.authorization_snapshot = {
+        "environment": {
+            "id": "current-environment",
+            "kind": "sandbox",
+            "label": "Workspace",
+            "workspace_path": "/workspace",
+            "repository_root": "/repo",
+            "branch": "main",
+            "base_commit": "current-run-base",
+            "created_at": "2026-01-01T00:05:00Z",
+        }
+    }
+    test_db.add(anchor_run)
+    await test_db.commit()
+
+    session_scope = await authenticated_async_client.get(
+        f"/api/v1/agent/runs/{run.id}/changes",
+        params={"scope": "session", "expected_revision": run.revision},
+    )
+
+    assert session_scope.status_code == status.HTTP_200_OK
+    body = session_scope.json()
+    assert body["scope"] == "session"
+    assert body["base_revision"] == "session-base-anchor"
+    assert body["environment_id"] == "anchor-environment"
+    assert body["repository_root"] == "/repo"
+    assert body["workspace_path"] == "/workspace"
+    assert body["branch"] == "main"
+    assert body["reason"] == "change_attribution_not_recorded"
+
+    run_scope = await authenticated_async_client.get(
+        f"/api/v1/agent/runs/{run.id}/changes",
+        params={"scope": "run", "expected_revision": run.revision},
+    )
+    assert run_scope.json()["base_revision"] == "current-run-base"
+    assert run_scope.json()["environment_id"] == "current-environment"
+
+
+async def test_changes_session_scope_fails_closed_without_baseline(
+    authenticated_async_client,
+    test_db,
+    test_project_db,
+    test_user,
+) -> None:
+    run = await _add_run(test_db, test_project_db, test_user)
+    test_db.add(
+        AgentExecutionEvent(
+            id="session-fail-closed-event",
+            conversation_id=run.conversation_id,
+            message_id=run.message_id,
+            event_type="tool_result",
+            event_data={"file_path": "src/run.py", "hunk_id": "run-hunk"},
+            event_time_us=1,
+            event_counter=0,
+        )
+    )
+    await test_db.commit()
+
+    session_scope = await authenticated_async_client.get(
+        f"/api/v1/agent/runs/{run.id}/changes",
+        params={"scope": "session", "expected_revision": run.revision},
+    )
+
+    assert session_scope.status_code == status.HTTP_200_OK
+    body = session_scope.json()
+    assert body["scope"] == "session"
+    assert body["status"] == "unavailable"
+    assert body["reason"] == "session_baseline_unavailable"
+    assert body["base_revision"] is None
+    assert body["environment_id"] is None
+    assert body["files"] == []
+    assert body["attribution"] == []
+
+
+async def test_changes_session_scope_fails_closed_on_environment_mismatch(
+    authenticated_async_client,
+    test_db,
+    test_project_db,
+    test_user,
+) -> None:
+    run = await _add_run(test_db, test_project_db, test_user)
+    now = datetime.now(UTC)
+    anchor_run = AgentRunAuthorityModel(
+        id="run-authority-mismatch-anchor",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        conversation_id=run.conversation_id,
+        run_kind="chat",
+        plan_run_id=None,
+        plan_version_id=None,
+        idempotency_key="run-authority-mismatch",
+        message_id="run-authority-mismatch-message",
+        request_message="Anchor run",
+        status="succeeded",
+        revision=2,
+        permission_profile="workspace_write",
+        authorization_snapshot={
+            "environment": {
+                "id": "mismatch-anchor-environment",
+                "kind": "sandbox",
+                "label": "Workspace",
+                "workspace_path": "/workspace",
+                "repository_root": "/repo-a",
+                "branch": "main",
+                "base_commit": "session-base-anchor",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        },
+        created_at=now - timedelta(minutes=5),
+        updated_at=now - timedelta(minutes=4),
+    )
+    authority = await test_db.get(AgentRunAuthorityModel, run.id)
+    assert authority is not None
+    authority.authorization_snapshot = {
+        "environment": {
+            "id": "mismatch-current-environment",
+            "kind": "sandbox",
+            "label": "Workspace",
+            "workspace_path": "/workspace",
+            "repository_root": "/repo-b",
+            "branch": "main",
+            "base_commit": "current-run-base",
+            "created_at": "2026-01-01T00:05:00Z",
+        }
+    }
+    test_db.add(anchor_run)
+    await test_db.commit()
+
+    session_scope = await authenticated_async_client.get(
+        f"/api/v1/agent/runs/{run.id}/changes",
+        params={"scope": "session", "expected_revision": run.revision},
+    )
+
+    assert session_scope.status_code == status.HTTP_200_OK
+    body = session_scope.json()
+    assert body["status"] == "unavailable"
+    assert body["reason"] == "session_baseline_environment_mismatch"
+    assert body["files"] == []
+    assert body["attribution"] == []
+
+
+async def test_changes_default_scope_is_byte_identical_to_run_scope(
+    authenticated_async_client,
+    test_db,
+    test_project_db,
+    test_user,
+) -> None:
+    run = await _add_run(test_db, test_project_db, test_user)
+
+    default_scope = await authenticated_async_client.get(
+        f"/api/v1/agent/runs/{run.id}/changes",
+        params={"expected_revision": run.revision},
+    )
+    run_scope = await authenticated_async_client.get(
+        f"/api/v1/agent/runs/{run.id}/changes",
+        params={"scope": "run", "expected_revision": run.revision},
+    )
+
+    assert default_scope.status_code == status.HTTP_200_OK
+    assert default_scope.content == run_scope.content
 
 
 async def test_ready_input_promotes_once_with_same_receipt(

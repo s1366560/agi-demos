@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   allowedRunInputDeliveries,
+  changeScopeFallbackTarget,
   effectiveRunInputDelivery,
   referenceForChangeLine,
   runInputReferenceLabel,
@@ -88,4 +89,18 @@ test('delivery and snapshot availability follow authoritative run state', () => 
   assert.equal(effectiveRunInputDelivery('queue_next', []), null);
   assert.equal(snapshotMatchesRun(snapshot, 'run-1', 7), true);
   assert.equal(snapshotMatchesRun(snapshot, 'run-1', 8), false);
+});
+
+test('session scope failure falls back to the run scope without fabricating data', () => {
+  const unavailable = { ...snapshot, status: 'unavailable', reason: 'session_baseline_unavailable' };
+  assert.equal(
+    changeScopeFallbackTarget(unavailable, 'session', ['turn', 'run', 'session']),
+    'run',
+  );
+  // Without the run scope in the available set there is no honest fallback.
+  assert.equal(changeScopeFallbackTarget(unavailable, 'session', ['session']), null);
+  // Ready snapshots and non-session scopes never fall back.
+  assert.equal(changeScopeFallbackTarget(snapshot, 'session', ['run', 'session']), null);
+  assert.equal(changeScopeFallbackTarget(unavailable, 'run', ['run', 'session']), null);
+  assert.equal(changeScopeFallbackTarget(null, 'session', ['run', 'session']), null);
 });

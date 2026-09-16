@@ -3378,6 +3378,13 @@ function SessionSteeringQa() {
                   error={null}
                   references={references}
                   comments={changeComments}
+                  revert={{
+                    available: false,
+                    pending: false,
+                    notice: null,
+                    requestRevert: () => undefined,
+                    dismissNotice: () => undefined,
+                  }}
                   scope="run"
                   availableScopes={['run']}
                   onScopeChange={() => undefined}
