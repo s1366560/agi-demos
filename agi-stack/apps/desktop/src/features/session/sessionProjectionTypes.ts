@@ -44,6 +44,8 @@ export type SessionAllowedAction =
   | 'deliver_artifact'
   | SessionRunAction;
 
+export type SessionExecutionStage = 'understand' | 'implement' | 'verify' | 'review';
+
 export type SessionProjectionCapabilities = {
   environmentKinds: DesktopExecutionEnvironmentKind[];
   canSendMessage: boolean;
@@ -220,6 +222,7 @@ export type ConversationSessionProjection = {
   toolInvocations: DesktopToolInvocation[];
   evidenceSummary: SessionProjectionEvidenceSummary;
   capabilities: SessionProjectionCapabilities;
+  executionStage: SessionExecutionStage | null;
   snapshotRevision: string;
   updatedAt: string;
 };

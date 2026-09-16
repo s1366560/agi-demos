@@ -312,7 +312,7 @@ export function buildSessionDetailViewModel({
       executionMode === 'plan' || executionMode === 'build' || executionMode === 'explore'
         ? executionMode
         : 'unavailable',
-    stage: 'unavailable',
+    stage: projection?.executionStage ?? 'unavailable',
     conversationMode: projection ? stringValue(authorityConversation.conversation_mode) : null,
     participantCount: participantAgents === null ? null : participantAgents.length + 1,
     linkedTaskId: projection

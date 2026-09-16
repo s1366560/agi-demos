@@ -256,6 +256,7 @@ function decodeDesktopConversationSessionProjection(
     toolInvocations,
     evidenceSummary,
     capabilities,
+    executionStage: null,
     snapshotRevision,
     updatedAt,
   };

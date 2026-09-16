@@ -1232,3 +1232,36 @@ test('cloud cancellation capability requires an active scoped run and an exact a
     assert.equal(decodeConversationSessionProjection(invalid, 'conversation-1'), null);
   }
 });
+
+
+test('cloud session projection decodes the server-derived execution stage tolerantly', () => {
+  for (const stage of ['understand', 'implement', 'verify', 'review']) {
+    const payload = validCloudProjection();
+    payload.execution_stage = stage;
+    assert.equal(
+      decodeConversationSessionProjection(payload, 'conversation-1')?.executionStage,
+      stage,
+    );
+  }
+
+  const unknown = validCloudProjection();
+  unknown.execution_stage = 'explore';
+  const decodedUnknown = decodeConversationSessionProjection(unknown, 'conversation-1');
+  assert.ok(decodedUnknown);
+  assert.equal(decodedUnknown.executionStage, null);
+
+  const absent = validCloudProjection();
+  assert.equal(
+    decodeConversationSessionProjection(absent, 'conversation-1')?.executionStage,
+    null,
+  );
+
+  const explicitNull = validCloudProjection();
+  explicitNull.execution_stage = null;
+  assert.equal(
+    decodeConversationSessionProjection(explicitNull, 'conversation-1')?.executionStage,
+    null,
+  );
+
+  assert.equal(decodeSignedProjection(validProjection())?.executionStage, null);
+});

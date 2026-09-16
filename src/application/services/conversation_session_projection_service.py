@@ -27,6 +27,7 @@ from src.application.schemas.conversation_session_projection import (
     SessionWorkspacePlanContextResponse,
     SessionWorkspacePlanNodeResponse,
 )
+from src.application.services.session_stage import derive_execution_stage
 
 HITLKind = Literal["clarification", "decision", "env_var", "permission", "a2ui_action"]
 CapabilityMode = Literal["work", "code"]
@@ -334,6 +335,7 @@ class ConversationSessionProjectionService:
                 can_deliver_artifacts=False,
                 allowed_actions=allowed_actions,
             ),
+            execution_stage=derive_execution_stage(snapshot),
             snapshot_revision="pending",
             updated_at=self._updated_at(snapshot),
         )

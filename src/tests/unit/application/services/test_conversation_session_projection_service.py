@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
@@ -21,6 +23,7 @@ from src.application.services.conversation_session_projection_service import (
     WorkspacePlanContextAuthority,
     WorkspacePlanNodeAuthority,
 )
+from src.application.services.session_stage import derive_execution_stage
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_session_projection_reader import (
     SqlConversationSessionProjectionReader,
 )
@@ -502,3 +505,199 @@ async def test_cloud_run_control_capability_requires_active_unparked_turn(status
     expected = status in {"queued", "running"} and not blocked
     assert projection.capabilities.can_control_execution is expected
     assert ("cancel" in projection.capabilities.allowed_actions) is expected
+
+
+# --- execution_stage derivation matrix --------------------------------------
+
+
+def stage_snapshot(**overrides: object) -> ConversationSessionAuthoritySnapshot:
+    base = ConversationSessionAuthoritySnapshot(
+        conversation=replace(conversation(), current_mode="plan", message_count=0),
+        attempts=(),
+        conversation_tasks=(),
+        workspace_plan_context=None,
+        pending_hitl=(),
+        has_blocking_hitl=False,
+        artifact_records=(),
+        tool_executions=ToolExecutionPageAuthority(items=(), total=0, failed_total=0),
+    )
+    return replace(base, **overrides)  # type: ignore[arg-type]
+
+
+def pending_task() -> ConversationTaskAuthority:
+    return ConversationTaskAuthority(
+        id="checklist-1",
+        conversation_id="conversation-1",
+        content="Write focused tests",
+        status="pending",
+        priority="high",
+        order_index=0,
+        created_at=NOW - timedelta(minutes=15),
+        updated_at=None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("stage_snapshot_overrides", "expected"),
+    [
+        # fresh session: no runs/plans/tasks and no messages -> no stage
+        ({}, None),
+        # plan mode with a draft plan -> understand
+        ({"plan_versions": (plan_version(),)}, "understand"),
+        # any conversation activity without later-stage signals -> understand
+        (
+            {"conversation": replace(conversation(), current_mode="plan", message_count=1)},
+            "understand",
+        ),
+        # build mode is already implementing
+        (
+            {"conversation": replace(conversation(), current_mode="build", message_count=0)},
+            "implement",
+        ),
+        # an active run -> implement
+        ({"runs": (plan_run(),)}, "implement"),
+        ({"runs": (replace(plan_run(), status="queued"),)}, "implement"),
+        # approved plan with incomplete tasks -> implement
+        (
+            {
+                "plan_versions": (replace(plan_version(), status="approved"),),
+                "conversation_tasks": (pending_task(),),
+            },
+            "implement",
+        ),
+        # approved plan fully done without run/artifacts stays at understand
+        (
+            {
+                "plan_versions": (replace(plan_version(), status="approved"),),
+                "conversation_tasks": (replace(pending_task(), status="completed"),),
+            },
+            "understand",
+        ),
+        # active attempt with verification evidence -> verify
+        ({"attempts": (attempt("attempt-1", 1, "running"),)}, "verify"),
+        # verification evidence while a run is active -> verify (beats implement)
+        (
+            {
+                "attempts": (attempt("attempt-1", 1, "cancelled"),),
+                "runs": (plan_run(),),
+            },
+            "verify",
+        ),
+        # adjudicated attempts -> review
+        ({"attempts": (attempt("attempt-1", 1, "accepted"),)}, "review"),
+        ({"attempts": (attempt("attempt-1", 1, "rejected"),)}, "review"),
+        (
+            {
+                "attempts": (
+                    replace(
+                        attempt("attempt-1", 1, "running"),
+                        completed_at=NOW - timedelta(minutes=1),
+                    ),
+                )
+            },
+            "review",
+        ),
+        # reviewable run terminal states with artifacts -> review
+        (
+            {
+                "runs": (replace(plan_run(), status="ready_review"),),
+                "artifact_records": (ArtifactRecordAuthority(id="artifact-1", created_at=NOW),),
+            },
+            "review",
+        ),
+        (
+            {
+                "runs": (replace(plan_run(), status="completed"),),
+                "attempts": (attempt("attempt-1", 1, "cancelled"),),
+            },
+            "review",
+        ),
+        # failed/cancelled with reviewable artifacts -> review
+        (
+            {
+                "runs": (replace(plan_run(), status="failed"),),
+                "artifact_records": (ArtifactRecordAuthority(id="artifact-1", created_at=NOW),),
+            },
+            "review",
+        ),
+        # terminal failure without reviewable artifacts -> no stepper
+        ({"runs": (replace(plan_run(), status="failed"),)}, None),
+        ({"runs": (replace(plan_run(), status="cancelled"),)}, None),
+        # failed run with an active verified attempt still shows verify
+        (
+            {
+                "runs": (replace(plan_run(), status="failed"),),
+                "attempts": (attempt("attempt-1", 1, "running"),),
+            },
+            "verify",
+        ),
+        # precedence conflict: running run + adjudicated attempt -> later stage
+        (
+            {
+                "runs": (plan_run(),),
+                "attempts": (attempt("attempt-1", 1, "accepted"),),
+            },
+            "review",
+        ),
+    ],
+)
+def test_derive_execution_stage_matrix(
+    stage_snapshot_overrides: dict[str, object], expected: str | None
+) -> None:
+    assert derive_execution_stage(stage_snapshot(**stage_snapshot_overrides)) == expected
+
+
+def test_pending_hitl_never_changes_the_derived_stage() -> None:
+    source = stage_snapshot(
+        plan_versions=(plan_version(),),
+        pending_hitl=snapshot().pending_hitl,
+        has_blocking_hitl=True,
+    )
+
+    assert derive_execution_stage(source) == "understand"
+
+
+async def test_projection_exposes_derived_execution_stage() -> None:
+    projection = await ConversationSessionProjectionService(
+        FakeConversationSessionReader(snapshot())
+    ).get_projection(
+        conversation_id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        now=NOW,
+    )
+
+    # latest attempt is running with candidate verification refs
+    assert projection.execution_stage == "verify"
+
+
+async def test_execution_stage_participates_in_the_snapshot_revision_digest() -> None:
+    service = ConversationSessionProjectionService(FakeConversationSessionReader(snapshot()))
+    projection = await service.get_projection(
+        conversation_id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        now=NOW,
+    )
+
+    unsigned = projection.model_dump(mode="json", exclude={"snapshot_revision"})
+    assert "execution_stage" in unsigned
+    canonical = json.dumps(unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == projection.snapshot_revision
+
+    fresh = await ConversationSessionProjectionService(
+        FakeConversationSessionReader(stage_snapshot())
+    ).get_projection(
+        conversation_id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        now=NOW,
+    )
+    assert fresh.execution_stage is None
+    assert fresh.snapshot_revision != projection.snapshot_revision

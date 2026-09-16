@@ -16,6 +16,7 @@ import type {
   CloudWorkspacePlanNode,
   ConversationSessionProjection,
   SessionAllowedAction,
+  SessionExecutionStage,
   SessionProjectionCapabilities,
   SessionProjectionPlan,
   SessionProjectionScope,
@@ -191,9 +192,25 @@ export function decodeCloudConversationSessionProjection(
       changes: null,
     },
     capabilities,
+    executionStage: readExecutionStage(root.execution_stage),
     snapshotRevision,
     updatedAt,
   };
+}
+
+const executionStageValues = new Set<SessionExecutionStage>([
+  'understand',
+  'implement',
+  'verify',
+  'review',
+]);
+
+// The stage is server-derived and advisory: unknown or absent values degrade
+// to null (no stepper) instead of failing the whole projection decode.
+function readExecutionStage(value: unknown): SessionExecutionStage | null {
+  return typeof value === 'string' && executionStageValues.has(value as SessionExecutionStage)
+    ? (value as SessionExecutionStage)
+    : null;
 }
 
 const cloudRunStatuses = new Set<DesktopRunStatus>([

@@ -426,6 +426,7 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
     assert payload["conversation"]["capability_mode"] == "code"
     assert payload["conversation"]["workspace_name"] == workspace_name
     assert payload["execution"]["attempt_history"] == []
+    assert payload["execution_stage"] == "implement"
     _assert_current_run(
         payload,
         plan_run=plan_run,
@@ -583,3 +584,73 @@ async def test_standalone_session_projection_allows_omitted_workspace(
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["authority_kind"] == "conversation_record"
+    assert response.json()["execution_stage"] is None
+
+
+async def test_session_projection_execution_stage_tracks_persisted_authority(
+    authenticated_async_client,
+    _session_projection_v2_runtime,
+    test_db,
+    test_project_db,
+    test_user,
+) -> None:
+    conversation = Conversation(
+        id="session-projection-stage-conversation",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Stage tracking session",
+        status="active",
+        agent_config={},
+        message_count=0,
+        current_mode="plan",
+        conversation_mode="single_agent",
+        workspace_id=None,
+        linked_workspace_task_id=None,
+    )
+    test_db.add(conversation)
+    await test_db.commit()
+
+    await _session_projection_v2_runtime()
+
+    scope = {
+        "tenant_id": test_project_db.tenant_id,
+        "project_id": test_project_db.id,
+    }
+    fresh = await authenticated_async_client.get(
+        f"/api/v1/agent/conversations/{conversation.id}/session",
+        params=scope,
+    )
+    assert fresh.status_code == status.HTTP_200_OK
+    fresh_payload = fresh.json()
+    assert "execution_stage" in fresh_payload
+    assert fresh_payload["execution_stage"] is None
+
+    test_db.add(
+        AgentPlanVersionModel(
+            id="session-projection-stage-plan",
+            conversation_id=conversation.id,
+            version=1,
+            status="draft",
+            tasks_json=[
+                {
+                    "id": "session-projection-stage-task",
+                    "conversation_id": conversation.id,
+                    "content": "Inspect the scoped session",
+                    "status": "pending",
+                    "priority": "high",
+                    "order_index": 0,
+                }
+            ],
+        )
+    )
+    await test_db.commit()
+
+    planned = await authenticated_async_client.get(
+        f"/api/v1/agent/conversations/{conversation.id}/session",
+        params=scope,
+    )
+    assert planned.status_code == status.HTTP_200_OK
+    planned_payload = planned.json()
+    assert planned_payload["execution_stage"] == "understand"
+    assert planned_payload["snapshot_revision"] != fresh_payload["snapshot_revision"]

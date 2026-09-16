@@ -673,3 +673,32 @@ test('terminal run leaves no respondable HITL requests', () => {
   assert.deepEqual(respondableHitlRequestsForProjection(null), []);
   assert.deepEqual(respondableHitlRequestsForProjection(projection({ pendingHitl })), []);
 });
+
+
+test('session view model maps the server-derived execution stage through', () => {
+  for (const stage of ['understand', 'implement', 'verify', 'review']) {
+    const view = build({ projection: projection({ executionStage: stage }) });
+    assert.equal(view.stage, stage);
+  }
+});
+
+test('session view model falls back to unavailable without a derived stage', () => {
+  assert.equal(build({ projection: projection() }).stage, 'unavailable');
+  assert.equal(
+    build({ projection: projection({ executionStage: null }) }).stage,
+    'unavailable',
+  );
+  assert.equal(build().stage, 'unavailable');
+});
+
+test('terminal failed run without artifacts never renders a stage stepper', () => {
+  const failedWithoutArtifacts = projection({
+    currentRun: { ...projection().currentRun, status: 'failed' },
+    executionStage: null,
+  });
+
+  const view = build({ projection: failedWithoutArtifacts });
+
+  assert.equal(view.status, 'failed');
+  assert.equal(view.stage, 'unavailable');
+});

@@ -234,6 +234,7 @@ class ConversationSessionProjectionResponse(_ProjectionModel):
     tool_execution_records: SessionToolExecutionPageResponse
     evidence_summary: SessionEvidenceSummaryResponse
     capabilities: SessionCapabilitiesResponse
+    execution_stage: Literal["understand", "implement", "verify", "review"] | None = None
     snapshot_revision: str = Field(min_length=1)
     updated_at: datetime
 
