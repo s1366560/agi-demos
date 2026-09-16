@@ -185,17 +185,6 @@ export function AutomationEditorDialog({
             />
           </label>
           <AutomationSelect
-            label={t('automations.form.delivery')}
-            value={draft.deliveryKind}
-            onValueChange={(value) => setDraft({ ...draft, deliveryKind: value as DeliveryKind })}
-            disabled={busy}
-            options={[
-              ['none', t('automations.form.deliveryNone')],
-              ['announce', t('automations.form.deliveryAnnounce')],
-              ['webhook', t('automations.form.deliveryWebhook')],
-            ]}
-          />
-          <AutomationSelect
             label={t('automations.form.conversationMode')}
             value={draft.conversationMode}
             onValueChange={(value) =>
