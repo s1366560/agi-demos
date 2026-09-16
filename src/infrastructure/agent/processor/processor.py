@@ -71,7 +71,7 @@ if TYPE_CHECKING:
     from src.infrastructure.plugins.v2.agent_loop import AgentLoopSelectionV2
 
 from src.domain.model.agent.hitl_types import HITLType
-from src.domain.ports.agent.control_channel_port import ControlChannelPort
+from src.domain.ports.agent.control_channel_port import ControlChannelPort, ControlMessage
 from src.infrastructure.agent.processor.model_step_control_v2 import (
     ModelStepInterruptedV2,
     await_model_control_v2,
@@ -1714,8 +1714,7 @@ class SessionProcessor:
                     return events
 
                 if msg.message_type == ControlMessageType.STEER:
-                    steer_text = f"[Control] Parent agent instruction: {msg.payload}"
-                    messages.append({"role": "system", "content": steer_text})
+                    self._inject_steer_message(msg, messages, events)
                     self._control_steer_sequence_v2 = (
                         int(getattr(self, "_control_steer_sequence_v2", 0)) + 1
                     )
@@ -1768,6 +1767,46 @@ class SessionProcessor:
         except Exception:
             logger.warning("Error polling control channel", exc_info=True)
             return []
+
+    def _inject_steer_message(
+        self,
+        msg: ControlMessage,
+        messages: list[dict[str, Any]],
+        events: list[ProcessorEvent],
+    ) -> None:
+        """Append one STEER control payload to the model context.
+
+        A session-owner steer carrying canonical run-input fields becomes the
+        latest user guidance and emits a durable ``user_message`` event;
+        SubAgent-parent steers (no run_input_id) keep the system-role prefix.
+        """
+        owner_user_id = (self._langfuse_context or {}).get("user_id")
+        if (
+            msg.run_input_id
+            and msg.sender_id
+            and isinstance(owner_user_id, str)
+            and owner_user_id
+            and msg.sender_id == owner_user_id
+        ):
+            messages.append({"role": "user", "content": msg.payload})
+            events.append(
+                {
+                    "type": "user_message",
+                    "data": {
+                        "role": "user",
+                        "content": msg.payload,
+                        "message_id": msg.message_id,
+                        "metadata": {
+                            "injected_via": "steer",
+                            "steer_message_id": msg.message_id,
+                        },
+                        "source": "steer",
+                    },
+                }
+            )
+            return
+        steer_text = f"[Control] Parent agent instruction: {msg.payload}"
+        messages.append({"role": "system", "content": steer_text})
 
     async def _poll_model_control_v2(self, messages: list[dict[str, Any]]) -> None:
         """Apply accepted control before an old model decision becomes executable."""

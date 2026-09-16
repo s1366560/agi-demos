@@ -1,12 +1,15 @@
-# Steer 注入 WS 协议草案（P1-1 Queue vs Steer)
+# Steer 注入 WS 协议（P1-1 Queue vs Steer)
 
-> 状态：草案，待后端评审。前端已按本草案实现完整 UX 与容错回退。
+> 状态：**已落地**。后端 `steer_message` WS 处理器与类型化路由错误均已上线；
+> 前端按本协议实现完整 UX 与容错回退，并已删除对错误文案的文本匹配。
 >
 > **后端现状（已核对 `src/infrastructure/adapters/primary/web/websocket/message_router.py`）**：
-> 后端未注册 `steer_message` 处理器（仅有 SubAgent 控制面的 `steer` 命令，两者不同）。
-> 未识别的消息类型由 `MessageRouter` 应答 `{type:"error", data:{message:"Unknown
-> message type: steer_message"}}`——**不带 `code`，也不回显 `message_id`**。
-> 前端已据此实现即时拒绝识别（见 §4）， steer 不再等待 ack 超时才回退。
+> 后端注册了 `steer_message` 处理器，应答类型化 ack
+> `{type:"ack", action:"steer_message", outcome:"accepted"|"rejected", reason_code, message_id}`；
+> 未识别的消息类型由 `MessageRouter` 应答**类型化错误**：
+> `{type:"error", code:"UNKNOWN_MESSAGE_TYPE", message_id:<回显>}`。
+> 所有拒绝事件均可通过 `code` + `message_id` 归因到在途 steer，
+> 前端不再依赖任何错误文案匹配。
 
 ## 1. 背景与语义
 
@@ -46,22 +49,19 @@
 | 接受（兜底） | durable `user_message` 事件携带同一 `message_id`（turn 边界注入成功落库） |
 | 拒绝 | `{type:"ack", action:"steer_message", outcome:"rejected", message_id, ...}` |
 | 拒绝 | `{type:"error", code: "STEER_UNSUPPORTED" \| "STEER_NOT_SUPPORTED" \| "INVALID_STEER_MESSAGE" \| "UNKNOWN_MESSAGE_TYPE", message_id, ...}` |
-| 拒绝（当前后端实测） | `{type:"error", data:{message:"Unknown message type: steer_message"}}`——无 `code`、无 `message_id` 回显。因每个会话面板同一时刻至多一条 steer 在途（`steerDispatchRef` 守卫），前端将该未归属错误确定性地归为在途 steer 的拒绝 |
 
-建议的拒绝原因码（供后端扩展）：`STEER_UNSUPPORTED`（该 runtime 不支持注入）、
-`STEER_TURN_ALREADY_COMMITTED`（越过 turn 边界，建议客户端回退为排队）。
-
-> 后端落地提示：`MessageRouter.route` 的未知类型应答目前不携带 `code`，也不回显
-> `message_id`。后端实现 steer 时，应至少对未知类型应答补上
-> `code="UNKNOWN_MESSAGE_TYPE"` 并回显请求中的 `message_id`，使拒绝可归因、
-> 前端可删除对错误文案的匹配。
+已落地的最终错误码集合（前端 `AGENT_STEER_REJECTED_ERROR_CODES`）：
+`INVALID_STEER_MESSAGE`、`STEER_NOT_SUPPORTED`、`STEER_UNSUPPORTED`、`UNKNOWN_MESSAGE_TYPE`。
+所有拒绝事件（ack `outcome:"rejected"` 与类型化 error）均回显 `message_id`，
+可归因到在途 steer。**未携带 `code` / `message_id` 的裸文本错误一律不归因**
+（前端已删除文本匹配，由 10 秒 ack 超时兜底）。
 
 ## 4. 前端回退行为（已实现）
 
 steer 发出后，任一以下情况触发**回退为排队**：
 
-1. 收到拒绝类事件（上表，含当前后端实测的未归属 `Unknown message type` 错误——
-   即时判定，不再等待超时）；
+1. 收到拒绝类事件（上表；拒绝均可通过 `code` / ack + `message_id` 回显归因到在途
+   steer——裸文本错误不归因，由超时兜底）；
 2. 10 秒 ack 超时仍无接受事件（保留为最终兜底，覆盖「后端静默忽略」的未来形态）；
 3. run 结束（streaming 终止）时 steer 仍未被接受——turn 边界已错过。
 
@@ -91,9 +91,12 @@ steer 发出后，任一以下情况触发**回退为排队**：
 3. **权限与审计**：steer 是否需要在审计日志中单独标记（引导改变了 agent 行为路径）？
 4. **上下文项**：当前 steer 仅携带纯文本；skill / subagent 等 composer context 不支持
    steer（前端跳过这类条目，留在队列中随 run 结束发送）。是否需要协议扩展支持？
-5. **本地 runtime（loopback HTTP）路径**：本地模式 `send_message` 有 HTTP 兜底；steer
-   是否也需要 HTTP 端点，还是仅 cloud WS 支持？
-6. **ack 超时基准**：前端暂定 10 秒。当前后端因无 `steer_message` 处理器会立即返回
-   未归属的 `Unknown message type` 错误，前端即时回退、实际不经过超时路径；10 秒
-   超时保留为「后端实现了 steer 但静默吞掉消息」形态的兜底。若后端在长工具调用场景
-   下 turn 边界可能远超该值，请提供建议值或改为「接受前事件驱动、无超时」模型。
+5. **本地 runtime（loopback HTTP）路径**：已定案——本地模式 steer 保持不可用，
+   compose-ahead 一律走 queue 回退语义。门控复用
+   `canQueuePendingAgentRunMessage` 的模式检查（`useAgentSocket.ts`：
+   `mode === "cloud" && enabled && authenticationAvailable`），本地模式下整个
+   compose-ahead 队列（含 steer intent）不入队，run 中发送直接走本地 HTTP 兜底路径。
+6. **ack 超时基准**：前端暂定 10 秒，保留为「后端静默吞掉消息」形态的最终兜底
+   （steer 拒绝正常由类型化 ack / error 即时判定，实际不经过超时路径）。若后端在
+   长工具调用场景下 turn 边界可能远超该值，请提供建议值或改为「接受前事件驱动、
+   无超时」模型。

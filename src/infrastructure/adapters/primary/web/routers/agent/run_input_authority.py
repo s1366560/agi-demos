@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime, timedelta
-from typing import Literal, cast
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -18,11 +17,18 @@ from src.application.schemas.agent_run_authority import (
     PromoteRunInputResponse,
     RunInputAck,
     RunInputListResponse,
-    RunInputReceipt,
+)
+from src.application.services.agent.run_input_dispatch import (
+    RUN_INPUT_DISPATCH_LEASE as _RUN_INPUT_DISPATCH_LEASE,
+    SteerDispatchOutcome,
+    _canonical_hash,
+    _dispatch_lease_is_active,
+    _input_ack,
+    _input_receipt,
+    dispatch_persisted_steer_control,
+    settle_steer_dispatch,
 )
 from src.domain.model.agent.run_input import AgentRunInputDelivery, AgentRunInputStatus
-from src.domain.model.agent.tool_policy import ControlMessageType
-from src.domain.ports.agent.control_channel_port import ControlMessage
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.attachment_model import AttachmentModel
@@ -38,9 +44,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.agent.subagent.control_channel import RedisControlChannel
 from src.infrastructure.i18n import gettext as _
-from src.infrastructure.plugins.v2.agent_worker_runtime import (
-    current_agent_worker_redis_client_v2,
-)
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -50,12 +53,11 @@ from src.infrastructure.plugins.v2.boundary import (
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from .plans import _execute_approved_plan
-from .run_authority_common import _canonical_hash, _explicit_change_payloads, _load_scoped_run
+from .run_authority_common import _explicit_change_payloads, _load_scoped_run
 
 router = APIRouter()
 _PROMOTED_RUN_TASKS: set[asyncio.Task[None]] = set()
 _ACTIVE_RUN_STATUSES = frozenset({"queued", "running"})
-_RUN_INPUT_DISPATCH_LEASE = timedelta(seconds=30)
 
 
 async def _validate_run_input_authorities(
@@ -169,67 +171,6 @@ async def _validate_run_input_authorities(
         )
 
 
-def _input_receipt(row: AgentRunInputModel) -> RunInputReceipt:
-    return RunInputReceipt(
-        id=row.id,
-        conversation_id=row.conversation_id,
-        run_id=row.run_id,
-        expected_run_revision=row.expected_run_revision,
-        message_id=row.message_id,
-        idempotency_key=row.idempotency_key,
-        delivery=cast(Literal["steer_now", "queue_next"], row.delivery),
-        status=cast(
-            Literal[
-                "pending_boundary",
-                "queued",
-                "applied",
-                "ready",
-                "blocked",
-                "promoted_to_plan",
-            ],
-            row.status,
-        ),
-        sequence=row.sequence,
-        queue_position=row.queue_position,
-        content=row.message,
-        references=list(row.references_json),
-        context_items=list(row.context_items_json),
-        applied_round=row.applied_round,
-        applied_at=row.applied_at,
-        injected_via=row.injected_via,
-        dispatch_status=cast(
-            Literal["not_required", "dispatching", "dispatched", "failed"],
-            row.dispatch_status,
-        ),
-        dispatch_attempts=row.dispatch_attempts,
-        dispatch_lease_expires_at=row.dispatch_lease_expires_at,
-        dispatch_error_code=row.dispatch_error_code,
-        promotion_idempotency_key=row.promotion_key,
-        promoted_at=row.promoted_at,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
-
-
-def _input_ack(
-    row: AgentRunInputModel,
-    *,
-    run_revision: int,
-    created: bool,
-) -> RunInputAck:
-    return RunInputAck(
-        accepted=True,
-        created=created,
-        conversation_id=row.conversation_id,
-        message_id=row.message_id,
-        delivery_mode=cast(Literal["steer_now", "queue_next"], row.delivery),
-        run_id=row.run_id,
-        run_revision=run_revision,
-        queue_position=row.queue_position,
-        input=_input_receipt(row),
-    )
-
-
 def _run_input_dispatch_rejection(
     *,
     status_code: int,
@@ -253,15 +194,6 @@ def _run_input_dispatch_rejection(
     )
 
 
-def _dispatch_lease_is_active(row: AgentRunInputModel, *, now: datetime) -> bool:
-    lease = row.dispatch_lease_expires_at
-    if lease is None:
-        return False
-    if lease.tzinfo is None:
-        lease = lease.replace(tzinfo=UTC)
-    return lease > now
-
-
 async def _dispatch_persisted_steer(
     *,
     request: Request,
@@ -272,8 +204,6 @@ async def _dispatch_persisted_steer(
 ) -> RunInputAck | JSONResponse:
     """Dispatch a committed steer row, then settle its retryable transport state."""
 
-    accepted = False
-    error_code = "control_channel_unavailable"
     try:
         async with pin_agent_turn_operation_v2(
             operation_id=f"run-input-dispatch:{row.id}",
@@ -297,41 +227,18 @@ async def _dispatch_persisted_steer(
                 },
             },
         ):
-            redis_client = current_agent_worker_redis_client_v2()
-            accepted = await RedisControlChannel(redis_client).send_control(
-                ControlMessage(
-                    run_id=row.run_id,
-                    message_type=ControlMessageType.STEER,
-                    payload=row.message,
-                    sender_id=current_user.id,
-                    run_input_id=row.id,
-                    delivery_mode="steer_now",
-                    run_revision=row.expected_run_revision,
-                    message_id=row.message_id,
-                    idempotency_key=row.idempotency_key,
-                )
-            )
-            error_code = "control_channel_rejected"
+            outcome = await dispatch_persisted_steer_control(row=row, sender_id=current_user.id)
     except RuntimeV2Error:
-        accepted = False
+        outcome = SteerDispatchOutcome(accepted=False, error_code="control_channel_unavailable")
 
-    now = datetime.now(UTC)
-    row.dispatch_lease_expires_at = None
-    row.updated_at = now
-    if not accepted:
-        row.dispatch_status = "failed"
-        row.dispatch_error_code = error_code
-        await db.commit()
+    await settle_steer_dispatch(db, row=row, outcome=outcome)
+    if not outcome.accepted:
         return _run_input_dispatch_rejection(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             reason_code="run_input_dispatch_failed",
             detail="Run input delivery failed",
             row=row,
         )
-
-    row.dispatch_status = "dispatched"
-    row.dispatch_error_code = None
-    await db.commit()
     return _input_ack(
         row,
         run_revision=row.expected_run_revision,

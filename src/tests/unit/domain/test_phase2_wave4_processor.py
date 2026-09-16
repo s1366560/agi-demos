@@ -15,6 +15,7 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.tool_policy import ControlMessageType
 from src.domain.ports.agent.control_channel_port import ControlMessage
+from src.infrastructure.agent.processor.model_step_control_v2 import ModelStepInterruptedV2
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
@@ -245,6 +246,102 @@ class TestCheckControlChannelSteer:
         assert event.applied_round == 3
         assert event.injected_via == "control_channel_observe_boundary"
         assert len(messages) == 1
+
+
+@pytest.mark.unit
+class TestCheckControlChannelOwnerSteer:
+    async def test_owner_run_input_steer_appends_user_role_message(self) -> None:
+        channel = _make_control_channel()
+        steer_msg = ControlMessage(
+            run_id="run-1",
+            message_type=ControlMessageType.STEER,
+            payload="Ship the green path first.",
+            sender_id="user-1",
+            run_input_id="input-1",
+            delivery_mode="steer_now",
+            run_revision=4,
+            message_id="desktop-steer-1",
+            idempotency_key="desktop-steer-1",
+        )
+        channel.consume_control.return_value = [steer_msg]
+        proc = _make_processor(control_channel=channel, run_id="run-1")
+        proc._langfuse_context = {"user_id": "user-1"}  # pyright: ignore[reportPrivateUsage]
+        proc._step_count = 3  # pyright: ignore[reportPrivateUsage]
+        messages: list[dict[str, str]] = []
+
+        events = await proc._check_control_channel(messages)  # pyright: ignore[reportPrivateUsage]
+
+        assert messages == [{"role": "user", "content": "Ship the green path first."}]
+        assert len(events) == 2
+        user_event = events[0]
+        assert isinstance(user_event, dict)
+        assert user_event["type"] == "user_message"
+        assert user_event["data"]["role"] == "user"
+        assert user_event["data"]["content"] == "Ship the green path first."
+        assert user_event["data"]["message_id"] == "desktop-steer-1"
+        assert user_event["data"]["metadata"] == {
+            "injected_via": "steer",
+            "steer_message_id": "desktop-steer-1",
+        }
+        applied = events[1]
+        assert isinstance(applied, AgentRunInputAppliedEvent)
+        assert applied.run_input_id == "input-1"
+        assert applied.message_id == "desktop-steer-1"
+
+    async def test_non_owner_run_input_steer_keeps_system_prefix(self) -> None:
+        channel = _make_control_channel()
+        steer_msg = ControlMessage(
+            run_id="run-1",
+            message_type=ControlMessageType.STEER,
+            payload="Focus on the boundary.",
+            sender_id="someone-else",
+            run_input_id="input-1",
+            delivery_mode="steer_now",
+            run_revision=4,
+            message_id="desktop-steer-1",
+            idempotency_key="desktop-steer-1",
+        )
+        channel.consume_control.return_value = [steer_msg]
+        proc = _make_processor(control_channel=channel, run_id="run-1")
+        proc._langfuse_context = {"user_id": "user-1"}  # pyright: ignore[reportPrivateUsage]
+        messages: list[dict[str, str]] = []
+
+        events = await proc._check_control_channel(messages)  # pyright: ignore[reportPrivateUsage]
+
+        assert len(messages) == 1
+        assert messages[0]["role"] == "system"
+        assert "[Control] Parent agent instruction:" in messages[0]["content"]
+        assert all(not isinstance(event, dict) for event in events)
+        assert any(isinstance(event, AgentRunInputAppliedEvent) for event in events)
+
+    async def test_owner_steer_mid_model_call_restarts_interrupted_step(self) -> None:
+        channel = _make_control_channel()
+        steer_msg = ControlMessage(
+            run_id="run-1",
+            message_type=ControlMessageType.STEER,
+            payload="Stop refactoring and fix the test.",
+            sender_id="user-1",
+            run_input_id="input-1",
+            delivery_mode="steer_now",
+            run_revision=4,
+            message_id="desktop-steer-1",
+            idempotency_key="desktop-steer-1",
+        )
+        channel.consume_control.return_value = [steer_msg]
+        proc = _make_processor(control_channel=channel, run_id="run-1")
+        proc._langfuse_context = {"user_id": "user-1"}  # pyright: ignore[reportPrivateUsage]
+        messages: list[dict[str, str]] = []
+
+        with pytest.raises(ModelStepInterruptedV2) as exc_info:
+            await proc._poll_model_control_v2(messages)  # pyright: ignore[reportPrivateUsage]
+
+        assert exc_info.value.restart is True
+        assert messages == [{"role": "user", "content": "Stop refactoring and fix the test."}]
+        assert any(
+            isinstance(event, dict) and event.get("type") == "user_message"
+            for event in exc_info.value.events
+        )
+        assert any(isinstance(event, AgentRunInputAppliedEvent) for event in exc_info.value.events)
 
 
 @pytest.mark.unit

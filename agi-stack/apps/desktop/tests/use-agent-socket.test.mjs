@@ -320,12 +320,12 @@ test("steer outcome reads acks, durable echoes, and steer error codes", () => {
   );
 });
 
-test("the router's unattributed unknown-type error rejects the in-flight steer immediately", () => {
+test("bare text errors are never attributed to the in-flight steer (no text matching)", () => {
   const messageId = "desktop-steer-prompt-1";
-  // The current backend registers no steer_message handler; MessageRouter
-  // answers unknown types with an error that carries neither code nor
-  // message_id. With one steer in flight per panel this must resolve the
-  // steer at once instead of stalling until the ack timeout.
+  // Regression pin: text matching on error messages must not come back. The
+  // backend now emits typed errors (code + message_id echo), so a bare text
+  // error without code/message_id stays unattributed and the steer resolves
+  // via the ack timeout fallback instead.
   assert.equal(
     agentSteerMessageOutcome(
       {
@@ -334,7 +334,14 @@ test("the router's unattributed unknown-type error rejects the in-flight steer i
       },
       messageId,
     ),
-    "rejected",
+    null,
+  );
+  assert.equal(
+    agentSteerMessageOutcome(
+      { type: "error", message: "Unknown message type: steer_message" },
+      messageId,
+    ),
+    null,
   );
   // Unknown-type errors for other message types never resolve the steer.
   assert.equal(
@@ -355,18 +362,26 @@ test("the router's unattributed unknown-type error rejects the in-flight steer i
     ),
     null,
   );
-  assert.equal(
-    agentSteerMessageOutcome(
-      { type: "error", message: "Unknown message type: steer_message" },
-      messageId,
-    ),
-    "rejected",
-  );
-  // An error attributed to a different message id never falls back to text.
+  // Typed errors with code UNKNOWN_MESSAGE_TYPE and the message_id echo are
+  // attributed to the in-flight steer and reject it immediately.
   assert.equal(
     agentSteerMessageOutcome(
       {
         type: "error",
+        code: "UNKNOWN_MESSAGE_TYPE",
+        message_id: messageId,
+        data: { message: "Unknown message type: steer_message" },
+      },
+      messageId,
+    ),
+    "rejected",
+  );
+  // A typed error attributed to a different message id never resolves it.
+  assert.equal(
+    agentSteerMessageOutcome(
+      {
+        type: "error",
+        code: "UNKNOWN_MESSAGE_TYPE",
         message_id: "other-message",
         data: { message: "Unknown message type: steer_message" },
       },

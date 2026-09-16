@@ -1,5 +1,12 @@
 import { validMessageDisplayContent } from '../features/chat/messageDisplayModel';
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { desktopApiCredential, DesktopApiClient } from "../api/client";
 import {
@@ -344,33 +351,13 @@ export function deliverAgentSteerMessage(
 }
 
 /**
- * The current backend router has no steer_message handler: it answers unknown
- * message types with an unattributed error (no code, no message_id echo), e.g.
- * `{type:"error", data:{message:"Unknown message type: steer_message"}}`.
- * ChatPanel keeps at most one steer in flight per conversation panel, so this
- * router response unambiguously rejects the pending steer. Detecting it lets
- * the compose-ahead queue fall back to plain queue semantics immediately
- * instead of stalling until the ack timeout.
- */
-function agentSteerUnsupportedRouterError(
-  payload: Record<string, unknown>,
-): boolean {
-  const text = nestedStringField(payload, ["message"]);
-  if (!text) return false;
-  const normalized = text.trim().toLowerCase();
-  return (
-    normalized.startsWith("unknown message type:") &&
-    normalized.includes("steer_message")
-  );
-}
-
-/**
  * Interpret a socket event as the outcome of a previously sent steer message.
  * Accepted: an ack for `steer_message` or a durable user message echoing the
- * steer message id. Rejected: a steer ack with a non-accepted outcome, an
- * error event carrying a steer-specific code for the same message id, or the
- * router's unattributed unknown-type error for `steer_message` (the current
- * backend does not register a steer_message handler).
+ * steer message id. Rejected: a steer ack with a non-accepted outcome or an
+ * error event carrying a steer-specific code for the same message id (the
+ * backend steer handler and the typed router error both echo message_id).
+ * Bare text errors without a code or message_id are never attributed to an
+ * in-flight steer; the ack timeout is the silent-swallow fallback.
  */
 export function agentSteerMessageOutcome(
   event: unknown,
@@ -384,13 +371,7 @@ export function agentSteerMessageOutcome(
     "message_id",
     "messageId",
   ]);
-  if (eventMessageId !== normalizedMessageId) {
-    return eventMessageId === null &&
-      eventType === "error" &&
-      agentSteerUnsupportedRouterError(payload)
-      ? "rejected"
-      : null;
-  }
+  if (eventMessageId !== normalizedMessageId) return null;
   if (eventType === "ack" && payload.action === "steer_message") {
     return nestedStringField(payload, ["outcome"]) === "accepted"
       ? "accepted"
@@ -552,6 +533,42 @@ export function confirmPendingAgentRunMessageReceipt(
   return queue.delete(`${conversationId}\u0000${messageId}`);
 }
 
+/**
+ * Module-level mirror of the agent socket's live connection state. App owns
+ * the single `useAgentSocket` instance; surfaces that cannot receive the
+ * connected flag through props (e.g. the composer stop control) subscribe
+ * here instead. The snapshot defaults to connected so QA surfaces rendering
+ * without a socket hook keep the previous enabled-with-error-feedback
+ * behavior; the real hook publishes the actual transport state on mount.
+ */
+const agentSocketConnectedListeners = new Set<() => void>();
+let agentSocketConnectedSnapshot = true;
+
+function publishAgentSocketConnected(connected: boolean): void {
+  if (agentSocketConnectedSnapshot === connected) return;
+  agentSocketConnectedSnapshot = connected;
+  for (const listener of agentSocketConnectedListeners) listener();
+}
+
+export function subscribeAgentSocketConnected(listener: () => void): () => void {
+  agentSocketConnectedListeners.add(listener);
+  return () => {
+    agentSocketConnectedListeners.delete(listener);
+  };
+}
+
+export function getAgentSocketConnectedSnapshot(): boolean {
+  return agentSocketConnectedSnapshot;
+}
+
+export function useAgentSocketConnected(): boolean {
+  return useSyncExternalStore(
+    subscribeAgentSocketConnected,
+    getAgentSocketConnectedSnapshot,
+    () => true,
+  );
+}
+
 export function useAgentSocket(
   config: DesktopRuntimeConfig,
   enabled: boolean,
@@ -562,6 +579,9 @@ export function useAgentSocket(
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentWsEvent[]>([]);
+  useEffect(() => {
+    publishAgentSocketConnected(connected);
+  }, [connected]);
   const socketRef = useRef<WebSocket | null>(null);
   const contextStateRef = useRef(createAgentSocketContextState());
   const pendingAgentMessagesRef = useRef(createPendingAgentMessageQueue());

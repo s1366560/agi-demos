@@ -47,6 +47,9 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.status_handler i
     SubscribeStatusHandler,
     UnsubscribeStatusHandler,
 )
+from src.infrastructure.adapters.primary.web.websocket.handlers.steer_handler import (
+    SteerMessageHandler,
+)
 from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_handler import (
     SubscribeHandler,
     UnsubscribeHandler,
@@ -69,6 +72,7 @@ __all__ = [
     "RestartAgentHandler",
     "SendMessageHandler",
     "StartAgentHandler",
+    "SteerMessageHandler",
     "SteerSubAgentHandler",
     "StopAgentHandler",
     "StopSessionHandler",

@@ -96,7 +96,18 @@ class MessageRouter:
                 logger.error(f"[WS Router] Error in handler for {msg_type}: {e}", exc_info=True)
                 await context.send_error(f"Handler error: {e!s}")
         else:
-            await context.send_error(f"Unknown message type: {msg_type}")
+            message_id = message.get("message_id")
+            conversation_id = message.get("conversation_id")
+            await context.send_error(
+                f"Unknown message type: {msg_type}",
+                code="UNKNOWN_MESSAGE_TYPE",
+                conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+                extra=(
+                    {"message_id": message_id}
+                    if isinstance(message_id, str) and message_id
+                    else None
+                ),
+            )
 
     @property
     def registered_types(self) -> list[str]:
@@ -127,6 +138,7 @@ def get_message_router() -> MessageRouter:
             RestartAgentHandler,
             SendMessageHandler,
             StartAgentHandler,
+            SteerMessageHandler,
             SteerSubAgentHandler,
             StopAgentHandler,
             StopSessionHandler,
@@ -155,6 +167,7 @@ def get_message_router() -> MessageRouter:
                 StopSessionHandler(),
                 KillRunHandler(),
                 SteerSubAgentHandler(),
+                SteerMessageHandler(),
                 # Subscription
                 SubscribeHandler(),
                 UnsubscribeHandler(),
