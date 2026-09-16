@@ -398,19 +398,19 @@
   --desktop-panel-glass-2-rgb: 15, 25, 38;
   --desktop-track-glass-rgb: 2, 6, 11;
   --desktop-on-accent: #03141a;
-  /* Prototype mission-control refactor 2026-09: chat surface + message bubble
-     anatomy remapped onto the prototype palette (chat bg #080c12 family, user
-     bubble #161d27, agent bubble panel #0d121a / border #242d3a, inline code
-     #151c27, code block #090e15). Token names unchanged from the web parity
-     redesign so feature CSS keeps working. */
-  --desktop-chat-bg: #080c12;
-  --desktop-bubble-user-bg: #161d27;
-  --desktop-bubble-user-border: #2a3542;
-  --desktop-bubble-agent-bg: #0d121a;
-  --desktop-bubble-agent-border: #242d3a;
-  --desktop-inline-code-bg: #151c27;
-  --desktop-code-block-bg: #090e15;
-  --desktop-code-block-bg-rgb: 9, 14, 21;
+  /* Web conversation parity 2026-12: chat surface + message bubble anatomy
+     re-pointed onto the web monochrome dark palette (chat bg #0a0a0a, user
+     bubble slate-800/70 composite #141414, agent bubble surface-dark #121212
+     with a #262626 hairline, inline code primary-50 #1c1c1c, code block
+     #0d0d0d). Token names unchanged so feature CSS keeps working. */
+  --desktop-chat-bg: #0a0a0a;
+  --desktop-bubble-user-bg: #141414;
+  --desktop-bubble-user-border: #2b2b2b;
+  --desktop-bubble-agent-bg: #121212;
+  --desktop-bubble-agent-border: #262626;
+  --desktop-inline-code-bg: #1c1c1c;
+  --desktop-code-block-bg: #0d0d0d;
+  --desktop-code-block-bg-rgb: 13, 13, 13;
   --desktop-error-bubble-bg: #231115;
   --desktop-error-bubble-border: #5d3239;
   --desktop-error-bubble-text: #ff9aa4;
@@ -464,6 +464,41 @@
   --desktop-shadow-raised: 0 4px 14px rgba(var(--desktop-black-rgb), 0.35);
   --desktop-shadow-popover: 0 12px 32px rgba(var(--desktop-black-rgb), 0.5);
   --desktop-shadow-dialog: 0 24px 64px rgba(var(--desktop-black-rgb), 0.6);
+  /* Web conversation parity 2026-12: typography scale from web/src/index.css
+     @theme (10/11/12/13/14px with paired line heights + label tracking). */
+  --desktop-text-2xs: 0.625rem;
+  --desktop-text-2xs--line-height: 1.4;
+  --desktop-text-xs-plus: 0.6875rem;
+  --desktop-text-xs-plus--line-height: 1.45;
+  --desktop-text-xs: 0.75rem;
+  --desktop-text-xs--line-height: 1.45;
+  --desktop-text-code: 0.8125rem;
+  --desktop-text-code--line-height: 1.6;
+  --desktop-text-sm: 0.875rem;
+  --desktop-text-sm--line-height: 1.55;
+  --desktop-tracking-label: 0.05em;
+  /* Web conversation parity 2026-12: radius scale (web radius sm/md/lg). */
+  --desktop-radius-sm: 2px;
+  --desktop-radius-md: 6px;
+  --desktop-radius-lg: 8px;
+  /* Web conversation parity 2026-12: chat-flow surface/border/text aliases on
+     the web dark panel ladder (#121212/#181818/#1f1f1f, borders #333/#404040,
+     text #ededed/#9c9c9c/#8a8a8a). */
+  --desktop-chat-panel: #121212;
+  --desktop-chat-panel-alt: #181818;
+  --desktop-chat-panel-elevated: #1f1f1f;
+  --desktop-chat-border: #333333;
+  --desktop-chat-border-strong: #404040;
+  --desktop-chat-text: #ededed;
+  --desktop-chat-text-secondary: #9c9c9c;
+  --desktop-chat-text-tertiary: #8a8a8a;
+  /* Neutral alpha-tint channel for hover washes inside the chat flow (white
+     at low alpha on dark; flips to black on light). */
+  --desktop-chat-tint-rgb: 255, 255, 255;
+  /* Web conversation parity 2026-12: running/info status accent (web blue;
+     mapped to the spec info value #38d6ff on dark). */
+  --desktop-status-running: #38d6ff;
+  --desktop-status-running-rgb: 56, 214, 255;
 }
 
 /* Light theme overrides. Every --desktop-* token from :root must be redefined
@@ -864,14 +899,16 @@
   --desktop-panel-glass-2-rgb: 255, 255, 255;
   --desktop-track-glass-rgb: 238, 238, 238;
   --desktop-on-accent: #ffffff;
-  /* Web parity redesign 2026-09: chat surface + message bubble anatomy
-     (light counterparts of the dark bubble tokens above). */
-  --desktop-chat-bg: #f8fafc;
+  /* Web conversation parity 2026-12: chat surface + message bubble anatomy
+     (light counterparts on the web light palette: chat bg #f7f7f7, user bubble
+     slate-50/80 #f8fafc, agent bubble #ffffff with #e3e3e3 hairline, inline
+     code primary-50 #f5f5f5, code block surface-muted #f7f7f7). */
+  --desktop-chat-bg: #f7f7f7;
   --desktop-bubble-user-bg: #f8fafc;
   --desktop-bubble-user-border: #e5e5e5;
   --desktop-bubble-agent-bg: #ffffff;
   --desktop-bubble-agent-border: #e3e3e3;
-  --desktop-inline-code-bg: #f1f5f9;
+  --desktop-inline-code-bg: #f5f5f5;
   --desktop-code-block-bg: #f7f7f7;
   --desktop-code-block-bg-rgb: 247, 247, 247;
   --desktop-error-bubble-bg: #fef2f2;
@@ -918,4 +955,36 @@
   --desktop-shadow-raised: 0 2px 10px rgba(var(--desktop-black-rgb), 0.08);
   --desktop-shadow-popover: 0 10px 28px rgba(var(--desktop-black-rgb), 0.12);
   --desktop-shadow-dialog: 0 20px 48px rgba(var(--desktop-black-rgb), 0.16);
+  /* Web conversation parity 2026-12: typography scale (theme-independent). */
+  --desktop-text-2xs: 0.625rem;
+  --desktop-text-2xs--line-height: 1.4;
+  --desktop-text-xs-plus: 0.6875rem;
+  --desktop-text-xs-plus--line-height: 1.45;
+  --desktop-text-xs: 0.75rem;
+  --desktop-text-xs--line-height: 1.45;
+  --desktop-text-code: 0.8125rem;
+  --desktop-text-code--line-height: 1.6;
+  --desktop-text-sm: 0.875rem;
+  --desktop-text-sm--line-height: 1.55;
+  --desktop-tracking-label: 0.05em;
+  /* Web conversation parity 2026-12: radius scale (theme-independent). */
+  --desktop-radius-sm: 2px;
+  --desktop-radius-md: 6px;
+  --desktop-radius-lg: 8px;
+  /* Web conversation parity 2026-12: chat-flow surface/border/text aliases on
+     the web light palette (#ffffff/#f2f2f2/#e9e9e9, borders #e3e3e3/#cccccc,
+     text #141414/#4f4f4f/#6b6b6b). */
+  --desktop-chat-panel: #ffffff;
+  --desktop-chat-panel-alt: #f2f2f2;
+  --desktop-chat-panel-elevated: #e9e9e9;
+  --desktop-chat-border: #e3e3e3;
+  --desktop-chat-border-strong: #cccccc;
+  --desktop-chat-text: #141414;
+  --desktop-chat-text-secondary: #4f4f4f;
+  --desktop-chat-text-tertiary: #6b6b6b;
+  /* Neutral alpha-tint channel (black at low alpha on light). */
+  --desktop-chat-tint-rgb: 0, 0, 0;
+  /* Web conversation parity 2026-12: running/info status accent (web blue-600). */
+  --desktop-status-running: #2563eb;
+  --desktop-status-running-rgb: 37, 99, 235;
 }

@@ -605,9 +605,12 @@ test('session composer keeps voice and delivery controls in the trailing action 
 });
 
 test('session composer uses a consistent typography scale and radius system', () => {
+  // Web conversation parity 2026-12: the composer follows the web InputBar
+  // recipe — rounded-md (6px) card radius and the web 14px text-sm body size
+  // (previously an 8px radius with a desktop-specific 11px input size).
   assert.match(
     chatStyles,
-    /\.session-chat-narrative \.session-composer-editor\s*\{[\s\S]*--session-composer-radius:\s*8px;[\s\S]*--session-composer-control-radius:\s*6px;[\s\S]*--session-composer-font-size:\s*11px;/,
+    /\.session-chat-narrative \.session-composer-editor\s*\{[\s\S]*--session-composer-radius:\s*6px;[\s\S]*--session-composer-control-radius:\s*6px;[\s\S]*--session-composer-font-size:\s*14px;/,
   );
   assert.match(
     chatStyles,

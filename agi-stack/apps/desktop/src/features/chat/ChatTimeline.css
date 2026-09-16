@@ -176,7 +176,7 @@
 .markdown-content {
   min-width: 0;
   max-width: 100%;
-  color: var(--desktop-text-pale);
+  color: var(--desktop-chat-text);
   font-size: inherit;
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -214,7 +214,7 @@
 .markdown-content h4,
 .markdown-content h5,
 .markdown-content h6 {
-  color: var(--desktop-text-mist);
+  color: var(--desktop-chat-text);
   line-height: 1.4;
 }
 
@@ -255,18 +255,18 @@
   word-break: break-word;
 }
 
-/* Web parity redesign 2026-09: inline code = mono 13px on a subtle chip
-   (light #f1f5f9 / dark #262626 via --desktop-inline-code-bg). */
+/* Web conversation parity 2026-12: inline code = mono chip in the near-primary
+   text color on primary-50 (web .memstack-prose :not(pre) > code). */
 .markdown-content code {
   border-radius: 4px;
   background: var(--desktop-inline-code-bg);
-  color: var(--desktop-text-frost);
+  color: var(--desktop-chat-text);
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.93em;
+  font-size: 0.85em;
 }
 
 .markdown-content :not(pre) > code {
-  padding: 2px 4px;
+  padding: 0.15em 0.4em;
 }
 
 /* Code inside a block (framed or raw pre) stays chip-free: the frame owns
@@ -277,62 +277,100 @@
   background: transparent;
 }
 
+/* Web conversation parity 2026-12: blockquote renders as a bordered card
+   (web .memstack-prose blockquote — hairline border, 8px radius, tinted
+   surface, italic secondary text). */
 .markdown-content blockquote {
   margin: 0;
-  padding-left: 10px;
-  border-left: 2px solid rgba(var(--desktop-slate-rgb), 0.28);
-  color: var(--desktop-muted);
+  padding: 12px 16px;
+  border: 1px solid var(--desktop-chat-border-strong);
+  border-radius: var(--desktop-radius-lg);
+  background: var(--desktop-inline-code-bg);
+  color: var(--desktop-chat-text-secondary);
+  font-style: italic;
 }
 
+/* Web conversation parity 2026-12: tables follow .memstack-prose — full width,
+   13px, header row on the muted surface with a 2px bottom rule, cells with a
+   1px hairline bottom border. */
 .markdown-content table {
   display: block;
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: 0.94em;
+  font-size: var(--desktop-text-code);
   line-height: 1.45;
 }
 
-.markdown-content th,
-.markdown-content td {
-  padding: 4px 6px;
-  border: 1px solid var(--desktop-border-soft);
+.markdown-content th {
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--desktop-chat-border);
+  background: var(--desktop-chat-panel-alt);
+  font-weight: 600;
+  text-align: left;
 }
 
+.markdown-content td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.08);
+}
+
+/* Web conversation parity 2026-12: list markers and horizontal rules use the
+   tertiary/muted hairline vocabulary of .memstack-prose. */
+.markdown-content li::marker {
+  color: var(--desktop-chat-text-tertiary);
+}
+
+.markdown-content hr {
+  height: 1px;
+  margin: 24px 0;
+  border: 0;
+  background: var(--desktop-chat-border);
+}
+
+/* Web conversation parity 2026-12: worklog rows render as web execution step
+   cards — panel surface, hairline border, 6px radius, whisper shadow, with a
+   hover lift (web TimelineStepItem / ToolExecution card recipe). */
 .message.timeline-row {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: start;
-  gap: 6px;
-  min-height: 30px;
-  padding: 4px 8px;
-  border-color: transparent;
-  background: transparent;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel);
+  box-shadow: var(--desktop-shadow-card);
+  transition:
+    border-color 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
 }
 
 .message.timeline-row:hover,
 .message.timeline-row.is-expanded {
-  border-color: rgba(var(--desktop-slate-rgb), 0.14);
-  background: rgba(var(--desktop-slate-rgb), 0.055);
+  border-color: var(--desktop-chat-border-strong);
+  background: var(--desktop-chat-panel);
+  box-shadow: 0 1px 3px rgba(var(--desktop-overlay-16-rgb), 0.045);
 }
 
 .message.timeline-row.tool,
 .message.timeline-row.artifact,
 .message.timeline-row.runtime {
-  border-color: transparent;
-  background: transparent;
+  border-color: var(--desktop-chat-border);
+  background: var(--desktop-chat-panel);
 }
 
 .message.timeline-row.tool:hover,
 .message.timeline-row.tool.is-expanded {
-  border-color: rgba(var(--desktop-amber-rgb), 0.22);
-  background: rgba(var(--desktop-amber-rgb), 0.055);
+  border-color: var(--desktop-chat-border-strong);
+  background: var(--desktop-chat-panel);
 }
 
 .message.timeline-row.artifact:hover,
 .message.timeline-row.artifact.is-expanded {
-  border-color: rgba(var(--desktop-silver-rgb), 0.2);
-  background: rgba(var(--desktop-silver-rgb), 0.05);
+  border-color: var(--desktop-chat-border-strong);
+  background: var(--desktop-chat-panel);
 }
 
 .timeline-row-toggle,
@@ -387,25 +425,25 @@
 }
 
 .timeline-row.tool .timeline-row-icon {
-  color: var(--desktop-amber);
+  color: var(--desktop-chat-text-secondary);
 }
 
 /* Web parity redesign 2026-09 phase 2: tool-call rows get the web execution
-   card icon chip — 28x28, 1px ring, status-tinted (running=amber,
-   complete=green, failed=red). */
+   card icon chip — 28x28, 1px ring, status-tinted. Web conversation parity
+   2026-12: running tint follows the web blue "Running" pill (info accent). */
 .timeline-row-icon.tool-call-icon {
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(var(--desktop-slate-rgb), 0.2);
+  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.14);
   border-radius: 6px;
-  background: rgba(var(--desktop-slate-rgb), 0.06);
-  color: var(--desktop-muted);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
+  color: var(--desktop-chat-text-secondary);
 }
 
 .timeline-row-icon.tool-call-icon.is-running {
-  border-color: rgba(var(--desktop-amber-rgb), 0.3);
-  background: rgba(var(--desktop-amber-rgb), 0.1);
-  color: var(--desktop-amber);
+  border-color: rgba(var(--desktop-status-running-rgb), 0.3);
+  background: rgba(var(--desktop-status-running-rgb), 0.1);
+  color: var(--desktop-status-running);
 }
 
 .timeline-row-icon.tool-call-icon.is-complete {
@@ -429,12 +467,12 @@
   height: 14px;
 }
 
-/* Web parity redesign 2026-09 phase 2: tool/step titles read as 13px
-   medium (web execution card tool name). */
+/* Web conversation parity 2026-12: tool/step titles read as 12px medium (web
+   execution card tool name, text-xs font-medium). */
 .timeline-row-title {
   flex: 0 0 auto;
-  color: var(--desktop-text-soft);
-  font-size: 13px;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-xs);
   font-weight: 500;
   line-height: 20px;
 }
@@ -442,8 +480,8 @@
 .timeline-row-summary {
   min-width: 0;
   overflow: hidden;
-  color: var(--desktop-muted);
-  font-size: 12px;
+  color: var(--desktop-chat-text-secondary);
+  font-size: var(--desktop-text-xs);
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -455,25 +493,25 @@
   justify-self: end;
   gap: 6px;
   min-height: 22px;
-  color: var(--desktop-faint);
-  font-size: 11px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
   line-height: 18px;
   white-space: nowrap;
 }
 
-/* Web parity redesign 2026-09 phase 2: status pills follow the web
-   ExecutionTimeline vocabulary — 10px font-medium rounded-full tints
-   (running=amber, done=green #35d399, error=red #ff6978). */
+/* Web conversation parity 2026-12: status pills follow the web ToolExecution
+   vocabulary — 10px font-medium rounded-full tints (running = web blue,
+   done = emerald, error = red). */
 .timeline-status {
   display: inline-flex;
   align-items: center;
   min-height: 18px;
   padding: 1px 8px;
-  border: 1px solid rgba(var(--desktop-slate-rgb), 0.16);
+  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.14);
   border-radius: 999px;
-  background: rgba(var(--desktop-slate-rgb), 0.06);
-  color: var(--desktop-muted);
-  font-size: 10px;
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
+  color: var(--desktop-chat-text-secondary);
+  font-size: var(--desktop-text-2xs);
   font-weight: 500;
 }
 
@@ -490,9 +528,9 @@
 }
 
 .timeline-status.waiting {
-  border-color: rgba(var(--desktop-amber-rgb), 0.26);
-  background: rgba(var(--desktop-amber-rgb), 0.12);
-  color: var(--desktop-amber);
+  border-color: rgba(var(--desktop-status-running-rgb), 0.3);
+  background: rgba(var(--desktop-status-running-rgb), 0.12);
+  color: var(--desktop-status-running);
 }
 
 .timeline-details {
@@ -500,7 +538,12 @@
   gap: 8px;
   min-width: 0;
   max-width: 100%;
-  padding: 3px 0 5px 21px;
+  padding: 5px 0 5px 21px;
+}
+
+/* Tool-call payload blocks align under the row title (28px icon chip + gap). */
+.tool-call .timeline-details {
+  padding-left: 34px;
 }
 
 .timeline-detail-block {
@@ -511,13 +554,13 @@
 
 /* Web parity redesign 2026-09 phase 2: section micro-labels are 10px
    uppercase tracking-wide (web text-2xs font-semibold uppercase
-   tracking-label). */
+   tracking-label — the INPUT / OUTPUT section headers). */
 .timeline-detail-block > span {
-  color: var(--desktop-faint);
-  font-size: 10px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
   font-weight: 600;
-  letter-spacing: 0.05em;
-  line-height: 15px;
+  letter-spacing: var(--desktop-tracking-label);
+  line-height: var(--desktop-text-2xs--line-height);
   text-transform: uppercase;
 }
 
@@ -557,20 +600,20 @@
   line-height: 1.45;
 }
 
-/* Web parity redesign 2026-09 phase 2: expanded tool input/output reads as
-   mono 13px/1.6 on the subtle frame (web step detail pre blocks). */
+/* Web conversation parity 2026-12: expanded tool input/output reads as mono
+   13px/1.6 on the elevated panel frame (web step detail pre blocks). */
 .timeline-details pre {
   max-width: 100%;
   margin: 0;
   padding: 8px;
   overflow: auto;
-  border: 1px solid var(--desktop-border-soft);
-  border-radius: 6px;
-  background: rgba(var(--desktop-surface-32-rgb), 0.42);
-  color: var(--desktop-muted);
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel-elevated);
+  color: var(--desktop-chat-text-secondary);
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--desktop-text-code);
+  line-height: var(--desktop-text-code--line-height);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1761,5 +1804,35 @@
   .composer-right-actions {
     justify-self: end;
     align-self: end;
+  }
+}
+
+/* Web conversation parity 2026-12: timeline items enter with the web
+   animate-fade-in-up recipe (0.25s ease-out, translateY 8px), gated behind
+   no-preference so prefers-reduced-motion disables the motion entirely. */
+@keyframes desktop-timeline-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .session-chat-narrative .agent-timeline > .message,
+  .session-chat-narrative .agent-timeline > .thought-timeline-card,
+  .session-chat-narrative .agent-timeline > .work-plan-timeline-card,
+  .session-chat-narrative .agent-timeline > .artifact-timeline-card,
+  .session-chat-narrative .agent-timeline > .skill-execution-card,
+  .session-chat-narrative .agent-timeline > .memory-recall-card,
+  .session-chat-narrative .agent-timeline > .memory-captured-card,
+  .session-chat-narrative .agent-timeline > .timeline-subagent-group,
+  .session-chat-narrative .agent-timeline > .timeline-tool-group,
+  .session-chat-narrative .agent-timeline > .timeline-debug-group,
+  .session-chat-narrative .message-stack > .message {
+    animation: desktop-timeline-fade-in-up 250ms var(--ease-out);
   }
 }

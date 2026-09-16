@@ -1145,10 +1145,10 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  border: 1px solid rgba(var(--desktop-slate-rgb), 0.14);
-  border-radius: 8px;
-  background: rgba(var(--desktop-surface-26-rgb), 0.7);
-  color: var(--desktop-gray-27);
+  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.12);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
+  color: var(--desktop-chat-text-tertiary);
 }
 
 .thought-timeline-icon > svg {
@@ -1157,21 +1157,26 @@
 }
 
 .thought-timeline-icon.is-streaming {
-  color: var(--desktop-cyan);
+  border-color: rgba(var(--desktop-status-running-rgb), 0.3);
+  background: rgba(var(--desktop-status-running-rgb), 0.1);
+  color: var(--desktop-status-running);
   animation: thought-timeline-icon-pulse 1.4s ease-in-out infinite;
 }
 
+/* Web conversation parity 2026-12: thought card = bg-slate-50/80 /
+   dark:bg-slate-800/50 collapsible card with a hairline border (web Thought /
+   ThinkingBlock shell). */
 .thought-timeline-surface {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(var(--desktop-slate-rgb), 0.16);
-  border-radius: 8px;
-  background: rgba(var(--desktop-surface-26-rgb), 0.4);
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel-alt);
 }
 
 .thought-timeline-card.is-streaming .thought-timeline-surface {
-  border-color: rgba(var(--desktop-cyan-soft-rgb), 0.24);
-  background: rgba(var(--desktop-surface-cyan-7-rgb), 0.5);
+  border-color: rgba(var(--desktop-status-running-rgb), 0.3);
+  background: var(--desktop-chat-panel-alt);
 }
 
 .thought-timeline-toggle {
@@ -1191,7 +1196,7 @@
 }
 
 .thought-timeline-toggle:hover {
-  background: rgba(var(--desktop-slate-rgb), 0.06);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
 }
 
 .thought-timeline-toggle:focus-visible {
@@ -1206,18 +1211,21 @@
   color: var(--desktop-gray-36);
 }
 
+/* Web conversation parity 2026-12: thought title reads as the web "Reasoning"
+   header — 12px semibold secondary text (not an uppercase micro label). */
 .thought-timeline-title {
   flex: 0 0 auto;
-  color: var(--desktop-muted);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--desktop-chat-text-secondary);
+  font-size: var(--desktop-text-xs);
+  font-weight: 600;
 }
 
 .thought-timeline-live {
-  color: var(--desktop-cyan);
-  font-size: 9px;
+  color: var(--desktop-status-running);
+  font-size: var(--desktop-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--desktop-tracking-label);
+  text-transform: uppercase;
 }
 
 .thought-timeline-streaming-dots {
@@ -1246,8 +1254,8 @@
 .thought-timeline-preview {
   min-width: 0;
   overflow: hidden;
-  color: var(--desktop-gray-36);
-  font-size: 10px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-xs-plus);
   font-style: italic;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1256,8 +1264,8 @@
 .thought-timeline-time {
   flex: 0 0 auto;
   margin-left: auto;
-  color: var(--desktop-gray-3);
-  font-size: 9px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1310,10 +1318,10 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  border: 1px solid rgba(var(--desktop-slate-rgb), 0.14);
-  border-radius: 8px;
-  background: rgba(var(--desktop-surface-26-rgb), 0.7);
-  color: var(--desktop-cyan);
+  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.12);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
+  color: var(--desktop-chat-text-secondary);
 }
 
 .work-plan-timeline-icon > svg {
@@ -1321,12 +1329,14 @@
   height: 15px;
 }
 
+/* Web conversation parity 2026-12: work plan card = neutral collapsible card
+   (web WorkPlan shell shares the Thought surface recipe). */
 .work-plan-timeline-surface {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(var(--desktop-cyan-soft-rgb), 0.18);
-  border-radius: 8px;
-  background: rgba(var(--desktop-surface-cyan-7-rgb), 0.38);
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel-alt);
 }
 
 .work-plan-timeline-toggle {
@@ -1347,7 +1357,7 @@
 }
 
 .work-plan-timeline-toggle:hover {
-  background: rgba(var(--desktop-cyan-soft-rgb), 0.05);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
 }
 
 .work-plan-timeline-toggle:focus-visible {
@@ -1364,32 +1374,34 @@
 
 .work-plan-timeline-title {
   flex: 0 0 auto;
-  color: var(--desktop-gray-34);
-  font-size: 11px;
-  font-weight: 650;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-xs);
+  font-weight: 600;
 }
 
+/* Web conversation parity 2026-12: step-count pill = web bg-primary/10
+   text-primary rounded-full count badge (desktop primary accent = cyan). */
 .work-plan-timeline-count,
 .work-plan-timeline-status {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: rgba(var(--desktop-cyan-soft-rgb), 0.1);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
   color: var(--desktop-cyan);
-  font-size: 9px;
+  font-size: var(--desktop-text-2xs);
   line-height: 1;
   padding: 4px 7px;
 }
 
 .work-plan-timeline-status {
-  background: rgba(var(--desktop-slate-rgb), 0.1);
-  color: var(--desktop-gray-28);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.06);
+  color: var(--desktop-chat-text-secondary);
 }
 
 .work-plan-timeline-time {
   flex: 0 0 auto;
   margin-left: auto;
-  color: var(--desktop-gray-3);
-  font-size: 9px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1414,14 +1426,14 @@
   align-items: start;
   gap: 9px;
   padding: 9px;
-  border: 1px solid rgba(var(--desktop-slate-rgb), 0.12);
-  border-radius: 7px;
-  background: rgba(var(--desktop-surface-26-rgb), 0.28);
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-lg);
+  background: var(--desktop-chat-panel);
 }
 
 .work-plan-timeline-step.is-current {
-  border-color: rgba(var(--desktop-cyan-soft-rgb), 0.38);
-  background: rgba(var(--desktop-surface-cyan-7-rgb), 0.42);
+  border-color: rgba(var(--desktop-status-running-rgb), 0.35);
+  background: rgba(var(--desktop-status-running-rgb), 0.06);
 }
 
 .work-plan-timeline-step-number {
@@ -1430,9 +1442,9 @@
   height: 24px;
   place-items: center;
   border-radius: 999px;
-  background: rgba(var(--desktop-cyan-soft-rgb), 0.12);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
   color: var(--desktop-cyan);
-  font-size: 10px;
+  font-size: var(--desktop-text-2xs);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -1442,8 +1454,8 @@
 }
 
 .work-plan-timeline-step-description {
-  color: var(--desktop-gray-31);
-  font-size: 11px;
+  color: var(--desktop-chat-text-secondary);
+  font-size: var(--desktop-text-xs);
   line-height: 1.55;
 }
 
@@ -1462,17 +1474,17 @@
   gap: 3px;
   margin-top: 7px;
   padding-top: 7px;
-  border-top: 1px solid rgba(var(--desktop-slate-rgb), 0.1);
-  color: var(--desktop-gray-36);
-  font-size: 10px;
+  border-top: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.08);
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-xs-plus);
   line-height: 1.5;
 }
 
 .work-plan-timeline-expected-output > span {
-  color: var(--desktop-gray-11);
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--desktop-tracking-label);
   text-transform: uppercase;
 }
 
@@ -1582,6 +1594,9 @@
   gap: 0;
 }
 
+/* Web conversation parity 2026-12: assistant and user messages keep the web
+   MessageBubble rhythm — rows breathe with a 14px top gap inside the padded
+   conversation column. */
 .session-chat-narrative .message.session-thread-message {
   position: relative;
   display: flex;
@@ -1589,7 +1604,7 @@
   max-width: 100%;
   align-items: flex-start;
   gap: 12px;
-  margin: 22px 0 0;
+  margin: 14px 0 0;
   padding: 0;
   overflow: visible;
   border: 0;
@@ -1597,9 +1612,8 @@
   background: transparent;
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): user bubble is a
-   plain gray card — radius 12px, max-width 84%, right-aligned, no avatar and
-   no visible name/timestamp in the session narrative. */
+/* Web conversation parity 2026-12: user bubble stays right-aligned
+   (max-width ≈ web 85%) with the avatar on the right. */
 .session-chat-narrative .message.session-thread-message.user {
   width: fit-content;
   max-width: 84%;
@@ -1684,12 +1698,16 @@
   height: 13px;
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): assistant text spans
-   the full thread column — the prototype has no narrowed bubble column. */
+/* Web conversation parity 2026-12: assistant rows span the thread column;
+   the bubble card itself caps at the web content width (lg:max-w-[92%]). */
 .session-chat-narrative .message.session-thread-message.agent {
   width: 100%;
   max-width: 100%;
   background: transparent;
+}
+
+.session-chat-narrative .message.session-thread-message.agent .session-message-body {
+  max-width: 92%;
 }
 
 /* Web parity redesign 2026-09: 32x32 avatar chip, radius 8px, primary-tinted
@@ -1712,44 +1730,46 @@
   height: 16px;
 }
 
+/* Web conversation parity 2026-12: user avatar = right-aligned neutral chip
+   (web bg-slate-100/80 ring-slate-200/45 with a slate-500 user glyph). */
 .session-thread-message.user .session-thread-avatar {
   order: 2;
-  border-color: rgba(var(--desktop-slate-rgb), 0.2);
-  background: rgba(var(--desktop-slate-rgb), 0.1);
-  color: var(--desktop-muted);
+  border-color: rgba(var(--desktop-chat-tint-rgb), 0.14);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.06);
+  color: var(--desktop-chat-text-secondary);
 }
 
 .session-thread-message.runtime .session-thread-avatar {
-  color: var(--desktop-gray-27);
+  border-color: rgba(var(--desktop-chat-tint-rgb), 0.12);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
+  color: var(--desktop-chat-text-tertiary);
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): no avatar chips and
-   no visible name/timestamp meta in the session narrative — the prototype
-   message anatomy is a bare bubble (user) and flat text (assistant). The DOM
-   contract (avatar span, identity, time, action menu) is unchanged; the
-   hover/focus action menu floats at the message edge instead. */
+/* Web conversation parity 2026-12: avatars and the identity row (label, badge,
+   timestamp) are visible again, sitting above the bubble exactly like the web
+   MessageTime row (assistant: above-left; user: above-right). The DOM contract
+   (avatar span, identity, time, action menu) is unchanged; the hover/focus
+   action menu stays in the meta row. */
 .session-chat-narrative .session-thread-message .session-thread-avatar {
-  display: none;
+  display: grid;
 }
 
 .session-chat-narrative .session-thread-message .session-message-identity {
-  display: none;
+  display: flex;
 }
 
 .session-chat-narrative .session-thread-message .transcript-meta {
-  position: absolute;
-  z-index: 6;
-  top: -2px;
-  right: 0;
-  min-height: 0;
-  margin: 0;
+  position: static;
+  z-index: auto;
+  min-height: 20px;
+  margin: 0 0 4px;
+  padding-left: 2px;
 }
 
 .session-chat-narrative .session-thread-message.user .transcript-meta {
-  top: 50%;
-  right: calc(100% + 8px);
-  flex-direction: row;
-  transform: translateY(-50%);
+  padding-right: 2px;
+  padding-left: 0;
+  transform: none;
 }
 
 .session-message-body {
@@ -1784,9 +1804,9 @@
   flex: 1 1 auto;
   flex-wrap: wrap;
   gap: 4px 7px;
-  color: var(--desktop-faint);
-  font-size: 10px;
-  line-height: 1.3;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
+  line-height: var(--desktop-text-2xs--line-height);
 }
 
 .session-thread-message.user .session-message-identity {
@@ -1797,7 +1817,7 @@
 .session-message-label {
   max-width: min(28ch, 42vw);
   overflow: hidden;
-  color: var(--desktop-gray-29);
+  color: var(--desktop-chat-text-secondary);
   font-size: inherit;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -1805,11 +1825,11 @@
 }
 
 .session-message-badge {
-  padding: 1px 5px;
-  border: 1px solid rgba(var(--desktop-cyan-soft-rgb), 0.22);
+  padding: 1px 6px;
+  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.14);
   border-radius: 999px;
-  background: rgba(var(--desktop-cyan-soft-rgb), 0.07);
-  color: var(--desktop-cyan-muted);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
+  color: var(--desktop-chat-text-tertiary);
   white-space: nowrap;
 }
 
@@ -1818,7 +1838,7 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
-  color: var(--desktop-faint);
+  color: var(--desktop-chat-text-tertiary);
   white-space: nowrap;
 }
 
@@ -1832,25 +1852,38 @@
   max-width: 100%;
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): user bubble = plain
-   gray card, 12px radius on all corners (no asymmetric sharp corner), 12px
-   horizontal rhythm; background/border tokens unchanged (#161d27/#2a3542). */
+/* Web conversation parity 2026-12: user bubble = bg-slate-50/80 /
+   dark:bg-slate-800/70 card with a hairline border, rounded-lg with the
+   near-side corner tightened (rounded-br-sm), px-4 py-2 and the web whisper
+   shadow (MessageBubble.UserMessage). */
 .session-thread-message.user .session-message-surface {
-  padding: 12px 14px;
+  padding: 8px 16px;
   border: 1px solid var(--desktop-bubble-user-border);
-  border-radius: 12px;
+  border-radius: var(--desktop-radius-lg) var(--desktop-radius-lg)
+    var(--desktop-radius-sm) var(--desktop-radius-lg);
   background: var(--desktop-bubble-user-bg);
+  box-shadow: var(--desktop-shadow-card);
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): assistant messages
-   render as flat markdown directly on the thread background — no bubble card,
-   no border, no shadow (the base rule stays token-driven for other hosts). */
+/* Web conversation parity 2026-12: assistant bubble = bg-white /
+   dark:bg-surface-dark card, border-slate-200/55 hairline, rounded-lg with
+   rounded-tl-sm, px-4 py-2.5, whisper shadow (ASSISTANT_BUBBLE_CLASSES). */
 .session-thread-message.agent .session-message-surface {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: 10px 16px;
+  border: 1px solid var(--desktop-bubble-agent-border);
+  border-radius: var(--desktop-radius-sm) var(--desktop-radius-lg)
+    var(--desktop-radius-lg) var(--desktop-radius-lg);
+  background: var(--desktop-bubble-agent-bg);
+  box-shadow: var(--desktop-shadow-card);
+}
+
+/* Web conversation parity 2026-12: runtime narrative messages reuse the card
+   vocabulary on the raised panel so they read as system surfaces, not prose. */
+.session-thread-message.runtime .session-message-surface {
+  padding: 8px 16px;
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-lg);
+  background: var(--desktop-chat-panel-alt);
 }
 
 .session-message-actions {
@@ -1963,15 +1996,15 @@
   line-height: 1.5;
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): thread text follows
-   the prototype message anatomy — 12px/1.66 (ConversationDetail.css .msg-text). */
+/* Web conversation parity 2026-12: thread prose follows the web body scale —
+   text-sm 14px with the 1.55 prose leading (MARKDOWN_PROSE_CLASSES). */
 .session-chat-narrative .session-thread-message .transcript-content {
   min-width: 0;
   max-width: 100%;
   margin-top: 0;
-  color: var(--desktop-text-soft);
-  font-size: 12px;
-  line-height: 1.66;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-sm);
+  line-height: var(--desktop-text-sm--line-height);
   overflow-wrap: anywhere;
 }
 
@@ -1982,31 +2015,34 @@
   margin-bottom: 8px;
 }
 
+/* Web conversation parity 2026-12: execution summary pills follow the web
+   ExecutionSummaryPanel recipe — neutral rounded-full pills, tertiary label +
+   medium near-primary value (SUMMARY_PILL_CLASSES). */
 .assistant-execution-summary > span {
   display: inline-flex;
   align-items: baseline;
   gap: 5px;
   min-height: 23px;
-  padding: 3px 7px;
-  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.16);
+  padding: 3px 9px;
+  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.12);
   border-radius: 999px;
-  background: rgba(var(--desktop-cyan-rgb), 0.055);
-  color: var(--desktop-gray-34);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.04);
+  color: var(--desktop-chat-text-secondary);
 }
 
 .assistant-execution-summary small {
-  color: var(--desktop-gray-36);
-  font-size: 9px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
 }
 
 .assistant-execution-summary strong {
-  color: var(--desktop-text-cyan);
-  font-size: 10px;
-  font-weight: 650;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-xs-plus);
+  font-weight: 500;
 }
 
 .session-chat-narrative .session-thread-message.user .transcript-content {
-  color: var(--desktop-text-soft);
+  color: var(--desktop-chat-text);
 }
 
 .forced-skill-message-badge {
@@ -2240,44 +2276,50 @@
   color: var(--desktop-text-pale);
 }
 
+/* Web conversation parity 2026-12: artifact card follows the web
+   ArtifactCreated recipe — white / dark panel card with a hairline border and
+   the whisper drop shadow, emerald icon block, neutral file strip. */
 .artifact-timeline-card {
   display: grid;
   width: min(680px, 100%);
   max-width: 100%;
   gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(var(--desktop-green-soft-rgb), 0.34);
-  border-radius: 9px;
-  background: rgba(var(--desktop-surface-green-4-rgb), 0.76);
-  color: var(--desktop-text-pale);
+  padding: 14px;
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel);
+  box-shadow: 0 6px 16px -16px rgba(var(--desktop-overlay-16-rgb), 0.22);
+  color: var(--desktop-chat-text);
 }
 
 .artifact-timeline-card.status-error {
-  border-color: rgba(var(--desktop-red-strong-rgb), 0.44);
-  background: rgba(var(--desktop-surface-red-2-rgb), 0.76);
+  border-color: rgba(var(--desktop-red-rgb), 0.4);
+  background: var(--desktop-chat-panel);
 }
 
 .artifact-timeline-card > header {
   display: grid;
   min-width: 0;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
 }
 
+/* Web ArtifactCreated icon block: 32px rounded-md emerald tint + ring. */
 .artifact-timeline-icon {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border-radius: 7px;
-  background: rgba(var(--desktop-green-soft-rgb), 0.12);
-  color: var(--desktop-green-bright);
+  border: 1px solid rgba(var(--desktop-green-rgb), 0.3);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-green-rgb), 0.1);
+  color: var(--desktop-green);
 }
 
 .artifact-timeline-icon > svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 .artifact-timeline-heading {
@@ -2287,14 +2329,15 @@
 }
 
 .artifact-timeline-heading > strong {
-  color: var(--desktop-text-mist);
-  font-size: 11px;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-xs);
+  font-weight: 600;
 }
 
 .artifact-timeline-heading > small {
   overflow: hidden;
-  color: var(--desktop-gray-10);
-  font-size: 9px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2303,17 +2346,17 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--desktop-gray-36);
-  font-size: 9px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
   white-space: nowrap;
 }
 
 .artifact-timeline-status.ready {
-  color: var(--desktop-green-bright);
+  color: var(--desktop-green);
 }
 
 .artifact-timeline-status.error {
-  color: var(--desktop-red-soft);
+  color: var(--desktop-red);
 }
 
 .artifact-timeline-status > svg {
@@ -2343,9 +2386,9 @@
   max-height: 300px;
   place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(var(--desktop-teal-muted-rgb), 0.22);
-  border-radius: 7px;
-  background: rgba(var(--desktop-surface-32-rgb), 0.72);
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel-alt);
 }
 
 .artifact-timeline-image > img {
@@ -2361,23 +2404,25 @@
   align-items: center;
   gap: 8px;
   padding: 10px;
-  border: 1px solid rgba(var(--desktop-red-strong-rgb), 0.3);
-  border-radius: 7px;
-  background: rgba(var(--desktop-surface-red-2-rgb), 0.5);
-  color: var(--desktop-red-muted);
-  font-size: 10px;
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.3);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-red-rgb), 0.06);
+  color: var(--desktop-red);
+  font-size: var(--desktop-text-xs-plus);
 }
 
+/* Web ArtifactCreated file info strip: slate-50/80 rounded-md strip with a
+   hairline border, 12px medium filename + tertiary size + green download. */
 .artifact-timeline-file {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
-  padding: 8px 9px;
-  border: 1px solid rgba(var(--desktop-teal-muted-rgb), 0.2);
-  border-radius: 7px;
-  background: rgba(var(--desktop-surface-33-rgb), 0.58);
+  padding: 9px 10px;
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel-alt);
 }
 
 .artifact-timeline-file > span {
@@ -2391,20 +2436,21 @@
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
-  color: var(--desktop-green-muted);
+  color: var(--desktop-green);
 }
 
 .artifact-timeline-file strong {
   overflow: hidden;
-  color: var(--desktop-text-pale);
-  font-size: 10px;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-xs);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .artifact-timeline-file > small {
-  color: var(--desktop-gray-36);
-  font-size: 9px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
   white-space: nowrap;
 }
 
@@ -2413,8 +2459,9 @@
   align-items: center;
   gap: 5px;
   border-radius: 4px;
-  color: var(--desktop-green-bright);
-  font-size: 9px;
+  color: var(--desktop-green);
+  font-size: var(--desktop-text-2xs);
+  font-weight: 500;
   text-decoration: none;
 }
 
@@ -2434,8 +2481,8 @@
 
 .artifact-timeline-error {
   margin: 0;
-  color: var(--desktop-red-soft);
-  font-size: 10px;
+  color: var(--desktop-red);
+  font-size: var(--desktop-text-xs-plus);
   line-height: 1.45;
 }
 
@@ -2445,31 +2492,20 @@
   gap: 6px;
 }
 
+/* Web ArtifactCreated metadata chips: rounded border slate-200 bg-slate-50
+   px-2 py-1 text-2xs text-slate-500. */
 .artifact-timeline-card > footer > span {
-  padding: 2px 5px;
-  border: 1px solid rgba(var(--desktop-teal-muted-rgb), 0.18);
+  padding: 2px 6px;
+  border: 1px solid var(--desktop-chat-border);
   border-radius: 4px;
-  color: var(--desktop-gray-9);
-  font-size: 8px;
-}
-
-.radix-themes.light .artifact-timeline-card {
-  border-color: rgba(var(--desktop-green-soft-rgb), 0.26);
-}
-
-.radix-themes.light .artifact-timeline-card.status-error {
-  border-color: rgba(var(--desktop-red-strong-rgb), 0.3);
-}
-
-.radix-themes.light .artifact-timeline-image,
-.radix-themes.light .artifact-timeline-file {
-  border-color: rgba(var(--desktop-green-soft-rgb), 0.18);
-  background: rgba(var(--desktop-white-rgb), 0.72);
+  background: var(--desktop-chat-panel-alt);
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
 }
 
 @media (max-width: 520px) {
   .artifact-timeline-card > header {
-    grid-template-columns: 28px minmax(0, 1fr);
+    grid-template-columns: 32px minmax(0, 1fr);
   }
 
   .artifact-timeline-status {
@@ -2487,7 +2523,7 @@
 }
 
 .session-chat-narrative .session-thread-message.agent .markdown-content strong {
-  color: var(--desktop-text-mist);
+  color: var(--desktop-chat-text);
   font-weight: 650;
 }
 
@@ -2658,7 +2694,7 @@
 
 .session-chat-narrative .timeline-tool-group,
 .session-chat-narrative .timeline-debug-group {
-  margin: 20px 0 0;
+  margin: 14px 0 0;
   overflow: visible;
   border: 0;
   border-radius: 0;
@@ -2674,7 +2710,7 @@
   gap: 8px;
   padding: 4px 6px;
   border-radius: 7px;
-  color: var(--desktop-muted);
+  color: var(--desktop-chat-text-secondary);
   cursor: pointer;
   list-style: none;
 }
@@ -2688,7 +2724,7 @@
 
 .session-chat-narrative .timeline-tool-group > summary:hover,
 .session-chat-narrative .timeline-debug-group > summary:hover {
-  background: rgba(var(--desktop-slate-rgb), 0.055);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
 }
 
 .session-chat-narrative .timeline-tool-group-icon,
@@ -2700,7 +2736,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--desktop-cyan);
+  color: var(--desktop-chat-text-tertiary);
 }
 
 .session-chat-narrative .timeline-tool-group-icon svg,
@@ -2717,38 +2753,54 @@
   gap: 8px;
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): worklog group header
-   reads as the prototype session-worklog header — 11px label with 9px meta. */
+/* Web conversation parity 2026-12: worklog group header reads as the web
+   ExecutionTimeline summary — 12px medium label with 10px tertiary meta. */
 .session-chat-narrative .timeline-tool-group > summary strong,
 .session-chat-narrative .timeline-debug-group > summary strong {
   overflow: hidden;
-  color: var(--desktop-muted);
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-xs);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .session-chat-narrative .timeline-tool-group > summary small,
-.session-chat-narrative .timeline-tool-group > summary em,
-.session-chat-narrative .timeline-debug-group > summary small,
-.session-chat-narrative .timeline-debug-group > summary em {
-  color: var(--desktop-faint);
-  font-size: 9px;
+.session-chat-narrative .timeline-debug-group > summary small {
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
   font-style: normal;
 }
 
+/* Web conversation parity 2026-12: group status renders as a rounded-full
+   status pill (running = web blue, success = emerald, failed = red). */
+.session-chat-narrative .timeline-tool-group > summary em,
+.session-chat-narrative .timeline-debug-group > summary em {
+  padding: 1px 8px;
+  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.14);
+  border-radius: 999px;
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
+  color: var(--desktop-chat-text-secondary);
+  font-size: var(--desktop-text-2xs);
+  font-style: normal;
+  font-weight: 500;
+}
+
 .session-chat-narrative .timeline-tool-group.status-complete > summary em {
+  border-color: rgba(var(--desktop-green-rgb), 0.22);
+  background: rgba(var(--desktop-green-rgb), 0.1);
   color: var(--desktop-green);
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): running status uses
-   the cyan "worked for" vocabulary of the prototype worklog row. */
 .session-chat-narrative .timeline-tool-group.status-running > summary em {
-  color: var(--desktop-cyan);
+  border-color: rgba(var(--desktop-status-running-rgb), 0.3);
+  background: rgba(var(--desktop-status-running-rgb), 0.12);
+  color: var(--desktop-status-running);
 }
 
 .session-chat-narrative .timeline-tool-group.status-failed > summary em {
+  border-color: rgba(var(--desktop-red-rgb), 0.26);
+  background: rgba(var(--desktop-red-rgb), 0.1);
   color: var(--desktop-red);
 }
 
@@ -2767,8 +2819,8 @@
 .session-chat-narrative .timeline-tool-group-items,
 .session-chat-narrative .timeline-debug-group-items {
   display: grid;
-  gap: 2px;
-  padding: 2px 0 4px 27px;
+  gap: 4px;
+  padding: 2px 0 4px 26px;
   border-top: 0;
   background: transparent;
 }
@@ -2951,39 +3003,13 @@
 
 .session-chat-narrative .message.timeline-row {
   min-width: 0;
-  padding: 5px 7px;
 }
 
-.session-chat-narrative .timeline-tool-group-items .message.timeline-row,
-.session-chat-narrative .timeline-debug-group-items .message.timeline-row {
-  border: 0;
-  border-radius: 0;
-}
-
-/* Prototype mission-control refactor 2026-09 (phase 5b): tool-call pairs
-   inside the worklog group flatten into the prototype session-worklog row —
-   no execution card chrome, just a slim row with a hover tint. */
+/* Web conversation parity 2026-12: tool-call pairs inside the worklog group
+   keep the web step-card chrome (panel surface, hairline border, 6px radius,
+   whisper shadow) instead of flattening into worklog text rows. */
 .session-chat-narrative .timeline-tool-group-items .message.timeline-row.tool-call {
   margin: 0;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  box-shadow: none;
-}
-
-.session-chat-narrative .timeline-tool-group-items .message.timeline-row.tool-call:hover,
-.session-chat-narrative
-  .timeline-tool-group-items
-  .message.timeline-row.tool-call.is-expanded {
-  border-color: transparent;
-  background: rgba(var(--desktop-slate-rgb), 0.055);
-}
-
-/* Prototype mission-control refactor 2026-09 (phase 5b): detail blocks align
-   under the flat row title (18px icon + 8px gap). */
-.session-chat-narrative .timeline-tool-group-items .tool-call .timeline-details {
-  padding-left: 26px;
 }
 
 /* Prototype mission-control refactor 2026-09 (phase 5b): thought cards inside
@@ -3032,17 +3058,16 @@
   border-bottom: 0;
 }
 
+/* Web conversation parity 2026-12: memory cards use the neutral collapsible
+   card shell (panel bg, hairline border, whisper shadow) instead of the
+   sky-tinted gradient glass. */
 .session-chat-narrative .memory-recall-card {
-  margin: 16px 0 0;
+  margin: 14px 0 0;
   overflow: hidden;
-  border: 1px solid rgba(var(--desktop-sky-rgb), 0.24);
-  border-radius: 9px;
-  background: linear-gradient(
-    180deg,
-    rgba(var(--desktop-surface-35-rgb), 0.97),
-    rgba(var(--desktop-surface-34-rgb), 0.97)
-  );
-  box-shadow: var(--desktop-shadow-raised);
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel);
+  box-shadow: var(--desktop-shadow-card);
 }
 
 .memory-recall-header {
@@ -3061,7 +3086,7 @@
 }
 
 .memory-recall-header:hover {
-  background: rgba(var(--desktop-sky-rgb), 0.04);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.04);
 }
 
 .memory-recall-header:focus-visible {
@@ -3076,7 +3101,7 @@
 }
 
 .memory-recall-chevron {
-  color: var(--desktop-faint);
+  color: var(--desktop-chat-text-tertiary);
 }
 
 .memory-recall-chevron svg {
@@ -3087,10 +3112,10 @@
 .memory-recall-icon {
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(var(--desktop-sky-rgb), 0.27);
-  border-radius: 7px;
-  background: rgba(var(--desktop-sky-rgb), 0.08);
-  color: var(--desktop-cyan-bright-2);
+  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.14);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
+  color: var(--desktop-chat-text-secondary);
 }
 
 .memory-recall-icon svg {
@@ -3106,16 +3131,16 @@
 
 .memory-recall-title strong {
   overflow: hidden;
-  color: var(--desktop-text-soft);
-  font-size: 11px;
-  font-weight: 650;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-xs);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .memory-recall-title small {
-  color: var(--desktop-gray-22);
-  font-size: 9px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
 }
 
 .memory-recall-meta {
@@ -3123,8 +3148,8 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  color: var(--desktop-gray-10);
-  font-size: 9px;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
 }
 
 .memory-pinned-count {
@@ -3147,7 +3172,7 @@
   display: grid;
   gap: 9px;
   padding: 10px 12px 12px 68px;
-  border-top: 1px solid rgba(var(--desktop-sky-rgb), 0.14);
+  border-top: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.08);
 }
 
 .memory-source-filters {
@@ -3293,11 +3318,11 @@
   gap: 8px;
   margin: 12px 0 0;
   padding: 7px 11px;
-  border: 1px solid rgba(var(--desktop-green-neon-rgb), 0.2);
-  border-radius: 7px;
-  background: rgba(var(--desktop-green-neon-rgb), 0.045);
-  color: var(--desktop-green-pastel);
-  font-size: 9px;
+  border: 1px solid rgba(var(--desktop-green-rgb), 0.22);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-green-rgb), 0.05);
+  color: var(--desktop-green);
+  font-size: var(--desktop-text-2xs);
 }
 
 .memory-captured-card svg {
@@ -3307,12 +3332,12 @@
 }
 
 .memory-captured-card strong {
-  color: var(--desktop-green-pastel);
-  font-size: 10px;
+  color: var(--desktop-green);
+  font-size: var(--desktop-text-xs-plus);
 }
 
 .memory-captured-card span {
-  color: var(--desktop-gray-9);
+  color: var(--desktop-chat-text-tertiary);
 }
 
 /* Web parity redesign 2026-09 phase 2: skill execution shares the execution
@@ -3955,9 +3980,11 @@
   box-shadow: var(--desktop-shadow-card);
 }
 
+/* Web conversation parity 2026-12: running/steered subagent cards take the
+   web blue status border (web SubAgentTimeline running border-blue). */
 .session-chat-narrative .timeline-subagent-group.status-running,
 .session-chat-narrative .timeline-subagent-group.status-steered {
-  border-color: rgba(var(--desktop-indigo-rgb), 0.35);
+  border-color: rgba(var(--desktop-status-running-rgb), 0.35);
 }
 
 .session-chat-narrative .timeline-subagent-group.status-success {
@@ -3986,7 +4013,7 @@
 }
 
 .subagent-group-header:hover {
-  background: rgba(var(--desktop-cyan-frost-rgb), 0.035);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.04);
 }
 
 .subagent-group-header:focus-visible {
@@ -4085,13 +4112,13 @@
   font-style: normal;
 }
 
-/* Web parity redesign 2026-09 phase 2: thin 4px progress track with an
-   indigo/blue fill (web ProgressPhaseBar). */
+/* Web conversation parity 2026-12: thin 4px progress track with the web blue
+   running fill (web ProgressPhaseBar scaleX). */
 .subagent-progress {
   overflow: hidden;
   height: 4px;
   border-radius: 999px;
-  background: rgba(var(--desktop-indigo-rgb), 0.12);
+  background: rgba(var(--desktop-status-running-rgb), 0.12);
 }
 
 .subagent-progress-bar {
@@ -4099,7 +4126,7 @@
   width: 100%;
   height: 100%;
   border-radius: 999px;
-  background: var(--desktop-indigo-bright);
+  background: var(--desktop-status-running);
   transform-origin: left;
   transition: transform 180ms var(--ease-out);
 }
@@ -4108,7 +4135,7 @@
   display: grid;
   gap: 9px;
   padding: 4px 12px 12px 68px;
-  border-top: 1px solid rgba(var(--desktop-steel-4-rgb), 0.18);
+  border-top: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.08);
 }
 
 .subagent-phase-list,
@@ -4250,34 +4277,23 @@
   color: var(--desktop-blue-soft);
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): worklog rows follow
-   the prototype session-worklog row — 10.5px semibold title, 9.5px summary,
-   9px meta, and a bare 18px status icon instead of the 28px chip. */
+/* Web conversation parity 2026-12: worklog rows inside the session narrative
+   keep the shared execution-card typography and the 28px status-tinted icon
+   chip (web TimelineStepItem) — no narrative-specific shrinking or bare icons,
+   so the base status tints (running blue / success emerald / failed red)
+   apply uniformly inside tool groups too. */
 .session-chat-narrative .timeline-worklog-row .timeline-row-title {
-  font-size: 10.5px;
-  font-weight: 600;
-  line-height: 18px;
+  font-size: var(--desktop-text-xs);
+  font-weight: 500;
+  line-height: 20px;
 }
 
 .session-chat-narrative .timeline-worklog-row .timeline-row-summary {
-  font-size: 9.5px;
+  font-size: var(--desktop-text-xs);
 }
 
 .session-chat-narrative .timeline-worklog-row .timeline-row-meta {
-  font-size: 9px;
-}
-
-.session-chat-narrative .timeline-tool-group-items .timeline-row-icon.tool-call-icon {
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.session-chat-narrative .timeline-tool-group-items .timeline-row-icon.tool-call-icon svg {
-  width: 13px;
-  height: 13px;
+  font-size: var(--desktop-text-2xs);
 }
 
 .timeline-diff-count {
@@ -4323,11 +4339,14 @@
   color: var(--desktop-amber);
 }
 
+/* Web conversation parity 2026-12: the approval card keeps its amber semantic
+   family (web permission/decision coloring) but the eyebrow and question copy
+   move onto the shared type scale — 10px uppercase micro label, 14px question. */
 .session-chat-narrative .message.timeline-row:has(.hitl-response-card) .timeline-row-title {
   color: var(--desktop-approval-eyebrow);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-size: var(--desktop-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--desktop-tracking-label);
   line-height: 1.4;
   text-transform: uppercase;
 }
@@ -4339,14 +4358,14 @@
 
 .session-chat-narrative .hitl-response-card .timeline-detail-summary {
   color: var(--desktop-approval-title);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--desktop-text-sm);
+  font-weight: 600;
   line-height: 1.5;
 }
 
 .session-chat-narrative .hitl-response-card .agent-run-meta {
   color: var(--desktop-approval-text);
-  font-size: 9px;
+  font-size: var(--desktop-text-2xs);
 }
 
 .session-chat-narrative .hitl-response-card .timeline-approval-evidence {
@@ -4483,22 +4502,29 @@
 .session-workspace-thread .session-chat-narrative .chat-composer {
   gap: 7px;
   padding: 12px clamp(18px, 5.8cqi, 92px) 14px;
-  border-top: 1px solid var(--desktop-border-soft);
-  background: var(--desktop-surface-7);
+  border-top: 1px solid var(--desktop-chat-border);
+  background: var(--desktop-chat-bg);
   box-shadow: none;
 }
 
+/* Web conversation parity 2026-12: composer follows the web InputBar recipe —
+   rounded-md bordered card on the panel surface, 14px text-sm input, focus
+   ring = accent border + soft outer ring. */
 .session-chat-narrative .session-composer-editor {
-  --session-composer-radius: 8px;
+  --session-composer-radius: 6px;
   --session-composer-control-radius: 6px;
-  --session-composer-font-size: 11px;
+  --session-composer-font-size: 14px;
 
   position: relative;
   min-width: 0;
   overflow: visible;
-  border: 1px solid var(--desktop-border-19);
+  border: 1px solid var(--desktop-chat-border);
   border-radius: var(--session-composer-radius);
-  background: var(--desktop-surface-6);
+  background: var(--desktop-chat-panel-alt);
+  box-shadow: 0 1px 3px rgba(var(--desktop-overlay-16-rgb), 0.035);
+  transition:
+    border-color 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
 }
 
 .session-chat-narrative .chat-composer-input,
@@ -4509,16 +4535,24 @@
   border-radius: var(--session-composer-radius) var(--session-composer-radius) 0
     0;
   background: transparent;
-  color: var(--desktop-text);
+  color: var(--desktop-chat-text);
   font-family: inherit;
   font-size: var(--session-composer-font-size);
-  line-height: 1.45;
+  line-height: 1.5;
   box-shadow: none;
 }
 
+.session-chat-narrative .chat-composer-input::placeholder,
+.session-chat-narrative .session-composer-editor textarea::placeholder {
+  color: var(--desktop-chat-text-tertiary);
+}
+
+/* Web InputBar focused state: border-primary/25 + ring-2 ring-primary/5. */
 .session-chat-narrative .session-composer-editor:focus-within {
-  border-color: var(--desktop-border-cyan-5);
-  box-shadow: 0 0 0 1px rgba(var(--desktop-cyan-dusk-3-rgb), 0.18);
+  border-color: rgba(var(--desktop-cyan-soft-rgb), 0.4);
+  box-shadow:
+    0 1px 4px rgba(var(--desktop-overlay-16-rgb), 0.045),
+    0 0 0 2px rgba(var(--desktop-cyan-soft-rgb), 0.1);
 }
 
 .session-chat-narrative .session-composer-editor.is-file-dragging {
@@ -4962,10 +4996,10 @@
 .session-chat-narrative .chat-composer-footer {
   display: flex;
   align-items: center;
-  min-height: 38px;
+  min-height: 40px;
   gap: 8px;
   padding: 5px 8px;
-  border-top: 1px solid var(--desktop-border-22);
+  border-top: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.08);
 }
 
 .session-chat-narrative .composer-right-actions {
@@ -4999,18 +5033,18 @@
 .session-composer-context-actions > button {
   display: inline-flex;
   align-items: center;
-  height: 26px;
+  height: 28px;
   gap: 5px;
   padding: 0 7px;
   border: 0;
   background: transparent;
-  color: var(--desktop-muted);
+  color: var(--desktop-chat-text-secondary);
   cursor: pointer;
 }
 
 .session-composer-context-actions > button:hover {
-  background: rgba(var(--desktop-slate-rgb), 0.1);
-  color: var(--desktop-text);
+  background: rgba(var(--desktop-chat-tint-rgb), 0.07);
+  color: var(--desktop-chat-text);
 }
 
 .session-composer-context-actions .composer-control-tray {
