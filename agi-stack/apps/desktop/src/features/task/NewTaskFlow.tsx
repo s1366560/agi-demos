@@ -307,6 +307,11 @@ export function NewTaskFlow({
     taskSessionConflictRecovery !== null &&
     (taskSessionConflictRecovery.workspaceSelection !== NEW_WORKSPACE_VALUE ||
       taskSessionConflictWorkspace !== null);
+  // Dead-end guard: an unresolved idempotency conflict whose earlier workspace
+  // cannot be recovered suppresses every primary footer action. Editing any
+  // definition field changes the fingerprint and restores plan generation.
+  const taskSessionConflictSuppressesActions =
+    taskSessionConflictIsCurrent && !taskSessionConflictActionAvailable;
   const workspaceLabel = newTaskWorkspaceLabel(
     session?.workspace ?? null,
     selectedWorkspace,
@@ -1349,7 +1354,11 @@ export function NewTaskFlow({
                         : t('task.createAsNewTask')}{' '}
                       <ArrowRightIcon />
                     </button>
-                  ) : taskSessionConflictIsCurrent ? null : (
+                  ) : taskSessionConflictSuppressesActions ? (
+                    <span className="new-task-conflict-hint" role="note">
+                      {t('task.sessionConflictEditUnblocksHint')}
+                    </span>
+                  ) : (
                     <button
                       className="primary"
                       type="button"

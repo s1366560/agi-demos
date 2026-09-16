@@ -80,6 +80,19 @@ function progress(input: unknown): number | null {
   return Math.min(100, Math.max(0, percent));
 }
 
+// Retains the original error object from electron-updater for diagnostics:
+// the message and, when available, the stack. Returns null when the event
+// carried no usable detail, so callers fall back to the plain message.
+function describeUpdateError(input: unknown): string | null {
+  if (input instanceof Error) {
+    const message = input.message || input.name;
+    const stack = typeof input.stack === 'string' ? input.stack : '';
+    return stack ? `${message}\n${stack}` : message;
+  }
+  if (typeof input === 'string' && input.length > 0) return input;
+  return null;
+}
+
 function recoveryPayloads(input: unknown): readonly UpdateRecoveryPayload[] | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   const files = (input as Record<string, unknown>).files;
@@ -196,7 +209,9 @@ export function startAutomaticUpdateLoop(
     'update-available': (input) => {
       const version = candidateVersion(input);
       if (!version) {
-        fail('update_available_contract_invalid', false);
+        // The event violates the electron-updater contract: mark it bad and
+        // skip it, but stay retryable so the next scheduled check runs.
+        fail('update_available_contract_invalid', true);
         return;
       }
       transition({
@@ -228,7 +243,9 @@ export function startAutomaticUpdateLoop(
     'download-progress': (input) => {
       const percent = progress(input);
       if (percent === null) {
-        fail('update_download_progress_contract_invalid', false);
+        // Contract violation: mark the event bad and skip it; the loop stays
+        // retryable so the next scheduled check can recover.
+        fail('update_download_progress_contract_invalid', true);
         return;
       }
       transition({
@@ -243,7 +260,9 @@ export function startAutomaticUpdateLoop(
       const version = candidateVersion(input) ?? state.candidateVersion;
       const payloads = recoveryPayloads(input);
       if (!version || !payloads) {
-        fail('update_downloaded_contract_invalid', false);
+        // Contract violation: mark the event bad and skip it; the loop stays
+        // retryable so the next scheduled check can recover.
+        fail('update_downloaded_contract_invalid', true);
         return;
       }
       if (!recovery) {
@@ -278,8 +297,9 @@ export function startAutomaticUpdateLoop(
         })
         .catch(() => fail('update_recovery_snapshot_failed', false));
     },
-    error: () => {
-      report('automatic update operation failed');
+    error: (input) => {
+      const detail = describeUpdateError(input);
+      report(detail ? `automatic update operation failed: ${detail}` : 'automatic update operation failed');
       fail('update_operation_failed', true);
     },
   };

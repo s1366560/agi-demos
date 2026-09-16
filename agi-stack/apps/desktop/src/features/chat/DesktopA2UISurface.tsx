@@ -9,10 +9,14 @@ import {
   createEmptyA2UISurfaceState,
   type A2UIActionCommand,
   type A2UIAllowedAction,
-  type A2UIComponentNode,
 } from './a2uiSurfaceModel';
 import { ensureDesktopA2UIRegistry } from './a2uiDesktopRegistry';
 import './DesktopA2UISurface.css';
+
+// Register the desktop A2UI components once at module scope, not during
+// render. Registration is idempotent and must complete before the first
+// A2UIViewer looks up component kinds.
+ensureDesktopA2UIRegistry();
 
 type DesktopA2UISurfaceProps = {
   messages: string;
@@ -43,7 +47,7 @@ export function DesktopA2UISurface({
   );
   const components = useMemo(
     () =>
-      Object.values(state.components).map(toRendererComponent) as unknown as A2UIViewerProps['components'],
+      Object.values(state.components) as unknown as A2UIViewerProps['components'],
     [state.components],
   );
   const interactive =
@@ -53,8 +57,6 @@ export function DesktopA2UISurface({
     authorityRevision !== null &&
     Boolean(idempotencyKey) &&
     allowedActions.length > 0;
-
-  ensureDesktopA2UIRegistry();
 
   if (state.status !== 'ready' || !state.rootId || !state.surfaceId) {
     return (
@@ -108,15 +110,4 @@ export function DesktopA2UISurface({
       ) : null}
     </section>
   );
-}
-
-function toRendererComponent(node: A2UIComponentNode): A2UIComponentNode {
-  const [kind, properties] = Object.entries(node.component)[0] ?? [];
-  if (!kind) return node;
-  const rendererKind =
-    kind === 'Checkbox' ? 'CheckBox' : kind === 'Select' ? 'MultipleChoice' : kind;
-  return {
-    ...node,
-    component: { [rendererKind]: properties },
-  };
 }

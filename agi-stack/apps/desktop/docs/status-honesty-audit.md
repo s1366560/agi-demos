@@ -8,20 +8,20 @@
 
 | 展示点 | 数据源(权威链) | 终态可呈现为运行中? | 修复前问题 | 现状 |
 |---|---|---|---|---|
-| 侧栏工作区树状态点(`workspaceTreeModel.ts` + `WorkspaceDock.tsx`) | `metadata.run.status`(WS `run_status` 事件 + 权威合并)回退 `conversation.status` | 不会(枚举直接映射) | 断连期间保留最后已知的 running(残余风险 R1) | 诚实;依赖服务端 watchdog 补 disconnected |
+| 侧栏工作区树状态点(`workspaceTreeModel.ts` + `WorkspaceDock.tsx`) | `metadata.run.status`(WS `run_status` 事件 + 权威合并)回退 `conversation.status` | 不会(枚举直接映射) | 断连期间保留最后已知的 running(原残余风险 R1) | 已修复(R1/F9):断连时非终态运行点降级为「最后已知」呈现,重连随新事件恢复 |
 | 工作区根节点聚合点(同文件 `workspaceTreeRootStatusPresentation`) | 子会话运行态按优先级聚合 | 仅当有子会话真实 running | 无 | 诚实 |
 | My Work 分组(`myWorkModel.ts` + `MyWorkQueue.tsx`) | 后端 `item.group` + `item.status` | 修复前:可能 | F1:`group='running'` 与终态 `status` 不一致时归入 Running | 已修复:`myWorkEffectiveGroup` 以 status 校正 |
 | My Work 卡片状态点(`MyWorkQueue.tsx` InboxCard) | 同上 | 修复前:可能 | 状态点颜色直接取原始 `item.group` | 已修复:改用 `myWorkEffectiveGroup` |
 | Activity 收件箱分类(`activityInboxModel.ts`) | 后端 `group`/`status`/`required_action` | 修复前:可能(误分为 needs_input) | F2:`status='completed'` 且分组滞后为 needs_input/needs_approval 时显示为待输入 | 已修复:复用 `myWorkEffectiveGroup` 校正分类 |
 | 会话头状态 badge(`SessionWorkspace.tsx` + `sessionViewModel.ts`) | projection `currentRun.status` / attempt.status / conversation.status | 不会 | 无 | 诚实 |
 | 会话头 live 指示(`SessionWorkspace.tsx`) | 全局 socket 连接态 + 会话状态 | 修复前:会(误导) | F3:终态会话在 socket 断开时显示「正在重连更新」,暗示还有更新会来 | 已修复:`sessionLiveIndicator` 对终态显示「更新已结束」 |
-| stage stepper(`SessionWorkspace.tsx`) | `viewModel.stage` | 不展示 | stage 恒为 `unavailable`,stepper 实际不渲染 | 不展示(非误导),见 R4 |
+| stage stepper(`SessionWorkspace.tsx`) | 后端 projection `execution_stage`(`session_stage.py` 纯派生)→ `viewModel.stage` | 不会(终态失败且无产物时为 `null` → 不渲染) | 修复前:stage 恒为 `unavailable`,stepper 实际不渲染 | 已恢复:服务端派生 + 桌面端透传,见 R4 |
 | 运行控制按钮 pause/resume/cancel/reconnect/fork(同文件 + `sessionProjectionModel.ts`) | projection `capabilities.runActions`,由 `runActionsForStatus` 从运行态派生并经一致性校验 | 不会 | 无(按钮集与状态严格一致;云端会话恒为空) | 诚实 |
 | 审批按钮 approve/request-changes(同文件) | 仅 `ready_review` 时由能力集给出 | 不会 | 无 | 诚实 |
 | HITL 卡片可响应性(`App.tsx` → `respondableHitlRequestIds` → `ChatTimeline.tsx`) | projection `capabilities.canRespondToHitl` + pending 列表 | 修复前:可能 | F4:终态运行残留 pending HITL 时卡片仍可操作,提交必然失败 | 已修复:`respondableHitlRequestsForProjection` 对终态运行返回空 |
 | 停止/取消文案(`SessionWorkspace.tsx` 更多菜单) | — | — | F5:停止按钮无破坏性语义说明 | 已修复:tooltip 注明「已产出的改动与文件会保留」(`session.stopRunHint`) |
 | 标题栏运行态映射(`App.tsx` `titlebarRunStateFromStatus`) | `sessionDetailViewModel.status` | 修复前:会(潜在) | F6:`ready_review`/`completed` 映射为 `'running'`(当前为未接线代码,属隐患) | 已修复:映射为 `'stopped'` |
-| Composer 停止按钮(`ChatPanel.tsx`) | `conversationResponseIsStreaming` + WS 发送结果 | 不会(断连时点击有错误反馈) | 断连期间停止按钮仍显示,但点击返回 `socket_unavailable` 错误 | 可接受;残余风险 R2 |
+| Composer 停止按钮(`ChatPanel.tsx`) | `conversationResponseIsStreaming` + WS 发送结果 + 实时 socket 连接态 | 不会(断连时按钮禁用并附 tooltip;点击错误反馈保留为兜底) | 断连期间停止按钮仍显示,但点击返回 `socket_unavailable` 错误 | 已修复(R2):断连时禁用,tooltip 说明原因(`session.stopResponseDisconnectedHint`) |
 
 ## 发现与修复
 
@@ -31,6 +31,20 @@
 - F4(已修复)终态运行上的残留 HITL 卡片仍可操作。根因:可响应集合只由能力位 `canRespondToHitl`(= pending 非空)决定,与运行终态脱钩。修复:`respondableHitlRequestsForProjection` 对终态运行返回空,`App.tsx` 的可响应 ID 列表改走该助手。
 - F5(已修复)停止运行按钮未说明对已产出的影响。修复:新增 `session.stopRunHint`(en+zh)作为 tooltip:「停止当前运行;已产出的改动与文件会保留。」
 - F6(已修复)标题栏映射把 `ready_review`/`completed` 视为 running。当前该映射未接线渲染,属隐患代码,已一并改为 `'stopped'`。
+- F7(已修复,P2-2,原 R2)Composer 停止按钮在断连期间仍可点击。根因:`conversationResponseIsStreaming` 的信号分支绕过 `activityPresence`,陈旧的非终态信号会维持 streaming 观感,而按钮 disabled 只看 stop 进行中。修复:`useAgentSocket` 将实时连接态发布到模块级订阅(`useAgentSocketConnected`),`ChatPanel` 据此把连接态传入 composer;停止按钮 disabled 与 tooltip 由 `agentStopResponseModel` 的 `agentStopResponseButtonDisabled` / `agentStopResponseButtonTitleKey` 派生,断连时禁用并提示「连接恢复前停止按钮保持禁用」(`session.stopResponseDisconnectedHint`,en+zh);点击后的 `socket_unavailable` 错误反馈保留为兜底。
+- F8(已解决,原 R4)stage stepper 恢复渲染。后端 `src/application/services/session_stage.py` 的 `derive_execution_stage` 只读快照中已持久化的枚举状态,按优先级派生(冲突取更靠后的阶段,progress 单调;pending HITL 不改变阶段),并随 `execution_stage` 字段进入 `snapshot_revision` 摘要;桌面端 decoder 容忍未知/缺失值(降级为 `null` → `'unavailable'` → 不渲染 stepper)。派生表(诚实契约):
+
+  | 阶段 | 条件(按序评估,先中先得) |
+  |---|---|
+  | review | 最新 attempt 已裁决(`accepted`/`rejected` 或 `completed_at` 非空);或最新 run 为 `ready_review`/`completed` 且有产物(`artifact_record_count>0` 或 candidate artifact refs 非空) |
+  | verify | 活跃 attempt 带非空 candidate verification refs;或 candidate verification refs 总数 >0 且 run 正在 `queued`/`running` |
+  | review(失败留痕) | 最新 run 为 `failed`/`cancelled` 但有可评审产物 |
+  | implement | run 正在 `queued`/`running`;或存在 approved plan 且有未完成 conversation task;或 `current_mode=='build'` |
+  | understand | `current_mode=='plan'` 且当前 plan 为 `draft`;或存在任何会话活动但以上皆不中 |
+  | null(不渲染) | 全新会话(无 runs/plans/tasks/消息);或最新 run `failed`/`cancelled` 且无可评审产物且无活跃 attempt |
+
+  测试证据:`src/tests/unit/application/services/test_conversation_session_projection_service.py`(20 例派生矩阵 + digest 覆盖)、`src/tests/integration/api/test_conversation_session_projection_api.py`(字段存在性、fresh → null、stage 变化驱动 snapshot_revision 变化)、`tests/session-projection-model.test.mjs`(decoder 容忍性)、`tests/session-view-model.test.mjs`(透传 + 「terminal failed run without artifacts never renders a stage stepper」钉测试)。
+- F9(已修复,P2-1,原 R1)侧栏树断连期间状态点保留最后已知的非终态运行态(如 running),暗示仍在实时推进。修复:引入「连接态 × 运行态」二维呈现——`workspaceTreeModel.ts` 新增 `workspaceTreeStatusIsLiveRun`(非终态集 `queued/running/paused/needs_input/needs_approval`,与 `myWorkModel` 的 `LIVE_RUN_GROUP_STATUSES` 对齐)与 `conversationTreeStatusPresentationForConnection(status, socketConnected)`;断连时非终态呈现带 `stale: true`,终态与连接态下完全不变。`WorkspaceDock.tsx` 通过既有的 `useAgentSocketConnected()`(只读引入,不改 `useAgentSocket.ts`)取得实时连接态,会话行与工作区根聚合点(`workspaceTreeRootStatusPresentation` 第三参)统一接入;stale 点停止脉冲动画、降透明度并加虚线环(`data-stale="true"`,CSS 变量双主题通用),tooltip/aria-label 追加「最后已知状态——连接已断开,更新暂停」(`workspaceTree.staleStatusHint`,en+zh)。根聚合仅在断连且有子会话处于非终态、且胜出 tone 属于 live 类(active/queued/paused/attention)时降级;danger/completed 等终态 tone 保持原样。重连后随 `run_status` 事件与游标续订自动恢复正常呈现。
 
 ## 测试证据
 
@@ -38,11 +52,10 @@
 - `tests/activity-inbox-model.test.mjs`:「Activity inbox corrects stale groups with runtime truth」。
 - `tests/session-view-model.test.mjs`:「terminal session never claims reconnecting live updates」「terminal run leaves no respondable HITL requests」。
 - `tests/desktop-shell-fidelity.test.mjs`:live 指示改钉 `sessionLiveIndicator(viewModel.status, liveConnected)`,并禁止回退到旧的裸三元表达式。
+- `tests/agent-stop-response-model.test.mjs`:「stop button is disabled while the socket is disconnected and enabled when connected」「ChatPanel wires the composer stop button to the live socket state」(F7/R2)。
+- `tests/workspace-tree-model.test.mjs`:「non-terminal run statuses degrade to stale while the socket is disconnected」「terminal and record statuses never degrade while the socket is disconnected」「root aggregate dot degrades only when a child claims live activity while disconnected」「workspace dock renders connected run dots without the stale treatment by default」「workspace dock wires the live socket state into status dot presentation」(F9/R1)。
 
 ## 残余风险(本次未修复)
 
-- R1 侧栏树断连期间的状态滞后:WS 断开后,树中运行点保留最后已知状态(如 running),直到服务端心跳 watchdog 将运行标记为 disconnected 并在重连后随游标订阅补发 `run_status`。缓解已存在(游标续订、权威合并);要做到断连即刻降级显示需要在树模型引入「连接态 × 状态」二维呈现,改动面大,留待后续迭代。
-- R2 Composer 停止按钮在断连期间仍可点击:`conversationResponseIsStreaming` 的信号分支绕过 `activityPresence`,陈旧的非终态信号会维持 streaming 观感。点击后有 `socket_unavailable` 错误反馈,非静默失效,故仅记录。
 - R3 `runToneFromStatus('active') → 'running'`:会话记录态 active 不等于运行中;该函数当前未接线渲染,记录为隐患,未改动以避免无关 churn。
-- R4 stage stepper 永不渲染:`buildSessionDetailViewModel` 中 `stage` 恒为 `'unavailable'`。不误导但等于无该功能;恢复 stage 派生属 P0-3 之后的独立工作。
 - R5 后端为唯一权威的分组/能力来源:F1/F2/F4 的客户端校正属于防御层,后端若持续产出不一致的 group 或 pending HITL,应在服务端修复并补合同测试。

@@ -79,6 +79,33 @@ export function agentStopRequestSettlesStreaming(
   return state.status === 'stopped' && state.conversationId === conversationId.trim();
 }
 
+export type AgentStopButtonInput = {
+  socketConnected: boolean;
+  status: AgentStopRequestState['status'];
+};
+
+/**
+ * The stop control is disabled while a stop is in flight, and while the live
+ * socket is disconnected (a click could only fail with `socket_unavailable`).
+ * The click-time error feedback stays as a belt-and-suspenders fallback.
+ */
+export function agentStopResponseButtonDisabled(input: AgentStopButtonInput): boolean {
+  return input.status === 'stopping' || !input.socketConnected;
+}
+
+export function agentStopResponseButtonLabelKey(input: AgentStopButtonInput): string {
+  return input.status === 'stopping'
+    ? 'session.stoppingResponse'
+    : 'session.stopResponse';
+}
+
+export function agentStopResponseButtonTitleKey(input: AgentStopButtonInput): string {
+  if (input.status === 'stopping') return 'session.stoppingResponse';
+  return input.socketConnected
+    ? 'session.stopResponse'
+    : 'session.stopResponseDisconnectedHint';
+}
+
 function settledAgentStopRequest(conversationId: string): AgentStopRequestState {
   return {
     conversationId,

@@ -31,8 +31,11 @@ export class ComponentRegistry {
   ): void;
   unregister(type: string): void;
   has(type: string): boolean;
+  get(type: string): ComponentType<A2UIRuntimeComponentProps> | null;
   getRegisteredTypes(): string[];
 }
+
+export function initializeDefaultCatalog(): void;
 
 export function useA2UIComponent(
   node: A2UIRuntimeNode,

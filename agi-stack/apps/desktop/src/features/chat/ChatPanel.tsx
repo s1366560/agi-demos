@@ -41,6 +41,7 @@ import { isExecutionContext, mergeExecutionSelectionItems, useConversationExecut
 import {
   agentSteerMessageOutcome,
   socketEventsSince,
+  useAgentSocketConnected,
 } from '../../hooks/useAgentSocket';
 import type {
   SubAgentControlCommand,
@@ -201,6 +202,9 @@ import type {
 } from './agentTaskSignalModel';
 import {
   agentStopRequestSettlesStreaming,
+  agentStopResponseButtonDisabled,
+  agentStopResponseButtonLabelKey,
+  agentStopResponseButtonTitleKey,
   applyAgentStopEvent,
   beginAgentStopRequest,
   EMPTY_AGENT_STOP_REQUEST,
@@ -770,6 +774,7 @@ export const ChatPanel = memo(function ChatPanel({
     stopRequest.status === 'error' && stopRequest.errorCode
       ? t(agentStopErrorTranslationKey(stopRequest.errorCode))
       : null;
+  const agentSocketConnected = useAgentSocketConnected();
   const visibleActionMessages = useMemo<VisibleMessageForRetry[]>(
     () =>
       visibleTimelineState
@@ -1945,6 +1950,7 @@ export const ChatPanel = memo(function ChatPanel({
             composeAheadEnabled={composeAheadEnabled}
             responseStreaming={responseStreaming}
             stopResponseAvailable={Boolean(onStopResponse)}
+            stopResponseSocketConnected={agentSocketConnected}
             stopResponseStatus={stopRequest.status}
             desktopRuntimeConfig={desktopRuntimeConfig}
             voiceSessionOperations={voiceSessionOperations}
@@ -2067,6 +2073,7 @@ type ChatComposerProps = {
   composeAheadEnabled: boolean;
   responseStreaming: boolean;
   stopResponseAvailable: boolean;
+  stopResponseSocketConnected: boolean;
   stopResponseStatus: AgentStopRequestState['status'];
   desktopRuntimeConfig?: DesktopRuntimeConfig;
   voiceSessionOperations: DesktopVoiceSessionOperationsV2;
@@ -2122,6 +2129,7 @@ function ChatComposer({
   composeAheadEnabled,
   responseStreaming,
   stopResponseAvailable,
+  stopResponseSocketConnected,
   stopResponseStatus,
   desktopRuntimeConfig,
   voiceSessionOperations,
@@ -3038,18 +3046,23 @@ function ChatComposer({
                 variant="soft"
                 className="stop-response-pill"
                 type="button"
-                aria-label={
-                  stopResponseStatus === 'stopping'
-                    ? t('session.stoppingResponse')
-                    : t('session.stopResponse')
-                }
-                title={
-                  stopResponseStatus === 'stopping'
-                    ? t('session.stoppingResponse')
-                    : t('session.stopResponse')
-                }
+                aria-label={t(
+                  agentStopResponseButtonLabelKey({
+                    socketConnected: stopResponseSocketConnected,
+                    status: stopResponseStatus,
+                  }),
+                )}
+                title={t(
+                  agentStopResponseButtonTitleKey({
+                    socketConnected: stopResponseSocketConnected,
+                    status: stopResponseStatus,
+                  }),
+                )}
                 loading={stopResponseStatus === 'stopping'}
-                disabled={stopResponseStatus === 'stopping'}
+                disabled={agentStopResponseButtonDisabled({
+                  socketConnected: stopResponseSocketConnected,
+                  status: stopResponseStatus,
+                })}
                 onClick={onStopResponse}
               >
                 <StopIcon />

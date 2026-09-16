@@ -25,9 +25,25 @@ pub(super) enum ToolCallReservation {
     Acquired(ToolCallLease),
     Replay(Value),
     Pending,
+    /// The call may or may not have executed on the server (the dispatch
+    /// completed without a verifiable local receipt). This state is terminal
+    /// for the idempotency key: the key is never re-acquirable, so callers
+    /// must rotate to a fresh idempotency key to retry the operation.
     Indeterminate,
 }
 
+/// Executes a leased MCP tool call guarded by `idempotency_key`.
+///
+/// Lease semantics:
+/// - `Replay`: a completed call with the same key returns the recorded result.
+/// - `Pending`: another caller holds a live lease for the key; this call
+///   waits until the lease expires or the wait deadline is reached.
+/// - `Indeterminate`: the dispatch outcome is unknown (transport failure,
+///   malformed response, or a lost completion write). Indeterminate is
+///   terminal per idempotency key — the same key will keep returning
+///   `local_mcp_tool_call_indeterminate` forever, because re-dispatching the
+///   identical request could double-execute a side effect. Callers that want
+///   to retry MUST rotate to a fresh idempotency key.
 pub(super) async fn execute_tool_call(
     supervisor: &McpSupervisor,
     scope: &McpScope,

@@ -3,6 +3,7 @@ import { useId } from 'react';
 import { useI18n } from '../../i18n';
 import {
   ComponentRegistry,
+  initializeDefaultCatalog,
   useA2UIComponent,
   type A2UIRuntimeComponentProps,
 } from '../../vendor/a2uiRendererInternals.mjs';
@@ -13,7 +14,22 @@ let registered = false;
 
 export function ensureDesktopA2UIRegistry(): void {
   if (registered) return;
+  // A2UIViewer initializes the default catalog at its own first render, which
+  // is too late for the alias lookups below, so initialize it explicitly.
+  initializeDefaultCatalog();
   const registry = ComponentRegistry.getInstance();
+  // Alias the desktop protocol's canonical kinds onto the vendored renderer's
+  // components so wire names ('Checkbox', 'Select') resolve directly without
+  // per-node remapping. Fail-closed: if the vendored renderer ever renames a
+  // component, the alias is skipped and the renderer falls back to rendering
+  // nothing for that kind instead of crashing.
+  for (const [desktopKind, vendoredKind] of [
+    ['Checkbox', 'CheckBox'],
+    ['Select', 'MultipleChoice'],
+  ] as const) {
+    const vendored = registry.get(vendoredKind);
+    if (vendored) registry.register(desktopKind, { component: vendored });
+  }
   registry.register('Badge', { component: DesktopA2UIBadge });
   registry.register('Radio', { component: DesktopA2UIRadio });
   registry.register('Table', { component: DesktopA2UITable });

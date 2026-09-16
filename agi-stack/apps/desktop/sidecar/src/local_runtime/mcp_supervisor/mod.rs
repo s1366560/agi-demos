@@ -505,7 +505,18 @@ impl McpSupervisor {
                 .for_each_concurrent(4, move |server| {
                     let supervisor = supervisor.clone();
                     async move {
-                        let _ = supervisor.ensure_initialized(&server).await;
+                        // Startup recovery is best-effort: a failure stays in
+                        // the server's stored runtime status, but must remain
+                        // diagnosable instead of being silently swallowed.
+                        if let Err(error) = supervisor.ensure_initialized(&server).await {
+                            tracing::warn!(
+                                server_id = %server.id,
+                                server_name = %server.name,
+                                reason_code = error.reason_code(),
+                                error = %error,
+                                "MCP server startup recovery failed"
+                            );
+                        }
                     }
                 })
                 .await;
@@ -691,6 +702,10 @@ impl McpSupervisor {
             "arguments": arguments,
         }));
         validate_idempotency_key(idempotency_key)?;
+        // Lease contract: an indeterminate outcome is terminal for this
+        // idempotency key (see `tool_call_lease::execute_tool_call`). A caller
+        // retrying after `local_mcp_tool_call_indeterminate` must supply a
+        // fresh idempotency key; reusing this key never re-dispatches.
         tool_call_lease::execute_tool_call(
             self,
             scope,

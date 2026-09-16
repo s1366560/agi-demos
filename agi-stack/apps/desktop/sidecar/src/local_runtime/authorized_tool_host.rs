@@ -188,7 +188,12 @@ impl AuthorizedRunToolHost {
                     )
                 )
             });
-        if used_once && consent_pending && self.validate_browser_run().is_ok() {
+        // A transport/execution error means the bridge never completed the
+        // authorized action; restore the reserved capability as well, so a
+        // flaky bridge does not burn the human's once approval. A successful
+        // execution still consumes it.
+        let action_not_executed = consent_pending || result.is_err();
+        if used_once && action_not_executed && self.validate_browser_run().is_ok() {
             self.once_permissions
                 .lock()
                 .expect("run once tool permissions")
@@ -829,6 +834,66 @@ mod tests {
         assert_eq!(probe.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert!(permissions.lock().expect("permissions").is_empty());
         assert!(host.call("browser_navigate", "{}").await.is_err());
+        std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    #[derive(Default)]
+    struct FlakyBrowserProbe {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    #[async_trait]
+    impl ToolHost for FlakyBrowserProbe {
+        fn list_tools(&self) -> Vec<String> {
+            vec!["browser_navigate".to_string()]
+        }
+
+        async fn call(&self, _tool: &str, _input: &str) -> CoreResult<String> {
+            let attempt = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tokio::task::yield_now().await;
+            if attempt == 0 {
+                return Err(CoreError::Tool("browser bridge connection reset".into()));
+            }
+            Ok(json!({"ok": true}).to_string())
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_transport_error_restores_once_permission_until_success() -> Result<(), String>
+    {
+        let (root, store, run, _) = running_host(DesktopPermissionProfile::ReadOnly)?;
+        let probe = Arc::new(FlakyBrowserProbe::default());
+        let permissions: RunOnceToolPermissions = Arc::new(Mutex::new(BTreeSet::from([(
+            run.id.clone(),
+            "browser_navigate".into(),
+        )])));
+        let run_id = run.id.clone();
+        let host = AuthorizedRunToolHost::new(probe.clone(), store, run)
+            .with_once_permissions(permissions.clone());
+        let once_active = || {
+            permissions
+                .lock()
+                .expect("run once permissions")
+                .contains(&(run_id.clone(), "browser_navigate".to_string()))
+        };
+
+        host.call("browser_navigate", "{}")
+            .await
+            .expect_err("the first bridge attempt fails at the transport layer");
+        assert!(
+            once_active(),
+            "a transport/execution error must restore the reserved once permission"
+        );
+
+        host.call("browser_navigate", "{}")
+            .await
+            .map_err(|error| error.to_string())?;
+        assert!(
+            !once_active(),
+            "successful execution still consumes the once permission"
+        );
+        assert_eq!(probe.calls.load(std::sync::atomic::Ordering::SeqCst), 2);
         std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
         Ok(())
     }
