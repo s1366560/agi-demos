@@ -387,6 +387,7 @@ import {
   sessionTimelineRequestIsCurrent,
 } from './features/session/sessionSelectionModel';
 import {
+  exhaustEarlierTimelinePage,
   failEarlierTimelinePage,
   resolveEarlierTimelinePage,
 } from './features/session/sessionTimelinePaginationModel';
@@ -2665,7 +2666,9 @@ export function App() {
           responseHasMore: Boolean(response.has_more),
         });
         if (pageResolution.kind === 'stalled') {
-          return failEarlierTimelinePage(current, t('session.earlierHistoryNoProgress'));
+          // End-of-history is benign: retire the load-earlier affordance
+          // neutrally instead of surfacing a blocking error.
+          return exhaustEarlierTimelinePage(current);
         }
         return {
           ...current,
@@ -2696,7 +2699,6 @@ export function App() {
     conversationTimeline.loadingEarlier,
     desktopSessionTimelineOperationsV2,
     scopedConversation,
-    t,
   ]);
 
   const respondToHitl = useCallback(

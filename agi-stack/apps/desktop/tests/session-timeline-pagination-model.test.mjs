@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   compareSessionTimelineCursors,
+  exhaustEarlierTimelinePage,
   failEarlierTimelinePage,
   resolveEarlierTimelinePage,
 } = require('/tmp/agistack-desktop-test-dist/src/features/session/sessionTimelinePaginationModel.js');
@@ -114,7 +115,7 @@ test('a non-monotonic or missing cursor fails closed after adding items', () => 
   }
 });
 
-test('a failed earlier page preserves the loaded window and disables automatic pagination', () => {
+test('a failed earlier page preserves the loaded window and the hasMore recovery signal', () => {
   const items = [{ id: 'event-1' }, { id: 'event-2' }];
   const firstCursor = { timeUs: 100, counter: 4 };
   const lastCursor = { timeUs: 120, counter: 1 };
@@ -133,13 +134,65 @@ test('a failed earlier page preserves the loaded window and disables automatic p
     lastCursor,
   };
 
-  const failed = failEarlierTimelinePage(current, 'History did not advance');
+  const failed = failEarlierTimelinePage(current, 'Connection interrupted');
 
   assert.notEqual(failed, current);
   assert.equal(failed.items, items);
   assert.equal(failed.firstCursor, firstCursor);
   assert.equal(failed.lastCursor, lastCursor);
   assert.equal(failed.loadingEarlier, false);
+  // A transient failure is not evidence of end-of-history: hasMore must
+  // survive so the load-earlier affordance returns once the error clears.
+  assert.equal(failed.hasMore, true);
+  assert.equal(failed.error, 'Connection interrupted');
+});
+
+test('a failed earlier page preserves an already-exhausted hasMore signal', () => {
+  const current = {
+    conversationId: 'conversation-1',
+    items: [{ id: 'event-1' }],
+    approvalRequests: [],
+    artifactVersions: [],
+    artifactDeliveries: [],
+    toolInvocations: [],
+    loading: false,
+    loadingEarlier: true,
+    error: null,
+    hasMore: false,
+    firstCursor: { timeUs: 100, counter: 4 },
+    lastCursor: { timeUs: 120, counter: 1 },
+  };
+
+  const failed = failEarlierTimelinePage(current, 'Connection interrupted');
+
   assert.equal(failed.hasMore, false);
-  assert.equal(failed.error, 'History did not advance');
+  assert.equal(failed.error, 'Connection interrupted');
+});
+
+test('an exhausted earlier page retires pagination neutrally without an error', () => {
+  const items = [{ id: 'event-1' }, { id: 'event-2' }];
+  const firstCursor = { timeUs: 100, counter: 4 };
+  const current = {
+    conversationId: 'conversation-1',
+    items,
+    approvalRequests: [],
+    artifactVersions: [],
+    artifactDeliveries: [],
+    toolInvocations: [],
+    loading: false,
+    loadingEarlier: true,
+    error: null,
+    hasMore: true,
+    firstCursor,
+    lastCursor: { timeUs: 120, counter: 1 },
+  };
+
+  const exhausted = exhaustEarlierTimelinePage(current);
+
+  assert.notEqual(exhausted, current);
+  assert.equal(exhausted.items, items);
+  assert.equal(exhausted.firstCursor, firstCursor);
+  assert.equal(exhausted.loadingEarlier, false);
+  assert.equal(exhausted.hasMore, false);
+  assert.equal(exhausted.error, null);
 });

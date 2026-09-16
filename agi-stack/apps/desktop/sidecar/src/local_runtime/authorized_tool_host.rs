@@ -308,10 +308,6 @@ impl ToolHost for AuthorizedRunToolHost {
             )
             .map_err(CoreError::Tool)?;
 
-        if self.once_permission_active(tool) {
-            self.consume_once_permission(tool);
-        }
-
         if prepared.existing {
             match prepared.invocation.status {
                 InvocationStatus::Completed => {
@@ -338,6 +334,13 @@ impl ToolHost for AuthorizedRunToolHost {
                 }
                 InvocationStatus::Prepared => {}
             }
+        }
+
+        // Consume the run-scoped once-permission only when the invocation will
+        // actually execute. Replays and idempotency short-circuits above must
+        // not burn the user's one-shot approval.
+        if self.once_permission_active(tool) {
+            self.consume_once_permission(tool);
         }
 
         self.session_store
@@ -865,6 +868,54 @@ mod tests {
             .lock()
             .expect("run once permissions")
             .is_empty());
+
+        std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn replayed_identical_invocation_does_not_consume_once_permission() -> Result<(), String>
+    {
+        let (root, _store, run, host) = running_host(DesktopPermissionProfile::ReadOnly)?;
+        let once_permissions: RunOnceToolPermissions = Arc::new(Mutex::new(BTreeSet::new()));
+        let host = host.with_once_permissions(Arc::clone(&once_permissions));
+        let input = r#"{"path":"replayed.txt","content":"replay-safe"}"#;
+        let grant_once = || {
+            once_permissions
+                .lock()
+                .expect("run once permissions")
+                .insert((run.id.clone(), "write".to_string()));
+        };
+        let once_active = || {
+            once_permissions
+                .lock()
+                .expect("run once permissions")
+                .contains(&(run.id.clone(), "write".to_string()))
+        };
+
+        grant_once();
+        host.call("write", input)
+            .await
+            .map_err(|error| error.to_string())?;
+        assert!(root.join("replayed.txt").exists());
+        assert!(
+            !once_active(),
+            "executing the call consumes the one-shot grant"
+        );
+
+        // A fresh one-shot approval followed by an identical repeat of the
+        // completed call replays the recorded outcome and must leave the
+        // grant untouched for a genuine retry with different input.
+        grant_once();
+        let replayed = host
+            .call("write", input)
+            .await
+            .map_err(|error| error.to_string())?;
+        assert!(replayed.contains("\"replayed\":true"));
+        assert!(
+            once_active(),
+            "replaying an identical completed invocation must not consume the one-shot grant"
+        );
 
         std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
         Ok(())

@@ -49,10 +49,26 @@ export function failEarlierTimelinePage(
   current: ConversationTimelineState,
   error: string,
 ): ConversationTimelineState {
+  // A transient failure says nothing about whether earlier history exists, so
+  // the known `hasMore` signal is preserved: clearing it would hide every
+  // recovery affordance once the error banner is dismissed.
   return {
     ...current,
     loadingEarlier: false,
     error,
+  };
+}
+
+export function exhaustEarlierTimelinePage(
+  current: ConversationTimelineState,
+): ConversationTimelineState {
+  // End-of-history is a benign terminal condition, not a failure: surface it
+  // neutrally by retiring the load-earlier affordance without raising an
+  // error.
+  return {
+    ...current,
+    loadingEarlier: false,
+    error: null,
     hasMore: false,
   };
 }

@@ -20,8 +20,8 @@ test('Project Workspaces maps list and create through project-scoped V2 operatio
   config.projectId = 'mutated-project';
 
   const [listed, created] = await Promise.all([listedPending, createdPending]);
-  assert.equal(listed.availability, 'degraded');
-  assert.equal(listed.reasonCode, 'desktop_project_workspace_lifecycle_partial');
+  assert.equal(listed.availability, 'available');
+  assert.equal(listed.reasonCode, null);
   assert.equal(listed.serviceVersion, '1.0.0');
   assert.equal(listed.contractVersion, '1.0.0');
   assert.equal(listed.authorityRevision, null);

@@ -8,11 +8,9 @@ export function projectWorkspacesClientV2Fixture(overrides = {}) {
       return Object.freeze({
         scope: Object.freeze({ ...scope }),
         authority: scope.authority,
-        availability: 'degraded',
+        availability: scope.authority === 'cloud' ? 'available' : 'degraded',
         reasonCode:
-          scope.authority === 'cloud'
-            ? 'desktop_project_workspace_lifecycle_partial'
-            : 'local_workspace_lifecycle_partial',
+          scope.authority === 'cloud' ? null : 'local_workspace_lifecycle_partial',
         serviceVersion: '1.0.0',
         contractVersion: '1.0.0',
         authorityRevision: null,

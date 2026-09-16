@@ -48,11 +48,16 @@ export function createProjectWorkspacesV2Client(
       if (!Array.isArray(workspaces)) {
         throw new Error(`${snapshotScope.authority}_project_workspaces_contract_invalid`);
       }
+      // Availability mirrors the authority's actual lifecycle coverage: the
+      // cloud backend serves the full workspace lifecycle (list/create/
+      // update/delete), while the local runtime serves list/create only, so
+      // local stays honestly degraded.
+      const lifecycleComplete = snapshotScope.authority === 'cloud';
       return Object.freeze({
         scope: snapshotScope,
         authority: snapshotScope.authority,
-        availability: 'degraded' as const,
-        reasonCode: partialReason(snapshotScope.authority),
+        availability: lifecycleComplete ? ('available' as const) : ('degraded' as const),
+        reasonCode: lifecycleComplete ? null : 'local_workspace_lifecycle_partial',
         serviceVersion: '1.0.0',
         contractVersion: '1.0.0' as const,
         authorityRevision: null,
@@ -151,12 +156,6 @@ function projectWorkspace(
     createdAt: workspace.created_at ?? null,
     updatedAt: workspace.updated_at ?? null,
   });
-}
-
-function partialReason(authority: ProjectWorkspacesScope['authority']): string {
-  return authority === 'cloud'
-    ? 'desktop_project_workspace_lifecycle_partial'
-    : 'local_workspace_lifecycle_partial';
 }
 
 function requireInputText(value: string, reasonCode: string): string {
