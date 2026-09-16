@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ChevronDownIcon, ChevronRightIcon } from '@radix-ui/react-icons';
+import {
+  CheckCircledIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CrossCircledIcon,
+  ExclamationTriangleIcon,
+} from '@radix-ui/react-icons';
 import { Button, Flex, Text, TextArea } from '@radix-ui/themes';
 
 import { useI18n } from '../../i18n';
@@ -37,6 +43,33 @@ import {
   timelineHitlQuestion,
   timelineHitlRequestId,
 } from './chatTimelinePresentation';
+
+/* Web conversation parity 2026-12 (InlineHITLCard): the standalone HITL card
+   opens with a rose Shield icon block. @radix-ui/react-icons ships no shield
+   glyph, so the lucide "Shield" path the web renders is inlined here. */
+function HitlShieldIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+    </svg>
+  );
+}
+
+type HitlRiskKind = 'low' | 'medium' | 'high';
+
+function hitlRiskKind(level: string | null): HitlRiskKind {
+  if (level === 'low') return 'low';
+  if (level === 'medium') return 'medium';
+  return 'high';
+}
 
 export function HitlResponseCard({
   item,
@@ -103,6 +136,16 @@ export function HitlResponseCard({
       : browserCapability?.kind === 'browser_credential_fill'
         ? t('chat.browserCredentialFill.title', { origin: browserCapability.origin })
         : null;
+  const riskLevel =
+    approvalRequest?.permission?.risk_level ?? approvalRequest?.decision?.risk.level ?? null;
+  const riskKind = hitlRiskKind(riskLevel);
+  const riskBannerLabel =
+    riskKind === 'low'
+      ? t('chat.riskBanner.low')
+      : riskKind === 'medium'
+        ? t('chat.riskBanner.medium')
+        : t('chat.riskBanner.high');
+  const responseDenied = responsePresentation?.valueKey === 'chat.response.denied';
 
   useEffect(() => {
     if (answered || expiry.state !== 'active') return;
@@ -145,9 +188,27 @@ export function HitlResponseCard({
 
   return (
     <div className={`timeline-details hitl-response-card${answered ? ' is-answered' : ''}`}>
-      <Text as="p" size="2" className="timeline-detail-summary">
-        {browserConsentTitle ?? question}
-      </Text>
+      {/* Web conversation parity 2026-12 (InlineHITLCard): standalone-card head —
+          rose shield block, tool/question title, risk-level tag. */}
+      <div className="hitl-card-head">
+        <span className="hitl-card-shield" aria-hidden="true">
+          <HitlShieldIcon />
+        </span>
+        <Text as="p" size="2" className="timeline-detail-summary">
+          {browserConsentTitle ?? question}
+        </Text>
+        {riskLevel && !answered ? (
+          <span className={`hitl-risk-tag is-${riskKind}`}>
+            {t('chat.risk')}: {riskLevel}
+          </span>
+        ) : null}
+      </div>
+      {riskLevel && !answered ? (
+        <div className={`hitl-risk-banner is-${riskKind}`} role="note">
+          <ExclamationTriangleIcon aria-hidden="true" />
+          <span>{riskBannerLabel}</span>
+        </div>
+      ) : null}
       {browserOrigin ? (
         <div className="agent-run-meta">
           {browserOrigin.tool ? (
@@ -193,12 +254,15 @@ export function HitlResponseCard({
 
       {responsePresentation ? (
         <div
-          className={`timeline-hitl-response${
-            responsePresentation.valueKey === 'chat.response.denied' ? ' is-denied' : ''
-          }`}
+          className={`timeline-hitl-response${responseDenied ? ' is-denied' : ''}`}
           role="status"
           aria-readonly="true"
         >
+          {responseDenied ? (
+            <CrossCircledIcon aria-hidden="true" />
+          ) : (
+            <CheckCircledIcon aria-hidden="true" />
+          )}
           <span>{t(responsePresentation.labelKey)}</span>
           <strong>
             {responsePresentation.valueKey

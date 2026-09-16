@@ -862,12 +862,17 @@
   }
 }
 
+/* Web conversation parity 2026-12 (§1.10 MessageArea): the conversation column
+   widens toward the web's near-full-width reading measure — web bubbles cap at
+   92-96% of a full-width pane (MESSAGE_MAX_WIDTH_CLASSES) with p-3/md:p-4 and
+   pb-20, so the desktop column keeps a wider ceiling, slimmer side padding and
+   the same 80px bottom clearance. */
 .session-workspace-thread .session-chat-narrative .message-stack {
   width: 100%;
-  max-width: 1120px;
+  max-width: 1440px;
   margin: 0 auto;
   gap: 0;
-  padding: 18px clamp(20px, 5.8cqi, 92px) 34px;
+  padding: 16px clamp(16px, 3.2cqi, 48px) 80px;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -1094,11 +1099,14 @@
   color: var(--desktop-muted);
 }
 
+/* Web conversation parity (audit 1.3): the working indicator is running-status
+   semantics, so it keeps the cyan info accent after the dark accent flipped to
+   monochrome. */
 .timeline-working-spinner {
   width: 12px;
   height: 12px;
-  border: 1.5px solid rgba(var(--desktop-cyan-soft-2-rgb), 0.24);
-  border-top-color: var(--desktop-cyan);
+  border: 1.5px solid rgba(var(--desktop-status-running-rgb), 0.24);
+  border-top-color: var(--desktop-status-running);
   border-radius: 50%;
   animation: timeline-working-spin var(--spin-duration) linear infinite;
 }
@@ -1110,7 +1118,7 @@
 }
 
 .session-chat-narrative .timeline-working-indicator > em {
-  color: var(--desktop-cyan);
+  color: var(--desktop-status-running);
   font-size: 9px;
   font-style: normal;
 }
@@ -1220,14 +1228,6 @@
   font-weight: 600;
 }
 
-.thought-timeline-live {
-  color: var(--desktop-status-running);
-  font-size: var(--desktop-text-2xs);
-  font-weight: 600;
-  letter-spacing: var(--desktop-tracking-label);
-  text-transform: uppercase;
-}
-
 .thought-timeline-streaming-dots {
   display: inline-flex;
   flex: 0 0 auto;
@@ -1256,7 +1256,6 @@
   overflow: hidden;
   color: var(--desktop-chat-text-tertiary);
   font-size: var(--desktop-text-xs-plus);
-  font-style: italic;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1275,13 +1274,15 @@
   padding: 0 12px 12px 30px;
 }
 
-/* Web parity redesign 2026-09: thought content reads as italic secondary
-   text inside the subtle bordered card (web ThinkingBlock). */
+/* Web conversation parity 2026-12 (§1.9 ThinkingBlock): thought content is
+   plain secondary text with pre-wrap whitespace, not italic markdown. */
 .thought-timeline-content .thought-content {
+  margin: 0;
   color: var(--desktop-muted);
   font-size: 12px;
-  font-style: italic;
   line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 @keyframes thought-timeline-icon-pulse {
@@ -1886,74 +1887,76 @@
   background: var(--desktop-chat-panel-alt);
 }
 
-.session-message-actions {
+/* Web conversation parity 2026-12 (§1.4 MessageActionBar): message actions are
+   a floating pill of inline icon buttons at the bubble's top corner, revealed
+   on hover or focus-within — replacing the kebab <details> dropdown. The pill
+   keeps a solid surface + hairline border + whisper shadow (web bg-white /
+   dark:bg-slate-800 rounded-lg shadow-sm). The article is the positioned
+   ancestor; the 24px meta row + 4px gap place the bubble 28px below its top. */
+.message.transcript-message {
   position: relative;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+}
+
+.session-message-actions {
+  position: absolute;
+  top: 14px;
+  right: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--desktop-border);
+  border-radius: var(--desktop-radius-lg);
+  background: var(--desktop-surface-15);
+  box-shadow: var(--desktop-shadow-card);
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
+/* User bubbles carry the avatar on the right (order 2): offset the pill so it
+   anchors to the bubble corner, not the avatar. */
+.session-thread-message.user .session-message-actions {
+  right: 52px;
+}
+
 .session-thread-message:hover .session-message-actions,
-.session-thread-message:focus-within .session-message-actions,
-.session-message-actions[open] {
+.session-thread-message:focus-within .session-message-actions {
   opacity: 1;
 }
 
-.session-message-actions > summary {
+.session-message-actions button {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   place-items: center;
-  border-radius: 5px;
-  color: var(--desktop-faint);
-  cursor: pointer;
-  list-style: none;
-}
-
-.session-message-actions > summary::-webkit-details-marker {
-  display: none;
-}
-
-.session-message-actions > summary:hover,
-.session-message-actions[open] > summary {
-  background: rgba(var(--desktop-slate-rgb), 0.1);
-  color: var(--desktop-text);
-}
-
-.session-message-actions > div {
-  position: absolute;
-  top: 27px;
-  right: 0;
-  z-index: 10;
-  min-width: 132px;
-  padding: 5px;
-  border: 1px solid var(--desktop-border);
-  border-radius: 7px;
-  background: var(--desktop-surface-15);
-  box-shadow: var(--desktop-shadow-popover);
-}
-
-.session-message-actions button {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 30px;
-  gap: 7px;
-  padding: 0 8px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   color: var(--desktop-muted);
   font: inherit;
   cursor: pointer;
 }
 
+.session-message-actions button > svg {
+  width: 14px;
+  height: 14px;
+}
+
 .session-message-actions button:hover {
   background: rgba(var(--desktop-slate-rgb), 0.1);
   color: var(--desktop-text);
+}
+
+.session-message-actions button.is-danger:hover {
+  background: rgba(var(--desktop-red-rgb), 0.1);
+  color: rgb(var(--desktop-red-bright-rgb));
+}
+
+.session-message-actions button:focus-visible {
+  outline: 2px solid rgba(var(--desktop-cyan-soft-rgb), 0.6);
+  outline-offset: -1px;
 }
 
 .session-message-actions button:disabled {
@@ -2704,7 +2707,7 @@
 .session-chat-narrative .timeline-tool-group > summary,
 .session-chat-narrative .timeline-debug-group > summary {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto 15px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto 15px;
   align-items: center;
   min-height: 34px;
   gap: 8px;
@@ -2802,6 +2805,60 @@
   border-color: rgba(var(--desktop-red-rgb), 0.26);
   background: rgba(var(--desktop-red-rgb), 0.1);
   color: var(--desktop-red);
+}
+
+/* Web conversation parity (audit 1.2): collapsed worklog groups keep
+   narrating what happened — a "N/M done" progress text (web text-2xs) plus a
+   red failed-count pill (web bg-red-100 text-red-600 rounded-full). */
+.session-chat-narrative .timeline-tool-group-progress {
+  flex: 0 0 auto;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.session-chat-narrative .timeline-tool-group-failed {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.26);
+  border-radius: 999px;
+  background: rgba(var(--desktop-red-rgb), 0.1);
+  color: var(--desktop-red);
+  font-size: var(--desktop-text-2xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Collapsed preview lines: up to 7 one-line action previews (web text-xs
+   leading-5 slate-500) with a tertiary "More N actions" overflow line. */
+.session-chat-narrative .timeline-tool-group-preview {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 6px 26px;
+  overflow: hidden;
+}
+
+.session-chat-narrative .timeline-tool-group-preview > div {
+  overflow: hidden;
+  color: var(--desktop-chat-text-secondary);
+  font-size: var(--desktop-text-xs);
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-chat-narrative .timeline-tool-group-preview > .timeline-tool-group-preview-more {
+  color: var(--desktop-chat-text-tertiary);
+}
+
+/* Audit 1.1 rail continuity: the tool-call rail connector bridges the 4px
+   grid gap between group rows so the vertical line reads unbroken. */
+.session-chat-narrative
+  .timeline-tool-group-items
+  > .message.timeline-row.tool-call {
+  margin-bottom: -4px;
 }
 
 .timeline-debug-group-chevron,
@@ -4296,6 +4353,24 @@
   font-size: var(--desktop-text-2xs);
 }
 
+/* Web conversation parity 2026-12 (§1.10 MessageArea): timeline and worklog
+   rows indent under the assistant avatar like the web's w-8 spacer + gap-3
+   (32px avatar + 12px gap), so structured rows align with the bubble text
+   column instead of spanning the full message column. */
+.session-chat-narrative .agent-timeline > .message.timeline-row,
+.session-chat-narrative .agent-timeline > .timeline-tool-group,
+.session-chat-narrative .agent-timeline > .timeline-debug-group,
+.session-chat-narrative .agent-timeline > .timeline-subagent-group,
+.session-chat-narrative .agent-timeline > .thought-timeline-card,
+.session-chat-narrative .agent-timeline > .work-plan-timeline-card,
+.session-chat-narrative .agent-timeline > .artifact-timeline-card,
+.session-chat-narrative .agent-timeline > .skill-execution-card,
+.session-chat-narrative .agent-timeline > .memory-recall-card,
+.session-chat-narrative .agent-timeline > .memory-captured-card,
+.session-chat-narrative .agent-timeline > .timeline-working-indicator {
+  margin-left: 44px;
+}
+
 .timeline-diff-count {
   display: inline-flex;
   gap: 5px;
@@ -4317,33 +4392,126 @@
   font-style: normal;
 }
 
-/* Prototype mission-control refactor 2026-09 (phase 5b): HITL request rows
-   take the prototype approval-card anatomy — amber frame, "human decision"
-   eyebrow title, scope evidence box, amber instruction field and the
-   Deny / Always allow / Allow once action trio. The card stays in the
-   timeline (the desktop composer has no approval slot); after resolution it
-   collapses to a slim green/red inline row. */
+/* Web conversation parity 2026-12 (§1.5 InlineHITLCard): HITL request rows take
+   the web standalone-card anatomy — neutral bubble surface with a hairline
+   border (not the old amber frame), a rose shield icon block + risk tag + risk
+   banner inside the card head, and an emerald/rose outcome panel once answered.
+   The card stays in the timeline (the desktop composer has no approval slot);
+   after resolution it collapses to a slim outcome row. */
 .session-chat-narrative .message.timeline-row:has(.hitl-response-card) {
   padding: 13px 14px;
-  border: 1px solid var(--desktop-approval-border);
-  border-radius: 10px;
-  background: var(--desktop-approval-bg);
+  border: 1px solid var(--desktop-bubble-agent-border);
+  border-radius: var(--desktop-radius-lg);
+  background: var(--desktop-bubble-agent-bg);
+  box-shadow: var(--desktop-shadow-card);
 }
 
-.session-chat-narrative .message.timeline-row:has(.hitl-response-card) .timeline-row-icon {
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--desktop-approval-icon-border);
-  border-radius: 8px;
-  background: var(--desktop-approval-icon-bg);
-  color: var(--desktop-amber);
+/* The card head renders its own rose shield block (web InlineHITLCard), so the
+   generic row icon is redundant while the request is open. */
+.session-chat-narrative .message.timeline-row:has(.hitl-response-card:not(.is-answered)) .timeline-row-icon {
+  display: none;
 }
 
-/* Web conversation parity 2026-12: the approval card keeps its amber semantic
-   family (web permission/decision coloring) but the eyebrow and question copy
-   move onto the shared type scale — 10px uppercase micro label, 14px question. */
+.session-chat-narrative .hitl-card-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Web InlineHITLCard: w-8 rounded-md rose Shield block. */
+.session-chat-narrative .hitl-card-shield {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.28);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-red-rgb), 0.08);
+  color: rgb(var(--desktop-red-bright-rgb));
+}
+
+.session-chat-narrative .hitl-card-shield > svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Web InlineHITLCard: risk-level tag pinned to the head's right edge. */
+.session-chat-narrative .hitl-risk-tag {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 1px 7px;
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.18);
+  border-radius: 999px;
+  background: rgba(var(--desktop-slate-rgb), 0.06);
+  color: var(--desktop-chat-text-secondary);
+  font-size: var(--desktop-text-2xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.session-chat-narrative .hitl-risk-tag.is-low {
+  border-color: rgba(var(--desktop-green-glow-rgb), 0.32);
+  background: rgba(var(--desktop-green-glow-rgb), 0.08);
+  color: var(--desktop-green);
+}
+
+.session-chat-narrative .hitl-risk-tag.is-medium {
+  border-color: rgba(var(--desktop-amber-hot-rgb), 0.32);
+  background: rgba(var(--desktop-amber-deep-rgb), 0.12);
+  color: var(--desktop-amber-dim);
+}
+
+.session-chat-narrative .hitl-risk-tag.is-high {
+  border-color: rgba(var(--desktop-red-rgb), 0.32);
+  background: rgba(var(--desktop-red-rgb), 0.08);
+  color: rgb(var(--desktop-red-bright-rgb));
+}
+
+/* Web InlineHITLCard: amber/rose risk banner under the head. */
+.session-chat-narrative .hitl-risk-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.16);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-slate-rgb), 0.05);
+  color: var(--desktop-chat-text-secondary);
+  font-size: var(--desktop-text-xs);
+  font-weight: 500;
+}
+
+.session-chat-narrative .hitl-risk-banner > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.session-chat-narrative .hitl-risk-banner.is-low {
+  border-color: rgba(var(--desktop-green-glow-rgb), 0.3);
+  background: rgba(var(--desktop-green-glow-rgb), 0.07);
+  color: var(--desktop-green);
+}
+
+.session-chat-narrative .hitl-risk-banner.is-medium {
+  border-color: rgba(var(--desktop-amber-hot-rgb), 0.3);
+  background: rgba(var(--desktop-amber-deep-rgb), 0.12);
+  color: var(--desktop-amber-dim);
+}
+
+.session-chat-narrative .hitl-risk-banner.is-high {
+  border-color: rgba(var(--desktop-red-rgb), 0.3);
+  background: rgba(var(--desktop-red-rgb), 0.07);
+  color: rgb(var(--desktop-red-bright-rgb));
+}
+
+/* The eyebrow keeps the shared 10px uppercase micro-label scale on neutral
+   tertiary text (the web card has no eyebrow; desktop keeps the type label). */
 .session-chat-narrative .message.timeline-row:has(.hitl-response-card) .timeline-row-title {
-  color: var(--desktop-approval-eyebrow);
+  color: var(--desktop-chat-text-tertiary);
   font-size: var(--desktop-text-2xs);
   font-weight: 600;
   letter-spacing: var(--desktop-tracking-label);
@@ -4357,14 +4525,17 @@
 }
 
 .session-chat-narrative .hitl-response-card .timeline-detail-summary {
-  color: var(--desktop-approval-title);
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--desktop-text);
   font-size: var(--desktop-text-sm);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.5;
 }
 
 .session-chat-narrative .hitl-response-card .agent-run-meta {
-  color: var(--desktop-approval-text);
+  color: var(--desktop-chat-text-tertiary);
   font-size: var(--desktop-text-2xs);
 }
 
@@ -4439,6 +4610,8 @@
   background: transparent;
 }
 
+.session-chat-narrative .hitl-response-card.is-answered .hitl-card-head,
+.session-chat-narrative .hitl-response-card.is-answered .hitl-risk-banner,
 .session-chat-narrative .hitl-response-card.is-answered .timeline-detail-summary,
 .session-chat-narrative .hitl-response-card.is-answered .agent-run-meta,
 .session-chat-narrative .hitl-response-card.is-answered .timeline-approval-evidence,
@@ -4446,31 +4619,45 @@
   display: none;
 }
 
+/* Web conversation parity 2026-12 (§1.5 InlineHITLCard answered state): the
+   outcome is an emerald/rose bordered panel with a status icon, medium label
+   and value — not a bare tinted strip. */
 .session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
+  gap: 7px;
+  padding: 8px 11px;
+  border: 1px solid rgba(var(--desktop-green-glow-rgb), 0.3);
+  border-radius: var(--desktop-radius-md);
   background: rgba(var(--desktop-green-glow-rgb), 0.08);
+}
+
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--desktop-green);
 }
 
 .session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response span {
   color: var(--desktop-green);
-  font-size: 9px;
+  font-size: var(--desktop-text-xs);
+  font-weight: 500;
+  text-transform: none;
 }
 
 .session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response strong {
   color: var(--desktop-green);
-  font-size: 10.5px;
+  font-size: var(--desktop-text-xs);
   font-weight: 600;
 }
 
 .session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response.is-denied {
-  background: rgba(var(--desktop-red-rgb), 0.08);
+  border-color: rgba(var(--desktop-red-rgb), 0.3);
+  background: rgba(var(--desktop-red-rgb), 0.07);
 }
 
+.session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response.is-denied > svg,
 .session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response.is-denied span,
 .session-chat-narrative .hitl-response-card.is-answered .timeline-hitl-response.is-denied strong {
   color: var(--desktop-red);
@@ -5168,6 +5355,14 @@
   .session-chat-narrative .timeline-tool-group,
   .session-chat-narrative .timeline-debug-group,
   .session-chat-narrative .agent-timeline > .message.timeline-row,
+  .session-chat-narrative .agent-timeline > .timeline-subagent-group,
+  .session-chat-narrative .agent-timeline > .thought-timeline-card,
+  .session-chat-narrative .agent-timeline > .work-plan-timeline-card,
+  .session-chat-narrative .agent-timeline > .artifact-timeline-card,
+  .session-chat-narrative .agent-timeline > .skill-execution-card,
+  .session-chat-narrative .agent-timeline > .memory-recall-card,
+  .session-chat-narrative .agent-timeline > .memory-captured-card,
+  .session-chat-narrative .agent-timeline > .timeline-working-indicator,
   .session-chat-narrative .agent-run-stack {
     margin-left: 0;
   }
@@ -5180,6 +5375,7 @@
   }
 
   .session-thread-message .transcript-author em,
+  .session-chat-narrative .timeline-tool-group-progress,
   .session-chat-narrative .timeline-row-meta > span:not(:last-child):not(.timeline-status) {
     display: none;
   }
@@ -5187,6 +5383,14 @@
   .session-chat-narrative .timeline-tool-group,
   .session-chat-narrative .timeline-debug-group,
   .session-chat-narrative .agent-timeline > .message.timeline-row,
+  .session-chat-narrative .agent-timeline > .timeline-subagent-group,
+  .session-chat-narrative .agent-timeline > .thought-timeline-card,
+  .session-chat-narrative .agent-timeline > .work-plan-timeline-card,
+  .session-chat-narrative .agent-timeline > .artifact-timeline-card,
+  .session-chat-narrative .agent-timeline > .skill-execution-card,
+  .session-chat-narrative .agent-timeline > .memory-recall-card,
+  .session-chat-narrative .agent-timeline > .memory-captured-card,
+  .session-chat-narrative .agent-timeline > .timeline-working-indicator,
   .session-chat-narrative .agent-run-stack {
     margin-left: 0;
   }

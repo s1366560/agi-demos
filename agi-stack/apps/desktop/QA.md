@@ -10,6 +10,36 @@ The dated observations below are historical records, not current commands or acc
 
 # Desktop QA Log
 
+## Conversation-flow web alignment + capability audit: 2026-09-16
+
+- Full audit of workspace, chat, skills, plugins, tool calls, and agent/subagent capability
+  surfaces found no confirmed contract bugs; fixes landed for the chat socket subscription gap
+  (`sendAgentMessage` now subscribes the live socket immediately via
+  `ensureAgentMessageSubscription`), the compose-ahead steer 10-second stall (the router's
+  unattributed unknown-type error now rejects the in-flight steer immediately; backend landing
+  hint recorded in `docs/steer-protocol-draft.md`), chat pagination recovery (transient
+  load-earlier failures no longer clear `hasMore`; end-of-history is no longer rendered as a red
+  alert), cloud workspace availability honesty (`available` vs the permanent degraded badge), and
+  sidecar permission admission (an identical completed tool call replay no longer consumes a
+  once-permission grant; mutation-verified regression test).
+- Conversation-flow rendering was aligned with the web design language: tool-call rows now use the
+  web rail+dot+connector timeline anatomy with duration under the status circle and preview-first
+  text; collapsed tool groups show N/M progress, failed pills, and action preview lines; the dark
+  accent is monochrome with cyan reserved for running/info status; HITL renders as a standalone
+  card with a rose shield block, risk tag/banner, and emerald/rose outcome panel; thought cards use
+  the brain glyph with plain-text content; message actions moved to a hover pill toolbar; streaming
+  caret removed in favor of a preparing state with live tool-argument streaming; code-block headers
+  match web casing and suppress on short snippets; markdown heading scale relaxed; message column
+  widened with timeline rows indented under the avatar; a collapsible task checklist panel with
+  progress bar is mounted above the composer and todowrite tool rows show status-count summaries.
+- Verification at this change set: `cargo test -p agistack-desktop-sidecar` 928 passed
+  (925 bin + 3 integration, 2 intentionally ignored), `node tests/run.mjs` 4783 tests
+  (4780 pass, 3 env-gated skips, 0 fail), `pnpm run build:electron` type-check + bundle pass,
+  `make -C agi-stack desktop-browser-qa` 8/8 pass. Native validation launched via
+  `make -C agi-stack run-desktop` with `AGISTACK_DESKTOP_DEBUG_PORT` CDP capture: local-mode shell,
+  workspace overview, conversation open, and a live composer send all rendered with the new
+  timeline anatomy (screenshots in `.tmp/desktop-qa-20260916/`).
+
 ## Native cloud gate, plan authority, and renderer CSP fixes: 2026-09-15
 
 - Cloud login against `http://localhost:8000` authenticated but stalled on the full-screen

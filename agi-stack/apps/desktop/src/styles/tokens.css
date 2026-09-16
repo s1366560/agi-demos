@@ -17,8 +17,13 @@
   --desktop-text: #e7edf6;
   --desktop-muted: #8996a9;
   --desktop-faint: #5d6979;
-  --desktop-cyan: #38d6ff;
-  --desktop-accent: #38d6ff;
+  /* Web conversation parity (audit 1.3): the dark accent is the web dark
+     primary — near-white monochrome #f2f2f2 (web/src/index.css --color-primary
+     dark). Cyan #38d6ff is reserved for running/info status semantics via
+     --desktop-status-running*; the --desktop-cyan* name is kept as the accent
+     alias so feature CSS and the light-theme neutral mapping stay parallel. */
+  --desktop-cyan: #f2f2f2;
+  --desktop-accent: #f2f2f2;
   --desktop-green: #35d399;
   --desktop-green-text: #63d78f;
   --desktop-amber: #f0b35a;
@@ -92,8 +97,11 @@
   --desktop-cyan-bright: #55d8f7;
   --desktop-green-bright: #4cd6a3;
   --desktop-amber-dim: #e8ad5b;
-  /* RGB channel tokens for rgba(var(...), alpha) usage */
-  --desktop-cyan-rgb: 56, 214, 255;
+  /* RGB channel tokens for rgba(var(...), alpha) usage. --desktop-cyan-rgb
+     mirrors the monochrome accent above (web dark primary #f2f2f2), so accent
+     tints (avatar washes, focus rings, selected pills) read neutral while
+     running/info status keeps the cyan --desktop-status-running-rgb channel. */
+  --desktop-cyan-rgb: 242, 242, 242;
   --desktop-slate-rgb: 148, 163, 184;
   --desktop-amber-rgb: 240, 179, 90;
   --desktop-green-rgb: 53, 211, 153;
@@ -110,8 +118,11 @@
   --desktop-overlay-4-rgb: 9, 17, 27;
   --desktop-overlay-5-rgb: 13, 19, 29;
   --desktop-overlay-6-rgb: 13, 24, 34;
-  --desktop-cyan-alt-rgb: 34, 211, 238;
-  --desktop-cyan-soft-rgb: 83, 208, 239;
+  /* Audit 1.3: accent tint channels mirror the monochrome dark primary
+     (#f2f2f2) so focus rings, selections, badges and hover washes read
+     neutral; light theme already maps these channels to grays. */
+  --desktop-cyan-alt-rgb: 242, 242, 242;
+  --desktop-cyan-soft-rgb: 242, 242, 242;
   --desktop-amber-alt-rgb: 245, 158, 11;
   --desktop-amber-soft-rgb: 245, 183, 71;
   /* Phase-2 surface ladder extension (dark to light by luminance) */
@@ -230,7 +241,7 @@
   --desktop-red-soft-rgb: 229, 139, 149;
   --desktop-green-neon-rgb: 74, 222, 128;
   --desktop-silver-rgb: 156, 163, 175;
-  --desktop-cyan-dim-rgb: 73, 177, 207;
+  --desktop-cyan-dim-rgb: 128, 128, 128;
   --desktop-amber-hot-rgb: 251, 191, 36;
   --desktop-cyan-vivid-rgb: 36, 178, 222;
   --desktop-blue-rgb: 65, 158, 216;
@@ -275,7 +286,7 @@
   --desktop-surface-cyan-7-rgb: 21, 45, 57;
   --desktop-surface-cyan-8-rgb: 28, 74, 88;
   --desktop-surface-cyan-9-rgb: 28, 93, 112;
-  --desktop-surface-cyan-10-rgb: 25, 114, 136;
+  --desktop-surface-cyan-10-rgb: 38, 38, 38;
   --desktop-surface-green-4-rgb: 8, 27, 25;
   --desktop-surface-green-5-rgb: 16, 113, 84;
   --desktop-surface-red-2: #2c151b;

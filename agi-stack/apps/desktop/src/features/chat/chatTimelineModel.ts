@@ -24,7 +24,7 @@ export type ToolActivityRow =
   | { kind: 'thought'; item: AgentTimelineItem }
   | { kind: 'tool_call'; pair: ToolCallPair };
 
-export type ToolCallPairStatus = 'running' | 'complete' | 'failed';
+export type ToolCallPairStatus = 'preparing' | 'running' | 'complete' | 'failed';
 
 export type ToolCallPresentationKind =
   | 'search'
@@ -391,12 +391,22 @@ export function mergeToolStreamItem(
         ? existing
         : existing.map((item, index) =>
             index === activeIndex
-              ? { ...item, metadata: { ...(item.metadata ?? {}), streaming: false } }
+              ? {
+                  ...item,
+                  metadata: {
+                    ...(item.metadata ?? {}),
+                    streaming: false,
+                    argsStreaming: false,
+                  },
+                }
               : item,
           );
     return sortTimelineItems([
       ...settled,
-      { ...incoming, metadata: { ...(incoming.metadata ?? {}), streaming: false } },
+      {
+        ...incoming,
+        metadata: { ...(incoming.metadata ?? {}), streaming: false, argsStreaming: false },
+      },
     ]);
   }
 
@@ -412,7 +422,15 @@ export function mergeToolStreamItem(
         eventTimeUs: item.eventTimeUs,
         eventCounter: item.eventCounter,
         timestamp: item.timestamp,
-        metadata: { ...(item.metadata ?? {}), ...(incoming.metadata ?? {}), streaming: true },
+        metadata: {
+          ...(item.metadata ?? {}),
+          ...(incoming.metadata ?? {}),
+          streaming: true,
+          // Web conversation parity (audit 1.7): while only act_delta chunks
+          // have arrived the call is still "preparing"; the canonical act
+          // marks the arguments complete and the call genuinely running.
+          argsStreaming: kind === 'delta',
+        },
       };
     });
     return kind === 'act'
@@ -422,7 +440,14 @@ export function mergeToolStreamItem(
 
   return sortTimelineItems([
     ...existing,
-    { ...incoming, metadata: { ...(incoming.metadata ?? {}), streaming: true } },
+    {
+      ...incoming,
+      metadata: {
+        ...(incoming.metadata ?? {}),
+        streaming: true,
+        argsStreaming: kind === 'delta',
+      },
+    },
   ]);
 }
 
@@ -1288,6 +1313,9 @@ function mergeToolIdentityPair(
       metadata: {
         ...(transient.metadata ?? {}),
         ...(canonical.metadata ?? {}),
+        // Promotion to the canonical act means the arguments finished
+        // streaming — never leave the skeleton's preparing flag behind.
+        argsStreaming: false,
       },
     };
   }
@@ -1382,7 +1410,49 @@ export function toolCallPairStatus(pair: ToolCallPair): ToolCallPairStatus {
     return pair.result.isError || pair.result.error ? 'failed' : 'complete';
   }
   if (pair.call.isError || pair.call.error) return 'failed';
-  return pair.call.type === 'observe' ? 'complete' : 'running';
+  if (pair.call.type === 'observe') return 'complete';
+  // Web conversation parity (audit 1.7): a call whose arguments are still
+  // streaming (only act_delta chunks so far) is "preparing", not yet running.
+  if (toolCallArgumentsStreaming(pair.call)) return 'preparing';
+  return 'running';
+}
+
+/**
+ * Whether the call's arguments are still streaming in. The live path sets
+ * `metadata.argsStreaming` in mergeToolStreamItem; the transient-skeleton
+ * fallback covers delta rows that arrived through other merge paths (a
+ * promoted skeleton carries the canonical execution id and is running).
+ */
+export function toolCallArgumentsStreaming(call: AgentTimelineItem): boolean {
+  if (call.type !== 'act') return false;
+  const metadata = isRecord(call.metadata) ? call.metadata : null;
+  if (metadata?.argsStreaming === true) return true;
+  if (metadata?.argsStreaming === false) return false;
+  return (
+    isTransientToolTimelineItem(call) &&
+    metadata?.streaming === true &&
+    !transientToolItemHasCanonicalExecution(call)
+  );
+}
+
+/**
+ * The live partial argument text for a preparing call: streamed deltas carry
+ * the accumulated JSON fragment as a string; already-parsed objects render
+ * pretty-printed. Returns '' when nothing has streamed yet.
+ */
+export function toolCallStreamingArguments(call: AgentTimelineItem): string {
+  const input = call.toolInput;
+  if (typeof input === 'string') return input;
+  if (isRecord(input) && Object.keys(input).length > 0) {
+    try {
+      return JSON.stringify(input, null, 2);
+    } catch {
+      return '';
+    }
+  }
+  const payload = isRecord(call.payload) ? call.payload : null;
+  const accumulated = payload?.accumulated_arguments ?? payload?.accumulatedArguments;
+  return typeof accumulated === 'string' ? accumulated : '';
 }
 
 export function toolCallPairDurationMs(pair: ToolCallPair): number | null {

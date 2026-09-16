@@ -45,9 +45,11 @@ const {
   timelineDayKey,
   timelineDayLabel,
   toolCallDiffStat,
+  toolCallArgumentsStreaming,
   toolCallPairDurationMs,
   toolCallPairStatus,
   toolCallPresentationKind,
+  toolCallStreamingArguments,
 } = require("/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js");
 const appSource = readFileSync(
   new URL("../src/App.tsx", import.meta.url),
@@ -5270,6 +5272,152 @@ test("streamed tool arguments merge into one stable call and settle on observe",
   assert.equal(pairToolCallItems(items)[0].result?.id, "observe-1");
 });
 
+test("argument deltas mark the call preparing until the canonical act arrives", () => {
+  let items = mergeToolStreamItem(
+    [],
+    {
+      id: "act_delta-10-1",
+      type: "act",
+      toolName: "write_file",
+      toolInput: '{"path":"src/',
+      payload: { call_id: "call-9", accumulated_arguments: '{"path":"src/' },
+      message_id: "message-9",
+      eventTimeUs: 10,
+      eventCounter: 1,
+    },
+    "delta",
+  );
+
+  let pairs = pairToolCallItems(items);
+  assert.equal(toolCallPairStatus(pairs[0]), "preparing");
+  assert.equal(toolCallArgumentsStreaming(pairs[0].call), true);
+  assert.equal(toolCallStreamingArguments(pairs[0].call), '{"path":"src/');
+  assert.equal(items[0].metadata.argsStreaming, true);
+
+  items = mergeToolStreamItem(
+    items,
+    {
+      id: "act-20-2",
+      type: "act",
+      toolName: "write_file",
+      toolInput: { path: "src/index.ts" },
+      payload: { call_id: "call-9", tool_execution_id: "exec-9" },
+      message_id: "message-9",
+      eventTimeUs: 20,
+      eventCounter: 2,
+    },
+    "act",
+  );
+
+  pairs = pairToolCallItems(items);
+  assert.equal(pairs.length, 1);
+  assert.equal(toolCallPairStatus(pairs[0]), "running");
+  assert.equal(toolCallArgumentsStreaming(pairs[0].call), false);
+  assert.equal(items[0].metadata.argsStreaming, false);
+
+  items = mergeToolStreamItem(
+    items,
+    {
+      id: "observe-30-3",
+      type: "observe",
+      toolName: "write_file",
+      toolOutput: "ok",
+      payload: { call_id: "call-9", tool_execution_id: "exec-9" },
+      message_id: "message-9",
+      eventTimeUs: 30,
+      eventCounter: 3,
+    },
+    "observe",
+  );
+
+  pairs = pairToolCallItems(items);
+  assert.equal(toolCallPairStatus(pairs[0]), "complete");
+  assert.equal(items[0].metadata.argsStreaming, false);
+});
+
+test("history hydration of a streaming delta clears the preparing flag", () => {
+  const live = mergeToolStreamItem(
+    [],
+    {
+      id: "act_delta-50-1",
+      type: "act",
+      toolName: "read_file",
+      toolInput: '{"path":"RE',
+      payload: { call_id: "call-h", accumulated_arguments: '{"path":"RE' },
+      message_id: "message-h",
+      eventTimeUs: 50,
+      eventCounter: 1,
+    },
+    "delta",
+  );
+  assert.equal(toolCallPairStatus(pairToolCallItems(live)[0]), "preparing");
+
+  const hydrated = mergeConversationTimelineItems(live, [
+    {
+      id: "act-60-2",
+      type: "act",
+      toolName: "read_file",
+      toolInput: { path: "README.md" },
+      execution_id: "exec-h",
+      payload: { call_id: "call-h", tool_execution_id: "exec-h" },
+      eventTimeUs: 60,
+      eventCounter: 2,
+    },
+  ]);
+
+  const pairs = pairToolCallItems(hydrated);
+  assert.equal(pairs.length, 1);
+  assert.equal(toolCallPairStatus(pairs[0]), "running");
+  assert.equal(toolCallArgumentsStreaming(pairs[0].call), false);
+});
+
+test("a canonical act without delta history is running, never preparing", () => {
+  const items = mergeToolStreamItem(
+    [],
+    {
+      id: "act-70-1",
+      type: "act",
+      toolName: "run_tests",
+      toolInput: { scope: "unit" },
+      payload: { tool_execution_id: "exec-r" },
+      message_id: "message-r",
+      eventTimeUs: 70,
+      eventCounter: 1,
+    },
+    "act",
+  );
+
+  const pairs = pairToolCallItems(items);
+  assert.equal(toolCallPairStatus(pairs[0]), "running");
+  assert.equal(toolCallArgumentsStreaming(pairs[0].call), false);
+  // Already-parsed input objects pretty-print for the streaming args block.
+  assert.equal(
+    toolCallStreamingArguments(pairs[0].call),
+    JSON.stringify({ scope: "unit" }, null, 2),
+  );
+});
+
+test("a preparing call without streamed arguments exposes empty args text", () => {
+  const items = mergeToolStreamItem(
+    [],
+    {
+      id: "act_delta-80-1",
+      type: "act",
+      toolName: "grep",
+      toolInput: {},
+      payload: { call_id: "call-empty" },
+      message_id: "message-empty",
+      eventTimeUs: 80,
+      eventCounter: 1,
+    },
+    "delta",
+  );
+
+  const pairs = pairToolCallItems(items);
+  assert.equal(toolCallPairStatus(pairs[0]), "preparing");
+  assert.equal(toolCallStreamingArguments(pairs[0].call), "");
+});
+
 test("history tool calls replace live delta skeletons without leaving a running duplicate", () => {
   const deltaOnly = mergeToolStreamItem(
     [],
@@ -5438,7 +5586,9 @@ test("persisted act delta skeletons yield to canonical executions like the Web c
       {
         call: "act_delta-800-0",
         result: null,
-        status: "running",
+        // Web parity (audit 1.7): a still-streaming delta skeleton without a
+        // canonical execution is preparing its arguments, not yet running.
+        status: "preparing",
       },
     ],
   );

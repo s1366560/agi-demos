@@ -1,13 +1,12 @@
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import { workspaceImagePreviewClient } from './structuredImagePreviewOwnerModel';
-import { isValidElement, memo, useMemo, useEffect, useRef, useState } from 'react';
+import { isValidElement, memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
   ChatBubbleIcon,
   ClockIcon,
   CopyIcon,
-  DotsHorizontalIcon,
   DrawingPinIcon,
   FileTextIcon,
   PersonIcon,
@@ -197,7 +196,6 @@ export function NarrativeMessageFrame({
         </header>
         <div className="session-message-surface">
           {children}
-          {streaming ? <span className="streaming-caret" aria-hidden="true" /> : null}
         </div>
       </div>
     </article>
@@ -321,39 +319,9 @@ function MessageActionMenu({
 }) {
   const { t } = useI18n();
   const { showToast } = useToast();
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-  const summaryRef = useRef<HTMLElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const availability = messageActionsForVisibleMessage(kind, streaming);
-  const closeMenu = (restoreFocus = false) => {
-    detailsRef.current?.removeAttribute('open');
-    setMenuOpen(false);
-    if (restoreFocus) {
-      window.requestAnimationFrame(() => summaryRef.current?.focus());
-    }
-  };
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const closeIfOutside = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && !detailsRef.current?.contains(target)) closeMenu();
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      closeMenu(true);
-    };
-    document.addEventListener('pointerdown', closeIfOutside, true);
-    document.addEventListener('keydown', closeOnEscape, true);
-    return () => {
-      document.removeEventListener('pointerdown', closeIfOutside, true);
-      document.removeEventListener('keydown', closeOnEscape, true);
-    };
-  }, [menuOpen]);
 
   const copyContent = () => {
-    closeMenu();
     if (!navigator.clipboard) {
       showToast('error', t('toast.copyMessageError', { detail: t('toast.clipboardUnavailable') }));
       return;
@@ -367,101 +335,89 @@ function MessageActionMenu({
         ),
     );
   };
-  const invoke = (action: (() => void) | undefined) => {
-    action?.();
-    closeMenu();
-  };
-  const invokeWithReturnFocus = (
-    action: ((returnFocus: HTMLElement) => void) | undefined,
-    fallback: HTMLButtonElement,
-  ) => {
-    const returnFocus = detailsRef.current?.querySelector<HTMLElement>('summary') ?? fallback;
-    closeMenu();
-    action?.(returnFocus);
-  };
 
+  // Web conversation parity 2026-12 (MessageActionBar): the message actions are
+  // a floating pill of inline icon buttons revealed on hover / focus-within at
+  // the bubble's top corner — no disclosure menu, so no dismiss/focus-restore
+  // bookkeeping is needed; keyboard users reach the buttons directly via Tab.
   return (
-    <details
+    <div
       className="session-message-actions"
-      ref={detailsRef}
-      onToggle={(event) => setMenuOpen(event.currentTarget.open)}
+      role="toolbar"
+      aria-label={t('chat.messageActions')}
     >
-      <summary
-        ref={summaryRef}
-        aria-label={t('chat.messageActions')}
-        title={t('chat.messageActions')}
+      <button
+        type="button"
+        aria-label={t('chat.copyMessage')}
+        title={t('chat.copyMessage')}
+        onClick={copyContent}
       >
-        <DotsHorizontalIcon />
-      </summary>
-      <div>
-        <button type="button" aria-label={t('chat.copyMessage')} onClick={copyContent}>
-          <CopyIcon aria-hidden="true" />
-          {t('chat.copyMessage')}
+        <CopyIcon aria-hidden="true" />
+      </button>
+      {availability.reply && onReply ? (
+        <button
+          type="button"
+          aria-label={t('chat.replyMessage')}
+          title={t('chat.replyMessage')}
+          onClick={onReply}
+        >
+          <ChatBubbleIcon aria-hidden="true" />
         </button>
-        {availability.reply && onReply ? (
-          <button
-            type="button"
-            aria-label={t('chat.replyMessage')}
-            onClick={() => invoke(onReply)}
-          >
-            <ChatBubbleIcon aria-hidden="true" />
-            {t('chat.replyMessage')}
-          </button>
-        ) : null}
-        {availability.edit && onEdit ? (
-          <button
-            type="button"
-            aria-label={t('chat.editMessage')}
-            onClick={() => invoke(onEdit)}
-          >
-            <Pencil1Icon aria-hidden="true" />
-            {t('chat.editMessage')}
-          </button>
-        ) : null}
-        {availability.delete && onDelete ? (
-          <button
-            type="button"
-            aria-label={t('chat.deleteMessage')}
-            onClick={(event) => invokeWithReturnFocus(onDelete, event.currentTarget)}
-          >
-            <TrashIcon aria-hidden="true" />
-            {t('chat.deleteMessage')}
-          </button>
-        ) : null}
-        {availability.retry && onRetry ? (
-          <button
-            type="button"
-            aria-label={t('chat.retryMessage')}
-            disabled={availability.retryDisabled || retryDisabled}
-            onClick={() => invoke(onRetry)}
-          >
-            <ReloadIcon aria-hidden="true" />
-            {t('chat.retryMessage')}
-          </button>
-        ) : null}
-        {kind === 'agent' && onPin ? (
-          <button
-            type="button"
-            aria-label={t(isPinned ? 'chat.unpinMessage' : 'chat.pinMessage')}
-            aria-pressed={isPinned}
-            onClick={() => invoke(onPin)}
-          >
-            <DrawingPinIcon aria-hidden="true" />
-            {t(isPinned ? 'chat.unpinMessage' : 'chat.pinMessage')}
-          </button>
-        ) : null}
-        {availability.saveTemplate && onSaveTemplate ? (
-          <button
-            type="button"
-            aria-label={t('chat.templates.saveAsTemplate')}
-            onClick={(event) => invokeWithReturnFocus(onSaveTemplate, event.currentTarget)}
-          >
-            <FileTextIcon aria-hidden="true" />
-            {t('chat.templates.saveAsTemplate')}
-          </button>
-        ) : null}
-      </div>
-    </details>
+      ) : null}
+      {availability.edit && onEdit ? (
+        <button
+          type="button"
+          aria-label={t('chat.editMessage')}
+          title={t('chat.editMessage')}
+          onClick={onEdit}
+        >
+          <Pencil1Icon aria-hidden="true" />
+        </button>
+      ) : null}
+      {availability.delete && onDelete ? (
+        <button
+          type="button"
+          className="is-danger"
+          aria-label={t('chat.deleteMessage')}
+          title={t('chat.deleteMessage')}
+          onClick={(event) => onDelete(event.currentTarget)}
+        >
+          <TrashIcon aria-hidden="true" />
+        </button>
+      ) : null}
+      {availability.retry && onRetry ? (
+        <button
+          type="button"
+          aria-label={t('chat.retryMessage')}
+          title={t('chat.retryMessage')}
+          disabled={availability.retryDisabled || retryDisabled}
+          onClick={onRetry}
+        >
+          <ReloadIcon aria-hidden="true" />
+        </button>
+      ) : null}
+      {kind === 'agent' && onPin ? (
+        <button
+          type="button"
+          aria-label={t(isPinned ? 'chat.unpinMessage' : 'chat.pinMessage')}
+          title={t(isPinned ? 'chat.unpinMessage' : 'chat.pinMessage')}
+          aria-pressed={isPinned}
+          onClick={onPin}
+        >
+          <DrawingPinIcon aria-hidden="true" />
+        </button>
+      ) : null}
+      {availability.saveTemplate && onSaveTemplate ? (
+        <button
+          type="button"
+          aria-label={t('chat.templates.saveAsTemplate')}
+          title={t('chat.templates.saveAsTemplate')}
+          onClick={(event) => onSaveTemplate(event.currentTarget)}
+        >
+          <FileTextIcon aria-hidden="true" />
+        </button>
+      ) : null}
+    </div>
   );
 }
 

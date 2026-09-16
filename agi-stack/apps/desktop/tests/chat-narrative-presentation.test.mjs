@@ -34,6 +34,7 @@ const chatSource = [
   'features/chat/ChatTranscript.tsx',
   'features/chat/chatTimelinePresentation.tsx',
 ].map(readSource).join('\n');
+const chatTranscriptSource = readSource('features/chat/ChatTranscript.tsx');
 const chatStyles = readSource('features/chat/ChatPanel.css');
 const duplicateDisclosureStyles = readSource(
   'features/chat/AssistantDuplicateDisclosure.css',
@@ -64,6 +65,7 @@ const attachmentQaSource = readOptionalSource(
 const thoughtTimelineCardSource = readOptionalSource(
   'features/chat/ThoughtTimelineCard.tsx',
 );
+const hitlResponseCardSource = readSource('features/chat/HitlResponseCard.tsx');
 const thoughtTimelineCardQaSource = readOptionalSource(
   'qa/ThoughtTimelineCardQa.tsx',
 );
@@ -104,23 +106,36 @@ test('session messages use the mission-control narrative hierarchy', () => {
   );
 });
 
-test('message action menu dismisses outside and restores trigger focus on Escape', () => {
-  assert.match(chatSource, /const \[menuOpen, setMenuOpen\] = useState\(false\)/);
+test('message actions render as a web-style hover pill bar at the bubble corner', () => {
+  // Web parity 2026-12 (MessageActionBar): inline icon buttons in a floating
+  // pill revealed on hover/focus-within — the kebab <details> dropdown is gone,
+  // so there is no outside-dismiss or Escape focus-restore bookkeeping.
   assert.match(
-    chatSource,
-    /document\.addEventListener\('pointerdown', closeIfOutside, true\)/,
+    chatTranscriptSource,
+    /role="toolbar"[\s\S]*aria-label=\{t\('chat\.messageActions'\)\}/,
   );
   assert.match(
-    chatSource,
-    /document\.addEventListener\('keydown', closeOnEscape, true\)/,
+    chatTranscriptSource,
+    /aria-label=\{t\('chat\.copyMessage'\)\}[\s\S]*?title=\{t\('chat\.copyMessage'\)\}/,
   );
-  assert.match(chatSource, /event\.preventDefault\(\);[\s\S]{0,80}closeMenu\(true\)/);
+  assert.match(chatTranscriptSource, /aria-label=\{t\('chat\.retryMessage'\)\}/);
+  assert.match(chatTranscriptSource, /aria-pressed=\{isPinned\}/);
   assert.match(
-    chatSource,
-    /window\.requestAnimationFrame\(\(\) => summaryRef\.current\?\.focus\(\)\)/,
+    chatTranscriptSource,
+    /onClick=\{\(event\) => onDelete\(event\.currentTarget\)\}/,
   );
-  assert.match(chatSource, /onToggle=\{\(event\) => setMenuOpen\(event\.currentTarget\.open\)\}/);
-  assert.match(chatSource, /<summary\s+ref=\{summaryRef\}/);
+  assert.match(
+    chatTranscriptSource,
+    /onClick=\{\(event\) => onSaveTemplate\(event\.currentTarget\)\}/,
+  );
+  assert.doesNotMatch(chatTranscriptSource, /<details|<summary|summaryRef|closeMenu/);
+  assert.match(chatStyles, /\.session-message-actions \{[\s\S]*opacity: 0/);
+  assert.match(
+    chatStyles,
+    /\.session-thread-message:hover \.session-message-actions,\s*\.session-thread-message:focus-within \.session-message-actions\s*\{[\s\S]*opacity: 1/,
+  );
+  assert.match(chatStyles, /\.session-message-actions button > svg \{/);
+  assert.match(chatStyles, /\.session-message-actions button\.is-danger:hover/);
 });
 
 test('execution duplicate recovery stays auditable without repeating the reply surface', () => {
@@ -771,10 +786,15 @@ test('reasoning and tool disclosures follow the Web transcript defaults', () => 
     thoughtTimelineCardSource,
     /aria-expanded=\{expanded\}[\s\S]*aria-controls=\{contentId\}/,
   );
+  // Web parity 2026-12 (§1.9 ThinkingBlock): brain glyph, no LIVE tag, plain
+  // pre-wrap text content instead of italic markdown.
   assert.match(
     thoughtTimelineCardSource,
-    /role="region"[\s\S]*<MarkdownContent[\s\S]*content=\{item\.content \?\? ''\}/,
+    /role="region"[\s\S]*className="thought-content">\{content\}</,
   );
+  assert.doesNotMatch(thoughtTimelineCardSource, /MarkdownContent/);
+  assert.doesNotMatch(thoughtTimelineCardSource, /StarIcon|thought-timeline-live/);
+  assert.match(thoughtTimelineCardSource, /viewBox="0 0 24 24"[\s\S]*stroke="currentColor"/);
   assert.match(
     thoughtTimelineCardSource,
     /const time = formatTimelineTime\(item\)[\s\S]*className="thought-timeline-time"/,
@@ -797,6 +817,58 @@ test('reasoning and tool disclosures follow the Web transcript defaults', () => 
   assert.match(
     sessionConversationQaSource,
     /current\[toggleItem\.id\]\s*\?\?\s*isTimelineItemInitiallyExpanded\(toggleItem\)/,
+  );
+});
+
+test('streaming bubbles render without a block caret (web parity §1.7)', () => {
+  assert.doesNotMatch(chatTranscriptSource, /streaming-caret/);
+  assert.match(chatTranscriptSource, /className="session-message-surface"/);
+});
+
+test('hitl requests use the web standalone card anatomy (§1.5)', () => {
+  assert.match(hitlResponseCardSource, /className="hitl-card-head"/);
+  assert.match(hitlResponseCardSource, /className="hitl-card-shield"/);
+  assert.match(
+    hitlResponseCardSource,
+    /className=\{`hitl-risk-tag is-\$\{riskKind\}`\}/,
+  );
+  assert.match(
+    hitlResponseCardSource,
+    /className=\{`hitl-risk-banner is-\$\{riskKind\}`\}[\s\S]*?role="note"/,
+  );
+  assert.match(hitlResponseCardSource, /<CheckCircledIcon aria-hidden="true" \/>/);
+  assert.match(hitlResponseCardSource, /<CrossCircledIcon aria-hidden="true" \/>/);
+  assert.match(
+    chatStyles,
+    /\.hitl-card-shield \{[\s\S]*border: 1px solid rgba\(var\(--desktop-red-rgb\), 0\.28\)/,
+  );
+  assert.match(chatStyles, /\.hitl-risk-banner\.is-high \{/);
+  assert.match(chatStyles, /\.hitl-risk-tag\.is-medium \{/);
+  assert.match(
+    chatStyles,
+    /\.hitl-response-card\.is-answered \.timeline-hitl-response \{[\s\S]*border: 1px solid rgba\(var\(--desktop-green-glow-rgb\), 0\.3\)/,
+  );
+  for (const key of ['chat.riskBanner.low', 'chat.riskBanner.medium', 'chat.riskBanner.high']) {
+    assert.equal(
+      (i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length,
+      2,
+    );
+  }
+});
+
+test('session narrative column widens and timeline rows indent under the avatar (§1.10)', () => {
+  assert.match(
+    chatStyles,
+    /\.session-workspace-thread \.session-chat-narrative \.message-stack \{[\s\S]*max-width: 1440px/,
+  );
+  assert.match(chatStyles, /padding: 16px clamp\(16px, 3\.2cqi, 48px\) 80px/);
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.agent-timeline > \.message\.timeline-row,[\s\S]*?margin-left: 44px/,
+  );
+  assert.match(
+    chatStyles,
+    /@container \(max-width: 520px\)[\s\S]*\.agent-timeline > \.thought-timeline-card,[\s\S]*?margin-left: 0/,
   );
 });
 

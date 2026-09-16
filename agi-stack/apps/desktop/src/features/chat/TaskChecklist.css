@@ -1,0 +1,183 @@
+/* Task checklist panel (web parity: audit §1.6 — web TaskList.tsx). All
+   colors come from the desktop token system so light and dark themes both
+   track the web monochrome + status-color palette. */
+
+.task-checklist {
+  margin: 0 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 9px;
+  background: var(--desktop-surface-24);
+}
+
+.task-checklist-header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-checklist-header:hover {
+  background: var(--desktop-surface-26);
+}
+
+.task-checklist-header:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: -2px;
+}
+
+.task-checklist-header svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--desktop-muted);
+}
+
+.task-checklist-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--desktop-text-pale);
+}
+
+.task-checklist-count {
+  margin-left: auto;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-checklist-percent {
+  color: var(--desktop-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-checklist-progress {
+  height: 6px;
+  margin: 2px 10px 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--desktop-surface-26);
+}
+
+.task-checklist-progress-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--desktop-green);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+
+.task-checklist-active {
+  margin: -2px 10px 6px;
+  color: var(--desktop-blue-soft);
+  font-size: 10px;
+}
+
+.task-checklist-body {
+  border-top: 1px solid var(--desktop-border-soft);
+}
+
+.task-checklist-items {
+  max-height: 220px;
+  margin: 0;
+  padding: 2px 4px 6px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.task-checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.task-checklist-item.is-active {
+  background: rgba(var(--desktop-blue-rgb), 0.12);
+}
+
+.task-checklist-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--desktop-muted);
+}
+
+.task-checklist-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.task-checklist-item.status-in_progress .task-checklist-icon {
+  color: var(--desktop-blue-soft);
+}
+
+.task-checklist-item.status-completed .task-checklist-icon {
+  color: var(--desktop-green);
+}
+
+.task-checklist-item.status-failed .task-checklist-icon {
+  color: var(--desktop-red-pale);
+}
+
+.task-checklist-item-content {
+  flex: 1;
+  min-width: 0;
+  color: var(--desktop-chat-text);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.task-checklist-item.status-completed .task-checklist-item-content {
+  color: var(--desktop-muted);
+  text-decoration: line-through;
+}
+
+.task-checklist-priority {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+
+.task-checklist-priority.is-high {
+  background: var(--desktop-red-pale);
+}
+
+.task-checklist-priority.is-low {
+  background: var(--desktop-muted);
+}
+
+.task-checklist-item.status-in_progress .task-checklist-icon svg {
+  animation: task-checklist-spin 1s linear infinite;
+}
+
+@keyframes task-checklist-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-checklist-item.status-in_progress .task-checklist-icon svg {
+    animation: none;
+  }
+
+  .task-checklist-item,
+  .task-checklist-progress-fill {
+    transition: none;
+  }
+}

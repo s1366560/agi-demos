@@ -51,6 +51,11 @@ export function highlightCodeToHtml(code: string, language: string | undefined |
  * highlighting, and an optional "show all N lines" clamp for long outputs.
  * Copy always uses the raw source string so soft-wrapping never leaks
  * display line breaks into the clipboard.
+ *
+ * Web conversation parity (audit 1.8): the header is omitted for short
+ * single-line snippets (web CodeBlock: `!text.includes('\n') && length < 80`),
+ * and the language label reads normal-case xs medium instead of a 10px
+ * uppercase tracked label.
  */
 export const CodeBlockFrame = memo(function CodeBlockFrame({
   code,
@@ -80,6 +85,9 @@ export const CodeBlockFrame = memo(function CodeBlockFrame({
   const collapsible =
     typeof collapsibleAfterLines === 'number' && lineCount > collapsibleAfterLines;
   const collapsed = collapsible && !expanded;
+  // Same heuristic as the web CodeBlock: short single-line snippets render
+  // headerless, without the language label and copy action.
+  const isShortSnippet = !code.includes('\n') && code.length < 80;
 
   useEffect(() => {
     return () => {
@@ -103,21 +111,23 @@ export const CodeBlockFrame = memo(function CodeBlockFrame({
   return (
     <div
       className={`code-block-frame${collapsed ? ' is-collapsed' : ''}${wrap ? ' is-wrapped' : ''}${
-        className ? ` ${className}` : ''
-      }`}
+        isShortSnippet ? ' is-headerless' : ''
+      }${className ? ` ${className}` : ''}`}
     >
-      <div className="code-block-head">
-        <span className="code-block-lang">{resolvedLanguage}</span>
-        <button
-          type="button"
-          className="code-block-copy"
-          aria-label={t('chat.copyCode')}
-          onClick={copyCode}
-        >
-          {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
-          <span>{copied ? t('chat.copied') : t('chat.copyCode')}</span>
-        </button>
-      </div>
+      {isShortSnippet ? null : (
+        <div className="code-block-head">
+          <span className="code-block-lang">{resolvedLanguage}</span>
+          <button
+            type="button"
+            className="code-block-copy"
+            aria-label={t('chat.copyCode')}
+            onClick={copyCode}
+          >
+            {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
+            <span>{copied ? t('chat.copied') : t('chat.copyCode')}</span>
+          </button>
+        </div>
+      )}
       <pre className="code-block-body">
         <code
           className={`hljs language-${resolvedLanguage}`}

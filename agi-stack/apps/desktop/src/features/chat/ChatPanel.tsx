@@ -166,6 +166,8 @@ import {
   latestAgentSuggestions,
   timelineItemsForDisplay,
 } from './chatTimelineModel';
+import { TaskChecklist } from './TaskChecklist';
+import { todoChecklistFromTimeline } from './todoChecklistModel';
 import { createConversationExportSnapshot } from './conversationExportModel';
 import {
   conversationComparisonAvailable,
@@ -609,6 +611,12 @@ export const ChatPanel = memo(function ChatPanel({
   );
   const agentSuggestions = useMemo(
     () => latestAgentSuggestions(visibleTimelineItems),
+    [visibleTimelineItems],
+  );
+  // Web conversation parity (audit 1.6): the live task checklist derives from
+  // task_list_updated/task_updated events with a todowrite tool-call fallback.
+  const todoChecklistItems = useMemo(
+    () => todoChecklistFromTimeline(visibleTimelineItems),
     [visibleTimelineItems],
   );
   const turnCollapseScope = useMemo(
@@ -1883,6 +1891,7 @@ export const ChatPanel = memo(function ChatPanel({
               usage={sessionUsage}
             />
           ) : null}
+          <TaskChecklist items={todoChecklistItems} />
           <ChatComposer
             key={composerResetKey}
             api={api}

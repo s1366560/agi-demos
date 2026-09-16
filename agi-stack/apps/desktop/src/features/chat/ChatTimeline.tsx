@@ -52,11 +52,16 @@ import {
   toolCallPairDurationMs,
   toolCallPairStatus,
   toolCallPresentationKind,
+  toolCallStreamingArguments,
 } from './chatTimelineModel';
 import type {
   ToolCallPair,
   ToolCallPresentationKind,
 } from './chatTimelineModel';
+import {
+  formatTodoToolCallSummary,
+  todoToolCallSummary,
+} from './todoChecklistModel';
 import { agentLifecyclePresentation } from './agentLifecyclePresentationModel';
 import { groupSubAgentTimelineItems } from './subagentTimelineGroupModel';
 import { SubagentToolActivityList } from './SubagentToolActivityList';
@@ -117,6 +122,9 @@ import './ChatTimeline.css';
 const TIMELINE_RENDER_THRESHOLD = 150;
 const TIMELINE_RENDER_WINDOW = 100;
 export const TIMELINE_RENDER_STEP = 100;
+/* Web conversation parity (audit 1.2): collapsed worklog groups show up to 7
+   one-line action previews before the "More N actions" overflow line. */
+const TOOL_GROUP_PREVIEW_LIMIT = 7;
 const EMPTY_PINNED_MESSAGE_IDS: readonly string[] = [];
 const EMPTY_TIMELINE_TURNS: readonly TimelineTurn[] = [];
 const EMPTY_COLLAPSED_TURN_IDS: readonly string[] = [];
@@ -264,6 +272,30 @@ export function AgentTimeline({
     }
     return -1;
   }, [narrative]);
+  /* Web conversation parity (audit 1.1): failed tool steps auto-expand (web
+     TimelineStepItem defaultExpanded on error). The toggle handler derives the
+     next value from the same expandedItems map, so prime the map through
+     onToggleItem once per failed call instead of overriding render defaults. */
+  const failedToolCalls = useMemo(() => {
+    const calls: AgentTimelineItem[] = [];
+    for (const node of narrative) {
+      if (node.kind !== 'tool_group') continue;
+      for (const row of toolActivityRows(node.items)) {
+        if (
+          row.kind === 'tool_call' &&
+          toolCallPairStatus(row.pair) === 'failed'
+        ) {
+          calls.push(row.pair.call);
+        }
+      }
+    }
+    return calls;
+  }, [narrative]);
+  useEffect(() => {
+    for (const call of failedToolCalls) {
+      if (expandedItems[call.id] === undefined) onToggleItem(call);
+    }
+  }, [failedToolCalls, expandedItems, onToggleItem]);
   const renderWindow = useMemo(
     () =>
       resolveTimelineRenderWindow(
@@ -626,6 +658,30 @@ export function AgentTimeline({
               expandedGroupItems,
               index === lastToolGroupIndex,
             );
+            const activityRows = toolActivityRows(node.items);
+            const groupPairs = activityRows.flatMap((row) =>
+              row.kind === 'tool_call' ? [row.pair] : [],
+            );
+            const pairStatuses = groupPairs.map((pair) =>
+              toolCallPairStatus(pair),
+            );
+            const completedCount = pairStatuses.filter(
+              (pairStatus) => pairStatus === 'complete',
+            ).length;
+            const failedCount = pairStatuses.filter(
+              (pairStatus) => pairStatus === 'failed',
+            ).length;
+            // Web conversation parity (audit 1.2): collapsed groups narrate
+            // what happened — up to 7 one-line action previews plus a
+            // "More N actions" overflow line (web ExecutionTimeline).
+            const groupPreviewLines = groupPairs.map((pair) => {
+              const { preview, label } = toolCallPairPreviewText(pair, t);
+              return label ? `${label} ${preview}` : preview;
+            });
+            const hiddenPreviewCount = Math.max(
+              0,
+              groupPreviewLines.length - TOOL_GROUP_PREVIEW_LIMIT,
+            );
             return (
               <Fragment key={groupId}>
                 {dayDivider}
@@ -655,6 +711,19 @@ export function AgentTimeline({
                         })}
                       </small>
                     </span>
+                    {groupPairs.length > 0 ? (
+                      <small className="timeline-tool-group-progress">
+                        {t('session.toolActivityProgress', {
+                          done: completedCount,
+                          total: groupPairs.length,
+                        })}
+                      </small>
+                    ) : null}
+                    {failedCount > 0 ? (
+                      <span className="timeline-tool-group-failed">
+                        {failedCount} {t('session.failedShort')}
+                      </span>
+                    ) : null}
                     <em>{t(`session.toolStatus.${node.status}`)}</em>
                     <ChevronRightIcon
                       className="timeline-tool-group-chevron"
@@ -663,7 +732,7 @@ export function AgentTimeline({
                   </summary>
                   <div className="timeline-tool-group-items">
                     <AggregatedSourcesCard items={node.items} />
-                    {toolActivityRows(node.items).map((row) =>
+                    {activityRows.map((row, rowIndex) =>
                       row.kind === 'thought' ? (
                         <TimelineItemView
                           item={row.item}
@@ -678,12 +747,29 @@ export function AgentTimeline({
                           pair={row.pair}
                           expanded={expandedItems[row.pair.call.id] ?? false}
                           onToggle={() => onToggleItem(row.pair.call)}
+                          isLast={rowIndex === activityRows.length - 1}
                           key={row.pair.call.id}
                         />
                       ),
                     )}
                   </div>
                 </details>
+                {!open && groupPreviewLines.length > 0 ? (
+                  <div className="timeline-tool-group-preview">
+                    {groupPreviewLines
+                      .slice(0, TOOL_GROUP_PREVIEW_LIMIT)
+                      .map((line, lineIndex) => (
+                        <div key={`${line}-${String(lineIndex)}`}>{line}</div>
+                      ))}
+                    {hiddenPreviewCount > 0 ? (
+                      <div className="timeline-tool-group-preview-more">
+                        {t('session.toolActivityMore', {
+                          count: hiddenPreviewCount,
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </Fragment>
             );
           }
@@ -820,37 +906,94 @@ function TimelineWorkingRow({ items }: { items: AgentTimelineItem[] }) {
   );
 }
 
-function ToolCallPairView({
-  pair,
-  expanded,
-  onToggle,
-}: {
-  pair: ToolCallPair;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const { t } = useI18n();
-  const status = toolCallPairStatus(pair);
+/* Web conversation parity (audit 1.1): tool-call rows render preview-first —
+   the descriptive preview is the prominent text and the step label (tool
+   title) is the secondary 2xs text, matching web TimelineStepItem. */
+function toolCallPairPreviewText(
+  pair: ToolCallPair,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): { preview: string; label: string | null } {
   const presentationKind = toolCallPresentationKind(pair);
-  const diffStat = toolCallDiffStat(pair);
-  const primary = pair.result ?? pair.call;
   const title =
     timelineToolDisplay(pair.call)?.title ||
     (presentationKind === 'tool'
       ? pair.call.toolName || t('chat.toolCall')
       : t(`session.toolKind.${presentationKind}`));
+  // Web conversation parity (audit 1.6): a todo-write tool call summarizes
+  // into a status-count title ("Update 4 todos: 2 pending, ...") instead of
+  // the raw generic tool summary (web ExecutionTimeline summarizeTodoDetails).
+  const todoSummary = todoToolCallSummary(pair.call, pair.result);
+  if (todoSummary) {
+    return { preview: formatTodoToolCallSummary(todoSummary, t), label: title };
+  }
+  const primary = pair.result ?? pair.call;
   const rawSummary = timelineSummary(primary, 'tool', t);
   const summary = stripRedundantToolPrefix(
     rawSummary,
     title,
     pair.call.toolName,
   );
+  if (summary && summary !== title) return { preview: summary, label: title };
+  return { preview: title, label: null };
+}
+
+function ToolCallPairView({
+  pair,
+  expanded,
+  onToggle,
+  isLast,
+}: {
+  pair: ToolCallPair;
+  expanded: boolean;
+  onToggle: () => void;
+  isLast: boolean;
+}) {
+  const { t } = useI18n();
+  const status = toolCallPairStatus(pair);
+  const presentationKind = toolCallPresentationKind(pair);
+  const diffStat = toolCallDiffStat(pair);
+  const { preview, label } = toolCallPairPreviewText(pair, t);
   const durationMs = toolCallPairDurationMs(pair);
   const hasDetails =
     timelineHasDetails(pair.call, 'tool') || Boolean(pair.result);
   const memberIds = pair.result
     ? [pair.call.id, pair.result.id]
     : [pair.call.id];
+  const toggleLabel = t(expanded ? 'chat.collapseItem' : 'chat.expandItem', {
+    item: label ?? preview,
+  });
+  const rowText = (
+    <span className="timeline-row-text">
+      <span className="timeline-row-preview">{preview}</span>
+      {label ? <span className="timeline-row-step-label">{label}</span> : null}
+    </span>
+  );
+  const rowMeta = (
+    <>
+      {diffStat ? (
+        <span className="timeline-diff-count">
+          <b>+{diffStat.additions}</b>
+          <i>−{diffStat.deletions}</i>
+        </span>
+      ) : null}
+      {status === 'preparing' ? (
+        <span className="timeline-status preparing">
+          <span className="timeline-status-dot" aria-hidden="true" />
+          {t('chat.status.preparing')}
+        </span>
+      ) : null}
+      {status === 'running' ? (
+        <span className="timeline-status waiting">
+          {t('chat.status.running')}
+        </span>
+      ) : null}
+      {status === 'failed' ? (
+        <span className="timeline-status error">
+          {t('chat.status.error')}
+        </span>
+      ) : null}
+    </>
+  );
   return (
     <article
       className={`timeline-worklog-row kind-${presentationKind} message timeline-row timeline-item tool tool-call status-${status} ${
@@ -859,58 +1002,78 @@ function ToolCallPairView({
       data-timeline-anchor-id={pair.call.id}
       data-timeline-anchor-members={JSON.stringify(memberIds)}
     >
-      {hasDetails ? (
-        <button
-          type="button"
-          className="timeline-row-toggle"
-          aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: title })}
-          title={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: title })}
-          aria-expanded={expanded}
-          onClick={onToggle}
-        >
-          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-        </button>
-      ) : (
-        <span className="timeline-row-spacer" aria-hidden="true" />
-      )}
-      <div className="timeline-row-main">
-        <div className="timeline-row-line">
-          <span
-            className={`timeline-row-icon tool-call-icon is-${status}`}
-            aria-hidden="true"
-          >
-            <TimelineToolIcon kind={presentationKind} status={status} />
-          </span>
-          <span className="timeline-row-title">{title}</span>
-          <span className="timeline-row-summary">{summary}</span>
-        </div>
-        {expanded && hasDetails ? <ToolCallPairBody pair={pair} /> : null}
-      </div>
-      <div className="timeline-row-meta">
-        {diffStat ? (
-          <span className="timeline-diff-count">
-            <b>+{diffStat.additions}</b>
-            <i>−{diffStat.deletions}</i>
-          </span>
-        ) : null}
-        {status === 'running' ? (
-          <span className="timeline-status waiting">
-            {t('chat.status.running')}
-          </span>
-        ) : null}
-        {status === 'failed' ? (
-          <span className="timeline-status error">
-            {t('chat.status.error')}
-          </span>
-        ) : null}
+      <div
+        className={`timeline-rail${durationMs !== null ? ' has-duration' : ''}`}
+        aria-hidden="true"
+      >
+        <span className={`timeline-rail-dot tool-call-icon is-${status}`}>
+          <TimelineToolIcon kind={presentationKind} status={status} />
+        </span>
         {durationMs !== null ? (
-          <span className="timeline-pair-duration">
+          <span className="timeline-rail-duration">
             {formatToolCallDuration(durationMs)}
           </span>
         ) : null}
-        <span>{formatTimelineTime(primary)}</span>
+        {!isLast ? <span className="timeline-rail-connector" /> : null}
+      </div>
+      <div className="timeline-row-main">
+        <div className="timeline-row-card">
+          {hasDetails ? (
+            <button
+              type="button"
+              className="timeline-row-toggle"
+              aria-label={toggleLabel}
+              title={toggleLabel}
+              aria-expanded={expanded}
+              onClick={onToggle}
+            >
+              {rowText}
+              {rowMeta}
+              {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+            </button>
+          ) : (
+            <div className="timeline-row-static">
+              {rowText}
+              {rowMeta}
+            </div>
+          )}
+          {status === 'preparing' ? (
+            <ToolCallPreparingBody pair={pair} />
+          ) : expanded && hasDetails ? (
+            <ToolCallPairBody pair={pair} />
+          ) : null}
+        </div>
       </div>
     </article>
+  );
+}
+
+/* Web conversation parity (audit 1.7): while tool-call arguments stream in,
+   the step card stays open with a "Building arguments" live block (web
+   MessageStream StreamingToolPreparation) instead of the collapsed summary. */
+function ToolCallPreparingBody({ pair }: { pair: ToolCallPair }) {
+  const { t } = useI18n();
+  const streamingArgs = toolCallStreamingArguments(pair.call);
+  if (!streamingArgs) {
+    return (
+      <div className="timeline-details">
+        <div className="timeline-tool-preparing-empty" role="status">
+          <span className="timeline-status-dot" aria-hidden="true" />
+          <em>{t('chat.preparingToolCall')}</em>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="timeline-details">
+      <div className="timeline-detail-block">
+        <span>{t('chat.buildingArguments')}</span>
+        <pre className="timeline-tool-args-stream">
+          {streamingArgs}
+          <span className="timeline-tool-args-caret" aria-hidden="true" />
+        </pre>
+      </div>
+    </div>
   );
 }
 
@@ -919,9 +1082,12 @@ function TimelineToolIcon({
   status,
 }: {
   kind: ToolCallPresentationKind;
-  status: 'running' | 'complete' | 'failed';
+  status: 'preparing' | 'running' | 'complete' | 'failed';
 }) {
-  if (status === 'running') return <UpdateIcon />;
+  // Preparing shares the running glyph but does not spin: the arguments are
+  // still streaming, so the call has not started executing yet (web parity —
+  // the preparing pill pulses instead of spinning).
+  if (status === 'running' || status === 'preparing') return <UpdateIcon />;
   if (status === 'failed') return <ExclamationTriangleIcon />;
   if (kind === 'search') return <MagnifyingGlassIcon />;
   if (kind === 'read') return <FileTextIcon />;

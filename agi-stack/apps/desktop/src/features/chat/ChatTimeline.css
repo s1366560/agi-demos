@@ -208,6 +208,10 @@
   white-space: normal;
 }
 
+/* Web conversation parity (audit 1.11): headings keep a real scale instead of
+   the old 1.06em/1em caps — web MARKDOWN_PROSE_CLASSES only sets
+   font-semibold + margins, so headings retain the browser's larger scale.
+   The existing 4px sibling margin rhythm is unchanged. */
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3,
@@ -215,21 +219,29 @@
 .markdown-content h5,
 .markdown-content h6 {
   color: var(--desktop-chat-text);
+  font-weight: 600;
   line-height: 1.4;
 }
 
-.markdown-content h1,
-.markdown-content h2 {
-  font-size: 1.06em;
-  font-weight: 700;
+.markdown-content h1 {
+  font-size: 1.75em;
 }
 
-.markdown-content h3,
-.markdown-content h4,
+.markdown-content h2 {
+  font-size: 1.5em;
+}
+
+.markdown-content h3 {
+  font-size: 1.25em;
+}
+
+.markdown-content h4 {
+  font-size: 1.1em;
+}
+
 .markdown-content h5,
 .markdown-content h6 {
   font-size: 1em;
-  font-weight: 650;
 }
 
 .markdown-content ul,
@@ -428,34 +440,192 @@
   color: var(--desktop-chat-text-secondary);
 }
 
-/* Web parity redesign 2026-09 phase 2: tool-call rows get the web execution
-   card icon chip — 28x28, 1px ring, status-tinted. Web conversation parity
-   2026-12: running tint follows the web blue "Running" pill (info accent). */
-.timeline-row-icon.tool-call-icon {
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgba(var(--desktop-chat-tint-rgb), 0.14);
-  border-radius: 6px;
-  background: rgba(var(--desktop-chat-tint-rgb), 0.05);
-  color: var(--desktop-chat-text-secondary);
+/* Web conversation parity (audit 1.1): tool-call rows follow the web
+   ExecutionTimeline step anatomy — a left rail with a 24px status circle
+   (2px status-tinted ring, spinner while running), the duration in 2xs
+   tabular-nums under the circle, and a 1px connector line between steps. The
+   article loses its standalone card chrome; the card moves to
+   .timeline-row-card inside the content column. */
+.message.timeline-row.tool-call,
+.message.timeline-row.tool-call:hover,
+.message.timeline-row.tool-call.is-expanded {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.timeline-row-icon.tool-call-icon.is-running {
-  border-color: rgba(var(--desktop-status-running-rgb), 0.3);
-  background: rgba(var(--desktop-status-running-rgb), 0.1);
+.timeline-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+}
+
+.timeline-rail.has-duration {
+  width: 36px;
+}
+
+.timeline-rail-dot {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(var(--desktop-chat-tint-rgb), 0.18);
+  border-radius: 999px;
+  background: var(--desktop-chat-panel);
+  color: var(--desktop-chat-text-secondary);
+  transition:
+    color 300ms var(--ease-out),
+    background-color 300ms var(--ease-out),
+    border-color 300ms var(--ease-out);
+}
+
+.timeline-rail-dot svg {
+  width: 11px;
+  height: 11px;
+}
+
+.timeline-rail-dot.is-running {
+  border-color: rgba(var(--desktop-status-running-rgb), 0.55);
+  background: rgba(var(--desktop-status-running-rgb), 0.12);
   color: var(--desktop-status-running);
 }
 
-.timeline-row-icon.tool-call-icon.is-complete {
-  border-color: rgba(var(--desktop-green-rgb), 0.26);
-  background: rgba(var(--desktop-green-rgb), 0.09);
+.timeline-rail-dot.is-complete {
+  border-color: rgba(var(--desktop-green-rgb), 0.5);
+  background: rgba(var(--desktop-green-rgb), 0.12);
   color: var(--desktop-green);
 }
 
-.timeline-row-icon.tool-call-icon.is-failed {
-  border-color: rgba(var(--desktop-red-rgb), 0.3);
-  background: rgba(var(--desktop-red-rgb), 0.1);
+.timeline-rail-dot.is-failed {
+  border-color: rgba(var(--desktop-red-rgb), 0.55);
+  background: rgba(var(--desktop-red-rgb), 0.12);
   color: var(--desktop-red);
+}
+
+.timeline-rail-duration {
+  max-width: 40px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-rail-connector {
+  flex: 1 1 auto;
+  width: 1px;
+  min-height: 16px;
+  margin-top: 4px;
+  background: var(--desktop-chat-border);
+}
+
+/* Web conversation parity (audit 1.1): the step card is a rounded-md hairline
+   panel (web border-slate-200/50 bg-white dark:bg-slate-950/70 px-3 py-2) with
+   a hover lift; the toggle becomes its full-width header button with
+   preview-first text. */
+.timeline-row-card {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--desktop-chat-border);
+  border-radius: var(--desktop-radius-md);
+  background: var(--desktop-chat-panel);
+  box-shadow: var(--desktop-shadow-card);
+  transition:
+    border-color 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
+}
+
+.timeline-row-card:hover,
+.message.timeline-row.tool-call.is-expanded .timeline-row-card {
+  border-color: var(--desktop-chat-border-strong);
+  box-shadow: 0 1px 3px rgba(var(--desktop-overlay-16-rgb), 0.045);
+}
+
+.tool-call .timeline-row-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  padding-bottom: 6px;
+}
+
+.tool-call .timeline-row-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 22px;
+  height: auto;
+  text-align: left;
+}
+
+/* The card itself carries the hover lift; the header button stays transparent
+   and exposes a neutral focus ring (web focus-visible ring-primary/50). */
+.tool-call .timeline-row-toggle:hover {
+  background: transparent;
+}
+
+.tool-call .timeline-row-toggle:focus-visible {
+  outline: 2px solid rgba(var(--desktop-cyan-rgb), 0.5);
+  outline-offset: 1px;
+  border-radius: var(--desktop-radius-sm);
+}
+
+.tool-call .timeline-row-toggle > svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+.timeline-row-static {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 22px;
+}
+
+/* Preview-first text: the tool preview is prominent (web text-xs slate-700)
+   and the step label is secondary (web text-2xs content-tertiary). */
+.timeline-row-text {
+  display: flex;
+  align-items: baseline;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.timeline-row-preview {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--desktop-chat-text);
+  font-size: var(--desktop-text-xs);
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-row-step-label {
+  flex: 0 0 auto;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-2xs);
+  line-height: 18px;
 }
 
 .timeline-row.artifact .timeline-row-icon {
@@ -533,6 +703,86 @@
   color: var(--desktop-status-running);
 }
 
+/* Web conversation parity (audit 1.7): the preparing pill mirrors the web
+   StreamingToolPreparation badge — blue tint with a pulsing dot. */
+.timeline-status.preparing {
+  gap: 5px;
+  border-color: rgba(var(--desktop-status-running-rgb), 0.3);
+  background: rgba(var(--desktop-status-running-rgb), 0.12);
+  color: var(--desktop-status-running);
+}
+
+.timeline-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--desktop-status-running);
+  animation: tool-preparing-pulse 1.2s ease-in-out infinite;
+}
+
+/* The rail dot tints blue while arguments stream, softer than the running
+   state (web preparing circle is the same blue family as running). */
+.timeline-rail-dot.is-preparing {
+  border-color: rgba(var(--desktop-status-running-rgb), 0.4);
+  background: rgba(var(--desktop-status-running-rgb), 0.08);
+  color: var(--desktop-status-running);
+}
+
+/* Live argument stream: blue-tinted mono panel with an inline pulsing caret
+   (web bg-blue-50 dark:bg-blue-500/5, border-blue-200 dark:border-blue-500/20,
+   max-h-32 scroll). */
+.timeline-details pre.timeline-tool-args-stream {
+  max-height: 128px;
+  overflow-y: auto;
+  border-color: rgba(var(--desktop-status-running-rgb), 0.25);
+  background: rgba(var(--desktop-status-running-rgb), 0.06);
+  color: var(--desktop-chat-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.timeline-tool-args-caret {
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  margin-left: 2px;
+  border-radius: 1px;
+  background: var(--desktop-status-running);
+  vertical-align: -2px;
+  animation: tool-preparing-pulse 1.2s ease-in-out infinite;
+}
+
+/* Preparing with no arguments yet: dashed blue placeholder (web
+   border-dashed border-blue-200 dark:border-blue-500/20, italic blue copy). */
+.timeline-tool-preparing-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed rgba(var(--desktop-status-running-rgb), 0.3);
+  border-radius: var(--desktop-radius-md);
+  background: rgba(var(--desktop-status-running-rgb), 0.05);
+}
+
+.timeline-tool-preparing-empty em {
+  color: var(--desktop-status-running);
+  font-size: var(--desktop-text-xs);
+  font-style: italic;
+}
+
+@keyframes tool-preparing-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .timeline-details {
   display: grid;
   gap: 8px;
@@ -541,9 +791,10 @@
   padding: 5px 0 5px 21px;
 }
 
-/* Tool-call payload blocks align under the row title (28px icon chip + gap). */
+/* Tool-call payload blocks sit inside the step card under its header (web
+   expanded step details render inside the card). */
 .tool-call .timeline-details {
-  padding-left: 34px;
+  padding: 2px 0;
 }
 
 .timeline-detail-block {
@@ -805,8 +1056,10 @@
 }
 
 /* --- Conversation rendering upgrades: code frames, streaming, day rhythm --- */
-/* Web parity redesign 2026-09: frame bg joins the panel ladder (#141414 dark /
-   #f7f7f7 light), radius 8px, 10px uppercase tertiary language label. */
+/* Web conversation parity (audit 1.8): frame keeps the rounded-lg hairline
+   border; the header uses a stronger tinted surface with a normal-case
+   12px/500 language label (web text-xs font-medium text-slate-500) and is
+   omitted entirely for short single-line snippets. */
 .code-block-frame {
   position: relative;
   display: grid;
@@ -824,19 +1077,18 @@
   justify-content: space-between;
   min-height: 26px;
   gap: 8px;
-  padding: 3px 4px 3px 9px;
+  padding: 5px 6px 5px 12px;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: rgba(var(--desktop-slate-rgb), 0.05);
+  background: rgba(var(--desktop-slate-rgb), 0.09);
 }
 
 .code-block-lang {
   overflow: hidden;
-  color: var(--desktop-faint);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
+  color: var(--desktop-chat-text-tertiary);
+  font-size: var(--desktop-text-xs);
+  font-weight: 500;
+  line-height: var(--desktop-text-xs--line-height, 16px);
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -975,25 +1227,6 @@
   font-weight: 700;
 }
 
-/* Streaming assistant output: blinking caret at the insertion point.
-   Web parity redesign 2026-09: subtle 2px block in the content color. */
-.streaming-caret {
-  display: inline-block;
-  width: 2px;
-  height: 14px;
-  margin-left: 3px;
-  border-radius: 1px;
-  background: currentcolor;
-  vertical-align: -2px;
-  animation: streaming-caret-blink 1.05s steps(2, start) infinite;
-}
-
-@keyframes streaming-caret-blink {
-  50% {
-    opacity: 0;
-  }
-}
-
 /* Calendar day rhythm inside the conversation timeline */
 .timeline-day-divider {
   display: flex;
@@ -1057,32 +1290,16 @@
   font-size: 0.96em;
 }
 
-/* Paired tool-call rows: status icon + duration */
-.tool-call-icon.is-running {
-  color: var(--desktop-cyan);
-}
-
+/* Paired tool-call rows: the rail dot carries the status colors; the running
+   dot icon spins (reduced-motion fallback below). */
 .tool-call-icon.is-running svg {
   animation: tool-call-spin var(--spin-duration) linear infinite;
-}
-
-.tool-call-icon.is-complete {
-  color: var(--desktop-green);
-}
-
-.tool-call-icon.is-failed {
-  color: var(--desktop-red);
 }
 
 @keyframes tool-call-spin {
   to {
     transform: rotate(360deg);
   }
-}
-
-.timeline-pair-duration {
-  color: var(--desktop-faint);
-  font-variant-numeric: tabular-nums;
 }
 
 .timeline-tool-group.status-running .timeline-tool-group-icon,
@@ -1096,7 +1313,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: 0 0 0 3px rgba(var(--desktop-cyan-rgb), 0.18);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-status-running-rgb), 0.18);
   animation: tool-group-pulse 1.6s ease-in-out infinite;
   pointer-events: none;
 }
@@ -1113,8 +1330,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-.streaming-caret,
-.tool-call-icon.is-running svg {
+.tool-call-icon.is-running svg,
+.timeline-status-dot,
+.timeline-tool-args-caret {
     animation: none;
   }
 
@@ -1122,6 +1340,11 @@
 .timeline-tool-group.status-running .timeline-debug-group-icon::after {
     animation: none;
     opacity: 1;
+  }
+
+.timeline-rail-dot,
+.timeline-row-card {
+    transition: none;
   }
 }
 
@@ -1489,8 +1712,11 @@
   color: var(--desktop-faint);
 }
 
+/* Audit 1.3: focus chrome follows the neutral accent (the color token now
+   resolves to the near-white dark primary); the border uses the strong
+   neutral chat border instead of the cyan border family. */
 .composer-model-search:focus-within {
-  border-color: var(--desktop-border-cyan-5);
+  border-color: var(--desktop-chat-border-strong);
   color: var(--desktop-cyan);
 }
 
