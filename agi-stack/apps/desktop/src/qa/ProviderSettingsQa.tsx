@@ -366,6 +366,64 @@ const qaPluginMarketplaceOperationsV2 = Object.freeze<DesktopPluginMarketplaceOp
     }
     return project(plugins.map(managedPluginFromMarketplaceEntry));
   },
+  installMarketplacePlugin: async (config, request, signal) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID || request.tenant_id !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    const current = plugins.find(
+      (plugin) =>
+        plugin.plugin_id === request.plugin_id && plugin.version === request.version,
+    );
+    if (!current) throw new Error('qa_plugin_marketplace_version_not_found');
+    plugins = plugins.map((plugin) =>
+      plugin === current ? { ...plugin, install_status: 'installed' } : plugin,
+    );
+    return {
+      plugin_id: request.plugin_id,
+      version: request.version,
+      status: 'approved',
+      reason: 'protocol v2 Bundle verified and desired',
+    };
+  },
+  approveMarketplacePlugin: async (config, pluginId, input, signal) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    return {
+      plugin_id: pluginId,
+      version: input.version,
+      status: 'approved',
+      granted_permissions: [...input.approvedPermissions].sort(),
+    };
+  },
+  revokeMarketplacePlugin: async (config, pluginId, input, signal) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    const revokedVersions = plugins
+      .filter(
+        (plugin) =>
+          plugin.plugin_id === pluginId &&
+          (input.version === undefined || plugin.version === input.version),
+      )
+      .map((plugin) => plugin.version);
+    if (revokedVersions.length === 0) {
+      throw new Error('qa_plugin_marketplace_version_not_found');
+    }
+    plugins = plugins.map((plugin) =>
+      plugin.plugin_id === pluginId && revokedVersions.includes(plugin.version)
+        ? { ...plugin, revoked: true, revocation_reason: input.reason }
+        : plugin,
+    );
+    return {
+      plugin_id: pluginId,
+      revoked_versions: revokedVersions,
+      revoked_permissions: 0,
+    };
+  },
   uninstallMarketplacePlugin: async (config, pluginId, version, signal) => {
     signal?.throwIfAborted();
     if (config.tenantId !== QA_TENANT_ID) {

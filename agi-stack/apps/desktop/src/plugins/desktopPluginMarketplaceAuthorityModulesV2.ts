@@ -9,6 +9,11 @@ import { DesktopApiClient } from '../api/client';
 import type {
   DesktopRuntimeConfig,
   ManagedPlugin,
+  MarketplacePluginApprovalResponse,
+  MarketplacePluginInstallRequest,
+  MarketplacePluginInstallResponse,
+  MarketplacePluginRevocationResponse,
+  MarketplacePluginRevokeRequest,
   MarketplacePluginUninstallResponse,
 } from '../types';
 import type {
@@ -35,6 +40,20 @@ export interface DesktopPluginMarketplaceCatalogAuthorityV2 {
 }
 
 export interface DesktopPluginMarketplaceManagementAuthorityV2 {
+  readonly installMarketplacePlugin: (
+    request: MarketplacePluginInstallRequest,
+    signal?: AbortSignal,
+  ) => Promise<MarketplacePluginInstallResponse>;
+  readonly approveMarketplacePlugin: (
+    pluginId: string,
+    input: { version: string; approvedPermissions: string[] },
+    signal?: AbortSignal,
+  ) => Promise<MarketplacePluginApprovalResponse>;
+  readonly revokeMarketplacePlugin: (
+    pluginId: string,
+    input: MarketplacePluginRevokeRequest,
+    signal?: AbortSignal,
+  ) => Promise<MarketplacePluginRevocationResponse>;
   readonly uninstallMarketplacePlugin: (
     pluginId: string,
     version: string,
@@ -64,6 +83,23 @@ export interface DesktopPluginMarketplaceOperationsV2 {
     signal: AbortSignal | undefined,
     project: (plugins: ManagedPlugin[]) => TResult | Promise<TResult>,
   ) => Promise<TResult>;
+  readonly installMarketplacePlugin: (
+    config: DesktopRuntimeConfig,
+    request: MarketplacePluginInstallRequest,
+    signal?: AbortSignal,
+  ) => Promise<MarketplacePluginInstallResponse>;
+  readonly approveMarketplacePlugin: (
+    config: DesktopRuntimeConfig,
+    pluginId: string,
+    input: { version: string; approvedPermissions: string[] },
+    signal?: AbortSignal,
+  ) => Promise<MarketplacePluginApprovalResponse>;
+  readonly revokeMarketplacePlugin: (
+    config: DesktopRuntimeConfig,
+    pluginId: string,
+    input: MarketplacePluginRevokeRequest,
+    signal?: AbortSignal,
+  ) => Promise<MarketplacePluginRevocationResponse>;
   readonly uninstallMarketplacePlugin: (
     config: DesktopRuntimeConfig,
     pluginId: string,
@@ -79,7 +115,10 @@ export type DesktopPluginMarketplaceCatalogOperationsV2 = Pick<
 
 export type DesktopPluginMarketplaceManagementOperationsV2 = Pick<
   DesktopPluginMarketplaceOperationsV2,
-  'uninstallMarketplacePlugin'
+  | 'installMarketplacePlugin'
+  | 'approveMarketplacePlugin'
+  | 'revokeMarketplacePlugin'
+  | 'uninstallMarketplacePlugin'
 >;
 
 type ServiceAdmissionRejectionV2 = Extract<
@@ -175,6 +214,44 @@ export function createDesktopPluginMarketplaceOperationsV2(
         actions,
         config,
         async (authority) => project(await authority.listMarketplacePlugins(signal)),
+      );
+    },
+    installMarketplacePlugin: (
+      config: DesktopRuntimeConfig,
+      request: MarketplacePluginInstallRequest,
+      signal?: AbortSignal,
+    ) => {
+      const actions = requireGenerationActionsV2('management', resolveActions());
+      return withDesktopPluginMarketplaceManagementOperationV2(
+        actions,
+        config,
+        (authority) => authority.installMarketplacePlugin(request, signal),
+      );
+    },
+    approveMarketplacePlugin: (
+      config: DesktopRuntimeConfig,
+      pluginId: string,
+      input: { version: string; approvedPermissions: string[] },
+      signal?: AbortSignal,
+    ) => {
+      const actions = requireGenerationActionsV2('management', resolveActions());
+      return withDesktopPluginMarketplaceManagementOperationV2(
+        actions,
+        config,
+        (authority) => authority.approveMarketplacePlugin(pluginId, input, signal),
+      );
+    },
+    revokeMarketplacePlugin: (
+      config: DesktopRuntimeConfig,
+      pluginId: string,
+      input: MarketplacePluginRevokeRequest,
+      signal?: AbortSignal,
+    ) => {
+      const actions = requireGenerationActionsV2('management', resolveActions());
+      return withDesktopPluginMarketplaceManagementOperationV2(
+        actions,
+        config,
+        (authority) => authority.revokeMarketplacePlugin(pluginId, input, signal),
       );
     },
     uninstallMarketplacePlugin: (
@@ -292,6 +369,20 @@ function createDesktopPluginMarketplaceManagementAuthorityV2(
 ): DesktopPluginMarketplaceManagementAuthorityV2 {
   const authority = new DesktopApiClient(cloneDesktopRuntimeConfigV2(config));
   return Object.freeze({
+    installMarketplacePlugin: (
+      request: MarketplacePluginInstallRequest,
+      signal?: AbortSignal,
+    ) => authority.installMarketplacePlugin(request, signal),
+    approveMarketplacePlugin: (
+      pluginId: string,
+      input: { version: string; approvedPermissions: string[] },
+      signal?: AbortSignal,
+    ) => authority.approveMarketplacePlugin(pluginId, input, signal),
+    revokeMarketplacePlugin: (
+      pluginId: string,
+      input: MarketplacePluginRevokeRequest,
+      signal?: AbortSignal,
+    ) => authority.revokeMarketplacePlugin(pluginId, input, signal),
     uninstallMarketplacePlugin: (
       pluginId: string,
       version: string,
@@ -317,6 +408,29 @@ function createRevocableManagementAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopPluginMarketplaceManagementAuthorityV2 {
   return Object.freeze({
+    installMarketplacePlugin: (
+      request: MarketplacePluginInstallRequest,
+      signal?: AbortSignal,
+    ) => {
+      assertOperationActiveV2('management', isOperationActive());
+      return authority.installMarketplacePlugin(request, signal);
+    },
+    approveMarketplacePlugin: (
+      pluginId: string,
+      input: { version: string; approvedPermissions: string[] },
+      signal?: AbortSignal,
+    ) => {
+      assertOperationActiveV2('management', isOperationActive());
+      return authority.approveMarketplacePlugin(pluginId, input, signal);
+    },
+    revokeMarketplacePlugin: (
+      pluginId: string,
+      input: MarketplacePluginRevokeRequest,
+      signal?: AbortSignal,
+    ) => {
+      assertOperationActiveV2('management', isOperationActive());
+      return authority.revokeMarketplacePlugin(pluginId, input, signal);
+    },
     uninstallMarketplacePlugin: (
       pluginId: string,
       version: string,

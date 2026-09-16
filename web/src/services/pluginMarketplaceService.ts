@@ -1,8 +1,14 @@
 import { httpClient } from '@/services/client/httpClient';
 
 import type {
+  MarketplacePackageApprovalResponse,
+  MarketplacePackageApproveRequest,
   MarketplacePackageCatalogEntry,
   MarketplacePackageDetail,
+  MarketplacePackageInstallRequest,
+  MarketplacePackageInstallResponse,
+  MarketplacePackageRevocationResponse,
+  MarketplacePackageRevokeRequest,
   MarketplacePackageUninstallRequest,
   MarketplacePackageUninstallResponse,
 } from '@/types/pluginMarketplace';
@@ -31,6 +37,36 @@ export const pluginMarketplaceService = {
     return httpClient.get<MarketplacePackageDetail>(`${BASE_URL}/${encodeURIComponent(pluginId)}`, {
       params: visibilityParams(options),
     });
+  },
+
+  installPackage(
+    pluginId: string,
+    request: MarketplacePackageInstallRequest
+  ): Promise<MarketplacePackageInstallResponse> {
+    return httpClient.post<MarketplacePackageInstallResponse>(
+      `${BASE_URL}/${encodeURIComponent(pluginId)}/install`,
+      request
+    );
+  },
+
+  approvePackage(
+    pluginId: string,
+    request: MarketplacePackageApproveRequest
+  ): Promise<MarketplacePackageApprovalResponse> {
+    return httpClient.post<MarketplacePackageApprovalResponse>(
+      `${BASE_URL}/${encodeURIComponent(pluginId)}/approve`,
+      request
+    );
+  },
+
+  revokePackage(
+    pluginId: string,
+    request: MarketplacePackageRevokeRequest
+  ): Promise<MarketplacePackageRevocationResponse> {
+    return httpClient.post<MarketplacePackageRevocationResponse>(
+      `${BASE_URL}/${encodeURIComponent(pluginId)}/revoke`,
+      request
+    );
   },
 
   uninstallPackage(

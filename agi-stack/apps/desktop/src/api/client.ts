@@ -39,7 +39,13 @@ import type {
   LoginOutcome,
   LlmRoutingRole,
   ManagedPlugin,
+  MarketplacePluginApprovalResponse,
+  MarketplacePluginApproveRequest,
   MarketplacePluginCatalogEntry,
+  MarketplacePluginInstallRequest,
+  MarketplacePluginInstallResponse,
+  MarketplacePluginRevocationResponse,
+  MarketplacePluginRevokeRequest,
   MarketplacePluginUninstallResponse,
   PaginatedConversationsResponse,
   PlanSnapshot,
@@ -1733,6 +1739,71 @@ export class DesktopApiClient {
           tenant_id: tenantId,
           version: requireValue(version, 'plugin version'),
         },
+      },
+    );
+  }
+
+  async installMarketplacePlugin(
+    request: MarketplacePluginInstallRequest,
+    signal?: AbortSignal,
+  ): Promise<MarketplacePluginInstallResponse> {
+    const pluginId = requireValue(request.plugin_id, 'plugin id');
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    if (request.tenant_id !== tenantId) {
+      throw new DesktopApiError('Marketplace install tenant scope mismatch', 400, {
+        detail: 'tenant_scope_mismatch',
+      });
+    }
+    return this.request<MarketplacePluginInstallResponse>(
+      `/api/v1/plugin-marketplace/packages/${encodeURIComponent(pluginId)}/install`,
+      {
+        method: 'POST',
+        signal,
+        body: request,
+      },
+    );
+  }
+
+  async approveMarketplacePlugin(
+    pluginId: string,
+    input: { version: string; approvedPermissions: string[] },
+    signal?: AbortSignal,
+  ): Promise<MarketplacePluginApprovalResponse> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    const body: MarketplacePluginApproveRequest = {
+      version: requireValue(input.version, 'plugin version'),
+      tenant_id: tenantId,
+      approved_permissions: [...input.approvedPermissions],
+    };
+    return this.request<MarketplacePluginApprovalResponse>(
+      `/api/v1/plugin-marketplace/packages/${encodeURIComponent(
+        requireValue(pluginId, 'plugin id'),
+      )}/approve`,
+      {
+        method: 'POST',
+        signal,
+        body,
+      },
+    );
+  }
+
+  async revokeMarketplacePlugin(
+    pluginId: string,
+    input: MarketplacePluginRevokeRequest,
+    signal?: AbortSignal,
+  ): Promise<MarketplacePluginRevocationResponse> {
+    const body: MarketplacePluginRevokeRequest = {
+      reason: requireValue(input.reason, 'revocation reason'),
+      ...(input.version ? { version: input.version } : {}),
+    };
+    return this.request<MarketplacePluginRevocationResponse>(
+      `/api/v1/plugin-marketplace/packages/${encodeURIComponent(
+        requireValue(pluginId, 'plugin id'),
+      )}/revoke`,
+      {
+        method: 'POST',
+        signal,
+        body,
       },
     );
   }

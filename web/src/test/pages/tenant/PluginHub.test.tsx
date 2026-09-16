@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
+import { useUser } from '@/stores/auth';
 
 import { channelService } from '@/services/channelService';
 import { pluginMarketplaceService } from '@/services/pluginMarketplaceService';
@@ -29,9 +30,13 @@ vi.mock('antd', async () => {
 
 vi.mock('@/stores/project');
 vi.mock('@/stores/tenant');
+vi.mock('@/stores/auth', () => ({
+  useUser: vi.fn(),
+}));
 vi.mock('@/services/pluginMarketplaceService', () => ({
   pluginMarketplaceService: {
     listPackages: vi.fn(),
+    installPackage: vi.fn(),
     uninstallPackage: vi.fn(),
   },
 }));
@@ -64,6 +69,24 @@ const marketplacePackage = {
   revocation_reason: null,
 };
 
+const signedMarketplacePackage = {
+  ...marketplacePackage,
+  plugin_id: 'signed-plugin',
+  install_status: 'uninstalled',
+  manifest: {
+    schema_version: 2,
+    targets: ['python'],
+    signature: 'c2ln',
+    manifests: [{ permissions: ['tools.execute'] }],
+  },
+  signature: { algorithm: 'Ed25519', public_key_pem: 'pem-public', signature_base64: 'c2ln' },
+  provenance: {
+    predicateType: 'https://slsa.dev/provenance/v1',
+    builderId: 'builder-v2',
+    subjectName: 'signed-plugin',
+  },
+};
+
 const channelConfig = {
   id: 'cfg-1',
   project_id: 'project-1',
@@ -91,6 +114,7 @@ describe('PluginHub', () => {
         listProjects: vi.fn().mockResolvedValue(undefined),
       })
     );
+    vi.mocked(useUser).mockReturnValue({ is_superuser: true } as never);
     vi.mocked(pluginMarketplaceService.listPackages).mockResolvedValue([marketplacePackage]);
     vi.mocked(pluginMarketplaceService.uninstallPackage).mockResolvedValue({
       plugin_id: marketplacePackage.plugin_id,
@@ -166,5 +190,104 @@ describe('PluginHub', () => {
       );
     });
     expect(await screen.findByText('App ID')).toBeInTheDocument();
+  });
+
+  it('gates install behind the platform administrator capability', async () => {
+    vi.mocked(useUser).mockReturnValue({ is_superuser: false } as any);
+    vi.mocked(pluginMarketplaceService.listPackages).mockResolvedValue([signedMarketplacePackage]);
+
+    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+
+    const installButton = await screen.findByRole('button', {
+      name: 'tenant.pluginHub.pluginsList.install',
+    });
+    expect(installButton).toBeDisabled();
+    expect(pluginMarketplaceService.installPackage).not.toHaveBeenCalled();
+  });
+
+  it('installs a verified package after explicit permission approval', async () => {
+    vi.mocked(pluginMarketplaceService.listPackages).mockResolvedValue([signedMarketplacePackage]);
+    vi.mocked(pluginMarketplaceService.installPackage).mockResolvedValue({
+      plugin_id: 'signed-plugin',
+      version: '2.0.0',
+      status: 'approved',
+      reason: 'protocol v2 Bundle verified and desired',
+    });
+
+    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+
+    const installButton = await screen.findByRole('button', {
+      name: 'tenant.pluginHub.pluginsList.install',
+    });
+    expect(installButton).toBeEnabled();
+    fireEvent.click(installButton);
+
+    const checkbox = await screen.findByRole('checkbox');
+    fireEvent.click(checkbox);
+    const confirm = (
+      await screen.findAllByRole('button', { name: 'tenant.pluginHub.pluginsList.install' })
+    ).find((button) => button.closest('.ant-modal-container'));
+    expect(confirm).toBeDefined();
+    fireEvent.click(confirm!);
+
+    await waitFor(() => {
+      expect(pluginMarketplaceService.installPackage).toHaveBeenCalledWith(
+        'signed-plugin',
+        expect.objectContaining({
+          plugin_id: 'signed-plugin',
+          version: '2.0.0',
+          publisher: 'memstack',
+          tenant_id: 'tenant-1',
+          artifact: {
+            registry: 'https://registry.memstack.test',
+            repository: 'plugins/github',
+            manifest_sha256: 'b'.repeat(64),
+          },
+          artifact_sha256: 'a'.repeat(64),
+          signature: {
+            algorithm: 'Ed25519',
+            public_key_pem: 'pem-public',
+            signature_base64: 'c2ln',
+          },
+          provenance: {
+            predicate_type: 'https://slsa.dev/provenance/v1',
+            builder_id: 'builder-v2',
+            subject_name: 'signed-plugin',
+          },
+          approved_permissions: ['tools.execute'],
+          tenant_admin_approved: true,
+          security_scan_passed: true,
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(messageMock.success).toHaveBeenCalled();
+    });
+  });
+
+  it('keeps the modal open with the structured reason when install is quarantined', async () => {
+    vi.mocked(pluginMarketplaceService.listPackages).mockResolvedValue([signedMarketplacePackage]);
+    vi.mocked(pluginMarketplaceService.installPackage).mockResolvedValue({
+      plugin_id: 'signed-plugin',
+      version: '2.0.0',
+      status: 'quarantined',
+      reason: 'protocol v2 marketplace trust store is empty',
+    });
+
+    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'tenant.pluginHub.pluginsList.install' })
+    );
+    fireEvent.click(await screen.findByRole('checkbox'));
+    const confirm = (
+      await screen.findAllByRole('button', { name: 'tenant.pluginHub.pluginsList.install' })
+    ).find((button) => button.closest('.ant-modal-container'));
+    fireEvent.click(confirm!);
+
+    expect(await screen.findByTestId('install-error')).toHaveTextContent(
+      'protocol v2 marketplace trust store is empty'
+    );
+    expect(messageMock.success).not.toHaveBeenCalled();
   });
 });

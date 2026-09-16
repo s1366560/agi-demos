@@ -633,7 +633,12 @@ test('bound authorities freeze config and forward AbortSignal through exact V2 e
     assert.equal(Object.isFrozen(catalog), true);
     assert.equal(Object.isFrozen(management), true);
     assert.deepEqual(Object.keys(catalog), ['listMarketplacePlugins']);
-    assert.deepEqual(Object.keys(management), ['uninstallMarketplacePlugin']);
+    assert.deepEqual(Object.keys(management), [
+      'installMarketplacePlugin',
+      'approveMarketplacePlugin',
+      'revokeMarketplacePlugin',
+      'uninstallMarketplacePlugin',
+    ]);
     assert.equal(plugins[0].id, 'github@2.4.1');
     assert.equal(outcome.desired_removed, true);
     assert.equal(calls.length, 2);

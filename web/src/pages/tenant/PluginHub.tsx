@@ -7,6 +7,7 @@ import { App, Button, Empty, Form, Input, Modal, Select, Space, Switch, Typograp
 import { Package, RefreshCw } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { useUser } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
@@ -20,8 +21,11 @@ import {
   getChannelConfigSubmitValues,
   isRecord,
 } from '@/utils/channelConfigSanitizers';
+import { buildMarketplaceInstallRequest } from '@/utils/pluginMarketplaceInstall';
+
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { InstallPluginPackageModal } from '@/components/marketplace/InstallPluginPackageModal';
 
 import { ChannelConfigSection } from './ChannelConfigSection';
 import { PluginMarketplaceSection } from './PluginMarketplaceSection';
@@ -56,6 +60,8 @@ export const PluginHub: React.FC = () => {
   const projectIdFromQuery = searchParams.get('projectId');
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const tenantId = urlTenantId || currentTenant?.id || null;
+  const currentUser = useUser();
+  const canInstallPackages = currentUser?.is_superuser === true;
 
   const {
     projects,
@@ -90,6 +96,8 @@ export const PluginHub: React.FC = () => {
   const [configsLoading, setConfigsLoading] = useState(false);
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [packageActionKey, setPackageActionKey] = useState<string | null>(null);
+  const [installTarget, setInstallTarget] = useState<MarketplacePackageCatalogEntry | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
   const [configActionKey, setConfigActionKey] = useState<string | null>(null);
   const [configModalVisible, setConfigModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ChannelConfig | null>(null);
@@ -120,6 +128,8 @@ export const PluginHub: React.FC = () => {
     setChannelSchemas({});
     setMarketplaceLoading(false);
     setMarketplaceError(null);
+    setInstallTarget(null);
+    setInstallError(null);
     setConfigsLoading(false);
     setSchemaLoading(false);
     setConfigModalVisible(false);
@@ -382,6 +392,49 @@ export const PluginHub: React.FC = () => {
     [loadChannelConfigs, loadMarketplace, message, tenantId, t]
   );
 
+  const handleOpenInstall = useCallback((entry: MarketplacePackageCatalogEntry) => {
+    setInstallError(null);
+    setInstallTarget(entry);
+  }, []);
+
+  const handleInstallPackage = useCallback(async () => {
+    if (!tenantId || !installTarget) return;
+    const request = buildMarketplaceInstallRequest(installTarget, tenantId);
+    if (!request) {
+      setInstallError(t('tenant.pluginHub.pluginsList.installUnavailable.unsigned'));
+      return;
+    }
+    const actionKey = `install:${installTarget.plugin_id}:${installTarget.version}`;
+    setPackageActionKey(actionKey);
+    setInstallError(null);
+    try {
+      const outcome = await pluginMarketplaceService.installPackage(
+        installTarget.plugin_id,
+        request
+      );
+      if (outcome.status !== 'approved') {
+        setInstallError(outcome.reason || t('tenant.pluginHub.messages.pluginInstallFailed'));
+        return;
+      }
+      message.success(
+        t('tenant.pluginHub.messages.pluginInstalled', {
+          name: outcome.plugin_id,
+          version: outcome.version,
+        })
+      );
+      setInstallTarget(null);
+      await Promise.all([loadMarketplace(), loadChannelConfigs()]);
+    } catch (installError) {
+      setInstallError(
+        installError instanceof Error
+          ? installError.message
+          : t('tenant.pluginHub.messages.pluginInstallFailed')
+      );
+    } finally {
+      setPackageActionKey((current) => (current === actionKey ? null : current));
+    }
+  }, [installTarget, loadChannelConfigs, loadMarketplace, message, tenantId, t]);
+
   const handleAddConfig = useCallback(() => {
     if (!selectedProjectId) {
       message.warning(t('tenant.pluginHub.messages.selectProjectFirst'));
@@ -582,11 +635,33 @@ export const PluginHub: React.FC = () => {
         loading={marketplaceLoading}
         error={marketplaceError}
         actionKey={packageActionKey}
+        canInstall={canInstallPackages}
         onRetry={() => {
           void loadMarketplace();
         }}
         onOpen={openPluginDetail}
+        onInstall={handleOpenInstall}
         onUninstall={handleUninstallPackage}
+      />
+
+      <InstallPluginPackageModal
+        key={
+          installTarget ? `${installTarget.plugin_id}:${installTarget.version}` : 'install-closed'
+        }
+        entry={installTarget}
+        busy={
+          installTarget !== null &&
+          packageActionKey === `install:${installTarget.plugin_id}:${installTarget.version}`
+        }
+        error={installError}
+        onCancel={() => {
+          if (packageActionKey?.startsWith('install:')) return;
+          setInstallTarget(null);
+          setInstallError(null);
+        }}
+        onConfirm={() => {
+          void handleInstallPackage();
+        }}
       />
 
       <ChannelConfigSection

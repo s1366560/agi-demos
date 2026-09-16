@@ -121,6 +121,7 @@ interface BackendUserResponse {
   name: string;
   roles: string[];
   is_active: boolean;
+  is_superuser?: boolean;
   created_at: string;
   profile?: UserProfile;
   preferred_language?: 'en-US' | 'zh-CN' | null;
@@ -246,6 +247,7 @@ export const authAPI = {
       name: userResponse.name,
       roles: userResponse.roles,
       is_active: userResponse.is_active,
+      is_superuser: userResponse.is_superuser,
       created_at: userResponse.created_at,
       profile: userResponse.profile,
       must_change_password,
@@ -263,6 +265,7 @@ export const authAPI = {
       name: userResponse.name,
       roles: userResponse.roles,
       is_active: userResponse.is_active,
+      is_superuser: userResponse.is_superuser,
       created_at: userResponse.created_at,
       profile: userResponse.profile,
       preferred_language: userResponse.preferred_language ?? undefined,
@@ -276,6 +279,7 @@ export const authAPI = {
       name: userResponse.name,
       roles: userResponse.roles,
       is_active: userResponse.is_active,
+      is_superuser: userResponse.is_superuser,
       created_at: userResponse.created_at,
       profile: userResponse.profile,
       preferred_language: userResponse.preferred_language ?? undefined,
@@ -291,6 +295,7 @@ export const authAPI = {
       name: userResponse.name,
       roles: userResponse.roles,
       is_active: userResponse.is_active,
+      is_superuser: userResponse.is_superuser,
       created_at: userResponse.created_at,
       profile: userResponse.profile,
       preferred_language: userResponse.preferred_language ?? undefined,

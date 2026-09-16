@@ -13,15 +13,23 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import { ArrowLeft, Package, RefreshCw } from 'lucide-react';
 
+import { useUser } from '@/stores/auth';
 import { useTenantStore } from '@/stores/tenant';
 
 import { pluginMarketplaceService } from '@/services/pluginMarketplaceService';
 
+import {
+  buildMarketplaceInstallRequest,
+  marketplaceInstallAvailability,
+} from '@/utils/pluginMarketplaceInstall';
+
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { InstallPluginPackageModal } from '@/components/marketplace/InstallPluginPackageModal';
 
 import type {
   MarketplacePackageCatalogEntry,
@@ -41,10 +49,14 @@ export const PluginDetail: React.FC = () => {
   const { message } = App.useApp();
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const tenantId = urlTenantId || currentTenant?.id || null;
+  const currentUser = useUser();
+  const canInstallPackages = currentUser?.is_superuser === true;
   const [detail, setDetail] = useState<MarketplacePackageDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionKey, setActionKey] = useState<string | null>(null);
+  const [installTarget, setInstallTarget] = useState<MarketplacePackageCatalogEntry | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
 
   const loadPackage = useCallback(async () => {
@@ -115,6 +127,49 @@ export const PluginDetail: React.FC = () => {
     [loadPackage, message, tenantId, t]
   );
 
+  const handleOpenInstall = useCallback((entry: MarketplacePackageCatalogEntry) => {
+    setInstallError(null);
+    setInstallTarget(entry);
+  }, []);
+
+  const handleInstall = useCallback(async () => {
+    if (!tenantId || !installTarget) return;
+    const request = buildMarketplaceInstallRequest(installTarget, tenantId);
+    if (!request) {
+      setInstallError(t('tenant.pluginHub.pluginsList.installUnavailable.unsigned'));
+      return;
+    }
+    const nextActionKey = `install:${installTarget.plugin_id}:${installTarget.version}`;
+    setActionKey(nextActionKey);
+    setInstallError(null);
+    try {
+      const outcome = await pluginMarketplaceService.installPackage(
+        installTarget.plugin_id,
+        request
+      );
+      if (outcome.status !== 'approved') {
+        setInstallError(outcome.reason || t('tenant.pluginHub.messages.pluginInstallFailed'));
+        return;
+      }
+      message.success(
+        t('tenant.pluginHub.messages.pluginInstalled', {
+          name: outcome.plugin_id,
+          version: outcome.version,
+        })
+      );
+      setInstallTarget(null);
+      await loadPackage();
+    } catch (installError) {
+      setInstallError(
+        installError instanceof Error
+          ? installError.message
+          : t('tenant.pluginHub.messages.pluginInstallFailed')
+      );
+    } finally {
+      setActionKey((current) => (current === nextActionKey ? null : current));
+    }
+  }, [installTarget, loadPackage, message, tenantId, t]);
+
   const columns = useMemo(
     () => [
       {
@@ -146,32 +201,62 @@ export const PluginDetail: React.FC = () => {
       {
         title: t('tenant.pluginHub.channelsList.actions'),
         key: 'actions',
-        render: (_: unknown, entry: MarketplacePackageCatalogEntry) => (
-          <Popconfirm
-            title={t('tenant.pluginHub.pluginsList.confirmUninstallNamed', {
-              name: entry.plugin_id,
-            })}
-            description={t('tenant.pluginHub.pluginsList.uninstallDescriptionV2')}
-            onConfirm={() => {
-              void handleUninstall(entry);
-            }}
-            okText={t('tenant.pluginHub.pluginsList.uninstall')}
-            okButtonProps={{ danger: true }}
-            disabled={entry.revoked || entry.install_status === 'uninstalled'}
-          >
-            <Button
-              danger
-              size="small"
+        render: (_: unknown, entry: MarketplacePackageCatalogEntry) => {
+          const installAvailability = marketplaceInstallAvailability(entry);
+          const installActionKey = `install:${entry.plugin_id}:${entry.version}`;
+          const installable = canInstallPackages && installAvailability === 'ready';
+          const installReason = canInstallPackages
+            ? t(`tenant.pluginHub.pluginsList.installUnavailable.${installAvailability}`)
+            : t('tenant.pluginHub.pluginsList.installAdminRequired');
+          return (
+          <Space>
+            {entry.install_status !== 'installed' && !entry.revoked ? (
+              installable ? (
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={actionKey === installActionKey}
+                  onClick={() => {
+                    handleOpenInstall(entry);
+                  }}
+                >
+                  {t('tenant.pluginHub.pluginsList.install')}
+                </Button>
+              ) : (
+                <Tooltip title={installReason}>
+                  <Button size="small" disabled>
+                    {t('tenant.pluginHub.pluginsList.install')}
+                  </Button>
+                </Tooltip>
+              )
+            ) : null}
+            <Popconfirm
+              title={t('tenant.pluginHub.pluginsList.confirmUninstallNamed', {
+                name: entry.plugin_id,
+              })}
+              description={t('tenant.pluginHub.pluginsList.uninstallDescriptionV2')}
+              onConfirm={() => {
+                void handleUninstall(entry);
+              }}
+              okText={t('tenant.pluginHub.pluginsList.uninstall')}
+              okButtonProps={{ danger: true }}
               disabled={entry.revoked || entry.install_status === 'uninstalled'}
-              loading={actionKey === `${entry.plugin_id}:${entry.version}`}
             >
-              {t('tenant.pluginHub.pluginsList.uninstall')}
-            </Button>
-          </Popconfirm>
-        ),
+              <Button
+                danger
+                size="small"
+                disabled={entry.revoked || entry.install_status === 'uninstalled'}
+                loading={actionKey === `${entry.plugin_id}:${entry.version}`}
+              >
+                {t('tenant.pluginHub.pluginsList.uninstall')}
+              </Button>
+            </Popconfirm>
+          </Space>
+          );
+        },
       },
     ],
-    [actionKey, handleUninstall, t]
+    [actionKey, canInstallPackages, handleOpenInstall, handleUninstall, t]
   );
 
   const versions = detail?.versions ?? [];
@@ -321,6 +406,26 @@ export const PluginDetail: React.FC = () => {
           </section>
         </>
       ) : null}
+
+      <InstallPluginPackageModal
+        key={
+          installTarget ? `${installTarget.plugin_id}:${installTarget.version}` : 'install-closed'
+        }
+        entry={installTarget}
+        busy={
+          installTarget !== null &&
+          actionKey === `install:${installTarget.plugin_id}:${installTarget.version}`
+        }
+        error={installError}
+        onCancel={() => {
+          if (actionKey?.startsWith('install:')) return;
+          setInstallTarget(null);
+          setInstallError(null);
+        }}
+        onConfirm={() => {
+          void handleInstall();
+        }}
+      />
     </div>
   );
 };

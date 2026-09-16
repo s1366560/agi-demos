@@ -1,16 +1,97 @@
+import { useState } from 'react';
+
 import {
   ComponentInstanceIcon,
   Cross2Icon,
+  DownloadIcon,
   ExclamationTriangleIcon,
   ReloadIcon,
   TrashIcon,
 } from '@radix-ui/react-icons';
 
+import { marketplacePluginPermissions } from '../../api/pluginMarketplaceModel';
 import { useI18n } from '../../i18n';
 import type { ManagedPlugin } from '../../types';
 import { useModalDialog } from './useModalDialog';
 
 import './PluginManagementDialogs.css';
+
+export function PluginInstallDialog({
+  plugin,
+  busy,
+  error,
+  onClose,
+  onInstall,
+}: {
+  plugin: ManagedPlugin;
+  busy: boolean;
+  error: string | null;
+  onClose: () => void;
+  onInstall: () => void;
+}) {
+  const { t } = useI18n();
+  const dialogRef = useModalDialog({ active: true, nested: true, onClose });
+  const [scopeApproved, setScopeApproved] = useState(false);
+  const permissions = marketplacePluginPermissions(plugin.manifest);
+
+  return (
+    <DialogFrame
+      dialogRef={dialogRef}
+      title={t('settings.pluginManager.install')}
+      description={t('settings.pluginManager.installDescription')}
+      busy={busy}
+      onClose={onClose}
+    >
+      <div className="plugin-management-body compact">
+        <div className="plugin-management-state">
+          <ComponentInstanceIcon />
+          <span>
+            <strong>{plugin.plugin_id}</strong>
+            <code>{plugin.version}</code>
+          </span>
+        </div>
+        <p>{plugin.publisher}</p>
+        <fieldset disabled={busy}>
+          <legend>{t('settings.pluginManager.declaredPermissions')}</legend>
+          {permissions.length === 0 ? (
+            <p>{t('settings.pluginManager.noDeclaredPermissions')}</p>
+          ) : (
+            <ul>
+              {permissions.map((permission) => (
+                <li key={permission}>
+                  <code>{permission}</code>
+                </li>
+              ))}
+            </ul>
+          )}
+          <label>
+            <input
+              type="checkbox"
+              checked={scopeApproved}
+              onChange={(event) => setScopeApproved(event.target.checked)}
+            />
+            {t('settings.pluginManager.approveTenantPermissions')}
+          </label>
+        </fieldset>
+        <DialogError error={error} />
+      </div>
+      <footer className="plugin-management-footer">
+        <button type="button" className="secondary" disabled={busy} onClick={onClose}>
+          {t('common.cancel')}
+        </button>
+        <button
+          type="button"
+          className="primary"
+          disabled={busy || !scopeApproved}
+          onClick={onInstall}
+        >
+          {busy ? <ReloadIcon className="managed-resource-spin" /> : <DownloadIcon />}
+          {t('settings.pluginManager.confirmInstall')}
+        </button>
+      </footer>
+    </DialogFrame>
+  );
+}
 
 export function PluginUninstallDialog({
   plugin,

@@ -2,10 +2,13 @@ import React, { useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Alert, Badge, Button, Popconfirm, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Badge, Button, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { Eye } from 'lucide-react';
 
+import { marketplaceInstallAvailability } from '@/utils/pluginMarketplaceInstall';
+
 import type { MarketplacePackageCatalogEntry } from '@/types/pluginMarketplace';
+
 import type { PaginationProps, TableColumnsType } from 'antd';
 
 const { Text, Title } = Typography;
@@ -15,8 +18,10 @@ interface PluginMarketplaceSectionProps {
   readonly loading: boolean;
   readonly error: string | null;
   readonly actionKey: string | null;
+  readonly canInstall: boolean;
   readonly onRetry: () => void;
   readonly onOpen: (pluginId: string) => void;
+  readonly onInstall: (entry: MarketplacePackageCatalogEntry) => void;
   readonly onUninstall: (entry: MarketplacePackageCatalogEntry) => Promise<void>;
 }
 
@@ -32,8 +37,10 @@ export const PluginMarketplaceSection: React.FC<PluginMarketplaceSectionProps> =
   loading,
   error,
   actionKey,
+  canInstall,
   onRetry,
   onOpen,
+  onInstall,
   onUninstall,
 }) => {
   const { t } = useTranslation();
@@ -133,7 +140,14 @@ export const PluginMarketplaceSection: React.FC<PluginMarketplaceSectionProps> =
       {
         title: t('tenant.pluginHub.channelsList.actions'),
         key: 'actions',
-        render: (_value, entry) => (
+        render: (_value, entry) => {
+          const installAvailability = marketplaceInstallAvailability(entry);
+          const installActionKey = `install:${entry.plugin_id}:${entry.version}`;
+          const installable = canInstall && installAvailability === 'ready';
+          const installReason = canInstall
+            ? t(`tenant.pluginHub.pluginsList.installUnavailable.${installAvailability}`)
+            : t('tenant.pluginHub.pluginsList.installAdminRequired');
+          return (
           <Space>
             <Button
               size="small"
@@ -146,6 +160,26 @@ export const PluginMarketplaceSection: React.FC<PluginMarketplaceSectionProps> =
                 onOpen(entry.plugin_id);
               }}
             />
+            {entry.install_status !== 'installed' && !entry.revoked ? (
+              installable ? (
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={actionKey === installActionKey}
+                  onClick={() => {
+                    onInstall(entry);
+                  }}
+                >
+                  {t('tenant.pluginHub.pluginsList.install')}
+                </Button>
+              ) : (
+                <Tooltip title={installReason}>
+                  <Button size="small" disabled>
+                    {t('tenant.pluginHub.pluginsList.install')}
+                  </Button>
+                </Tooltip>
+              )
+            ) : null}
             <Popconfirm
               title={t('tenant.pluginHub.pluginsList.confirmUninstallNamed', {
                 name: entry.plugin_id,
@@ -166,10 +200,11 @@ export const PluginMarketplaceSection: React.FC<PluginMarketplaceSectionProps> =
               </Button>
             </Popconfirm>
           </Space>
-        ),
+          );
+        },
       },
     ],
-    [actionKey, onOpen, onUninstall, t]
+    [actionKey, canInstall, onInstall, onOpen, onUninstall, t]
   );
 
   return (

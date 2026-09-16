@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  buildMarketplaceInstallRequest,
+  marketplaceInstallAvailability,
+} from '../../api/pluginMarketplaceModel';
 import type { DesktopPluginMarketplaceManagementOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopRuntimeConfig, ManagedPlugin } from '../../types';
 
 export type PluginDialogState = {
-  kind: 'uninstall';
+  kind: 'uninstall' | 'install';
   key: string;
   plugin: ManagedPlugin;
 };
@@ -30,16 +34,16 @@ export function usePluginManagement({
   const [dialogBusy, setDialogBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const contextKeyRef = useRef(contextKey);
-  const uninstallAbortRef = useRef<AbortController | null>(null);
+  const mutationAbortRef = useRef<AbortController | null>(null);
   contextKeyRef.current = contextKey;
 
   useEffect(() => {
-    uninstallAbortRef.current?.abort();
-    uninstallAbortRef.current = null;
+    mutationAbortRef.current?.abort();
+    mutationAbortRef.current = null;
     setDialog(null);
     setDialogBusy(false);
     setDialogError(null);
-    return () => uninstallAbortRef.current?.abort();
+    return () => mutationAbortRef.current?.abort();
   }, [active, contextKey]);
 
   const closeDialog = useCallback(() => {
@@ -59,12 +63,26 @@ export function usePluginManagement({
     [canManage],
   );
 
+  const openInstall = useCallback(
+    (plugin: ManagedPlugin) => {
+      if (!canManage) return;
+      if (marketplaceInstallAvailability(config.mode, plugin) !== 'ready') return;
+      setDialogError(null);
+      setDialog({
+        kind: 'install',
+        key: `${plugin.id}:install:${crypto.randomUUID()}`,
+        plugin,
+      });
+    },
+    [canManage, config.mode],
+  );
+
   const uninstall = useCallback(async () => {
     if (!canManage || dialog?.kind !== 'uninstall') return;
     const requestContextKey = contextKey;
     const controller = new AbortController();
-    uninstallAbortRef.current?.abort();
-    uninstallAbortRef.current = controller;
+    mutationAbortRef.current?.abort();
+    mutationAbortRef.current = controller;
     setDialogBusy(true);
     setDialogError(null);
     try {
@@ -83,7 +101,7 @@ export function usePluginManagement({
         setDialogError(errorMessage(caught));
       }
     } finally {
-      if (uninstallAbortRef.current === controller) uninstallAbortRef.current = null;
+      if (mutationAbortRef.current === controller) mutationAbortRef.current = null;
       if (contextKeyRef.current === requestContextKey && !controller.signal.aborted) {
         setDialogBusy(false);
       }
@@ -98,6 +116,44 @@ export function usePluginManagement({
     pluginMarketplaceOperationsV2,
   ]);
 
+  const install = useCallback(async () => {
+    if (!canManage || dialog?.kind !== 'install') return;
+    const request = buildMarketplaceInstallRequest(dialog.plugin, config.tenantId);
+    if (!request) {
+      setDialogError('marketplace_install_unsigned');
+      return;
+    }
+    const requestContextKey = contextKey;
+    const controller = new AbortController();
+    mutationAbortRef.current?.abort();
+    mutationAbortRef.current = controller;
+    setDialogBusy(true);
+    setDialogError(null);
+    try {
+      const outcome = await pluginMarketplaceOperationsV2.installMarketplacePlugin(
+        config,
+        request,
+        controller.signal,
+      );
+      if (contextKeyRef.current !== requestContextKey) return;
+      if (outcome.status !== 'approved') {
+        setDialogError(outcome.reason || `marketplace_install_${outcome.status}`);
+        return;
+      }
+      setDialog(null);
+      await onReload();
+    } catch (caught) {
+      if (contextKeyRef.current === requestContextKey && !controller.signal.aborted) {
+        setDialogError(errorMessage(caught));
+      }
+    } finally {
+      if (mutationAbortRef.current === controller) mutationAbortRef.current = null;
+      if (contextKeyRef.current === requestContextKey && !controller.signal.aborted) {
+        setDialogBusy(false);
+      }
+    }
+  }, [canManage, config, contextKey, dialog, onReload, pluginMarketplaceOperationsV2]);
+
   return {
     dialog,
     dialogBusy,
@@ -105,6 +161,8 @@ export function usePluginManagement({
     closeDialog,
     openUninstall,
     uninstall,
+    openInstall,
+    install,
   };
 }
 

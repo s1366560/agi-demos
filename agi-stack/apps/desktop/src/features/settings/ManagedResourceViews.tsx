@@ -14,8 +14,9 @@ import {
   UploadIcon,
 } from '@radix-ui/react-icons';
 
+import { marketplaceInstallAvailability } from '../../api/pluginMarketplaceModel';
 import { useI18n } from '../../i18n';
-import type { ManagedSubAgent, RuntimeMode } from '../../types';
+import type { ManagedPlugin, ManagedSubAgent, RuntimeMode } from '../../types';
 import type {
   ManagedResource,
   ManagedResourceListFilter,
@@ -92,6 +93,7 @@ export function ManagedResourceWorkspace({
   onChannels,
   onReload,
   onRemove,
+  onInstall,
 }: {
   section: ResourceSection;
   items: ManagedResource[];
@@ -122,6 +124,7 @@ export function ManagedResourceWorkspace({
   onChannels: () => void;
   onReload: () => void;
   onRemove: (item: ManagedResource) => void;
+  onInstall: (item: ManagedResource) => void;
 }) {
   const { t } = useI18n();
   const meta = sectionMeta[section];
@@ -310,6 +313,7 @@ export function ManagedResourceWorkspace({
             onEvolution={() => onEvolution(selected, canManage)}
             onImportSubAgent={() => onImportSubAgent(selected)}
             onRemove={() => onRemove(selected)}
+            onInstall={() => onInstall(selected)}
           />
         ) : (
           <div className="managed-resource-detail-empty">
@@ -371,6 +375,7 @@ function ResourceDetail({
   onEvolution,
   onImportSubAgent,
   onRemove,
+  onInstall,
 }: {
   section: ResourceSection;
   item: ManagedResource;
@@ -385,6 +390,7 @@ function ResourceDetail({
   onEvolution: () => void;
   onImportSubAgent: () => void;
   onRemove: () => void;
+  onInstall: () => void;
 }) {
   const { locale, t } = useI18n();
   const meta = sectionMeta[section];
@@ -397,11 +403,21 @@ function ResourceDetail({
     !resourceIsImmutable(section, item, mode) &&
     (section === 'skills' || section === 'agents' || section === 'subagents');
   const removable = section === 'plugins' && canManage && !resourceIsImmutable(section, item, mode);
+  const pluginInstallState =
+    section === 'plugins'
+      ? marketplaceInstallAvailability(mode, item as ManagedPlugin)
+      : null;
+  const installable = pluginInstallState === 'ready' && canManage;
   const skillCanEvolve = section === 'skills' && !resourceIsImmutable(section, item, mode);
   const filesystemSubAgent =
     section === 'subagents' && (item as ManagedSubAgent).source === 'filesystem';
   const notice = resourceIsImmutable(section, item, mode)
-    ? t('settings.immutableResource')
+    ? section === 'plugins' &&
+      canManage &&
+      pluginInstallState !== null &&
+      pluginInstallState !== 'ready'
+      ? t(`settings.pluginManager.installUnavailable.${pluginInstallState}`)
+      : t('settings.immutableResource')
     : !canManage
       ? t(
           section === 'plugins' && mode === 'cloud'
@@ -494,6 +510,17 @@ function ResourceDetail({
             >
               <DownloadIcon />
               {t('settings.skillPackages.exportAction')}
+            </button>
+          ) : null}
+          {installable ? (
+            <button
+              type="button"
+              className="managed-resource-secondary-action"
+              disabled={busy}
+              onClick={onInstall}
+            >
+              <DownloadIcon />
+              {t('settings.pluginManager.install')}
             </button>
           ) : null}
           {removable ? (

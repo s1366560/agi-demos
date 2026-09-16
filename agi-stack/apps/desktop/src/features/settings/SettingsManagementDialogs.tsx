@@ -2,7 +2,7 @@ import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
 import { ChannelConnectionsDialog } from './ChannelConnectionsDialog';
 import { MCPServerDialog } from './MCPServerDialog';
-import { PluginUninstallDialog } from './PluginManagementDialogs';
+import { PluginInstallDialog, PluginUninstallDialog } from './PluginManagementDialogs';
 import { SkillManagementDialogs } from './SkillManagementDialogs';
 import { SubAgentEditorDialog } from './SubAgentEditorDialog';
 import { SubAgentLibraryDialog } from './SubAgentLibraryDialog';
@@ -74,6 +74,16 @@ export function SettingsManagementDialogs({
           error={plugins.dialogError}
           onClose={plugins.closeDialog}
           onUninstall={() => void plugins.uninstall()}
+        />
+      ) : null}
+      {plugins.dialog?.kind === 'install' ? (
+        <PluginInstallDialog
+          key={plugins.dialog.key}
+          plugin={plugins.dialog.plugin}
+          busy={plugins.dialogBusy}
+          error={plugins.dialogError}
+          onClose={plugins.closeDialog}
+          onInstall={() => void plugins.install()}
         />
       ) : null}
       <ChannelConnectionsDialog management={channels} />

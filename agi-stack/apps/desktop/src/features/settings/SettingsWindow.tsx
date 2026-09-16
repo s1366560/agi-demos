@@ -909,6 +909,11 @@ export function SettingsWindow({
                       pluginManagement.openUninstall(item as ManagedPlugin);
                     }
                   }}
+                  onInstall={(item) => {
+                    if (section === 'plugins') {
+                      pluginManagement.openInstall(item as ManagedPlugin);
+                    }
+                  }}
                   />
                   )}
                 </>

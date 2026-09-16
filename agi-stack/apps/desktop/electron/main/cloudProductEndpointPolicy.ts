@@ -148,6 +148,38 @@ const COMMUNITY_SEARCH_BODY_KEYS = new Set([
   'tenant_id',
   'project_id',
 ]);
+const PLUGIN_MARKETPLACE_INSTALL_BODY_KEYS = new Set([
+  'plugin_id',
+  'version',
+  'publisher',
+  'tenant_id',
+  'artifact',
+  'artifact_sha256',
+  'manifest',
+  'signature',
+  'provenance',
+  'approved_permissions',
+  'tenant_admin_approved',
+  'security_scan_passed',
+]);
+const PLUGIN_MARKETPLACE_APPROVE_BODY_KEYS = new Set([
+  'version',
+  'tenant_id',
+  'approved_permissions',
+]);
+const PLUGIN_MARKETPLACE_REVOKE_BODY_KEYS = new Set(['reason', 'version']);
+
+function marketplaceBodyRecord(value: unknown): boolean {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function marketplaceStringList(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length <= 100 &&
+    value.every((item) => typeof item === 'string' && item.length > 0)
+  );
+}
 
 export function authorizeCloudProductEndpoint(
   request: EndpointRequest,
@@ -188,6 +220,51 @@ export function authorizeCloudProductEndpoint(
       target.searchParams.get('include_revoked') === 'true'
     ) {
       return endpoint('identity-catalog', null, null, null);
+    }
+    if (
+      segments.length === 7 && segments[4] === 'packages' &&
+      segments[6] === 'install' && request.method === 'POST' &&
+      request.mutation === undefined && noQuery(target) &&
+      exactBodyKeys(request.body, PLUGIN_MARKETPLACE_INSTALL_BODY_KEYS) &&
+      typeof request.body.plugin_id === 'string' &&
+      requiredIdentifier(segments[5]) === request.body.plugin_id &&
+      typeof request.body.publisher === 'string' &&
+      typeof request.body.artifact_sha256 === 'string' &&
+      marketplaceBodyRecord(request.body.artifact) &&
+      marketplaceBodyRecord(request.body.manifest) &&
+      marketplaceBodyRecord(request.body.signature) &&
+      marketplaceBodyRecord(request.body.provenance) &&
+      marketplaceStringList(request.body.approved_permissions) &&
+      typeof request.body.tenant_admin_approved === 'boolean' &&
+      typeof request.body.security_scan_passed === 'boolean'
+    ) {
+      requiredBodyIdentifier(request.body, 'version');
+      return endpoint('tenant-admin', requiredBodyIdentifier(request.body, 'tenant_id'), null, null);
+    }
+    if (
+      segments.length === 7 && segments[4] === 'packages' &&
+      segments[6] === 'approve' && request.method === 'POST' &&
+      request.mutation === undefined && noQuery(target) &&
+      exactBodyKeys(request.body, PLUGIN_MARKETPLACE_APPROVE_BODY_KEYS) &&
+      marketplaceStringList(request.body.approved_permissions)
+    ) {
+      requiredIdentifier(segments[5]);
+      requiredBodyIdentifier(request.body, 'version');
+      return endpoint('tenant-admin', requiredBodyIdentifier(request.body, 'tenant_id'), null, null);
+    }
+    if (
+      segments.length === 7 && segments[4] === 'packages' &&
+      segments[6] === 'revoke' && request.method === 'POST' &&
+      request.mutation === undefined && noQuery(target) &&
+      request.body !== undefined &&
+      Object.keys(request.body).length >= 1 &&
+      Object.keys(request.body).every((key) => PLUGIN_MARKETPLACE_REVOKE_BODY_KEYS.has(key)) &&
+      typeof request.body.reason === 'string' &&
+      request.body.reason.trim().length > 0 &&
+      (request.body.version === undefined || typeof request.body.version === 'string')
+    ) {
+      requiredIdentifier(segments[5]);
+      return endpoint('tenant-admin', null, null, null);
     }
     if (
       segments.length === 7 && segments[4] === 'packages' &&

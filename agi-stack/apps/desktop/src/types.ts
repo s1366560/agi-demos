@@ -1392,6 +1392,66 @@ export type MarketplacePluginUninstallResponse = {
   revoked_permissions: number;
 };
 
+export type MarketplacePluginArtifactSource = {
+  registry: string;
+  repository: string;
+  manifest_sha256: string;
+};
+
+export type MarketplacePluginInstallRequest = {
+  plugin_id: string;
+  version: string;
+  publisher: string;
+  tenant_id: string;
+  artifact: MarketplacePluginArtifactSource;
+  artifact_sha256: string;
+  manifest: Record<string, unknown>;
+  signature: {
+    algorithm: string;
+    public_key_pem: string;
+    signature_base64: string;
+  };
+  provenance: {
+    predicate_type: string;
+    builder_id: string;
+    subject_name: string;
+  };
+  approved_permissions: string[];
+  tenant_admin_approved: boolean;
+  security_scan_passed: boolean;
+};
+
+export type MarketplacePluginInstallResponse = {
+  plugin_id: string;
+  version: string;
+  status: string;
+  reason: string;
+};
+
+export type MarketplacePluginApproveRequest = {
+  version: string;
+  tenant_id: string;
+  approved_permissions: string[];
+};
+
+export type MarketplacePluginApprovalResponse = {
+  plugin_id: string;
+  version: string;
+  status: 'approved' | 'revoked';
+  granted_permissions: string[];
+};
+
+export type MarketplacePluginRevokeRequest = {
+  reason: string;
+  version?: string;
+};
+
+export type MarketplacePluginRevocationResponse = {
+  plugin_id: string;
+  revoked_versions: string[];
+  revoked_permissions: number;
+};
+
 export type PluginConfigSchemaProperty = {
   type?: string;
   title?: string;

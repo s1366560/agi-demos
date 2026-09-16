@@ -123,6 +123,21 @@ const noProjectPluginMarketplaceOperationsV2 =
   Object.freeze<DesktopPluginMarketplaceOperationsV2>({
     listMarketplacePlugins: async () => [],
     projectMarketplacePlugins: async (_config, _signal, project) => project([]),
+    installMarketplacePlugin: async () => {
+      throw new DesktopPluginMarketplaceAuthorityUnavailableErrorV2('management', {
+        reasonCode: 'desktop_renderer_generation_actions_unavailable',
+      });
+    },
+    approveMarketplacePlugin: async () => {
+      throw new DesktopPluginMarketplaceAuthorityUnavailableErrorV2('management', {
+        reasonCode: 'desktop_renderer_generation_actions_unavailable',
+      });
+    },
+    revokeMarketplacePlugin: async () => {
+      throw new DesktopPluginMarketplaceAuthorityUnavailableErrorV2('management', {
+        reasonCode: 'desktop_renderer_generation_actions_unavailable',
+      });
+    },
     uninstallMarketplacePlugin: async () => {
       throw new DesktopPluginMarketplaceAuthorityUnavailableErrorV2('management', {
         reasonCode: 'desktop_renderer_generation_actions_unavailable',
