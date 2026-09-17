@@ -25,6 +25,7 @@ import { AgentSwitcher } from './AgentSwitcher';
 import { LlmOverridePopover } from './chat/LlmOverridePopover';
 import { ModelSwitchPopover } from './chat/ModelSwitchPopover';
 import { VoiceWaveform } from './chat/VoiceWaveform';
+import { PermissionModeSwitcher } from './PermissionModeSwitcher';
 
 import type { PendingAttachment } from './FileUploader';
 import type { WebOperationContextV2 } from '../../plugins/webOperationAdmissionV2';
@@ -180,6 +181,11 @@ export const InputToolbar = memo<InputToolbarProps>(
               `}
             />
           </LazyTooltip>
+
+          <PermissionModeSwitcher
+            conversationId={activeConversationId}
+            disabled={!!(isStreaming || disabled)}
+          />
 
           <LazyTooltip
             title={

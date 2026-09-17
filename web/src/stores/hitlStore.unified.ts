@@ -534,6 +534,8 @@ function createRequestFromSSE(
 
       return {
         ...base,
+        // Permission asks wait for the user decision without client-side expiry.
+        expiresAt: undefined,
         question: description ?? `Allow ${toolName} to ${action}?`,
         permissionData: {
           toolName: toolName,

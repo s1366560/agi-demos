@@ -97,4 +97,45 @@ describe('InlineHITLCard', () => {
     expect(screen.getByText('Deploy <prod>')).toBeInTheDocument();
     expect(screen.getByText('Granted - executed')).toBeInTheDocument();
   });
+
+  it('derives the granted verdict from the structured prop, not localized text', async () => {
+    const permissionData: PermissionAskedEventData = {
+      request_id: 'hitl-i18n',
+      tool_name: 'deploy_tool',
+      permission_type: 'ask',
+      description: 'Deploy prod',
+      risk_level: 'high',
+      context: {},
+    };
+
+    const { unmount } = render(
+      <InlineHITLCard
+        hitlType="permission"
+        requestId="hitl-i18n"
+        permissionData={permissionData}
+        isAnswered={true}
+        answeredValue="已允许"
+        answeredGranted={true}
+        createdAt="2026-09-17T00:00:00Z"
+      />
+    );
+
+    expect(await screen.findByText('Granted - executed')).toBeInTheDocument();
+    expect(screen.queryByText('Denied - executed')).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <InlineHITLCard
+        hitlType="permission"
+        requestId="hitl-i18n"
+        permissionData={permissionData}
+        isAnswered={true}
+        answeredValue="已拒绝"
+        answeredGranted={false}
+        createdAt="2026-09-17T00:00:00Z"
+      />
+    );
+
+    expect(await screen.findByText('Denied - executed')).toBeInTheDocument();
+  });
 });

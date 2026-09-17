@@ -50,6 +50,8 @@ import type {
   DecisionAnsweredEventData,
   EnvVarRequestedEventData,
   EnvVarProvidedEventData,
+  PermissionAskedEventData,
+  PermissionRepliedEventData,
   A2UIActionAskedEventData,
   ArtifactCreatedEventData,
   ArtifactCategory,
@@ -712,6 +714,55 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
       };
     }
 
+    case 'permission_asked': {
+      // Two wire shapes reach the client: the processor domain event
+      // ({request_id, permission, patterns, metadata}) and the persisted HITL
+      // request projection ({request_id, tool_name, action, risk_level, ...}).
+      const data = event.data as Partial<PermissionAskedEventData> & {
+        permission?: string | undefined;
+        patterns?: string[] | undefined;
+        metadata?: Record<string, unknown> | undefined;
+      };
+      const metadata = data.metadata ?? {};
+      const toolName =
+        data.tool_name ??
+        (typeof metadata.tool === 'string' ? metadata.tool : undefined) ??
+        data.patterns?.[0] ??
+        data.permission ??
+        'unknown';
+      return {
+        id: generateTimelineEventId('permission_asked'),
+        type: 'permission_asked',
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        requestId: data.request_id ?? '',
+        toolName,
+        description: data.description ?? '',
+        riskLevel: data.risk_level,
+        parameters:
+          data.context ??
+          (typeof metadata.input === 'object' && metadata.input !== null
+            ? (metadata.input as Record<string, unknown>)
+            : undefined),
+        context: Object.keys(metadata).length > 0 ? metadata : (data.context ?? undefined),
+        answered: false,
+      };
+    }
+
+    case 'permission_replied': {
+      const data = event.data as Partial<PermissionRepliedEventData>;
+      return {
+        id: generateTimelineEventId('permission_replied'),
+        type: 'permission_replied',
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        requestId: data.request_id ?? '',
+        granted: data.granted === true,
+      };
+    }
+
     case 'a2ui_action_asked': {
       const data = event.data as A2UIActionAskedEventData;
       return {
@@ -1123,8 +1174,6 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     case 'compact_needed':
     case 'doom_loop_detected':
     case 'doom_loop_intervened':
-    case 'permission_asked':
-    case 'permission_replied':
     case 'skill_matched':
     case 'skill_execution_start':
     case 'skill_tool_start':

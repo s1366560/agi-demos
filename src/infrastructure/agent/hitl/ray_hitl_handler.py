@@ -32,6 +32,11 @@ from src.infrastructure.agent.hitl.utils import build_stable_hitl_request_id
 
 logger = logging.getLogger(__name__)
 
+# Permission asks must outlive any reasonable user think-time: the web UI no
+# longer shows an expiry countdown, so the wait is effectively unbounded and
+# only capped here to keep abandoned sessions from leaking forever.
+PERMISSION_TIMEOUT_SECONDS = 86400.0
+
 
 class RayHITLHandler:
     """HITL handler that persists requests and raises HITLPendingException."""
@@ -510,7 +515,7 @@ class RayHITLHandler:
             await self._execute_hitl_request(
                 HITLType.PERMISSION,
                 request_data,
-                timeout_seconds or 60.0,
+                timeout_seconds or PERMISSION_TIMEOUT_SECONDS,
             ),
         )
 

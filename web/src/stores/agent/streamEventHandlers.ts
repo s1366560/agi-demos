@@ -27,6 +27,10 @@ import {
   mergeA2UIMessageStreamWithSnapshot,
 } from './a2uiMessages';
 import { useExecutionStore } from './executionStore';
+import {
+  shouldAutoApprovePermission,
+  useAgentPermissionModeStore,
+} from './permissionModeStore';
 
 import type { DeltaBufferState } from './deltaBuffers';
 import type { AdditionalAgentHandlers } from './types';
@@ -121,6 +125,7 @@ export interface StreamHandlerDeps {
   operation?: WebOperationContextV2;
   get: () => {
     activeConversationId: string | null;
+    respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
     getConversationState: (conversationId: string) => ConversationState;
     updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
   };
@@ -1177,6 +1182,26 @@ export function createStreamEventHandlers(
           event.data as unknown as Record<string, unknown>,
           handlerConversationId
         );
+
+      // Permission mode automation: auto-approve per the conversation's selected
+      // mode. Only fires while this conversation is the active one, so events
+      // replayed for background conversations keep their cards pending for
+      // manual review.
+      const mode = useAgentPermissionModeStore
+        .getState()
+        .getPermissionMode(handlerConversationId);
+      const wireData = event.data as PermissionAskedEventData & {
+        permission?: string | undefined;
+        permission_type?: string | undefined;
+      };
+      if (
+        event.data.request_id &&
+        mode !== 'ask' &&
+        get().activeConversationId === handlerConversationId &&
+        shouldAutoApprovePermission(mode, wireData)
+      ) {
+        void get().respondToPermission(event.data.request_id, true);
+      }
     },
 
     onPermissionReplied: (event) => {

@@ -2057,6 +2057,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             requestId={e.requestId || permissionData?.request_id || ''}
             permissionData={permissionData}
             isAnswered={e.answered === true}
+            answeredGranted={e.granted === true}
             answeredValue={
               e.granted !== undefined
                 ? e.granted
@@ -2081,6 +2082,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             hitlType="permission"
             requestId={e.requestId || ''}
             isAnswered={true}
+            answeredGranted={e.granted === true}
             answeredValue={
               e.granted
                 ? t('agent.messageBubble.granted', 'Granted')
@@ -2106,6 +2108,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             requestId={e.requestId || permissionData?.request_id || ''}
             permissionData={permissionData}
             isAnswered={e.answered === true}
+            answeredGranted={e.granted === true}
             answeredValue={
               e.granted !== undefined
                 ? e.granted
@@ -2130,6 +2133,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             hitlType="permission"
             requestId={e.requestId || ''}
             isAnswered={true}
+            answeredGranted={e.granted === true}
             answeredValue={
               e.granted
                 ? t('agent.messageBubble.granted', 'Granted')

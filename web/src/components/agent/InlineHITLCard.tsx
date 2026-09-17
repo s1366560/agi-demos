@@ -81,6 +81,8 @@ export interface InlineHITLCardProps {
   isAnswered?: boolean | undefined;
   /** The answer that was provided (for answered state) */
   answeredValue?: string | undefined;
+  /** Structured permission verdict; avoids matching localized answeredValue text */
+  answeredGranted?: boolean | undefined;
   /** Created timestamp */
   createdAt?: string | undefined;
   /** Expires timestamp */
@@ -1015,7 +1017,8 @@ const PermissionContent: React.FC<{
   isSubmitting: boolean;
   isAnswered?: boolean | undefined;
   answeredValue?: string | undefined;
-}> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
+  answeredGranted?: boolean | undefined;
+}> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue, answeredGranted }) => {
   const { t } = useTranslation();
   const [remember, setRemember] = useState(false);
 
@@ -1044,7 +1047,12 @@ const PermissionContent: React.FC<{
   const toolName = cleanDisplayText(data.tool_name);
   const description = cleanDisplayText(data.description);
 
-  const wasGranted = isAnswered && (answeredValue === 'allow' || answeredValue === 'Granted');
+  // Prefer the structured verdict; the raw action strings are only a fallback
+  // for the local submit path which stores 'allow'/'deny' before any event
+  // round-trip. Never match localized display text here.
+  const wasGranted =
+    isAnswered &&
+    (answeredGranted ?? (answeredValue === 'allow' || answeredValue === 'Granted'));
 
   return (
     <div className="space-y-3">
@@ -1172,6 +1180,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
     permissionData,
     isAnswered: isAnsweredProp = false,
     answeredValue: answeredValueProp,
+    answeredGranted,
     createdAt,
     expiresAt,
     timeoutSeconds = 300,
@@ -1342,6 +1351,11 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                     {t(createdTimeInfo.key, createdTimeInfo.fallback, createdTimeInfo.params ?? {})}
                   </span>
                 ) : null
+              ) : hitlType === 'permission' ? (
+                // Permission asks wait for the user without an expiry countdown.
+                <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                  {t('agent.hitl.permission.awaiting', 'Awaiting your decision')}
+                </span>
               ) : (
                 <CountdownTimer
                   expiresAt={expiresAt}
@@ -1386,6 +1400,9 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                   isSubmitting={isCurrentlySubmitting}
                   isAnswered={isAnswered}
                   answeredValue={answeredValue}
+                  answeredGranted={
+                    answeredGranted ?? (answeredValue === 'allow' || answeredValue === 'Granted')
+                  }
                 />
               )}
             </div>

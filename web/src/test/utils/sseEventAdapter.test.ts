@@ -599,6 +599,86 @@ describe('SSE Event Adapter', () => {
         expect(timelineEvent.isError).toBe(false); // Default
       }
     });
+
+    it('should convert permission_asked (persisted HITL projection shape)', () => {
+      const timelineEvent = sseEventToTimeline({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-1',
+          tool_name: 'write_file',
+          action: 'execute',
+          risk_level: 'high',
+          description: 'Write to src/index.ts',
+          timeout_seconds: 86400,
+        } as any,
+      });
+
+      expect(timelineEvent).not.toBeNull();
+      expect(timelineEvent?.type).toBe('permission_asked');
+      if (timelineEvent?.type === 'permission_asked') {
+        expect(timelineEvent.requestId).toBe('perm-1');
+        expect(timelineEvent.toolName).toBe('write_file');
+        expect(timelineEvent.description).toBe('Write to src/index.ts');
+        expect(timelineEvent.riskLevel).toBe('high');
+        expect(timelineEvent.answered).toBe(false);
+      }
+    });
+
+    it('should convert permission_asked (processor domain event shape)', () => {
+      const timelineEvent = sseEventToTimeline({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-2',
+          permission: 'write',
+          patterns: ['edit_file'],
+          metadata: { tool: 'edit_file', input: { path: 'a.ts' } },
+        } as any,
+      });
+
+      expect(timelineEvent).not.toBeNull();
+      expect(timelineEvent?.type).toBe('permission_asked');
+      if (timelineEvent?.type === 'permission_asked') {
+        expect(timelineEvent.requestId).toBe('perm-2');
+        // Tool name falls back to metadata.tool, then patterns[0], then permission
+        expect(timelineEvent.toolName).toBe('edit_file');
+        expect(timelineEvent.parameters).toEqual({ path: 'a.ts' });
+        expect(timelineEvent.answered).toBe(false);
+      }
+    });
+
+    it('should derive tool name from permission when metadata is absent', () => {
+      const timelineEvent = sseEventToTimeline({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-3',
+          permission: 'system_api',
+          patterns: [],
+          metadata: {},
+        } as any,
+      });
+
+      expect(timelineEvent?.type).toBe('permission_asked');
+      if (timelineEvent?.type === 'permission_asked') {
+        expect(timelineEvent.toolName).toBe('system_api');
+      }
+    });
+
+    it('should convert permission_replied', () => {
+      const timelineEvent = sseEventToTimeline({
+        type: 'permission_replied',
+        data: {
+          request_id: 'perm-1',
+          granted: true,
+        } as any,
+      });
+
+      expect(timelineEvent).not.toBeNull();
+      expect(timelineEvent?.type).toBe('permission_replied');
+      if (timelineEvent?.type === 'permission_replied') {
+        expect(timelineEvent.requestId).toBe('perm-1');
+        expect(timelineEvent.granted).toBe(true);
+      }
+    });
   });
 
   describe('Batch Conversion', () => {

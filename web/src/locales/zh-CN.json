@@ -7620,6 +7620,16 @@
       "advancedSettings": "高级设置",
       "charLimitHint": "超过 {{count}} 个字符的消息可能会被模型截断"
     },
+    "permissionMode": {
+      "label": "授权模式",
+      "title": "授权设置",
+      "ask": "变更前确认",
+      "askDesc": "改文件前先问我",
+      "autoEdit": "自动编辑",
+      "autoEditDesc": "自动编辑文件",
+      "fullAccess": "完全访问",
+      "fullAccessDesc": "减少确认次数"
+    },
     "mention": {
       "label": "提及 Agent"
     },
@@ -8149,7 +8159,8 @@
       "save_for_later": "保存配置以便下次使用",
       "permission": {
         "granted": "已授权",
-        "denied": "已拒绝"
+        "denied": "已拒绝",
+        "awaiting": "等待你的决定"
       },
       "risk": {
         "label": "风险",

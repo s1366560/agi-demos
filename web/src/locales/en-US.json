@@ -7599,6 +7599,16 @@
       "advancedSettings": "Advanced settings",
       "charLimitHint": "Messages over {{count}} characters may be truncated by the model"
     },
+    "permissionMode": {
+      "label": "Permission mode",
+      "title": "Permission mode",
+      "ask": "Confirm before changes",
+      "askDesc": "Ask me before changing files",
+      "autoEdit": "Auto edit",
+      "autoEditDesc": "Automatically edit files",
+      "fullAccess": "Full access",
+      "fullAccessDesc": "Reduce confirmations"
+    },
     "mention": {
       "label": "Mention an agent"
     },
@@ -8128,7 +8138,8 @@
       "save_for_later": "Save configuration for next time",
       "permission": {
         "granted": "Granted",
-        "denied": "Denied"
+        "denied": "Denied",
+        "awaiting": "Awaiting your decision"
       },
       "risk": {
         "label": "Risk",

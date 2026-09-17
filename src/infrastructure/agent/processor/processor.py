@@ -176,7 +176,10 @@ class ProcessorConfig:
     initial_delay_ms: int = 2000
 
     # Permission configuration
-    permission_timeout: float = 300.0  # seconds
+    # Permission asks must outlive any reasonable user think-time: the web UI
+    # no longer shows an expiry countdown, so the wait is effectively unbounded
+    # and only capped here to keep abandoned sessions from leaking forever.
+    permission_timeout: float = 86400.0  # seconds (24h)
     approved_run_required: bool = False
     chat_run_required: bool = False
     continue_on_deny: bool = False  # Continue loop if permission denied

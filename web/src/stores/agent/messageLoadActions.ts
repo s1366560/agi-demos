@@ -51,6 +51,7 @@ export interface MessageLoadActionDeps {
     conversations: AgentV3State['conversations'];
     conversationStates: Map<string, ConversationState>;
     conversationScopeGeneration: number;
+    respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
     getConversationState: (conversationId: string) => ConversationState;
     updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
     setLlmModelOverride: (conversationId: string, modelName: string | null) => void;

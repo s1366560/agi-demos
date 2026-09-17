@@ -2,8 +2,10 @@ import { useBackgroundStore } from '../../../stores/backgroundStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { createStreamEventHandlers } from '../../../stores/agent/streamEventHandlers';
+import { useAgentPermissionModeStore } from '../../../stores/agent/permissionModeStore';
 import { useCanvasStore } from '../../../stores/canvasStore';
 import { useLayoutModeStore } from '../../../stores/layoutMode';
+import { useUnifiedHITLStore } from '../../../stores/hitlStore.unified';
 import { getA2UIContractCase, getA2UIContractMessages } from '../../fixtures/a2uiContractFixtures';
 import {
   getNativeBlockFixtureCase,
@@ -32,6 +34,7 @@ describe('streamEventHandlers', () => {
   // Mock dependencies
   let mockUpdateConversationState: ReturnType<typeof vi.fn>;
   let mockGetConversationState: ReturnType<typeof vi.fn>;
+  let mockRespondToPermission: ReturnType<typeof vi.fn>;
   let mockSet: ReturnType<typeof vi.fn>;
   let deltaBuffers: Map<string, DeltaBufferState>;
   let mockDeps: StreamHandlerDeps;
@@ -71,6 +74,8 @@ describe('streamEventHandlers', () => {
 
     mockGetConversationState = vi.fn().mockReturnValue(mockState);
 
+    mockRespondToPermission = vi.fn().mockResolvedValue(undefined);
+
     mockSet = vi.fn();
 
     deltaBuffers = new Map();
@@ -91,6 +96,7 @@ describe('streamEventHandlers', () => {
     mockDeps = {
       get: () => ({
         activeConversationId: conversationId,
+        respondToPermission: mockRespondToPermission,
         getConversationState: mockGetConversationState,
         updateConversationState: mockUpdateConversationState,
       }),
@@ -1502,5 +1508,115 @@ describe('streamEventHandlers', () => {
         agentState: 'idle',
       })
     );
+  });
+
+  describe('onPermissionAsked permission mode automation', () => {
+    beforeEach(() => {
+      useAgentPermissionModeStore.setState({ modesByConversation: {} });
+      useUnifiedHITLStore.getState().reset();
+      mockRespondToPermission.mockClear();
+    });
+
+    it('queues the permission card into the timeline in every mode', () => {
+      const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-card',
+          permission: 'write',
+          patterns: ['edit_file'],
+          metadata: { tool: 'edit_file', input: {} },
+        },
+      } as any);
+
+      expect(mockState.timeline.some((e) => e.type === 'permission_asked')).toBe(true);
+    });
+
+    it('auto-approves every ask in full_access mode for the active conversation', () => {
+      useAgentPermissionModeStore.getState().setPermissionMode(conversationId, 'full_access');
+      const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-1',
+          permission: 'system_api',
+          patterns: [],
+          metadata: {},
+        },
+      } as any);
+
+      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-1', true);
+    });
+
+    it('auto-approves only edit permissions in auto_edit mode', () => {
+      useAgentPermissionModeStore.getState().setPermissionMode(conversationId, 'auto_edit');
+      const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-edit',
+          permission: 'workspace_file_write',
+          patterns: [],
+          metadata: {},
+        },
+      } as any);
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-shell',
+          permission: 'bash',
+          patterns: [],
+          metadata: {},
+        },
+      } as any);
+
+      expect(mockRespondToPermission).toHaveBeenCalledTimes(1);
+      expect(mockRespondToPermission).toHaveBeenCalledWith('perm-edit', true);
+    });
+
+    it('never auto-approves in ask mode', () => {
+      const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-manual',
+          permission: 'write',
+          patterns: [],
+          metadata: {},
+        },
+      } as any);
+
+      expect(mockRespondToPermission).not.toHaveBeenCalled();
+    });
+
+    it('does not auto-approve when the handler conversation is not active', () => {
+      useAgentPermissionModeStore.getState().setPermissionMode(conversationId, 'full_access');
+      const inactiveDeps: StreamHandlerDeps = {
+        ...mockDeps,
+        get: () => ({
+          activeConversationId: 'conv-other',
+          respondToPermission: mockRespondToPermission,
+          getConversationState: mockGetConversationState,
+          updateConversationState: mockUpdateConversationState,
+        }),
+      };
+      const handlers = createStreamEventHandlers(conversationId, undefined, inactiveDeps);
+
+      handlers.onPermissionAsked?.({
+        type: 'permission_asked',
+        data: {
+          request_id: 'perm-bg',
+          permission: 'write',
+          patterns: [],
+          metadata: {},
+        },
+      } as any);
+
+      expect(mockRespondToPermission).not.toHaveBeenCalled();
+    });
   });
 });

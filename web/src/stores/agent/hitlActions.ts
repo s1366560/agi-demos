@@ -32,6 +32,7 @@ import type { StoreApi } from 'zustand';
 export interface HITLActionDeps {
   get: () => {
     activeConversationId: string | null;
+    respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
     getConversationState: (conversationId: string) => ConversationState;
     updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
   };
