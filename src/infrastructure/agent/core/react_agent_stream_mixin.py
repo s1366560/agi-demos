@@ -2282,6 +2282,25 @@ class StreamMixin:
                 if parsed is not None:
                     config.provider_options["presence_penalty"] = parsed
 
+            # Thinking-level override: map the requested effort onto
+            # provider-specific reasoning options for the effective model.
+            # Non-reasoning models simply ignore the request.
+            raw_reasoning_effort = llm_overrides.get("reasoning_effort")
+            if isinstance(raw_reasoning_effort, str) and raw_reasoning_effort.strip():
+                effort = raw_reasoning_effort.strip().lower()
+                if effort in ("low", "medium", "high"):
+                    from src.infrastructure.llm.reasoning_config import build_reasoning_config
+
+                    budget_by_effort = {"low": 4096, "medium": 10000, "high": 32000}
+                    reasoning_cfg = build_reasoning_config(
+                        effective_model_route.model_id,
+                        thinking_override=True,
+                        reasoning_effort=effort,
+                        thinking_budget_tokens=budget_by_effort[effort],
+                    )
+                    if reasoning_cfg:
+                        config.provider_options.update(reasoning_cfg.provider_options)
+
         if workspace_replan_turn:
             config.provider_options["tool_choice"] = "required"
         processor = self._processor_factory.create_for_main(
