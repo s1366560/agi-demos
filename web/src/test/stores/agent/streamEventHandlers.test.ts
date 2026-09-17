@@ -1548,6 +1548,8 @@ describe('streamEventHandlers', () => {
       } as any);
 
       expect(mockRespondToPermission).toHaveBeenCalledWith('perm-1', true);
+      // Full access suppresses the card entirely instead of queueing it.
+      expect(mockState.timeline.some((e) => e.type === 'permission_asked')).toBe(false);
     });
 
     it('auto-approves only edit permissions in auto_edit mode', () => {
@@ -1575,6 +1577,8 @@ describe('streamEventHandlers', () => {
 
       expect(mockRespondToPermission).toHaveBeenCalledTimes(1);
       expect(mockRespondToPermission).toHaveBeenCalledWith('perm-edit', true);
+      // Auto edit keeps the card visible; it flips to granted on approval.
+      expect(mockState.timeline.filter((e) => e.type === 'permission_asked')).toHaveLength(2);
     });
 
     it('never auto-approves in ask mode', () => {
@@ -1617,6 +1621,8 @@ describe('streamEventHandlers', () => {
       } as any);
 
       expect(mockRespondToPermission).not.toHaveBeenCalled();
+      // Background replays keep a pending card for manual review.
+      expect(mockState.timeline.some((e) => e.type === 'permission_asked')).toBe(true);
     });
   });
 });

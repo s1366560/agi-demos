@@ -1164,6 +1164,24 @@ export function createStreamEventHandlers(
     },
 
     onPermissionAsked: (event) => {
+      const mode = useAgentPermissionModeStore
+        .getState()
+        .getPermissionMode(handlerConversationId);
+      const wireData = event.data as PermissionAskedEventData & {
+        permission?: string | undefined;
+        permission_type?: string | undefined;
+      };
+      const requestId = event.data.request_id;
+      const isActiveConversation = get().activeConversationId === handlerConversationId;
+
+      // Full access: every ask is auto-approved, so the card is pure noise.
+      // Respond directly without queueing the timeline event or creating a
+      // HITL request. Background replays keep a pending card for manual review.
+      if (mode === 'full_access' && requestId && isActiveConversation) {
+        void get().respondToPermission(requestId, true);
+        return;
+      }
+
       const permissionEvent: AgentEvent<PermissionAskedEventData> = {
         type: 'permission_asked',
         data: event.data,
@@ -1183,24 +1201,16 @@ export function createStreamEventHandlers(
           handlerConversationId
         );
 
-      // Permission mode automation: auto-approve per the conversation's selected
-      // mode. Only fires while this conversation is the active one, so events
-      // replayed for background conversations keep their cards pending for
-      // manual review.
-      const mode = useAgentPermissionModeStore
-        .getState()
-        .getPermissionMode(handlerConversationId);
-      const wireData = event.data as PermissionAskedEventData & {
-        permission?: string | undefined;
-        permission_type?: string | undefined;
-      };
+      // Permission mode automation for the visible card (auto edit flips the
+      // card to granted once the approval lands). Only fires while this
+      // conversation is the active one.
       if (
-        event.data.request_id &&
+        requestId &&
         mode !== 'ask' &&
-        get().activeConversationId === handlerConversationId &&
+        isActiveConversation &&
         shouldAutoApprovePermission(mode, wireData)
       ) {
-        void get().respondToPermission(event.data.request_id, true);
+        void get().respondToPermission(requestId, true);
       }
     },
 

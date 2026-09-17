@@ -15,6 +15,25 @@ import type {
 } from '../../types/agent/timeline';
 
 /**
+ * Whether a timeline event is a permission card that was answered with Allow.
+ *
+ * Used by the message area to keep granted permission cards out of the UI in
+ * full-access mode, where every ask is auto-approved and the cards are noise.
+ * Pending (unanswered) and denied cards stay visible.
+ */
+export function isGrantedPermissionEvent(event: TimelineEvent): boolean {
+  if (event.type === 'permission_replied' || event.type === 'permission_granted') {
+    // granted is required on these projection shapes; a malformed event
+    // without it is falsy and simply stays visible.
+    return event.granted;
+  }
+  if (event.type === 'permission_asked' || event.type === 'permission_requested') {
+    return Boolean(event.answered) && Boolean(event.granted);
+  }
+  return false;
+}
+
+/**
  * Type guard to check if event has requestId property
  */
 function hasRequestId(event: TimelineEvent): event is TimelineEvent & { requestId: string } {

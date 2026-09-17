@@ -47,6 +47,8 @@ import { useVirtualizer, type VirtualItem, type Virtualizer } from '@tanstack/re
 import { ChevronDown, ChevronUp, Loader2, Pin, PinOff } from 'lucide-react';
 
 import { usePinnedEventIds, useAgentHITLStore } from '../../stores/agent/hitlStore';
+import { useAgentPermissionModeStore } from '../../stores/agent/permissionModeStore';
+import { isGrantedPermissionEvent } from '../../stores/agent/timelineUtils';
 
 import { SuggestionChips } from './chat/SuggestionChips';
 import { ConversationSummaryCardWrapper } from './message/ConversationSummaryCardWrapper';
@@ -346,8 +348,23 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const pinnedSectionId = useId();
     const { t } = useTranslation();
 
+    // Full-access mode auto-approves every permission ask, so granted cards
+    // are noise: filter them out before grouping. Pending and denied cards
+    // stay visible so nothing becomes unanswerable.
+    const permissionMode = useAgentPermissionModeStore(
+      (state) =>
+        (conversationId ? state.modesByConversation[conversationId] : undefined) ?? 'ask'
+    );
+    const visibleTimeline = useMemo(
+      () =>
+        permissionMode === 'full_access'
+          ? timeline.filter((event) => !isGrantedPermissionEvent(event))
+          : timeline,
+      [timeline, permissionMode]
+    );
+
     // Memoize grouped timeline items to avoid re-grouping on every render
-    const groupedItems = useMemo(() => groupTimelineEvents(timeline), [timeline]);
+    const groupedItems = useMemo(() => groupTimelineEvents(visibleTimeline), [visibleTimeline]);
 
     // Per-conversation collapsed turns (persisted in localStorage)
     const turnCollapse = useTurnCollapse(conversationId);
@@ -506,10 +523,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     // Determine states
     const shouldShowLoading =
       (propIsLoadingEarlier && hasEarlierMessages) || (showLoadingIndicator && hasEarlierMessages);
-    const showLoadingState = isLoading && timeline.length === 0;
-    const showEmptyState = !isLoading && timeline.length === 0;
+    const showLoadingState = isLoading && visibleTimeline.length === 0;
+    const showEmptyState = !isLoading && visibleTimeline.length === 0;
 
-    const timelineLen = timeline.length;
+    // Index base for the grouped (possibly permission-filtered) list below.
+    const timelineLen = visibleTimeline.length;
     const lastEventIndex = timelineLen - 1;
 
     // Virtualizer setup
