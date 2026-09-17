@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Inspect or explicitly upgrade one scope's builtin reference during maintenance."""
+"""Inspect or explicitly upgrade one scope's builtin reference during maintenance.
+
+--auto applies an observed stale builtin reference in the same run using the
+values just read from the database; the application service still enforces the
+same CAS and verification checks as an explicit --apply.
+"""
 
 import argparse
 import asyncio
@@ -45,6 +50,9 @@ async def run(args: argparse.Namespace) -> None:
                 scope
             )
             if head is None:
+                if args.auto:
+                    print(json.dumps({"status": "uninitialized-scope"}))
+                    return
                 raise ValueError("scope has not been initialized")
             current = next(
                 item for item in head.desired_set.bundles if item.bundle_id == replacement.bundle_id
@@ -60,10 +68,17 @@ async def run(args: argparse.Namespace) -> None:
                     }
                 )
             )
-            if not args.apply:
+            if not args.apply and not args.auto:
                 return
-            if current.digest != args.expected_digest:
-                raise ValueError("builtin digest differs from the explicitly expected old digest")
+            if args.auto:
+                if current == replacement:
+                    print(json.dumps({"status": "up-to-date"}))
+                    return
+                expected_revision = head.desired_set.revision
+            else:
+                expected_revision = args.expected_revision
+                if current.digest != args.expected_digest:
+                    raise ValueError("builtin digest differs from the explicitly expected old digest")
             loader = ScopedInstalledBundleLoaderV2(
                 session_factory=async_session_factory,
                 production_sources=sources,
@@ -74,7 +89,7 @@ async def run(args: argparse.Namespace) -> None:
                 session,
                 sources=sources,
                 load_verified_bundle=loader,
-                expected_revision=args.expected_revision,
+                expected_revision=expected_revision,
                 expected_bundle=current,
                 actor_id=args.actor_id,
                 scope=scope,
@@ -89,6 +104,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     _ = parser.add_argument("--apply", action="store_true")
     _ = parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="upgrade an observed stale builtin reference in one run (CAS still enforced)",
+    )
+    _ = parser.add_argument(
         "--scope-kind", choices=[kind.value for kind in ScopeKindV2], default="root"
     )
     _ = parser.add_argument("--tenant-id")
@@ -100,8 +120,14 @@ def main() -> None:
     _ = parser.add_argument("--trusted-public-key", action="append", default=[])
     _ = parser.add_argument("--allowed-registry", action="append", default=[])
     args = parser.parse_args()
+    if args.apply and args.auto:
+        parser.error("--apply and --auto are mutually exclusive")
+    if args.auto and (args.expected_revision or args.expected_digest):
+        parser.error("--auto does not accept --expected-revision or --expected-digest")
     if args.apply and not (args.expected_revision and args.expected_digest and args.actor_id):
         parser.error("--apply requires --expected-revision, --expected-digest and --actor-id")
+    if args.auto and not args.actor_id:
+        parser.error("--auto requires --actor-id")
     asyncio.run(run(args))
 
 

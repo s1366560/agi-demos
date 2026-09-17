@@ -19,7 +19,7 @@
 
 .PHONY: help install update clean init reset fresh restart stop logs status
 .PHONY: disk-usage clean-cache clean-build-cache clean-backend clean-web clean-docker clean-logs
-.PHONY: dev dev-all dev-stop dev-backend dev-web dev-web-stop
+.PHONY: dev dev-all dev-stop dev-backend dev-web dev-web-stop plugin-bundle-upgrade
 .PHONY: workspace-core-build workspace-core-configure workspace-core-start workspace-core-health workspace-core-status workspace-core-logs workspace-core-stop
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: drone-up drone-down drone-logs
@@ -107,6 +107,7 @@ help: ## Show this help message
 	@echo "  guard-refresh-select - Check wrapped execute(select(...)) usage"
 	@echo "  plugin-build-all - Validate protocol-v2 plugin artifacts"
 	@echo "  plugin-v2-contract-gate - Verify generated V2 catalogs and contract completeness"
+	@echo "  plugin-bundle-upgrade - Sync ROOT builtin bundle reference (runs during dev)"
 	@echo ""
 	@echo " Disk maintenance:"
 	@echo "  disk-usage        - Preview known build caches"
@@ -156,6 +157,7 @@ help-full: ## Show all available commands
 	@echo "  workspace-core-status - Show Workspace Core container health"
 	@echo "  workspace-core-logs   - Follow Workspace Core logs"
 	@echo "  workspace-core-stop   - Stop Workspace Core without deleting data"
+	@echo "  plugin-bundle-upgrade - Sync ROOT builtin bundle reference to the current production digest"
 	@echo ""
 	@echo " Ray Actors:"
 	@echo "  ray-up           - Start Ray cluster (production)"
@@ -352,7 +354,7 @@ update: ## Update all dependencies
 dev: dev-all ## Start all services (API + worker + infra + web)
 	@echo " Starting full development environment..."
 
-dev-all: dev-infra-dev db-init workspace-core-start
+dev-all: dev-infra-dev db-init plugin-bundle-upgrade workspace-core-start
 	@echo " Starting API server, Ray actor worker and Web in background..."
 	@echo "   API: http://localhost:8000 (logs: logs/api.log)"
 	@echo "   Web: http://localhost:3000 (logs: logs/web.log)"
@@ -481,6 +483,10 @@ dev-infra-dev: ## Start infrastructure with Ray in development mode (live code r
 	@echo "   - Use 'make ray-reload' to restart Ray services if needed"
 	@echo ""
 	@echo " Start observability stack with: make obs-start"
+
+plugin-bundle-upgrade: ## Sync ROOT builtin plugin bundle reference to the current production digest
+	@echo " Syncing ROOT builtin plugin bundle reference..."
+	@uv run python scripts/upgrade_root_builtin_bundle_v2.py --auto --actor-id make:plugin-bundle-upgrade
 
 workspace-core-build: ## Build the independent Avernet Workspace Core image
 	@echo " Building Avernet Workspace Core..."

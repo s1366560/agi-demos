@@ -4,6 +4,15 @@ Changing attested builtin source changes the production bundle digest. An existi
 ROOT desired configuration continues to reference the previous exact bundle, so
 startup correctly rejects it until an explicit maintenance upgrade is recorded.
 
+Local development automates this maintenance: `make dev` (and therefore
+`make restart`) runs the `plugin-bundle-upgrade` target after the database is
+ready, which invokes `scripts/upgrade_root_builtin_bundle_v2.py --auto` with the
+audit actor `make:plugin-bundle-upgrade`. The auto mode reads the stored
+reference and applies the same verified CAS upgrade in one run; it reports
+`{"status": "uninitialized-scope"}` or `{"status": "up-to-date"}` and writes
+nothing when there is no stale builtin reference. Production deployments and
+tenant/project/session scopes still follow the manual procedure below.
+
 Stop the API and validate the new source, artifact declarations, and generated
 catalogs first. Inspect the stored reference without changing state:
 
