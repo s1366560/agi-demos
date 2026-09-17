@@ -7054,6 +7054,7 @@
       "reset": "重置",
       "switchModel": "切换模型",
       "defaultModel": "默认：{{model}}",
+      "defaultOption": "默认",
       "selectModel": "选择模型",
       "autoRouter": "自动（路由器）",
       "autoRouterDescription": "由平台为每轮对话选择最合适的模型",
@@ -7629,6 +7630,33 @@
       "autoEditDesc": "自动编辑文件",
       "fullAccess": "完全访问",
       "fullAccessDesc": "减少确认次数"
+    },
+    "thinkingLevel": {
+      "label": "思考级别",
+      "title": "思考级别",
+      "default": "思考：自动",
+      "defaultDesc": "跟随模型默认",
+      "low": "思考：低",
+      "lowDesc": "快速、简短的推理",
+      "medium": "思考：中",
+      "mediumDesc": "均衡的推理深度",
+      "high": "思考：高",
+      "highDesc": "最深入的推理，较慢"
+    },
+    "plusMenu": {
+      "label": "添加",
+      "title": "添加",
+      "searchPlaceholder": "搜索插件、Agent、命令…",
+      "groupActions": "操作",
+      "groupPlugins": "插件",
+      "groupAgents": "Agent",
+      "groupCommands": "命令",
+      "noPlugins": "暂无可用插件",
+      "agentFromDatabase": "自定义 Agent",
+      "agentBuiltin": "内置 Agent",
+      "llmParamsDesc": "温度、最大 token 等",
+      "customized": "已自定义",
+      "loading": "加载中…"
     },
     "mention": {
       "label": "提及 Agent"

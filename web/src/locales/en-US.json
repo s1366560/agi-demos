@@ -7031,6 +7031,7 @@
       "reset": "Reset",
       "switchModel": "Switch Model",
       "defaultModel": "Default: {{model}}",
+      "defaultOption": "Default",
       "selectModel": "Select a model",
       "autoRouter": "Auto (Router)",
       "autoRouterDescription": "Let the platform pick the best model per turn",
@@ -7609,6 +7610,34 @@
       "fullAccess": "Full access",
       "fullAccessDesc": "Reduce confirmations"
     },
+    "thinkingLevel": {
+      "label": "Thinking level",
+      "title": "Thinking level",
+      "default": "Thinking: auto",
+      "defaultDesc": "Follow the model default",
+      "low": "Thinking: low",
+      "lowDesc": "Fast, brief reasoning",
+      "medium": "Thinking: medium",
+      "mediumDesc": "Balanced reasoning depth",
+      "high": "Thinking: high",
+      "highDesc": "Deepest reasoning, slower"
+    },
+    "plusMenu": {
+      "label": "Add",
+      "title": "Add",
+      "searchPlaceholder": "Search plugins, agents, commands…",
+      "groupActions": "Actions",
+      "groupPlugins": "Plugins",
+      "groupAgents": "Agents",
+      "groupCommands": "Commands",
+      "noPlugins": "No plugins available",
+      "agentFromDatabase": "Custom agent",
+      "agentBuiltin": "Built-in agent",
+      "llmParamsDesc": "Temperature, max tokens…",
+      "customized": "Custom",
+      "loading": "Loading…"
+    },
+
     "mention": {
       "label": "Mention an agent"
     },

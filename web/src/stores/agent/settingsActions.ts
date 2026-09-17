@@ -50,6 +50,44 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     },
 
     /**
+     * Set the per-conversation reasoning effort (thinking level).
+     * Merged into the existing appModelContext.llm_overrides map (never replaced
+     * wholesale) so temperature and other parameters survive the change.
+     * Stored as llm_overrides.reasoning_effort; removing it restores the
+     * model-side default.
+     */
+    setReasoningEffort: (
+      conversationId: string,
+      effort: 'low' | 'medium' | 'high' | null
+    ): void => {
+      const { updateConversationState, conversationStates } = get();
+      const convState = conversationStates.get(conversationId);
+      const currentCtx = convState?.appModelContext ?? {};
+      const currentOverrides =
+        (currentCtx.llm_overrides as LLMConfigOverrides | undefined) ?? undefined;
+
+      let nextOverrides: LLMConfigOverrides | null;
+      if (effort) {
+        nextOverrides = { ...currentOverrides, reasoning_effort: effort };
+      } else {
+        if (!currentOverrides) return;
+        const { reasoning_effort: _removed, ...rest } = currentOverrides;
+        nextOverrides = Object.keys(rest).length > 0 ? rest : null;
+      }
+
+      if (nextOverrides) {
+        updateConversationState(conversationId, {
+          appModelContext: { ...currentCtx, llm_overrides: nextOverrides },
+        });
+      } else {
+        const { llm_overrides: _dropped, ...rest } = currentCtx;
+        updateConversationState(conversationId, {
+          appModelContext: Object.keys(rest).length > 0 ? rest : null,
+        });
+      }
+    },
+
+    /**
      * Set per-conversation LLM model override.
      * Stored inside appModelContext.llm_model_override and sent via app_model_context.
      */

@@ -362,7 +362,7 @@ describe('Agent Workspace hardening', () => {
     expect((anchor as HTMLElement).getAttribute('data-timeline-index')).toBe('0');
   });
 
-  it('puts AgentSwitcher as first control in InputToolbar', () => {
+  it('consolidates composer controls into the leading + menu', async () => {
     const noop = () => {};
     const fileInputRef = { current: null } as React.RefObject<HTMLInputElement | null>;
 
@@ -371,7 +371,6 @@ describe('Agent Workspace hardening', () => {
         fileInputRef={fileInputRef}
         attachments={[]}
         capabilities={{ supportsAttachment: true } as any}
-        templateLibraryVisible={false}
         setTemplateLibraryVisible={vi.fn()}
         isListening={false}
         toggleVoiceInput={async () => {}}
@@ -385,6 +384,7 @@ describe('Agent Workspace hardening', () => {
         isPlanMode={false}
         onAgentSelect={vi.fn()}
         activeAgentId="agent-1"
+        onSlashSelect={vi.fn()}
         charCount={0}
         canSend={false}
         handleSend={noop}
@@ -392,8 +392,14 @@ describe('Agent Workspace hardening', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: /Primary Agent/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start voice call' })).toBeInTheDocument();
+    // The + button is the leading control; agent/voice actions live inside it.
+    const plusButton = screen.getByTestId('composer-plus-button');
+    expect(plusButton).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Primary Agent/i })).not.toBeInTheDocument();
+
+    fireEvent.click(plusButton);
+
+    expect(await screen.findByText('Start voice call')).toBeInTheDocument();
   });
 
   it('prevents opening AgentSwitcher when disabled', () => {

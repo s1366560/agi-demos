@@ -3,7 +3,7 @@ import { memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { InputNumber, Popover, Slider } from 'antd';
-import { Settings2 } from 'lucide-react';
+import { ChevronRight, Settings2 } from 'lucide-react';
 
 import { useAgentV3Store } from '@/stores/agentV3';
 
@@ -19,6 +19,8 @@ interface LlmOverridePopoverProps {
   conversationId: string | null;
   disabled?: boolean;
   capabilities?: ActiveModelCapabilities;
+  /** 'icon' renders the standalone square trigger; 'row' renders a full-width menu row. */
+  variant?: 'icon' | 'row' | undefined;
 }
 
 function tFallback(t: TFunction, key: string, fallback: string): string {
@@ -27,7 +29,7 @@ function tFallback(t: TFunction, key: string, fallback: string): string {
 }
 
 export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
-  ({ conversationId, disabled, capabilities }) => {
+  ({ conversationId, disabled, capabilities, variant = 'icon' }) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [localOverrides, setLocalOverrides] = useState<LLMConfigOverrides>({});
@@ -55,7 +57,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
     );
 
     const handleParamChange = (
-      key: keyof Omit<LLMConfigOverrides, 'stop' | 'response_format'>,
+      key: keyof Omit<LLMConfigOverrides, 'stop' | 'response_format' | 'reasoning_effort'>,
       value: number | null
     ) => {
       const newOverrides: LLMConfigOverrides = { ...localOverrides };
@@ -309,28 +311,60 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
         trigger="click"
         open={open}
         onOpenChange={handleOpenChange}
-        placement="top"
+        placement={variant === 'row' ? 'rightTop' : 'top'}
         styles={{ root: { width: 320 } }}
         arrow={false}
         destroyOnHidden
       >
-        <div>
-          <LazyTooltip title={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}>
-            <LazyButton
-              type="text"
-              size="small"
-              icon={<Settings2 size={18} />}
-              disabled={disabled}
-              aria-label={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
-              className={`
+        {variant === 'row' ? (
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
+            className={`w-full text-left px-3 py-2 flex items-center justify-between gap-2 rounded-md text-xs transition-colors duration-150 cursor-pointer ${
+              isActive
+                ? 'text-blue-700 dark:text-blue-300'
+                : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+            } ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Settings2 size={16} className="shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="font-medium truncate">
+                  {tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
+                </span>
+                <span className="text-2xs text-slate-400 dark:text-slate-500 truncate">
+                  {tFallback(t, 'agent.plusMenu.llmParamsDesc', 'Temperature, max tokens…')}
+                </span>
+              </div>
+            </div>
+            {isActive ? (
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shrink-0">
+                {tFallback(t, 'agent.plusMenu.customized', 'Custom')}
+              </span>
+            ) : (
+              <ChevronRight size={16} className="text-slate-400 shrink-0" />
+            )}
+          </button>
+        ) : (
+          <div>
+            <LazyTooltip title={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}>
+              <LazyButton
+                type="text"
+                size="small"
+                icon={<Settings2 size={18} />}
+                disabled={disabled}
+                aria-label={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
+                className={`
                 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                 hover:bg-slate-100 dark:hover:bg-slate-700/50
                 rounded-lg h-8 w-8 flex items-center justify-center
                 ${isActive ? 'text-primary bg-primary/5' : ''}
               `}
-            />
-          </LazyTooltip>
-        </div>
+              />
+            </LazyTooltip>
+          </div>
+        )}
       </Popover>
     );
   }

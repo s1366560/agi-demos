@@ -88,6 +88,10 @@ export interface AgentV3State {
   togglePinEvent: (eventId: string) => void;
   setLlmOverrides: (conversationId: string, overrides: LLMConfigOverrides | null) => void;
   setLlmModelOverride: (conversationId: string, modelName: string | null) => void;
+  setReasoningEffort: (
+    conversationId: string,
+    effort: 'low' | 'medium' | 'high' | null
+  ) => void;
 }
 
 export interface LoadMessagesOptions {

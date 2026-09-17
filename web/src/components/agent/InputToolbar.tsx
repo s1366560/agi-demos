@@ -1,31 +1,21 @@
-import { useState, memo } from 'react';
+import { memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Popover } from 'antd';
-import {
-  Send,
-  Square,
-  Paperclip,
-  BookOpen,
-  Mic,
-  MicOff,
-  Phone,
-  PhoneOff,
-  ListChecks,
-  Settings2,
-} from 'lucide-react';
+import { Send, Square, MicOff, PhoneOff } from 'lucide-react';
 
 import type { ActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
 
 import { PluginSlotOutlet } from '@/components/plugins/PluginSlotOutlet';
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
-import { AgentSwitcher } from './AgentSwitcher';
-import { LlmOverridePopover } from './chat/LlmOverridePopover';
 import { ModelSwitchPopover } from './chat/ModelSwitchPopover';
 import { VoiceWaveform } from './chat/VoiceWaveform';
+import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { PermissionModeSwitcher } from './PermissionModeSwitcher';
+import { ThinkingLevelSwitcher } from './ThinkingLevelSwitcher';
+
+import type { SlashItem } from '@/types/agent';
 
 import type { PendingAttachment } from './FileUploader';
 import type { WebOperationContextV2 } from '../../plugins/webOperationAdmissionV2';
@@ -37,8 +27,7 @@ export interface InputToolbarProps {
   attachments: readonly PendingAttachment[];
   /** Model capability flags */
   capabilities: ActiveModelCapabilities;
-  /** Template library open state */
-  templateLibraryVisible: boolean;
+  /** Template library open action */
   setTemplateLibraryVisible: React.Dispatch<React.SetStateAction<boolean>>;
   /** Voice input state */
   isListening: boolean;
@@ -60,6 +49,8 @@ export interface InputToolbarProps {
   /** Agent switcher */
   onAgentSelect?: ((agentId: string) => void) | undefined;
   activeAgentId?: string | undefined;
+  /** Slash command / skill selection from the + menu */
+  onSlashSelect: (item: SlashItem) => void;
   /** Char count for the input */
   charCount: number;
   /** Whether send button should be enabled */
@@ -74,7 +65,6 @@ export const InputToolbar = memo<InputToolbarProps>(
     fileInputRef,
     attachments,
     capabilities,
-    templateLibraryVisible,
     setTemplateLibraryVisible,
     isListening,
     voiceAnalyser,
@@ -90,179 +80,85 @@ export const InputToolbar = memo<InputToolbarProps>(
     isPlanMode,
     onAgentSelect,
     activeAgentId,
+    onSlashSelect,
     charCount,
     canSend,
     handleSend,
     onAbort,
   }) => {
     const { t } = useTranslation();
-    const [overflowOpen, setOverflowOpen] = useState(false);
-    const voiceCallLabel =
-      voiceCallStatus !== 'idle'
-        ? t('agent.voiceCall.endCall', { defaultValue: 'End call' })
-        : t('agent.inputBar.startVoiceCall', { defaultValue: 'Start voice call' });
-
-    const overflowContent = (
-      <div className="flex flex-col gap-1 p-1 min-w-50">
-        <LlmOverridePopover
-          conversationId={activeConversationId}
-          disabled={!!(isStreaming || disabled)}
-          capabilities={capabilities}
-        />
-        <ModelSwitchPopover
-          conversationId={activeConversationId}
-          projectId={projectId}
-          disabled={!!(isStreaming || disabled)}
-        />
-      </div>
-    );
 
     return (
       <div
         data-testid="input-toolbar"
         className="mt-auto flex min-w-0 flex-shrink-0 flex-wrap items-center gap-1.5 px-2 pt-1 pb-1.5 sm:px-3"
       >
-        {/* Left Actions */}
+        {/* Left Actions: consolidated "+" plus the three inline controls */}
         <div className="flex min-w-0 flex-wrap items-center gap-1">
-          {onAgentSelect && (
-            <>
-              <AgentSwitcher
-                activeAgentId={activeAgentId}
-                onSelect={onAgentSelect}
-                disabled={!!(isStreaming || disabled)}
-                className="h-8 min-w-0 max-w-[112px] min-[520px]:max-w-[180px]"
-              />
-              <div className="hidden min-[460px]:block w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5" />
-            </>
-          )}
+          <ComposerPlusMenu
+            fileInputRef={fileInputRef}
+            capabilities={capabilities}
+            attachments={attachments}
+            setTemplateLibraryVisible={setTemplateLibraryVisible}
+            isListening={isListening}
+            voiceCallStatus={voiceCallStatus}
+            toggleVoiceInput={toggleVoiceInput}
+            handleVoiceCall={handleVoiceCall}
+            onTogglePlanMode={onTogglePlanMode}
+            isPlanMode={isPlanMode}
+            onAgentSelect={onAgentSelect}
+            activeAgentId={activeAgentId}
+            onSlashSelect={onSlashSelect}
+            projectId={projectId}
+            activeConversationId={activeConversationId}
+            disabled={disabled}
+          />
 
-          <LazyTooltip
-            title={
-              capabilities.supportsAttachment
-                ? t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')
-                : t(
-                    'agent.inputBar.attachNotSupported',
-                    'Current model does not support file attachments'
-                  )
-            }
-          >
-            <LazyButton
-              type="text"
-              size="small"
-              icon={<Paperclip size={18} />}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!capabilities.supportsAttachment}
-              aria-label={t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')}
-              className={`
-                text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
-                hover:bg-slate-100 dark:hover:bg-slate-700/50
-                rounded-lg h-8 w-8 flex items-center justify-center
-                ${attachments.length > 0 ? 'text-primary' : ''}
-                ${!capabilities.supportsAttachment ? 'opacity-40 cursor-not-allowed' : ''}
-              `}
-            />
-          </LazyTooltip>
-
-          <LazyTooltip title={t('agent.inputBar.templates', 'Prompt templates')}>
-            <LazyButton
-              data-tour="prompt-templates"
-              type="text"
-              size="small"
-              icon={<BookOpen size={18} />}
-              onClick={() => {
-                setTemplateLibraryVisible((v) => !v);
-              }}
-              aria-label={t('agent.inputBar.templates', 'Prompt templates')}
-              className={`
-                text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
-                hover:bg-slate-100 dark:hover:bg-slate-700/50
-                rounded-lg h-8 w-8 flex items-center justify-center
-                ${templateLibraryVisible ? 'text-primary bg-primary/5' : ''}
-              `}
-            />
-          </LazyTooltip>
+          <div className="hidden min-[460px]:block w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5" />
 
           <PermissionModeSwitcher
             conversationId={activeConversationId}
             disabled={!!(isStreaming || disabled)}
           />
 
-          <LazyTooltip
-            title={
-              isListening
-                ? t('agent.inputBar.stopVoice', 'Stop voice input')
-                : t('agent.inputBar.startVoice', 'Voice input')
-            }
-          >
-            <LazyButton
-              type="text"
-              size="small"
-              icon={isListening ? <MicOff size={18} /> : <Mic size={18} />}
-              onClick={toggleVoiceInput}
-              disabled={voiceCallStatus !== 'idle'}
-              aria-label={
-                isListening
-                  ? t('agent.inputBar.stopVoice', 'Stop voice input')
-                  : t('agent.inputBar.startVoice', 'Voice input')
-              }
-              className={`
-                rounded-lg h-8 w-8 flex items-center justify-center transition-colors
-                ${
-                  isListening
-                    ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
-                }
-              `}
-            />
-          </LazyTooltip>
-          <VoiceWaveform active={isListening} analyser={voiceAnalyser} operation={voiceOperation} />
+          <ThinkingLevelSwitcher
+            conversationId={activeConversationId}
+            projectId={projectId}
+            disabled={!!(isStreaming || disabled)}
+          />
 
-          <LazyTooltip title={voiceCallLabel}>
-            <LazyButton
-              type="text"
-              size="small"
-              icon={voiceCallStatus !== 'idle' ? <PhoneOff size={18} /> : <Phone size={18} />}
-              onClick={handleVoiceCall}
-              disabled={isStreaming || disabled || isListening}
-              aria-label={voiceCallLabel}
-              className={`
-                rounded-lg h-8 w-8 flex items-center justify-center transition-colors
-                ${
-                  voiceCallStatus !== 'idle'
-                    ? 'text-green-500 bg-green-50 dark:bg-green-900/20 animate-pulse motion-reduce:animate-none'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
-                }
-              `}
-            />
-          </LazyTooltip>
+          <ModelSwitchPopover
+            conversationId={activeConversationId}
+            projectId={projectId}
+            disabled={!!(isStreaming || disabled)}
+          />
 
-          {/* Overflow menu for advanced controls */}
-          <Popover
-            content={overflowContent}
-            trigger="click"
-            open={overflowOpen}
-            onOpenChange={setOverflowOpen}
-            placement="topLeft"
-            arrow={false}
-            styles={{ content: { padding: 0 } }}
-          >
-            <LazyTooltip title={t('agent.inputBar.advancedSettings', 'Advanced settings')}>
-              <button
-                type="button"
-                disabled={!!(isStreaming || disabled)}
-                aria-label={t('agent.inputBar.advancedSettings', 'Advanced settings')}
-                className={`
-                  flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150
-                  text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700/50 dark:hover:text-slate-300
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
-                  disabled:cursor-not-allowed disabled:opacity-40
-                  ${overflowOpen ? 'text-primary bg-primary/5' : ''}
-                `}
-              >
-                <Settings2 size={16} />
-              </button>
+          {/* Transient voice states stay visible while active so they can be stopped */}
+          {isListening && (
+            <LazyTooltip title={t('agent.inputBar.stopVoice', 'Stop voice input')}>
+              <LazyButton
+                type="text"
+                size="small"
+                icon={<MicOff size={18} />}
+                onClick={toggleVoiceInput}
+                aria-label={t('agent.inputBar.stopVoice', 'Stop voice input')}
+                className="rounded-lg h-8 w-8 flex items-center justify-center text-red-500 bg-red-50 dark:bg-red-900/20"
+              />
             </LazyTooltip>
-          </Popover>
+          )}
+          <VoiceWaveform active={isListening} analyser={voiceAnalyser} operation={voiceOperation} />
+          {voiceCallStatus !== 'idle' && (
+            <LazyTooltip title={t('agent.voiceCall.endCall', 'End call')}>
+              <LazyButton
+                type="text"
+                size="small"
+                icon={<PhoneOff size={18} />}
+                onClick={handleVoiceCall}
+                aria-label={t('agent.voiceCall.endCall', 'End call')}
+                className="rounded-lg h-8 w-8 flex items-center justify-center text-green-500 bg-green-50 dark:bg-green-900/20 animate-pulse motion-reduce:animate-none"
+              />
+            </LazyTooltip>
+          )}
         </div>
 
         {/* Right Actions */}
@@ -270,37 +166,6 @@ export const InputToolbar = memo<InputToolbarProps>(
           data-testid="input-toolbar-actions"
           className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1"
         >
-          {onTogglePlanMode && (
-            <LazyTooltip
-              title={
-                isPlanMode
-                  ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')
-                  : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode (Shift+Tab)')
-              }
-            >
-              <button
-                type="button"
-                onClick={onTogglePlanMode}
-                disabled={isStreaming}
-                aria-label={
-                  isPlanMode
-                    ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')
-                    : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode (Shift+Tab)')
-                }
-                className={`
-                  flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed
-                  ${
-                    isPlanMode
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 disabled:opacity-40'
-                  }
-                `}
-              >
-                <ListChecks size={16} />
-              </button>
-            </LazyTooltip>
-          )}
-
           {charCount > 0 && (
             <LazyTooltip
               title={t('agent.inputBar.charLimitHint', {

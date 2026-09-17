@@ -617,6 +617,12 @@ export interface LLMConfigOverrides {
   seed?: number | null;
   stop?: string[] | null;
   response_format?: { type: 'text' | 'json_object' | 'json_schema' } | null;
+  /**
+   * Reasoning effort (thinking level) for reasoning-capable models.
+   * Applied via build_reasoning_config on the backend; ignored by models
+   * without reasoning support.
+   */
+  reasoning_effort?: 'low' | 'medium' | 'high' | null;
 }
 
 export interface ProviderListResponse {

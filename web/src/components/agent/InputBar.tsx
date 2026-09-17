@@ -974,7 +974,6 @@ export const InputBar = memo<InputBarProps>(
             fileInputRef={fileInputRef}
             attachments={attachments}
             capabilities={capabilities}
-            templateLibraryVisible={templateLibraryVisible}
             setTemplateLibraryVisible={setTemplateLibraryVisible}
             isListening={isListening}
             voiceAnalyser={voiceAnalyser}
@@ -990,6 +989,7 @@ export const InputBar = memo<InputBarProps>(
             isPlanMode={isPlanMode}
             onAgentSelect={onAgentSelect}
             activeAgentId={activeAgentId}
+            onSlashSelect={handleSlashSelect}
             charCount={charCount}
             canSend={canSend}
             handleSend={() => {
