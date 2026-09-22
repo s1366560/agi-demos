@@ -9,6 +9,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   CommandPalette,
+  groupCommandPaletteItems,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/CommandPalette.js');
 
 const source = readFileSync(
@@ -86,7 +87,7 @@ test('command palette renders grouped listbox semantics and disabled reasons', (
 
 test('command palette keyboard traversal remains flat across visual groups', () => {
   assert.match(source, /const enabledItems = useMemo/);
-  assert.match(source, /items\.filter\(\(item\) => !item\.disabled\)/);
+  assert.match(source, /groupedItems\.flatMap/);
   assert.match(source, /moveActiveItem\(1\)/);
   assert.match(source, /moveActiveItem\(-1\)/);
   assert.match(source, /setActiveItemId\(enabledItems\[0\]\.id\)/);
@@ -100,4 +101,20 @@ test('command palette omits empty groups because groups are derived from visible
 
   assert.equal((markup.match(/role="group"/g) ?? []).length, 1);
   assert.doesNotMatch(markup, /Governance/);
+});
+
+test('feature groups have stable order and keyboard candidates follow visual order', () => {
+  const items = [
+    { ...baseItem, id: 'organization', groupId: 'organization' },
+    { ...baseItem, id: 'tasks', groupId: 'tasks-automation' },
+    { ...baseItem, id: 'knowledge', groupId: 'knowledge-memory', disabled: true },
+    { ...baseItem, id: 'shell', groupId: 'desktop-shell' },
+    { ...baseItem, id: 'tasks-second', groupId: 'tasks-automation' },
+  ];
+  const groups = groupCommandPaletteItems(items);
+  assert.deepEqual(groups.map(([id]) => id),
+    ['tasks-automation', 'knowledge-memory', 'organization', 'desktop-shell']);
+  const markup = renderPalette(items);
+  assert.match(markup, /aria-activedescendant="command-option-tasks"/);
+  assert.ok(markup.indexOf('command-option-tasks-second') < markup.indexOf('id="command-option-organization"'));
 });

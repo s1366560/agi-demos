@@ -5178,16 +5178,16 @@ test("live Agent text events preserve raw delta whitespace and read text_end ful
 
 test("act items pair with the observe that answers them, preserving order", () => {
   const pairs = pairToolCallItems([
-    { id: "act-1", type: "act", toolName: "read_file", eventTimeUs: 1_000_000 },
+    { id: "act-1", tool_call_id: "fixture-1", type: "act", toolName: "read_file", eventTimeUs: 1_000_000 },
     {
-      id: "observe-1",
+      id: "observe-1", tool_call_id: "fixture-1",
       type: "observe",
       toolName: "read_file",
       eventTimeUs: 1_400_000,
     },
-    { id: "act-2", type: "act", toolName: "run_tests", eventTimeUs: 2_000_000 },
+    { id: "act-2", tool_call_id: "fixture-2", type: "act", toolName: "run_tests", eventTimeUs: 2_000_000 },
     {
-      id: "observe-2",
+      id: "observe-2", tool_call_id: "fixture-2",
       type: "observe",
       toolName: "run_tests",
       eventTimeUs: 3_000_000,
@@ -5713,8 +5713,8 @@ test("tool activity rows preserve structured thinking ahead of paired tool calls
       type: "thought",
       content: "Inspect the shared fixture.",
     },
-    { id: "act-1", type: "act", toolName: "read_file" },
-    { id: "observe-1", type: "observe", toolName: "read_file" },
+    { id: "act-1", tool_call_id: "fixture-1", type: "act", toolName: "read_file" },
+    { id: "observe-1", tool_call_id: "fixture-1", type: "observe", toolName: "read_file" },
   ]);
 
   assert.equal(rows.length, 2);
@@ -5728,13 +5728,13 @@ test("tool activity rows preserve structured thinking ahead of paired tool calls
 test("structured sources aggregate across calls, deduplicate URLs, and keep stable groups", () => {
   const model = aggregateStructuredToolSources([
     {
-      id: "act-search-1",
+      id: "act-search-1", tool_call_id: "fixture-search-1",
       type: "act",
       display: { kind: "search", metadata: { source_type: "web" } },
       eventTimeUs: 1,
     },
     {
-      id: "observe-search-1",
+      id: "observe-search-1", tool_call_id: "fixture-search-1",
       type: "observe",
       toolOutput: {
         results: [
@@ -5753,13 +5753,13 @@ test("structured sources aggregate across calls, deduplicate URLs, and keep stab
       eventTimeUs: 2,
     },
     {
-      id: "act-search-2",
+      id: "act-search-2", tool_call_id: "fixture-search-2",
       type: "act",
       display: { kind: "search" },
       eventTimeUs: 3,
     },
     {
-      id: "observe-search-2",
+      id: "observe-search-2", tool_call_id: "fixture-search-2",
       type: "observe",
       toolOutput: JSON.stringify({
         sources: [
@@ -5939,13 +5939,13 @@ test("structured source aggregation accepts explicit source lists in display met
 test("structured source aggregation ignores malformed candidates and unsafe links", () => {
   const model = aggregateStructuredToolSources([
     {
-      id: "act-safe-1",
+      id: "act-safe-1", tool_call_id: "fixture-safe-1",
       type: "act",
       display: { kind: "search" },
       eventTimeUs: 1,
     },
     {
-      id: "observe-safe-1",
+      id: "observe-safe-1", tool_call_id: "fixture-safe-1",
       type: "observe",
       toolOutput: {
         citations: [
@@ -5967,7 +5967,7 @@ test("structured source aggregation ignores malformed candidates and unsafe link
       eventTimeUs: 2,
     },
     {
-      id: "act-safe-2",
+      id: "act-safe-2", tool_call_id: "fixture-safe-2",
       type: "act",
       display: {
         metadata: { source_type: "rag", provider_label: "Knowledge base" },
@@ -5975,7 +5975,7 @@ test("structured source aggregation ignores malformed candidates and unsafe link
       eventTimeUs: 3,
     },
     {
-      id: "observe-safe-2",
+      id: "observe-safe-2", tool_call_id: "fixture-safe-2",
       type: "observe",
       toolOutput: {
         documents: [{ title: "" }, { title: "Internal guide", snippet: 42 }],
@@ -6009,9 +6009,9 @@ test("structured source aggregation ignores malformed candidates and unsafe link
 
 test("a trailing act without its observe renders as a running call", () => {
   const pairs = pairToolCallItems([
-    { id: "act-1", type: "act", toolName: "read_file", eventTimeUs: 1 },
-    { id: "observe-1", type: "observe", toolName: "read_file", eventTimeUs: 2 },
-    { id: "act-2", type: "act", toolName: "write_file", eventTimeUs: 3 },
+    { id: "act-1", tool_call_id: "fixture-1", type: "act", toolName: "read_file", eventTimeUs: 1 },
+    { id: "observe-1", tool_call_id: "fixture-1", type: "observe", toolName: "read_file", eventTimeUs: 2 },
+    { id: "act-2", tool_call_id: "fixture-2", type: "act", toolName: "write_file", eventTimeUs: 3 },
   ]);
 
   assert.equal(pairs.length, 2);
@@ -6032,9 +6032,9 @@ test("an orphaned observe still renders as a completed call on its own", () => {
 
 test("failed observations surface as failed pairs with a duration", () => {
   const failed = pairToolCallItems([
-    { id: "act-1", type: "act", toolName: "run_tests", eventTimeUs: 1_000_000 },
+    { id: "act-1", tool_call_id: "fixture-1", type: "act", toolName: "run_tests", eventTimeUs: 1_000_000 },
     {
-      id: "observe-1",
+      id: "observe-1", tool_call_id: "fixture-1",
       type: "observe",
       toolName: "run_tests",
       isError: true,
@@ -6042,9 +6042,9 @@ test("failed observations surface as failed pairs with a duration", () => {
     },
   ]);
   const withDelta = pairToolCallItems([
-    { id: "act-1", type: "act", toolName: "run_tests", eventTimeUs: 1_000_000 },
+    { id: "act-1", tool_call_id: "fixture-1", type: "act", toolName: "run_tests", eventTimeUs: 1_000_000 },
     {
-      id: "observe-1",
+      id: "observe-1", tool_call_id: "fixture-1",
       type: "observe",
       toolName: "run_tests",
       eventTimeUs: 2_500_000,
@@ -6067,6 +6067,7 @@ test("structured tool presentation metadata drives worklog anatomy", () => {
   const pair = pairToolCallItems([
     {
       id: "act-edit",
+      tool_call_id: "fixture-edit",
       type: "act",
       toolName: "patch",
       display: { kind: "edit" },
@@ -6074,6 +6075,7 @@ test("structured tool presentation metadata drives worklog anatomy", () => {
     },
     {
       id: "observe-edit",
+      tool_call_id: "fixture-edit",
       type: "observe",
       toolName: "patch",
       display: { kind: "edit" },

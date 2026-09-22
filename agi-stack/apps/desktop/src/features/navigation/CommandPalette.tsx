@@ -9,6 +9,7 @@ import {
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
 import { useI18n } from '../../i18n';
 import { type CommandPaletteItem } from '../../appShellTypes';
+import { DESKTOP_NAVIGATION_GROUPS } from './desktopCanonicalNavigationCatalog';
 
 export function CommandPalette({
   inputRef,
@@ -25,22 +26,11 @@ export function CommandPalette({
 }) {
   const { t } = useI18n();
   const paletteRef = useRef<HTMLElement>(null);
-  const enabledItems = useMemo(() => items.filter((item) => !item.disabled), [items]);
-  const groupedItems = useMemo(() => {
-    const groups = new Map<string, { label: string; items: CommandPaletteItem[] }>();
-    for (const item of items) {
-      const group = groups.get(item.groupId);
-      if (group) {
-        group.items.push(item);
-      } else {
-        groups.set(item.groupId, {
-          label: item.groupLabel,
-          items: [item],
-        });
-      }
-    }
-    return [...groups.entries()];
-  }, [items]);
+  const groupedItems = useMemo(() => groupCommandPaletteItems(items), [items]);
+  const enabledItems = useMemo(
+    () => groupedItems.flatMap(([, group]) => group.items.filter((item) => !item.disabled)),
+    [groupedItems],
+  );
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const activeItem = enabledItems.find((item) => item.id === activeItemId) ?? enabledItems[0];
   const activeOptionId = activeItem ? `command-option-${activeItem.id}` : undefined;
@@ -114,7 +104,14 @@ export function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label={t('commandPalette.title')}
-        onKeyDown={containTabFocus}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose(true);
+            return;
+          }
+          containTabFocus(event);
+        }}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <label className="command-search">
@@ -150,10 +147,6 @@ export function CommandPalette({
               if (event.key === 'Enter' && activeItem) {
                 event.preventDefault();
                 runItem(activeItem);
-              }
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                onClose(true);
               }
             }}
           />
@@ -204,7 +197,9 @@ export function CommandPalette({
                       </span>
                       <span className="command-copy">
                         <strong>{item.label}</strong>
-                        <em>{item.disabledReason ?? item.description}</em>
+                        {item.disabledReason || item.description ? (
+                          <em>{item.disabledReason ?? item.description}</em>
+                        ) : null}
                       </span>
                       {item.shortcut ? (
                         <kbd className="command-shortcut">{item.shortcut}</kbd>
@@ -233,4 +228,21 @@ export function getCommandPaletteFocusableElements(container: HTMLElement | null
   return Array.from(container.querySelectorAll<HTMLElement>(selectors)).filter(
     (element) => element.getAttribute('aria-hidden') !== 'true',
   );
+}
+
+// Use the same grouped order for rendering and keyboard traversal.
+export function groupCommandPaletteItems(items: readonly CommandPaletteItem[]) {
+  const groups = new Map<string, { label: string; items: CommandPaletteItem[] }>();
+  for (const item of items) {
+    const group = groups.get(item.groupId);
+    if (group) group.items.push(item);
+    else groups.set(item.groupId, { label: item.groupLabel, items: [item] });
+  }
+  const ordered = DESKTOP_NAVIGATION_GROUPS.flatMap(({ id }) => {
+    const group = groups.get(id);
+    if (!group) return [];
+    groups.delete(id);
+    return [[id, group] as const];
+  });
+  return [...ordered, ...groups.entries()];
 }

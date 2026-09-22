@@ -67,7 +67,7 @@
 }
 
 .settings-window-brand strong {
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .settings-window-brand small,
@@ -75,7 +75,7 @@
 .settings-profile-card small {
   overflow: hidden;
   color: var(--desktop-muted);
-  font-size: 7px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -96,7 +96,7 @@
   width: 100%;
   height: 27px;
   color: var(--desktop-text-mist);
-  font-size: 8px;
+  font-size: 12px;
   background: transparent;
   border: 0;
   outline: 0;
@@ -145,15 +145,15 @@
 .settings-rail-group > span {
   padding: 12px 9px 6px;
   color: var(--desktop-gray-15);
-  font-size: 7px;
-  font-weight: 800;
-  letter-spacing: 0.13em;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: normal;
 }
 
 .settings-rail-group button {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 18px;
-  min-height: 43px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  min-height: 36px;
   gap: 8px;
   align-items: center;
   padding: 7px 8px;
@@ -193,7 +193,9 @@
 
 .settings-rail-group strong {
   color: var(--desktop-gray-31);
-  font-size: 9px;
+  font-size: 12px;
+
+  font-weight: 500;
 }
 
 .settings-rail-group small {
@@ -243,8 +245,8 @@
   padding: 8px;
   margin: auto 4px 4px;
   color: var(--desktop-gray-7);
-  background: var(--desktop-surface-14);
-  border: 1px solid var(--desktop-border-16);
+  background: transparent;
+  border: 0;
   border-radius: 6px;
 }
 
@@ -267,7 +269,7 @@
 .settings-window-scope strong {
   overflow: hidden;
   color: var(--desktop-gray-29);
-  font-size: 8px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -297,13 +299,13 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--gray-5);
+  padding-bottom: 8px;
+  border-bottom: 0;
 }
 
 .settings-page-heading h1 {
-  margin: 7px 0 8px;
-  font-size: 27px;
+  margin: 0 0 8px;
+  font-size: 24px;
   letter-spacing: -0.03em;
 }
 

@@ -1,3 +1,5 @@
+import { TimelineInspectionProvider } from './features/session/TimelineInspectionContext';
+import { DESKTOP_NAVIGATION_METADATA } from './features/navigation/desktopCanonicalNavigationCatalog';
 import { waitForDesktopWorkspaceCoreReadyV2 } from './hooks/desktopWorkspaceCoreReadinessV2';
 import { useDesktopModalBackgroundV2 } from './hooks/useDesktopModalBackgroundV2';
 import { useDesktopRendererRuntimeAdmissionV2 } from './hooks/useDesktopRendererRuntimeAdmissionV2';
@@ -11,9 +13,11 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import { Theme } from '@radix-ui/themes';
 import {
+  ActivityLogIcon,
   DashboardIcon,
   GearIcon,
   GridIcon,
@@ -686,9 +690,18 @@ export function App() {
   const appShellRef = useRef<HTMLDivElement>(null);
   const loginRestoreTargetRef = useRef<HTMLElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // Right-panel visibility is shell-owned state from phase 1; the panel
-  // itself lands in a later phase and consumes this flag.
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(() => {
+    try { return localStorage.getItem('agistack.desktop.rightSidebarOpen') === 'true'; }
+    catch { return false; }
+  });
+  const rightSidebarPreferenceRef = useRef(rightSidebarOpen);
+  const rememberRightSidebar = (open: boolean) => {
+    rightSidebarPreferenceRef.current = open;
+    setRightSidebarOpenedForCanvas(false);
+    setRightSidebarOpen(open);
+    try { localStorage.setItem('agistack.desktop.rightSidebarOpen', String(open)); }
+    catch { /* Layout remains usable when storage is unavailable. */ }
+  };
   // Workbench tabs: view tabs follow the fixed model order, conversation tabs
   // append in open order. The landing view is open from the start.
   const [openTabs, setOpenTabs] = useState<WorkbenchTab[]>([
@@ -701,7 +714,7 @@ export function App() {
   const openRightCanvasPanel = useCallback(() => {
     setRightSidebarOpen(true);
     setActiveRightPanel('canvas');
-    setRightSidebarOpenedForCanvas(true);
+    setRightSidebarOpenedForCanvas(!rightSidebarPreferenceRef.current);
   }, []);
   const closeRightCanvasPanel = useCallback(() => {
     setActiveRightPanel('context');
@@ -1565,6 +1578,11 @@ export function App() {
   const desktopProductionRouteLocation = useMemo(
     () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
     [desktopBrowserHashLocation],
+  );
+  const currentDesktopHash = useSyncExternalStore(
+    desktopProductionRouteLocation.subscribe,
+    desktopProductionRouteLocation.readHash,
+    desktopProductionRouteLocation.readHash,
   );
   const desktopProductionRouteNavigation = useMemo(
     () =>
@@ -6935,13 +6953,13 @@ export function App() {
       }
     },
   }));
-  const shellCommandGroup = t('featureDirectory.group.desktopShell');
+  const shellCommandGroup = t('featureDirectory.group.workspacesRuntime');
   const commandItems: CommandPaletteItem[] = [
     ...routeCommandItems,
     {
       id: 'home',
       kind: 'action',
-      groupId: 'desktop-shell',
+      groupId: 'workspaces-runtime',
       groupLabel: shellCommandGroup,
       label: t('nav.home'),
       description: t('commandPalette.homeDescription'),
@@ -6952,8 +6970,8 @@ export function App() {
     {
       id: 'my-work',
       kind: 'action',
-      groupId: 'desktop-shell',
-      groupLabel: shellCommandGroup,
+      groupId: 'tasks-automation',
+      groupLabel: t('featureDirectory.group.tasksAutomation'),
       label: t('myWork.title'),
       description: t('myWork.commandDescription'),
       icon: <GridIcon />,
@@ -6961,9 +6979,20 @@ export function App() {
       onSelect: () => switchSection('board'),
     },
     {
+      id: 'activity',
+      kind: 'action',
+      groupId: 'tasks-automation',
+      groupLabel: t('featureDirectory.group.tasksAutomation'),
+      label: t('sidebar.activity'),
+      description: t('sidebar.activity'),
+      icon: <ActivityLogIcon />,
+      searchText: t('sidebar.activity'),
+      onSelect: () => switchSection('activity'),
+    },
+    {
       id: 'settings',
       kind: 'settings',
-      groupId: 'desktop-shell',
+      groupId: 'workspaces-runtime',
       groupLabel: shellCommandGroup,
       label: identityAuthenticated ? t('settings.title') : t('commandPalette.useApiKey'),
       description: identityAuthenticated
@@ -6976,7 +7005,7 @@ export function App() {
     {
       id: 'browser-integration-settings',
       kind: 'settings',
-      groupId: 'desktop-auxiliary',
+      groupId: 'workspaces-runtime',
       groupLabel: t('featureDirectory.group.auxiliary'),
       label: t('settings.browser'),
       description: t('settings.browserDescription'),
@@ -6987,7 +7016,7 @@ export function App() {
     {
       id: 'sign-in',
       kind: 'settings',
-      groupId: 'desktop-shell',
+      groupId: 'workspaces-runtime',
       groupLabel: shellCommandGroup,
       label: auth.status === 'signed_in' ? t('settings.account') : t('login.signInTitle'),
       description:
@@ -7010,7 +7039,7 @@ export function App() {
     {
       id: 'refresh-runtime',
       kind: 'action',
-      groupId: 'desktop-shell',
+      groupId: 'workspaces-runtime',
       groupLabel: shellCommandGroup,
       label: t('commandPalette.refreshWorkspace'),
       description: runtimeDisabledReason ?? t('commandPalette.refreshDescription'),
@@ -7023,7 +7052,7 @@ export function App() {
     {
       id: 'keyboard-shortcuts',
       kind: 'action',
-      groupId: 'desktop-shell',
+      groupId: 'workspaces-runtime',
       groupLabel: shellCommandGroup,
       label: t('commandPalette.showShortcuts'),
       description: t('shortcuts.description'),
@@ -7654,6 +7683,10 @@ export function App() {
     t('settings.noTenantSelected');
   const activeProjectName =
     selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected');
+  const currentDesktopRoute = restoreDesktopRoute(desktopProductionRouteRegistry, currentDesktopHash);
+  const currentDesktopRouteLabel = currentDesktopRoute.status === 'matched'
+    ? DESKTOP_NAVIGATION_METADATA.find((entry) => entry.routeId === currentDesktopRoute.match.definition.id)?.labelKey
+    : undefined;
   const desktopAuthenticatedShellViewModelV2: DesktopAuthenticatedShellViewModelV2 = {
     meta: {
       appearance: themeAppearance,
@@ -7672,14 +7705,14 @@ export function App() {
         ? {
             kind: 'visible',
             props: {
-              contextTitle: `${activeTenantName} · ${activeProjectName}`,
+              contextTitle: currentDesktopRouteLabel ? t(currentDesktopRouteLabel) : activeSection === 'chat' ? sessionTitle : activeSection === 'home' ? t('task.newThreadTitle') : activeSection === 'board' ? t('myWork.title') : activeSection === 'activity' ? t('sidebar.activity') : workspaceLabel(selectedWorkspace ?? undefined),
               sidebarCollapsed,
               rightSidebarOpen,
               rightSidebarAvailable,
               onToggleSidebar: () => setSidebarCollapsed((collapsed) => !collapsed),
               onToggleRightSidebar: () => {
                 if (!rightSidebarAvailable) return;
-                setRightSidebarOpen((open) => !open);
+                rememberRightSidebar(!rightSidebarOpen);
               },
             },
           }
@@ -7787,7 +7820,7 @@ export function App() {
                 onOpenCanvas: handleOpenCanvas,
                 onSelectPanel: handleSelectRightPanel,
                 onCloseCanvas: handleCloseCanvas,
-                onClose: () => setRightSidebarOpen(false),
+                onClose: () => rememberRightSidebar(false),
               },
             }
           : { kind: 'hidden' },
@@ -7795,6 +7828,7 @@ export function App() {
         connection,
         liveConnected: socket.connected,
         liveError: socket.error,
+        onOpenConnectionSettings: openConnectionSettings,
         tenantName: activeTenantName,
         projectName: activeProjectName,
       },
@@ -7921,9 +7955,12 @@ export function App() {
         auth={auth}
         capabilitySnapshot={desktopCapabilityState.snapshot}
       >
-        <DesktopRendererAuthenticatedShellV2
-          viewModel={desktopAuthenticatedShellViewModelV2}
-        />
+        <TimelineInspectionProvider sessionKey={selectedConversationId ?? ''} onOpen={openRightCanvasPanel}
+          isOpen={rightSidebarOpen && activeRightPanel === 'canvas'}>
+          <DesktopRendererAuthenticatedShellV2
+            viewModel={desktopAuthenticatedShellViewModelV2}
+          />
+        </TimelineInspectionProvider>
       </NativeMemoriesRouteProvider>
     </DesktopRendererGenerationProviderV2>
   );

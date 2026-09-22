@@ -195,9 +195,9 @@ test('status bar projection rejects malformed, duplicate, and inactive generatio
 });
 
 test('status bar input and failure boundary preserve the production footer contract', () => {
-  assert.match(statusBar, /title=\{liveError \?\? undefined\}/u);
-  assert.match(statusBar, /\{tenantName\} · \{projectName\}/u);
-  assert.match(statusBar, /liveError \? 'error' : liveConnected \? 'ready' : 'idle'/u);
+  assert.match(statusBar, /if \(!runtimeUnavailable && liveConnected && !liveError\) return null/u);
+  assert.match(statusBar, /className="desktop-status-bar-error">\{liveError\}/u);
+  assert.match(statusBar, /onClick=\{onOpenConnectionSettings\}/u);
   assert.match(boundary, /<footer\s+className="desktop-status-bar"/u);
   assert.doesNotMatch(boundary, /<DesktopStatusBar\b|fallback/u);
   const statusBarInput = new RegExp(
@@ -205,6 +205,7 @@ test('status bar input and failure boundary preserve the production footer contr
       String.raw`statusBar:\s*\{\s*connection,`,
       String.raw`\s*liveConnected:\s*socket\.connected,`,
       String.raw`\s*liveError:\s*socket\.error,`,
+      String.raw`\s*onOpenConnectionSettings:\s*openConnectionSettings,`,
       String.raw`\s*tenantName:\s*activeTenantName,`,
       String.raw`\s*projectName:\s*activeProjectName,\s*\}`,
     ].join(''),

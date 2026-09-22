@@ -4,13 +4,13 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 76px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   background: var(--desktop-bg);
 }
 
 .session-workspace-shell.has-status-banner {
-  grid-template-rows: 76px minmax(50px, auto) minmax(0, 1fr);
+  grid-template-rows: auto minmax(50px, auto) minmax(0, 1fr);
 }
 
 .session-workspace-header {
@@ -518,7 +518,7 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -873,3 +873,82 @@
   .session-overview-jump-grid { grid-template-columns: minmax(0, 1fr); }
   .session-overview-metrics article { min-height: 70px; }
 }
+
+.session-workspace-header {
+  min-height: 60px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  background: var(--desktop-bg);
+  border-bottom: 0;
+  padding-block: 10px;
+}
+.session-workspace-details { position: relative; }
+.session-workspace-details > summary {
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--desktop-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.session-workspace-details > summary:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: 2px;
+}
+.session-workspace-details-content {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(460px, 70vw);
+  padding: 16px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 12px;
+  background: var(--desktop-panel-raised);
+  box-shadow: var(--desktop-shadow-popover);
+}
+.session-workspace-details-content > p {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.session-workspace-details .session-workspace-stages {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.session-workspace-details .session-workspace-header-runtime {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* Conversation chrome is limited to a compact contextual actions menu. */
+.session-workspace-header {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 36px;
+  padding: 2px 16px;
+}
+.session-workspace-more .session-workspace-details > summary {
+  display: block;
+  width: auto;
+  height: auto;
+  padding: 8px;
+  font-size: 13px;
+}
+.session-workspace-more .session-workspace-details-content {
+  position: static;
+  width: auto;
+  max-height: 45vh;
+  overflow: auto;
+  padding: 8px;
+  border: 0;
+  box-shadow: none;
+}
+.session-connection-warning {
+  padding: 8px 24px;
+  color: var(--amber-11);
+  font-size: 13px;
+}
+
+.session-workspace-thread:has(> .session-connection-warning) {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.session-workspace-more > div { width: min(280px, 80vw); }

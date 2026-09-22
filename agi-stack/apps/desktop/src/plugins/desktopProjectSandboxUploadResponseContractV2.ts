@@ -10,11 +10,14 @@ export function requireSandboxUploadResultV2(
 ): AgentInputFileMetadata {
   if (
     !sandboxUploadRecordV2(raw) ||
-    raw.success !== true ||
-    raw.is_error !== false ||
+    typeof raw.success !== 'boolean' ||
+    typeof raw.is_error !== 'boolean' ||
     !Array.isArray(raw.content)
   )
     invalid();
+  if (!raw.success || raw.is_error) {
+    throw sandboxUploadErrorV2('project_sandbox_upload_tool_failed', 502);
+  }
   const text = raw.content
     .filter(sandboxUploadRecordV2)
     .map((item) => item.text)
@@ -25,6 +28,9 @@ export function requireSandboxUploadResultV2(
     result = JSON.parse(text);
   } catch {
     return invalid();
+  }
+  if (sandboxUploadRecordV2(result) && result.success === false) {
+    throw sandboxUploadErrorV2('project_sandbox_upload_tool_failed', 502);
   }
   if (
     !sandboxUploadRecordV2(result) ||

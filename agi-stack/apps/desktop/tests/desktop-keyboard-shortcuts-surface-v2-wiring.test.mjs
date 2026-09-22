@@ -63,7 +63,7 @@ test('keyboard shortcuts are selected from one typed pinned-generation V2 surfac
   assert.match(shell, /keyboardShortcuts:\s*DesktopKeyboardShortcutsInputV2/u);
   assert.match(
     shell,
-    /<DesktopRendererKeyboardShortcutsV2 input=\{surfaces\.keyboardShortcuts\}\s*\/>/u,
+    /<DesktopRendererKeyboardShortcutsV2\s+input=\{surfaces\.keyboardShortcuts\}\s*\/>/u,
   );
   assert.doesNotMatch(
     shell,

@@ -12,6 +12,7 @@ import { createDesktopTenantSkillEvolutionClientV2, type DesktopTenantSkillEvolu
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Theme } from '@radix-ui/themes';
+import { useThemePreference } from '../../theme';
 import {
   Cross2Icon,
   CubeIcon,
@@ -167,6 +168,7 @@ export function SettingsWindow({
   onSignOut,
 }: SettingsWindowProps) {
   const { t } = useI18n();
+  const { resolved: appearance } = useThemePreference();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [query, setQuery] = useState('');
   const [resourceQuery, setResourceQuery] = useState('');
@@ -639,7 +641,7 @@ export function SettingsWindow({
   );
 
   const windowContent = (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance={appearance} accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="settings-window-backdrop" onMouseDown={onClose}>
         <section
           ref={settingsDialogRef}
@@ -652,13 +654,8 @@ export function SettingsWindow({
         >
           <header className="settings-window-titlebar">
             <div className="settings-window-brand">
-              <img src="/icon-192.png" alt="" />
               <div>
                 <strong>{t('settings.title')}</strong>
-                <small>
-                  {selectedTenant?.name || config.tenantId || t('settings.noTenantSelected')} /{' '}
-                  {selectedProject?.name || config.projectId || t('settings.noProjectSelected')}
-                </small>
               </div>
             </div>
             <label className="settings-window-search">
@@ -933,7 +930,6 @@ function SettingsGroup({
   label,
   sections,
   active,
-  counts,
   onSelect,
 }: {
   label: string;
@@ -955,16 +951,14 @@ function SettingsGroup({
             key={section}
             className={active === section ? 'active' : ''}
             aria-label={t(meta.label)}
+            aria-current={active === section ? 'page' : undefined}
+            title={t(meta.description)}
             onClick={() => onSelect(section)}
           >
             <meta.Icon />
             <span>
               <strong>{t(meta.label)}</strong>
-              <small>{t(meta.description)}</small>
             </span>
-            {isCountedSection(section) && counts[section] !== null ? (
-              <em>{counts[section]}</em>
-            ) : null}
           </button>
         );
       })}

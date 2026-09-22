@@ -713,9 +713,7 @@ export function ModelProviderWorkspace({
       <section className="provider-catalog">
         <header>
           <div>
-            <span>{t('providers.inferenceEyebrow')}</span>
             <h2>{t('providers.title')}</h2>
-            <p>{t('providers.subtitle')}</p>
           </div>
           <button
             className="provider-icon-button"
@@ -733,6 +731,7 @@ export function ModelProviderWorkspace({
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            aria-label={t('providers.searchProviders')}
             placeholder={t('providers.searchProviders')}
           />
         </label>
@@ -740,6 +739,7 @@ export function ModelProviderWorkspace({
           {(['all', 'connected', 'attention'] as const).map((value) => (
             <button
               className={filter === value ? 'active' : ''}
+              aria-pressed={filter === value}
               type="button"
               key={value}
               onClick={() => setFilter(value)}
@@ -747,12 +747,6 @@ export function ModelProviderWorkspace({
               {t(`providers.filter.${value}`)}
             </button>
           ))}
-        </div>
-        <div className="provider-count">
-          <span>{t('providers.providerCount', { count: filteredProviders.length })}</span>
-          <button type="button" disabled={!canManage} onClick={() => setAdding(true)}>
-            <PlusIcon /> {t('providers.add')}
-          </button>
         </div>
         <div className="provider-list">
           {filteredProviders.map((item) => (
@@ -904,14 +898,6 @@ export function ModelProviderWorkspace({
                 <CopyIcon />
               </button>
             ) : null}
-            <button
-              className="provider-add-action"
-              type="button"
-              disabled={!canManage}
-              onClick={() => setAdding(true)}
-            >
-              <PlusIcon /> {t('providers.addProvider')}
-            </button>
           </div>
         </header>
 
@@ -947,16 +933,12 @@ export function ModelProviderWorkspace({
         {provider ? (
           <div className="provider-detail-scroll">
             <section className="provider-identity">
-              <div className="provider-identity-icon">
-                <CubeIcon />
-              </div>
-              <div>
+              <div className="provider-identity-copy">
                 <span>
                   {t('providers.modelProviderEyebrow')} ·{' '}
                   {providerTypeDisplayName(provider.provider_type).toUpperCase()}
                 </span>
                 <h1>{provider.name || provider.provider_type}</h1>
-                <p>{t('providers.identityDescription')}</p>
                 <div>
                   <ProviderStatusBadge
                     provider={provider}

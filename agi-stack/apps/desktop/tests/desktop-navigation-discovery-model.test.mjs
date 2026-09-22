@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 const require = createRequire(import.meta.url);
 const {
-  CANONICAL_DESKTOP_NAVIGATION_GROUPS,
+  DESKTOP_NAVIGATION_GROUPS,
   CANONICAL_DESKTOP_NAVIGATION_METADATA,
   DESKTOP_AUXILIARY_NAVIGATION_METADATA,
 } = require("/tmp/agistack-desktop-test-dist/src/features/navigation/desktopCanonicalNavigationCatalog.js");
@@ -84,21 +84,21 @@ test("Desktop discovery projects auxiliary routes only through selected navigati
     [
       {
         routeId: "backend-stores",
-        groupId: "desktop-auxiliary",
+        groupId: "workspaces-runtime",
         label: "backendStores.title",
         description: "backendStores.subtitle",
         destinationPath: "/tenant/tenant-1/backend-stores",
       },
       {
         routeId: "project-playbooks",
-        groupId: "desktop-auxiliary",
+        groupId: "tasks-automation",
         label: "projectPlaybooks.title",
         description: "projectPlaybooks.subtitle",
         destinationPath: "/tenant/tenant-1/project/project-1/playbooks",
       },
       {
         routeId: "project-support",
-        groupId: "desktop-auxiliary",
+        groupId: "organization",
         label: "projectSupport.title",
         description: "projectSupport.subtitle",
         destinationPath: "/tenant/tenant-1/project/project-1/support",
@@ -107,7 +107,7 @@ test("Desktop discovery projects auxiliary routes only through selected navigati
   );
 });
 
-test("Desktop discovery retains the canonical nine-group order and every route once", () => {
+test("Desktop discovery retains the five presentation groups and every route once", () => {
   const groups = deriveDesktopNavigationDiscoveryGroups(entries());
   const routeIds = groups.flatMap(({ entries: groupEntries }) =>
     groupEntries.map(({ routeId }) => routeId),
@@ -121,28 +121,24 @@ test("Desktop discovery retains the canonical nine-group order and every route o
   assert.deepEqual(
     groups.map(({ id }) => id),
     [
-      "tenant-core-operations",
-      "tenant-agent-building",
-      "tenant-extensions-integrations",
-      "tenant-runtime-infrastructure",
-      "tenant-governance-management",
-      "project-workspace",
-      "project-knowledge-base",
-      "project-discovery",
-      "project-configuration",
+      "tasks-automation",
+      "knowledge-memory",
+      "agents-extensions",
+      "workspaces-runtime",
+      "organization",
     ],
   );
   assert.deepEqual(
     groups.map(({ id }) => id),
-    CANONICAL_DESKTOP_NAVIGATION_GROUPS.map(({ id }) => id),
+    DESKTOP_NAVIGATION_GROUPS.map(({ id }) => id),
   );
   assert.deepEqual(
     groups.flatMap(({ entries: groupEntries }) =>
       groupEntries.map(({ routeId }) => routeId),
     ),
-    CANONICAL_DESKTOP_NAVIGATION_GROUPS.flatMap(({ id }) =>
+    DESKTOP_NAVIGATION_GROUPS.flatMap(({ id }) =>
       CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(
-        ({ routeId }) => registry.byId.get(routeId)?.navGroup === id,
+        ({ groupId }) => groupId === id,
       ).map(({ routeId }) => routeId),
     ),
   );
@@ -195,11 +191,11 @@ test("Desktop discovery search covers localized copy, group, alias and route ide
   assert.deepEqual(
     filterDesktopNavigationDiscoveryEntries(
       allEntries,
-      "tenant-governance-management",
+      "featureDirectory.group.organization",
       "en",
     ).map(({ routeId }) => routeId),
     allEntries
-      .filter(({ groupId }) => groupId === "tenant-governance-management")
+      .filter(({ groupId }) => groupId === "organization")
       .map(({ routeId }) => routeId),
   );
   assert.deepEqual(
@@ -230,3 +226,16 @@ function auxiliaryRoute(id, path, scope) {
     loader: async () => ({ routeId: id }),
   };
 }
+
+test("presentation regrouping preserves canonical route identity, scope and deep links", () => {
+  const allEntries = entries();
+  const workspaces = allEntries.filter(({ labelKey }) => labelKey === 'nav.workspaces');
+  assert.equal(workspaces.length, 2);
+  assert.deepEqual(new Set(workspaces.map(({ description }) => description)),
+    new Set(['featureDirectory.scope.tenant', 'featureDirectory.scope.project']));
+  for (const entry of allEntries) {
+    assert.equal(entry.definition, registry.byId.get(entry.routeId));
+    assert.ok(entry.destinationPath);
+    assert.ok(entry.groupId);
+  }
+});

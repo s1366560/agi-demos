@@ -5,11 +5,9 @@ import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
   ChatBubbleIcon,
-  ClockIcon,
   CopyIcon,
   DrawingPinIcon,
   FileTextIcon,
-  PersonIcon,
   Pencil1Icon,
   ReloadIcon,
   TrashIcon,
@@ -153,8 +151,6 @@ export function NarrativeMessageFrame({
   retryDisabled?: boolean;
   children: ReactNode;
 }) {
-  const RoleIcon =
-    kind === 'user' ? PersonIcon : kind === 'runtime' ? ActivityLogIcon : ChatBubbleIcon;
   return (
     <article
       className={`message transcript-message session-thread-message ${className} ${kind}${
@@ -162,10 +158,8 @@ export function NarrativeMessageFrame({
       }${isPinned ? ' is-pinned' : ''}`}
       data-timeline-anchor-id={timelineItemId}
       tabIndex={-1}
+      data-has-identity={Boolean(label || badge)}
     >
-      <span className="session-thread-avatar" aria-hidden="true">
-        <RoleIcon />
-      </span>
       <div className="session-message-body">
         <header className="transcript-meta">
           <span className="session-message-identity">
@@ -175,7 +169,6 @@ export function NarrativeMessageFrame({
             {badge ? <span className="session-message-badge">{badge}</span> : null}
             {time ? (
               <time className="session-message-time" title={time}>
-                <ClockIcon aria-hidden="true" />
                 <span>{time}</span>
               </time>
             ) : null}

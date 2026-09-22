@@ -393,3 +393,49 @@ test('notification preference i18n keys exist in both dictionaries', () => {
     assert.ok(occurrences >= 2, `${key} must exist in enUS and zhCN (found ${occurrences})`);
   }
 });
+
+
+test('settings window applies the saved light and dark appearance to its own Radix theme', () => {
+  const { SettingsWindow } = require('/tmp/agistack-desktop-test-dist/src/features/settings/SettingsWindow.js');
+  const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+  const reactDom = require('react-dom');
+  const createPortal = reactDom.createPortal;
+  // SSR does not support portals. Render their children in place so this test
+  // checks the actual SettingsWindow theme rather than a replacement component.
+  reactDom.createPortal = (children) => children;
+  try {
+    for (const appearance of ['light', 'dark']) {
+      const markup = withStoredGlobals({ locale: 'en', theme: appearance }, () => {
+        globalThis.document = { body: {} };
+        return renderToStaticMarkup(
+          React.createElement(I18nProvider, null,
+            React.createElement(ThemePreferenceProvider, null,
+              React.createElement(SettingsWindow, {
+                open: true,
+                initialSection: 'appearance',
+                auth: { status: 'signed_out', tenants: [], projects: [], user: null },
+                config: DEFAULT_CONFIG,
+                connection: 'ready',
+                wsConnected: true,
+                wsError: null,
+                runtimeDisabledReason: null,
+                agentDefinitionEvent: null,
+                onClose: () => {},
+                onConfigChange: () => {},
+                onRuntimeStatusRefresh: async () => {},
+                onRefreshRuntime: () => {},
+                onContextChange: async () => {},
+                onSignOut: () => {},
+              }),
+            ),
+          ),
+        );
+      });
+      const themeClass = markup.match(/class="([^"]*radix-themes[^"]*)"/)?.[1];
+      assert.ok(themeClass?.split(' ').includes(appearance), `${appearance} settings must use the saved appearance`);
+      assert.ok(markup.includes('role="radiogroup"'));
+    }
+  } finally {
+    reactDom.createPortal = createPortal;
+  }
+});

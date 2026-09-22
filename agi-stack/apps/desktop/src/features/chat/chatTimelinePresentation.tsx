@@ -302,6 +302,7 @@ export function timelineIcon(kind: TimelineKind, item: AgentTimelineItem): React
 }
 
 export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
+  if (item.isError || item.error || item.type === 'error' || agentLifecyclePresentation(item)?.isError) return true;
   const kind = timelineKind(item);
   if (kind === 'user' || kind === 'agent') return true;
   if (timelineHitlType(item)) return true;
@@ -342,6 +343,13 @@ export function timelineSummary(
   t: (key: string, values?: Record<string, string | number>) => string,
 ): string {
   const lifecycle = agentLifecyclePresentation(item);
+  if (item.isError || item.error || item.type === 'error' || lifecycle?.isError) {
+    const payload = isRecord(item.payload) ? item.payload : {};
+    const errorCode = item.error_code ?? payload.error_code;
+    if (errorCode === 'runtime_conflict') return t('chat.error.runtimeConflict');
+    if (errorCode === 'model_response_invalid') return t('chat.error.modelResponseInvalid');
+    return t('chat.error.executionFailed');
+  }
   if (lifecycle) {
     const progress = lifecycle.progress
       ? lifecycle.progress.current === undefined
@@ -353,9 +361,8 @@ export function timelineSummary(
       : '';
     return compactTimelineValue(
       [lifecycle.subject, progress, lifecycle.detail].filter(Boolean).join(' · '),
-    ) || item.type;
+    ) || timelineTitle(item, t);
   }
-  if (item.error) return item.error;
   if (timelineHitlType(item)) return timelineHitlQuestion(item, t);
   if (kind === 'artifact') return item.filename || item.artifactId || item.type;
   if (kind === 'tool') {
@@ -365,13 +372,12 @@ export function timelineSummary(
     if (fileSummary) {
       return item.toolName ? `${item.toolName} ${fileSummary}` : fileSummary;
     }
-    const source = item.toolOutput ?? item.toolInput ?? item.payload ?? item.content;
-    const summary = compactTimelineValue(source);
-    return item.toolName ? `${item.toolName}${summary ? ` ${summary}` : ''}` : summary || item.type;
+    return display?.title || item.toolName || timelineTitle(item, t);
   }
-  if (item.content) return compactTimelineValue(item.content);
-  if (item.payload !== undefined) return compactTimelineValue(item.payload);
-  return item.type;
+  const display = timelineToolDisplay(item);
+  if (display?.summary) return display.summary;
+  if (display?.title) return display.title;
+  return timelineTitle(item, t);
 }
 
 export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {

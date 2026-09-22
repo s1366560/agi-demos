@@ -271,3 +271,12 @@ function availableCapability() {
     authority_revision: 7,
   });
 }
+
+test('automation route exposes one creation entry and compact project totals without protocol cards', async () => {
+  const module = await createProjectCronJobsRouteModuleLoader({ createBinding: () => binding() })();
+  const markup = renderRoute(module, routeContext);
+  assert.match(markup, /<dl class="automations-summary"/);
+  assert.match(markup, /Project One/);
+  assert.doesNotMatch(markup, /PROJECT AUTOMATIONS|Control contract|Revision-guarded writes/);
+  assert.equal((markup.match(/New automation/g) ?? []).length, 1);
+});

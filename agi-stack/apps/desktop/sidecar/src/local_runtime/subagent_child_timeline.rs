@@ -134,13 +134,16 @@ impl ChildTimelineObserver {
         };
         let mut payload = json!({
             "execution_id": session_id, "run_id": session_id,
+            "tool_call_id": format!("{session_id}:tool:{round}"),
+            "conversation_id": self.conversation_id,
             "parent_run_id": self.run_id, "parent_run_revision": self.revision,
             "subagent_id": self.subagent_id, "round": round,
             "tool_name": tool, "tool_input": self.redact(tool, input), "failed": failed,
         });
         if failed {
             payload["error"] = json!("SubAgent tool execution failed");
-        } else if let Some(result) = result {
+        }
+        if let Some(result) = result {
             payload["tool_output"] = json!(self.redact(tool, result));
         }
         let item = self.state.timeline_item(
@@ -175,7 +178,14 @@ impl ReActObserver for ChildTimelineObserver {
         input: &str,
         output: &str,
     ) -> CoreResult<()> {
-        self.publish(session, round, tool, input, Some(output), false);
+        self.publish(
+            session,
+            round,
+            tool,
+            input,
+            Some(output),
+            timeline_presentation::tool_result_is_error(output),
+        );
         Ok(())
     }
     async fn on_tool_error(

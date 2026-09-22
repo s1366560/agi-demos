@@ -329,15 +329,17 @@ export function AutomationsPage({
     <section className="automations-page" aria-labelledby="automations-title">
       <header className="automations-header">
         <div>
-          <Text size="1" weight="bold" color="cyan">
-            {t('automations.kicker')}
-          </Text>
           <Heading id="automations-title" as="h1" size="6">
             {t('automations.title')}
           </Heading>
-          <Text as="p" size="2" color="gray">
-            {t('automations.description')}
-          </Text>
+          <dl className="automations-summary" aria-label={t('automations.summary')}>
+            <AutomationMetric
+              label={t('automations.project')}
+              value={projectName || projectId || '—'}
+            />
+            <AutomationMetric label={t('automations.total')} value={String(jobs.length)} />
+            <AutomationMetric label={t('automations.enabled')} value={String(enabledCount)} />
+          </dl>
         </div>
         <div className="automations-header-actions">
           <Button
@@ -367,22 +369,6 @@ export function AutomationsPage({
         </div>
       </header>
 
-      <div className="automations-summary" aria-label={t('automations.summary')}>
-        <AutomationMetric
-          label={t('automations.project')}
-          value={projectName || projectId || '—'}
-        />
-        <AutomationMetric label={t('automations.total')} value={String(jobs.length)} />
-        <AutomationMetric label={t('automations.enabled')} value={String(enabledCount)} />
-        <AutomationMetric
-          label={t('automations.contract')}
-          value={
-            capabilities?.revision_guarded && capabilities.idempotency_guarded
-              ? t('automations.guardedWrites')
-              : t('automations.readOnly')
-          }
-        />
-      </div>
 
       {!projectId ? (
         <AutomationEmpty
@@ -410,13 +396,6 @@ export function AutomationsPage({
           icon={<ActivityLogIcon />}
           title={t('automations.empty')}
           body={t('automations.emptyBody')}
-          action={
-            createCapability.allowed ? (
-              <Button onClick={openCreate}>
-                <PlusIcon /> {t('automations.new')}
-              </Button>
-            ) : undefined
-          }
         />
       ) : (
         <div className="automations-workbench">

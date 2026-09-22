@@ -294,8 +294,8 @@ test('workspace dock groups unbound sessions under recency headers with codex-st
   assert.match(markup, />Today</);
   assert.match(markup, />Older</);
   assert.ok(markup.indexOf('Fresh task session') < markup.indexOf('Ancient task session'));
-  assert.match(markup, /workspace-tree-session-status/);
-  assert.match(markup, /<time/);
+  assert.doesNotMatch(markup, /workspace-tree-session-status/);
+  assert.doesNotMatch(markup, /<time/);
 });
 
 test('workspace dock omits recency headers when every session shares one group', () => {
@@ -1034,4 +1034,27 @@ test('workspace dock wires the live socket state into status dot presentation', 
     2,
     'staleStatusHint must exist in both the English and Chinese dictionaries'
   );
+});
+
+test('conversation rows keep routine runtime metadata in tooltips and meaningful status visible', () => {
+  const idle = conversation('idle-row', 'Readable task title', new Date().toISOString());
+  idle.metadata = { environment_label: 'Local runtime' };
+  const running = conversation('running-row', 'Running task', new Date().toISOString());
+  running.metadata = { run: { status: 'running' } };
+  const failed = conversation('failed-row', 'Failed task', new Date().toISOString());
+  failed.metadata = { run: { status: 'failed' } };
+  const approval = conversation('approval-row', 'Approval task', new Date().toISOString());
+  approval.metadata = { run: { status: 'needs_approval' } };
+  const markup = renderWorkspaceDock({
+    projects: { 'project-1': { loading: false, error: null } },
+    workspaces: { 'workspace-a': { loading: false, error: null } },
+  }, { 'workspace-a': [idle, running, failed, approval] }, true);
+  assert.match(markup, /title="Readable task title\nLocal runtime\nidle/);
+  assert.doesNotMatch(markup, /<small>Local runtime/);
+  assert.doesNotMatch(markup, /<time/);
+  assert.equal((markup.match(/class="workspace-tree-session-status"/g) ?? []).length, 3);
+  assert.match(markup, /data-status="active"/);
+  assert.match(markup, /data-status="danger"/);
+  assert.match(markup, /data-status="attention"/);
+  assert.match(markup, /role="menuitem"/);
 });

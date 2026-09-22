@@ -1,3 +1,6 @@
+import { resolveTimelineInspectionItems } from './timelineStepDetailsModel';
+import { useTimelineInspection } from './TimelineInspectionContext';
+import { TimelineStepDetails } from './TimelineStepDetails';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -325,6 +328,7 @@ export function WorkspaceReviewPanel({
   sessionControls?: SessionCanvasControls;
 }) {
   const { t } = useI18n();
+  const timelineInspection = useTimelineInspection();
   const [focusedArtifactVersionId, setFocusedArtifactVersionId] = useState<
     string | null
   >(null);
@@ -592,6 +596,22 @@ export function WorkspaceReviewPanel({
     sessionContextWindow.current,
     sessionRuntimeInfrastructure.events.length,
   ]);
+
+  if (timelineInspection.items.length) {
+    const liveItems = resolveTimelineInspectionItems(timelineInspection.items, timelineItems);
+    return (
+      <aside className={`${panelClassName} review-panel-inspection`} aria-label={t('timelineDetails.title')}>
+        <TimelineStepDetails
+          items={liveItems}
+          onOpenFile={timelineInspection.onOpenFile}
+          onClose={() => {
+            timelineInspection.dismiss();
+            sessionControls?.onClose();
+          }}
+        />
+      </aside>
+    );
+  }
 
   return (
     <aside className={panelClassName} aria-label={t('session.canvas')}>

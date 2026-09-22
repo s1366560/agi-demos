@@ -201,7 +201,7 @@ test('right sidebar projection rejects malformed, duplicate, and inactive genera
 });
 
 test('right sidebar seam preserves shell state, local lifecycles, and failure layout', () => {
-  assert.match(app, /const \[rightSidebarOpen, setRightSidebarOpen\] = useState\(true\)/u);
+  assert.match(app, /localStorage\.getItem\('agistack\.desktop\.rightSidebarOpen'\) === 'true'/u);
   assert.match(app, /const \[activeRightPanel, setActiveRightPanel\]/u);
   assert.match(app, /rightSidebarAvailable && rightSidebarOpen/u);
   assert.match(app, /activePanel:\s*activeRightPanel/u);

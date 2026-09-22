@@ -21,16 +21,16 @@
 
 .provider-catalog {
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
-  background: var(--panel);
+  background: transparent;
   border-right: 1px solid var(--border);
 }
-.provider-catalog > header { display: flex; min-height: 82px; align-items: flex-start; justify-content: space-between; padding: 14px 13px 10px; }
+.provider-catalog > header { display: flex; min-height: 64px; align-items: center; justify-content: space-between; padding: 14px 13px 10px; }
 .provider-catalog > header > div { min-width: 0; }
 .provider-catalog > header span,
-.provider-identity > div:nth-child(2) > span,
+.provider-identity-copy > span,
 .provider-panel-grid header span,
 .provider-form-card > header span,
 .provider-model-catalog > header span,
@@ -79,14 +79,14 @@
 .provider-status-action.disable { color: var(--desktop-red-dim); border-color: var(--desktop-border-red); }
 .provider-status-action svg { width: 11px; height: 11px; }
 .provider-status-action:disabled { opacity: 0.5; }
-.provider-add-action { display: inline-flex; height: 32px; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; color: var(--desktop-text-ice); font-size: 11px; font-weight: 650; background: var(--desktop-cyan-dark); border: 1px solid var(--desktop-cyan-mid); border-radius: 5px; }
+.provider-add-action { display: inline-flex; height: 32px; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; color: var(--desktop-white); font-size: 11px; font-weight: 650; background: var(--desktop-cyan-dark); border: 1px solid var(--desktop-cyan-mid); border-radius: 5px; }
 .provider-detail-scroll { min-height: 0; overflow-y: auto; }
-.provider-identity { display: grid; grid-template-columns: 48px minmax(0, 1fr) 175px; align-items: start; gap: 13px; padding: 22px 24px 18px; }
+.provider-identity { display: grid; grid-template-columns: minmax(0, 1fr) 175px; align-items: start; gap: 13px; padding: 24px; }
 .provider-identity-icon { display: grid; width: 46px; height: 46px; place-items: center; color: var(--cyan); background: var(--desktop-surface-cyan-4); border: 1px solid var(--desktop-border-cyan); border-radius: 10px; }
 .provider-identity-icon svg { width: 21px; height: 21px; }
 .provider-identity h1 { margin: 5px 0; font-size: 23px; letter-spacing: -0.04em; }
 .provider-identity p { max-width: 680px; margin: 0; color: var(--desktop-gray-12); font-size: 12px; line-height: 1.55; }
-.provider-identity > div:nth-child(2) > div { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 11px; }
+.provider-identity-copy > div { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 11px; }
 .provider-auth-badge { display: inline-flex; min-height: 20px; align-items: center; gap: 5px; padding: 0 7px; color: var(--desktop-gray-12); font-size: 10.5px; background: var(--desktop-surface-15); border: 1px solid var(--desktop-border-14); border-radius: 5px; }
 .provider-identity > section { display: flex; flex-direction: column; align-items: flex-end; padding-top: 5px; text-align: right; }
 .provider-identity > section small { color: var(--desktop-gray-19); font-size: 10.5px; }
@@ -96,16 +96,16 @@
 .provider-tabs button { position: relative; padding: 0 11px; color: var(--desktop-gray-23); font-size: 8px; background: transparent; border: 0; }
 .provider-tabs button.active { color: var(--desktop-white); }
 .provider-tabs button.active::after { position: absolute; right: 8px; bottom: 0; left: 8px; height: 2px; background: var(--cyan); content: ''; }
-.provider-tab-content { padding: 16px 20px 32px; }
+.provider-tab-content { padding: 20px 24px 32px; }
 
-.provider-panel-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; }
+.provider-panel-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; }
 .provider-health-card,
 .provider-model-summary,
 .provider-routing-card,
 .provider-form-card,
 .provider-model-catalog,
 .provider-routing-form,
-.provider-activity-card { min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
+.provider-activity-card { min-width: 0; background: transparent; border: 0; border-radius: 0; }
 .provider-health-card,
 .provider-model-summary,
 .provider-routing-card,
@@ -378,7 +378,7 @@
 
 @media (max-width: 1180px) {
   .model-provider-workspace { grid-template-columns: 244px minmax(0, 1fr); }
-  .provider-identity { grid-template-columns: 42px minmax(0, 1fr); padding-right: 18px; padding-left: 18px; }
+  .provider-identity { grid-template-columns: minmax(0, 1fr); padding-right: 18px; padding-left: 18px; }
   .provider-identity > section { display: none; }
   .provider-tab-content { padding-right: 16px; padding-left: 16px; }
   .provider-health-card,

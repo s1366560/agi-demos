@@ -83,12 +83,12 @@ const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatSource, /function NarrativeMessageFrame/);
   assert.match(chatSource, /className="session-message-body"/);
-  assert.match(chatSource, /className="session-thread-avatar"/);
+  assert.doesNotMatch(chatSource, /className="session-thread-avatar"/);
   assert.match(chatSource, /className="session-message-identity"/);
   assert.match(chatSource, /<time[\s\S]*className="session-message-time"/);
   assert.match(chatSource, /<MessageActionMenu[\s\S]*content=\{content\}/);
   assert.doesNotMatch(chatSource, /className="session-message-context sr-only"/);
-  assert.match(chatStyles, /\.session-thread-avatar \{[\s\S]*display: grid/);
+  assert.match(chatSource, /data-has-identity=\{Boolean\(label \|\| badge\)\}/);
   // Web parity redesign 2026-09: the user bubble background moved from the
   // generic surface ladder (--desktop-surface-29) to a dedicated bubble token
   // mirroring the web MessageBubble user surface (slate-50/80 light,
@@ -465,10 +465,10 @@ test('debug activity collapses by structural event kind without text routing', (
     chatSource,
     /return timelineKind\(item\) === 'runtime' && !isImportantTimelineItem\(item\)/,
   );
-  assert.match(chatSource, /className="timeline-debug-group"/);
-  assert.match(chatSource, /className=\{`timeline-tool-group status-\$\{node\.status\}`\}/);
+  assert.match(chatSource, /className="timeline-diagnostic-link"/);
+  assert.match(chatSource, /timeline-tool-group timeline-steps/);
   assert.match(chatSource, /toolCallPresentationKind\(pair\)/);
-  assert.match(chatSource, /className=\{`timeline-worklog-row kind-\$\{presentationKind\}/);
+  assert.match(chatSource, /timeline-step status-/);
   assert.doesNotMatch(chatSource, /open=\{node\.status !== 'complete'/);
   assert.doesNotMatch(chatSource, /match\([^)]*item\.(content|description|reason)/);
   assert.match(chatStyles, /\.timeline-tool-group,[\s\S]*border: 0;[\s\S]*background: transparent/);
@@ -482,7 +482,7 @@ test('raw task and error payloads stay collapsed until a person opens them', () 
   assert.ok(importancePolicy, 'timeline importance policy must remain explicit');
   assert.match(importancePolicy, /timelineHitlType\(item\)/);
   assert.match(importancePolicy, /item\.type === 'work_plan'/);
-  assert.doesNotMatch(importancePolicy, /item\.isError|item\.error/);
+  assert.match(importancePolicy, /item\.isError|item\.error/);
   assert.doesNotMatch(importancePolicy, /startsWith\('task_'\)|artifact_error/);
 });
 
@@ -603,15 +603,15 @@ test('session composer exposes localized context actions and compact delivery co
   assert.match(chatStyles, /\.session-chat-narrative \.composer-delivery-switch/);
 });
 
-test('session composer keeps voice and delivery controls in the trailing action group', () => {
+test('session composer keeps active voice and delivery controls in the trailing action group', () => {
   const trailingActionsStart = chatSource.indexOf('className="composer-right-actions"');
   const sendButtonStart = chatSource.indexOf('className="send-pill"', trailingActionsStart);
   const trailingActions = chatSource.slice(trailingActionsStart, sendButtonStart);
 
   assert.notEqual(trailingActionsStart, -1);
   assert.notEqual(sendButtonStart, -1);
-  assert.match(trailingActions, /composer-voice-button is-/);
-  assert.match(trailingActions, /composer-call-button is-/);
+  assert.match(trailingActions, /voiceActive \? voiceButton : null/);
+  assert.match(trailingActions, /voiceCallActive \? voiceCallButton : null/);
   assert.match(trailingActions, /className="composer-delivery-switch"/);
   assert.match(
     chatStyles,
@@ -756,18 +756,14 @@ test('completed Agent replies render the authoritative execution summary', () =>
   assert.match(chatStyles, /\.assistant-execution-summary/);
 });
 
-test('reasoning and tool disclosures follow the Web transcript defaults', () => {
+test('tool groups default to summaries while failures expand', () => {
   assert.match(
     chatSource,
     /isTimelineItemInitiallyExpanded[\s\S]*item\.type === 'thought'[\s\S]*return true/,
   );
   assert.match(
     chatSource,
-    /const lastToolGroupIndex = useMemo\([\s\S]*narrative\.length - 1[\s\S]*narrative\[index\]\.kind === 'tool_group'/,
-  );
-  assert.match(
-    chatSource,
-    /timelineGroupOpen\(\s*node\.items,\s*expandedGroupItems,\s*index === lastToolGroupIndex/,
+    /timelineGroupOpen\(\s*node\.items,\s*expandedGroupItems,\s*displayStatus === 'running' \|\| displayStatus === 'failed'/,
   );
   assert.match(
     chatSource,
@@ -856,10 +852,10 @@ test('hitl requests use the web standalone card anatomy (§1.5)', () => {
   }
 });
 
-test('session narrative column widens and timeline rows indent under the avatar (§1.10)', () => {
+test('session narrative column stays readable and timeline rows indent under the avatar (§1.10)', () => {
   assert.match(
     chatStyles,
-    /\.session-workspace-thread \.session-chat-narrative \.message-stack \{[\s\S]*max-width: 1440px/,
+    /\.session-workspace-thread \.session-chat-narrative \.message-stack \{[\s\S]*max-width: 800px/,
   );
   assert.match(chatStyles, /padding: 16px clamp\(16px, 3\.2cqi, 48px\) 80px/);
   assert.match(

@@ -16,6 +16,7 @@ import type { DesktopRouteHostState } from './desktopRouteHostModel';
 import type { DesktopRouteModule } from './desktopRouteModule';
 import type { DesktopRouteRegistry } from './desktopRouteRegistry';
 import { useDesktopHashRouteHost } from './useDesktopHashRouteHost';
+import { DESKTOP_NAVIGATION_METADATA } from './desktopCanonicalNavigationCatalog';
 import './DesktopProductionRouter.css';
 
 export type DesktopProductionRouterNavigationPort = Readonly<{
@@ -124,6 +125,8 @@ export function DesktopProductionRouterView({
     'match' in state
       ? state.match.definition.id
       : t('desktopProductionRouter.nativeRoute');
+  const routeLabelKey = DESKTOP_NAVIGATION_METADATA.find((entry) => entry.routeId === routeId)?.labelKey;
+  const routeTitle = t(routeLabelKey ?? 'desktopProductionRouter.nativeRoute');
   const routeContentOwned = Boolean(
     routeActive &&
     isLoadedRouteState(state) &&
@@ -170,7 +173,7 @@ export function DesktopProductionRouterView({
               {t('desktopProductionRouter.returnWorkbench')}
             </button>
             <ChevronRightIcon aria-hidden="true" />
-            <code>{routeId}</code>
+            <span aria-current="page">{routeTitle}</span>
           </nav>
           {renderActiveRoute(
             state,

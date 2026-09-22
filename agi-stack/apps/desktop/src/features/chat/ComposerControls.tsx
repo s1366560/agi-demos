@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { CheckIcon, CubeIcon, MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { ComposerOptionsMenu } from './ComposerOptionsMenu';
 
 type ComposerMenu = 'files' | 'mode' | 'model' | 'effort' | 'runtime';
 
@@ -159,20 +160,23 @@ export function ComposerControls({
         />
       ) : null}
       {onEffortChange ? (
-        <ComposerSelectControl
-          disabled={false}
-          compactLabel={compactComposerLabel(effort)}
-          label={effort}
-          open={openMenu === 'effort'}
-          title="Effort"
-          controlLabel={`Reasoning effort: ${effort}`}
-          options={Array.from(new Set(['Low', 'Medium', 'High', effortLabel]))}
-          selected={effort}
-          onToggle={() => toggleMenu('effort')}
-          onSelect={(value) => {
+        <ComposerOptionsMenu
+          label={t('task.effort')}
+          value={effort}
+          options={Array.from(new Set(['Low', 'Medium', 'High', effortLabel])).map((value) => ({
+            value,
+            label:
+              value === 'Low'
+                ? t('task.effortLow')
+                : value === 'Medium'
+                  ? t('task.effortMedium')
+                  : value === 'High'
+                    ? t('task.effortHigh')
+                    : value,
+          }))}
+          onChange={(value) => {
             setEffort(value);
             onEffortChange(value);
-            setOpenMenu(null);
           }}
         />
       ) : null}

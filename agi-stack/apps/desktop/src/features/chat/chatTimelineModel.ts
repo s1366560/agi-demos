@@ -1,3 +1,5 @@
+import { timelineToolResultFailed } from './toolResultStatus';
+import { exactToolResults } from './timelineExecutionIdentity';
 import { userMessageForDisplay } from './messageDisplayModel';
 import type { AgentTimelineItem } from '../../types';
 import { foldAssistantExecutionDuplicatesForDisplay } from './assistantDuplicateDisplayModel';
@@ -1337,41 +1339,17 @@ function sortTimelineItems(items: AgentTimelineItem[]): AgentTimelineItem[] {
 }
 
 export function pairToolCallItems(items: AgentTimelineItem[]): ToolCallPair[] {
-  const pairs: ToolCallPair[] = [];
-  const pendingPairIndexes: number[] = [];
-
-  for (const item of items) {
-    // Web keeps act_delta in activeToolCalls and only appends the canonical act
-    // to history. The history API currently projects a persisted delta as an
-    // act_delta-* act whose execution_id is still the preparation call id.
-    // Ignore that stale skeleton, but keep a genuinely streaming delta and a
-    // locally promoted delta that already carries the canonical execution id.
-    if (
-      isTransientToolTimelineItem(item) &&
-      item.metadata?.streaming !== true &&
-      !transientToolItemHasCanonicalExecution(item)
-    ) {
-      continue;
-    }
-    if (item.type === 'act') {
-      pairs.push({ call: item, result: null });
-      pendingPairIndexes.push(pairs.length - 1);
-      continue;
-    }
-    if (item.type === 'observe') {
-      const pendingOffset = findMatchingPendingPairOffset(pairs, pendingPairIndexes, item);
-      if (pendingOffset >= 0) {
-        const pairIndex = pendingPairIndexes[pendingOffset];
-        pairs[pairIndex] = { ...pairs[pairIndex], result: item };
-        pendingPairIndexes.splice(pendingOffset, 1);
-      } else {
-        pairs.push({ call: item, result: null });
-      }
-      continue;
-    }
-    pairs.push({ call: item, result: null });
-  }
-  return pairs;
+  const unique = [...new Map(items.map((item) => [item.id, item])).values()];
+  const visible = unique.filter((item) => !(
+    isTransientToolTimelineItem(item) &&
+    item.metadata?.streaming !== true &&
+    !transientToolItemHasCanonicalExecution(item)
+  ));
+  const results = exactToolResults(visible);
+  const claimed = new Set([...results.values()].map((item) => item.id));
+  return visible.filter((item) => !claimed.has(item.id)).map((call) => ({
+    call, result: results.get(call.id) ?? null,
+  }));
 }
 
 function transientToolItemHasCanonicalExecution(item: AgentTimelineItem): boolean {
@@ -1397,7 +1375,7 @@ export function toolActivityRows(items: AgentTimelineItem[]): ToolActivityRow[] 
     if (item.type === 'thought') {
       flushTools();
       rows.push({ kind: 'thought', item });
-    } else {
+    } else if (item.type === 'act' || item.type === 'observe') {
       toolItems.push(item);
     }
   }
@@ -1407,9 +1385,9 @@ export function toolActivityRows(items: AgentTimelineItem[]): ToolActivityRow[] 
 
 export function toolCallPairStatus(pair: ToolCallPair): ToolCallPairStatus {
   if (pair.result) {
-    return pair.result.isError || pair.result.error ? 'failed' : 'complete';
+    return timelineToolResultFailed(pair.result) ? 'failed' : 'complete';
   }
-  if (pair.call.isError || pair.call.error) return 'failed';
+  if (timelineToolResultFailed(pair.call)) return 'failed';
   if (pair.call.type === 'observe') return 'complete';
   // Web conversation parity (audit 1.7): a call whose arguments are still
   // streaming (only act_delta chunks so far) is "preparing", not yet running.
@@ -1571,7 +1549,12 @@ export function shouldShowAgentWorkingIndicator(args: {
   const last = items[items.length - 1];
   if (last.metadata?.streaming) return false;
   if (last.role === 'assistant' || last.type === 'assistant_message') return false;
-  if (last.type === 'agent_conversation_finished') return false;
+  if (['agent_conversation_finished', 'complete', 'error'].includes(last.type)) return false;
+  if (last.type === 'run_status') {
+    const payload = isRecord(last.payload) ? last.payload : {};
+    const status = payload.status ?? last.status;
+    if (['completed', 'failed', 'stopped', 'cancelled', 'canceled'].includes(String(status))) return false;
+  }
   return true;
 }
 
@@ -1623,17 +1606,6 @@ function findMatchingActiveToolIndex(
     ) {
       return index;
     }
-  }
-  return -1;
-}
-
-function findMatchingPendingPairOffset(
-  pairs: ToolCallPair[],
-  pendingPairIndexes: number[],
-  result: AgentTimelineItem,
-): number {
-  for (let offset = pendingPairIndexes.length - 1; offset >= 0; offset -= 1) {
-    if (toolItemsReferToSameCall(pairs[pendingPairIndexes[offset]].call, result)) return offset;
   }
   return -1;
 }

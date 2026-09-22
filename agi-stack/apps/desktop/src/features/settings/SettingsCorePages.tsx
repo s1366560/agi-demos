@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Badge, Button, Text } from '@radix-ui/themes';
+import { Badge, Button } from '@radix-ui/themes';
 import {
   BellIcon,
   CheckCircledIcon,
@@ -39,7 +39,6 @@ type ResourceSection = Extract<
 export type SettingsResourceCounts = Record<ResourceSection, number | null>;
 
 export function SettingsPage({
-  eyebrow,
   title,
   description,
   action,
@@ -57,9 +56,6 @@ export function SettingsPage({
     <div className={`settings-page ${className}`.trim()}>
       <header className="settings-page-heading">
         <div>
-          <Text size="1" color="gray">
-            {eyebrow.toUpperCase()}
-          </Text>
           <h1>{title}</h1>
           <p>{description}</p>
         </div>

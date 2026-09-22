@@ -76,7 +76,9 @@ export function useComposerFileUpload({ api, onAdd, contextKey }: UseComposerFil
               error:
                 failure.reason === 'too_large'
                   ? t('composer.fileTooLarge')
-                  : (failure.error ?? t('composer.fileUploadUnavailable')),
+                  : failure.error === 'project_sandbox_upload_tool_failed'
+                    ? t('composer.fileUploadSandboxFailed')
+                    : (failure.error ?? t('composer.fileUploadUnavailable')),
             }),
           ),
         );

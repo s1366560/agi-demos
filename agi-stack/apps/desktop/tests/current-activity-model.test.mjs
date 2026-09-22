@@ -33,6 +33,7 @@ function userItem(overrides = {}) {
 function toolCall(overrides = {}) {
   return item({
     type: 'act',
+    tool_call_id: `fixture-call-${idSequence + 1}`,
     toolName: 'terminal',
     toolInput: { command: 'npm test' },
     ...overrides,
@@ -42,6 +43,7 @@ function toolCall(overrides = {}) {
 function toolResult(call, overrides = {}) {
   return item({
     type: 'observe',
+    tool_call_id: call.tool_call_id,
     toolName: call.toolName,
     content: 'ok',
     ...overrides,

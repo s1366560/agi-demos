@@ -1,3 +1,5 @@
+import '../management/ManagementSurfaces.css';
+
 import { useI18n } from '../../i18n';
 import type { ProjectAdministrationViewModelBase } from './projectAdministrationPresentationModel';
 
@@ -11,6 +13,7 @@ export function ProjectAdministrationPage({
   const { t } = useI18n();
   return (
     <section
+      className="project-administration-page"
       data-authority={model.scope.authority}
       data-route-id={model.routeId}
       data-state={model.state}

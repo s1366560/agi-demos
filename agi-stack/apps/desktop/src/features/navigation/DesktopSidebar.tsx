@@ -1,10 +1,8 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import {
-  BellIcon,
   ChevronUpIcon,
   CubeIcon,
-  DashboardIcon,
   GearIcon,
   GridIcon,
   MagnifyingGlassIcon,
@@ -77,16 +75,7 @@ type DesktopSidebarProps = {
   resizeHandle?: ReactNode;
 };
 
-const primaryItems = [
-  { id: 'my-work', labelKey: 'nav.myWork', icon: DashboardIcon },
-  { id: 'activity', labelKey: 'sidebar.activity', icon: BellIcon },
-] as const;
-
 export function DesktopSidebar({
-  activeSection,
-  taskCount,
-  activityUnreadCount,
-  conversationStatusSummary = null,
   tenantName,
   projectName,
   user,
@@ -152,7 +141,6 @@ export function DesktopSidebar({
         <img src="/icon-192.png" alt="" />
         <span className="desktop-design-brand-text">
           <strong>MemStack</strong>
-          <small>{t('nav.agentWorkspace')}</small>
         </span>
       </button>
 
@@ -167,32 +155,13 @@ export function DesktopSidebar({
         <PlusIcon /> {t('overview.newTask')}
       </button>
 
-      {/* View navigation: every workbench section in one column. Search is a
-          route surface (not a workbench section), so it renders as a standalone
-          item between My Work and Activity via its own handler. */}
       <nav className="desktop-design-primary-nav">
-        {primaryItems.map(({ id, labelKey, icon: Icon }) => (
-          <Fragment key={id}>
-            {id === 'activity' && onOpenSearch ? (
-              <button type="button" onClick={onOpenSearch}>
-                <MagnifyingGlassIcon />
-                <span>{t('nav.search')}</span>
-              </button>
-            ) : null}
-            <button
-              className={activeSection === id ? 'active' : ''}
-              type="button"
-              onClick={() => onNavigate(id)}
-            >
-              <Icon />
-              <span>{t(labelKey)}</span>
-              {id === 'my-work' && taskCount > 0 ? <small>{taskCount}</small> : null}
-              {id === 'activity' && activityUnreadCount > 0 ? (
-                <small>{activityUnreadCount}</small>
-              ) : null}
-            </button>
-          </Fragment>
-        ))}
+        {onOpenSearch ? (
+          <button type="button" onClick={onOpenSearch}>
+            <MagnifyingGlassIcon />
+            <span>{t('nav.search')}</span>
+          </button>
+        ) : null}
       </nav>
 
       {/* Header: the project/workspace heading and conversation status chips. */}
@@ -200,7 +169,6 @@ export function DesktopSidebar({
         <header className="desktop-design-header-row">
           <strong>{projectName}</strong>
           <div className="desktop-workspace-heading-actions">
-            <span>{t('workspaceTree.workspaces')}</span>
             {onCreateWorkspace ? (
               <button
                 type="button"
@@ -214,49 +182,7 @@ export function DesktopSidebar({
             ) : null}
           </div>
         </header>
-        {conversationStatusSummary ? (
-          <div
-            className="desktop-conversation-status-summary"
-            role="group"
-            aria-label={`${t('overview.conversations')} ${conversationStatusSummary.total}`}
-          >
-            <ConversationStatusChip
-              label={t('workspaceTree.running')}
-              count={conversationStatusSummary.running}
-              tone="running"
-            />
-            <ConversationStatusChip
-              label={t('workspaceTree.queued')}
-              count={conversationStatusSummary.queued}
-              tone="queued"
-            />
-            <ConversationStatusChip
-              label={t('settings.attention')}
-              count={conversationStatusSummary.attention}
-              tone="attention"
-            />
-            <ConversationStatusChip
-              label={t('workspaceTree.failed')}
-              count={conversationStatusSummary.failed}
-              tone="failed"
-            />
-            <ConversationStatusChip
-              label={t('workspaceTree.completed')}
-              count={conversationStatusSummary.completed}
-              tone="completed"
-            />
-            <ConversationStatusChip
-              label={t('overview.idle')}
-              count={conversationStatusSummary.idle}
-              tone="idle"
-            />
-            <ConversationStatusChip
-              label={t('workspaceTree.cancelled')}
-              count={conversationStatusSummary.cancelled}
-              tone="cancelled"
-            />
-          </div>
-        ) : null}
+
       </div>
 
       {/* Core list: the workspace tree owns the remaining scrollable space. */}
@@ -285,24 +211,16 @@ export function DesktopSidebar({
       <div className="desktop-design-toolbar">
         {onOpenFeatureDirectory ? (
           <button
-            className="desktop-design-toolbar-button"
+            className="desktop-design-toolbar-button desktop-design-feature-button"
             type="button"
             aria-label={t('featureDirectory.open')}
             aria-haspopup="dialog"
             onClick={(event) => onOpenFeatureDirectory(event.currentTarget)}
           >
             <GridIcon aria-hidden="true" />
+            <span>{t('featureDirectory.open')}</span>
           </button>
         ) : null}
-        <button
-          className="desktop-design-toolbar-button"
-          type="button"
-          aria-label={t('settings.title')}
-          title={t('settings.title')}
-          onClick={onOpenAccountSettings}
-        >
-          <GearIcon />
-        </button>
         <div ref={profileMenuRef} className="desktop-design-profile-wrap">
           {profileOpen ? (
             <div
@@ -377,24 +295,5 @@ export function DesktopSidebar({
       </div>
       {resizeHandle}
     </aside>
-  );
-}
-
-function ConversationStatusChip({
-  label,
-  count,
-  tone,
-}: {
-  label: string;
-  count: number;
-  tone: string;
-}) {
-  if (count === 0) return null;
-  return (
-    <span className={tone} title={`${label}: ${count}`}>
-      <i aria-hidden="true" />
-      {label}
-      <strong>{count}</strong>
-    </span>
   );
 }

@@ -118,6 +118,7 @@ import {
 } from './ChatTranscript';
 import './AssistantDuplicateDisclosure.css';
 import './ChatTimeline.css';
+import { useTimelineInspection } from '../session/TimelineInspectionContext';
 
 const TIMELINE_RENDER_THRESHOLD = 150;
 const TIMELINE_RENDER_WINDOW = 100;
@@ -186,6 +187,7 @@ export function AgentTimeline({
   onRespondToHitl,
   respondableHitlRequestIds,
   activityPresence,
+  running = false,
   onOpenMCPAppResult,
   onReplyMessage,
   onEditMessage,
@@ -212,6 +214,7 @@ export function AgentTimeline({
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   respondableHitlRequestIds: readonly string[];
   activityPresence: SessionActivityPresence;
+  running?: boolean;
   onOpenMCPAppResult?: (item: AgentTimelineItem) => void;
   onReplyMessage?: (item: AgentTimelineItem) => void;
   onEditMessage?: (item: AgentTimelineItem) => void;
@@ -266,12 +269,10 @@ export function AgentTimeline({
       ),
     [displayItems, state.conversationId],
   );
-  const lastToolGroupIndex = useMemo(() => {
-    for (let index = narrative.length - 1; index >= 0; index -= 1) {
-      if (narrative[index].kind === 'tool_group') return index;
-    }
-    return -1;
-  }, [narrative]);
+  const latestUserIndex = displayItems.reduce((latest, item, index) =>
+    item.role === 'user' || item.type === 'user_message' ? index : latest, -1);
+  const latestTurnItems = new Set(displayItems.slice(latestUserIndex + 1).map((item) => item.id));
+  const latestToolGroupIndex = narrative.map((node) => node.kind).lastIndexOf('tool_group');
   /* Web conversation parity (audit 1.1): failed tool steps auto-expand (web
      TimelineStepItem defaultExpanded on error). The toggle handler derives the
      next value from the same expandedItems map, so prime the map through
@@ -326,8 +327,8 @@ export function AgentTimeline({
     Record<string, boolean>
   >({});
   const showWorkingIndicator = shouldShowAgentWorkingIndicator({
-    items: displayItems,
-    presence: activityPresence,
+    items: state.items,
+    presence: running ? 'live' : activityPresence,
     awaitingHitl: respondableHitlRequestIdSet.size > 0,
   });
   const setGroupOpen = (items: AgentTimelineItem[], open: boolean) => {
@@ -538,7 +539,7 @@ export function AgentTimeline({
               node.items,
               expandedGroupItems,
               node.group.status === 'running' ||
-                node.group.status === 'steered',
+                node.group.status === 'steered' || node.group.status === 'error',
             );
             return (
               <Fragment key={groupId}>
@@ -561,7 +562,7 @@ export function AgentTimeline({
               node.items,
               expandedGroupItems,
               node.group.status === 'matched' ||
-                node.group.status === 'executing',
+                node.group.status === 'executing' || node.group.status === 'failed',
             );
             return (
               <Fragment key={groupId}>
@@ -578,7 +579,7 @@ export function AgentTimeline({
           }
           if (node.kind === 'mcp_app_group') {
             const groupId = timelineGroupIdentity(narrative, index);
-            const open = timelineGroupOpen(node.items, expandedGroupItems);
+            const open = timelineGroupOpen(node.items, expandedGroupItems, node.group.status === 'error');
             const resultItem = node.group.resultItem;
             const openApp =
               resultItem && onOpenMCPAppResult
@@ -600,176 +601,43 @@ export function AgentTimeline({
           }
           if (node.kind === 'activity_group') {
             const groupId = timelineGroupIdentity(narrative, index);
-            const open = node.items.some((item) => expandedGroupItems[item.id]);
-            return (
-              <Fragment key={groupId}>
-                {dayDivider}
-                {responseRegionMarker}
-                <details
-                  className="timeline-debug-group"
-                  data-timeline-anchor-id={groupId}
-                  data-timeline-anchor-members={node.membersJson}
-                  open={open}
-                  onToggle={(event) =>
-                    setGroupOpen(node.items, event.currentTarget.open)
-                  }
-                >
-                  <summary>
-                    <span
-                      className="timeline-debug-group-icon"
-                      aria-hidden="true"
-                    >
-                      <ActivityLogIcon />
-                    </span>
-                    <span>
-                      <strong>{t('session.runActivity')}</strong>
-                      <small>
-                        {t('session.runActivityCount', {
-                          count: node.items.length,
-                        })}
-                      </small>
-                    </span>
-                    <em>{t('session.inspect')}</em>
-                    <ChevronRightIcon
-                      className="timeline-debug-group-chevron"
-                      aria-hidden="true"
-                    />
-                  </summary>
-                  <div className="timeline-debug-group-items">
-                    {node.items.map((item) => (
-                      <TimelineItemView
-                        item={item}
-                        expanded={expandedItems[item.id] ?? false}
-                        onToggle={() => onToggleItem(item)}
-                        onRespondToHitl={onRespondToHitl}
-                        canRespondToHitl={false}
-                        key={item.id}
-                      />
-                    ))}
-                  </div>
-                </details>
-              </Fragment>
-            );
+            return <Fragment key={groupId}>{dayDivider}{responseRegionMarker}
+              <TimelineDiagnosticLink items={node.items} anchorId={groupId} />
+            </Fragment>;
           }
           if (node.kind === 'tool_group') {
             const groupId = timelineGroupIdentity(narrative, index);
-            const open = timelineGroupOpen(
-              node.items,
-              expandedGroupItems,
-              index === lastToolGroupIndex,
+            const groupIsLive = (running || activityPresence === 'live') && (
+              latestUserIndex >= 0
+                ? node.items.every((item) => latestTurnItems.has(item.id))
+                : index === latestToolGroupIndex
             );
+            const displayStatus = node.status === 'running' && !groupIsLive ? 'recorded' : node.status;
+            const open = timelineGroupOpen(node.items, expandedGroupItems,
+              displayStatus === 'running' || displayStatus === 'failed');
             const activityRows = toolActivityRows(node.items);
-            const groupPairs = activityRows.flatMap((row) =>
-              row.kind === 'tool_call' ? [row.pair] : [],
-            );
-            const pairStatuses = groupPairs.map((pair) =>
-              toolCallPairStatus(pair),
-            );
-            const completedCount = pairStatuses.filter(
-              (pairStatus) => pairStatus === 'complete',
-            ).length;
-            const failedCount = pairStatuses.filter(
-              (pairStatus) => pairStatus === 'failed',
-            ).length;
-            // Web conversation parity (audit 1.2): collapsed groups narrate
-            // what happened — up to 7 one-line action previews plus a
-            // "More N actions" overflow line (web ExecutionTimeline).
-            const groupPreviewLines = groupPairs.map((pair) => {
-              const { preview, label } = toolCallPairPreviewText(pair, t);
-              return label ? `${label} ${preview}` : preview;
-            });
-            const hiddenPreviewCount = Math.max(
-              0,
-              groupPreviewLines.length - TOOL_GROUP_PREVIEW_LIMIT,
-            );
             return (
               <Fragment key={groupId}>
-                {dayDivider}
-                {responseRegionMarker}
-                <details
-                  className={`timeline-tool-group status-${node.status}`}
-                  data-timeline-anchor-id={groupId}
-                  data-timeline-anchor-members={node.membersJson}
-                  open={open}
-                >
-                  <summary
-                    className="timeline-tool-group-summary"
-                    aria-expanded={open}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      setGroupOpen(node.items, !open);
-                    }}
-                  >
-                    <span className="timeline-tool-group-icon" aria-hidden>
-                      <ActivityLogIcon />
-                    </span>
-                    <span>
-                      <strong>{t('session.toolActivity')}</strong>
-                      <small>
-                        {t('session.toolActivityCount', {
-                          count: node.toolCount,
-                        })}
-                      </small>
-                    </span>
-                    {groupPairs.length > 0 ? (
-                      <small className="timeline-tool-group-progress">
-                        {t('session.toolActivityProgress', {
-                          done: completedCount,
-                          total: groupPairs.length,
-                        })}
-                      </small>
-                    ) : null}
-                    {failedCount > 0 ? (
-                      <span className="timeline-tool-group-failed">
-                        {failedCount} {t('session.failedShort')}
-                      </span>
-                    ) : null}
-                    <em>{t(`session.toolStatus.${node.status}`)}</em>
-                    <ChevronRightIcon
-                      className="timeline-tool-group-chevron"
-                      aria-hidden
-                    />
+                {dayDivider}{responseRegionMarker}
+                <details className={`timeline-tool-group timeline-steps status-${node.status}`}
+                  data-timeline-anchor-id={groupId} data-timeline-anchor-members={node.membersJson} open={open}>
+                  <summary className="timeline-tool-group-summary" aria-expanded={open}
+                    onClick={(event) => {event.preventDefault(); setGroupOpen(node.items, !open);}}>
+                    <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden="true" />
+                    <span>{t(`session.steps.${displayStatus}`, {count: node.toolCount})}</span>
                   </summary>
                   <div className="timeline-tool-group-items">
                     <AggregatedSourcesCard items={node.items} />
-                    {activityRows.map((row, rowIndex) =>
-                      row.kind === 'thought' ? (
-                        <TimelineItemView
-                          item={row.item}
-                          expanded={expandedItems[row.item.id] ?? false}
-                          onToggle={() => onToggleItem(row.item)}
-                          onRespondToHitl={onRespondToHitl}
-                          canRespondToHitl={false}
-                          key={row.item.id}
-                        />
-                      ) : (
-                        <ToolCallPairView
-                          pair={row.pair}
-                          expanded={expandedItems[row.pair.call.id] ?? false}
-                          onToggle={() => onToggleItem(row.pair.call)}
-                          isLast={rowIndex === activityRows.length - 1}
-                          key={row.pair.call.id}
-                        />
-                      ),
-                    )}
+                    {node.items.some(item => item.type !== 'act' && item.type !== 'observe' && item.type !== 'thought') &&
+                      <TimelineDiagnosticLink items={node.items} anchorId={`${groupId}:details`} />}
+                    {activityRows.map((row) => row.kind === 'thought' ? (
+                      <TimelineItemView key={row.item.id} item={row.item}
+                        expanded={expandedItems[row.item.id] ?? false} onToggle={() => onToggleItem(row.item)}
+                        onRespondToHitl={onRespondToHitl} canRespondToHitl={false} />
+                    ) : <ToolCallPairView key={row.pair.call.id} pair={row.pair}
+                      expanded={false} recorded={!groupIsLive} onToggle={() => onToggleItem(row.pair.call)} isLast />)}
                   </div>
                 </details>
-                {!open && groupPreviewLines.length > 0 ? (
-                  <div className="timeline-tool-group-preview">
-                    {groupPreviewLines
-                      .slice(0, TOOL_GROUP_PREVIEW_LIMIT)
-                      .map((line, lineIndex) => (
-                        <div key={`${line}-${String(lineIndex)}`}>{line}</div>
-                      ))}
-                    {hiddenPreviewCount > 0 ? (
-                      <div className="timeline-tool-group-preview-more">
-                        {t('session.toolActivityMore', {
-                          count: hiddenPreviewCount,
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
               </Fragment>
             );
           }
@@ -914,138 +782,61 @@ function toolCallPairPreviewText(
   t: (key: string, values?: Record<string, string | number>) => string,
 ): { preview: string; label: string | null } {
   const presentationKind = toolCallPresentationKind(pair);
-  const title =
-    timelineToolDisplay(pair.call)?.title ||
-    (presentationKind === 'tool'
-      ? pair.call.toolName || t('chat.toolCall')
-      : t(`session.toolKind.${presentationKind}`));
-  // Web conversation parity (audit 1.6): a todo-write tool call summarizes
-  // into a status-count title ("Update 4 todos: 2 pending, ...") instead of
-  // the raw generic tool summary (web ExecutionTimeline summarizeTodoDetails).
-  const todoSummary = todoToolCallSummary(pair.call, pair.result);
-  if (todoSummary) {
-    return { preview: formatTodoToolCallSummary(todoSummary, t), label: title };
+  const resultDisplay = pair.result ? timelineToolDisplay(pair.result) : null;
+  const callDisplay = timelineToolDisplay(pair.call);
+  const declaredTitle = resultDisplay?.title || callDisplay?.title;
+  const title = declaredTitle || (presentationKind === 'tool'
+    ? pair.call.toolName || pair.result?.toolName || t('chat.toolCall')
+    : t(`session.toolKind.${presentationKind}`));
+  if (toolCallPairStatus(pair) === 'failed') {
+    return { preview: timelineSummary(pair.result ?? pair.call, 'tool', t), label: title };
   }
-  const primary = pair.result ?? pair.call;
-  const rawSummary = timelineSummary(primary, 'tool', t);
-  const summary = stripRedundantToolPrefix(
-    rawSummary,
-    title,
-    pair.call.toolName,
-  );
-  if (summary && summary !== title) return { preview: summary, label: title };
+  const summary = resultDisplay?.summary || callDisplay?.summary;
+  if (summary) return { preview: summary, label: summary === title ? null : title };
+  const todoSummary = todoToolCallSummary(pair.call, pair.result);
+  if (todoSummary) return { preview: formatTodoToolCallSummary(todoSummary, t), label: title };
+  if (declaredTitle) return { preview: declaredTitle, label: null };
+  const fileItem = [pair.result, pair.call].find((item) => item && timelineFileMetadata(item));
+  if (fileItem) {
+    const preview = timelineSummary(fileItem, 'tool', t);
+    return { preview, label: preview === title ? null : title };
+  }
   return { preview: title, label: null };
 }
 
-function ToolCallPairView({
-  pair,
-  expanded,
-  onToggle,
-  isLast,
-}: {
-  pair: ToolCallPair;
-  expanded: boolean;
-  onToggle: () => void;
-  isLast: boolean;
+function ToolCallPairView({ pair, recorded }: {
+  pair: ToolCallPair; expanded: boolean; recorded?: boolean; onToggle: () => void; isLast: boolean;
 }) {
   const { t } = useI18n();
+  const { inspect } = useTimelineInspection();
   const status = toolCallPairStatus(pair);
-  const presentationKind = toolCallPresentationKind(pair);
-  const diffStat = toolCallDiffStat(pair);
-  const { preview, label } = toolCallPairPreviewText(pair, t);
-  const durationMs = toolCallPairDurationMs(pair);
-  const hasDetails =
-    timelineHasDetails(pair.call, 'tool') || Boolean(pair.result);
-  const memberIds = pair.result
-    ? [pair.call.id, pair.result.id]
-    : [pair.call.id];
-  const toggleLabel = t(expanded ? 'chat.collapseItem' : 'chat.expandItem', {
-    item: label ?? preview,
-  });
-  const rowText = (
-    <span className="timeline-row-text">
-      <span className="timeline-row-preview">{preview}</span>
-      {label ? <span className="timeline-row-step-label">{label}</span> : null}
-    </span>
-  );
-  const rowMeta = (
-    <>
-      {diffStat ? (
-        <span className="timeline-diff-count">
-          <b>+{diffStat.additions}</b>
-          <i>−{diffStat.deletions}</i>
-        </span>
-      ) : null}
-      {status === 'preparing' ? (
-        <span className="timeline-status preparing">
-          <span className="timeline-status-dot" aria-hidden="true" />
-          {t('chat.status.preparing')}
-        </span>
-      ) : null}
-      {status === 'running' ? (
-        <span className="timeline-status waiting">
-          {t('chat.status.running')}
-        </span>
-      ) : null}
-      {status === 'failed' ? (
-        <span className="timeline-status error">
-          {t('chat.status.error')}
-        </span>
-      ) : null}
-    </>
-  );
-  return (
-    <article
-      className={`timeline-worklog-row kind-${presentationKind} message timeline-row timeline-item tool tool-call status-${status} ${
-        expanded ? 'is-expanded' : ''
-      }`}
-      data-timeline-anchor-id={pair.call.id}
-      data-timeline-anchor-members={JSON.stringify(memberIds)}
-    >
-      <div
-        className={`timeline-rail${durationMs !== null ? ' has-duration' : ''}`}
-        aria-hidden="true"
-      >
-        <span className={`timeline-rail-dot tool-call-icon is-${status}`}>
-          <TimelineToolIcon kind={presentationKind} status={status} />
-        </span>
-        {durationMs !== null ? (
-          <span className="timeline-rail-duration">
-            {formatToolCallDuration(durationMs)}
-          </span>
-        ) : null}
-        {!isLast ? <span className="timeline-rail-connector" /> : null}
-      </div>
-      <div className="timeline-row-main">
-        <div className="timeline-row-card">
-          {hasDetails ? (
-            <button
-              type="button"
-              className="timeline-row-toggle"
-              aria-label={toggleLabel}
-              title={toggleLabel}
-              aria-expanded={expanded}
-              onClick={onToggle}
-            >
-              {rowText}
-              {rowMeta}
-              {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-            </button>
-          ) : (
-            <div className="timeline-row-static">
-              {rowText}
-              {rowMeta}
-            </div>
-          )}
-          {status === 'preparing' ? (
-            <ToolCallPreparingBody pair={pair} />
-          ) : expanded && hasDetails ? (
-            <ToolCallPairBody pair={pair} />
-          ) : null}
-        </div>
-      </div>
-    </article>
-  );
+  const pendingRecorded = recorded && (status === 'running' || status === 'preparing');
+  const kind = toolCallPresentationKind(pair);
+  const { preview } = toolCallPairPreviewText(pair, t);
+  const items = pair.result ? [pair.call, pair.result] : [pair.call];
+  return <article className={`timeline-step status-${pendingRecorded ? 'recorded' : status}`}
+    data-timeline-anchor-id={pair.call.id}
+    data-timeline-anchor-members={JSON.stringify(items.map(item => item.id))}>
+    <button type="button" className="timeline-step-button"
+      aria-label={t('session.stepDetails', {step: preview})} title={t('session.stepDetails', {step: preview})}
+      onClick={event => inspect(items, event.currentTarget)}>
+      <span className="timeline-step-icon" aria-hidden="true"><TimelineToolIcon kind={kind} status={pendingRecorded ? 'complete' : status}/></span>
+      <span className="timeline-step-copy">{preview}</span>
+      {status !== 'complete' && <span className="timeline-step-status">{pendingRecorded ? t('session.stepRecorded') : t(`chat.status.${status === 'failed' ? 'error' : status}`)}</span>}
+      <ChevronRightIcon className="timeline-step-detail-icon" aria-hidden="true" />
+    </button>
+  </article>;
+}
+
+function TimelineDiagnosticLink({items, anchorId}: {items: AgentTimelineItem[]; anchorId: string}) {
+  const {t} = useI18n();
+  const {inspect} = useTimelineInspection();
+  return <div className="timeline-diagnostic-link" data-timeline-anchor-id={anchorId}
+    data-timeline-anchor-members={JSON.stringify(items.map(item => item.id))}>
+    <button type="button" onClick={event => inspect(items, event.currentTarget)}>
+      {t('session.executionDetails')}<ChevronRightIcon aria-hidden="true" />
+    </button>
+  </div>;
 }
 
 /* Web conversation parity (audit 1.7): while tool-call arguments stream in,
@@ -1224,6 +1015,7 @@ function TimelineItemView({
   retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
+  const { inspect } = useTimelineInspection();
   const kind = timelineKind(item);
   const lineCount = useMemo(
     () => timelineDetailLineCount(item, kind),
@@ -1233,6 +1025,15 @@ function TimelineItemView({
     () => timelineSummary(item, kind, t),
     [item, kind, t],
   );
+  if ((item.isError || item.error || item.type === 'error' || kind === 'runtime') && !timelineHitlType(item) && !agentLifecyclePresentation(item)) {
+    const failed = Boolean(item.isError || item.error || item.type === 'error');
+    return <article className={`timeline-notice ${failed ? 'is-error' : ''}`}
+      data-timeline-anchor-id={item.id} role={failed ? 'alert' : undefined}>
+      {failed && <ExclamationTriangleIcon aria-hidden="true" />}
+      <span>{summary}</span>
+      <button type="button" onClick={event => inspect([item], event.currentTarget)}>{t('session.inspect')}</button>
+    </article>;
+  }
   if (kind === 'artifact') {
     return <ArtifactTimelineCard item={item} />;
   }

@@ -131,7 +131,6 @@ export function WorkspaceOverview({
       <section className="workspace-design-overview empty-project">
         <header className="workspace-design-header">
           <div>
-            <span className="workspace-design-eyebrow">{tenantName}</span>
             <div className="workspace-design-title-line">
               <h1>{t('overview.noProjectTitle')}</h1>
             </div>
@@ -266,9 +265,6 @@ export function WorkspaceOverview({
     <section className="workspace-design-overview">
       <header className="workspace-design-header">
         <div>
-          <span className="workspace-design-eyebrow">
-            {tenantName} / {projectName}
-          </span>
           <div className="workspace-design-title-line">
             <h1>{workspaceName}</h1>
             {officeStatusPresentation ? (
@@ -538,8 +534,6 @@ function Metric({
 }
 
 function CardHeading({
-  icon,
-  eyebrow,
   title,
 }: {
   icon: ReactNode;
@@ -548,9 +542,7 @@ function CardHeading({
 }) {
   return (
     <div className="workspace-design-card-heading">
-      <span>{icon}</span>
       <div>
-        <small>{eyebrow}</small>
         <h2>{title}</h2>
       </div>
     </div>

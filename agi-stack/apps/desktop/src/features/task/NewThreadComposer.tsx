@@ -1,12 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import {
-  ActivityLogIcon,
-  ArrowRightIcon,
-  CodeIcon,
-  CubeIcon,
-  FileTextIcon,
-  MixerHorizontalIcon,
-} from '@radix-ui/react-icons';
+import { ArrowRightIcon, CubeIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import type {
@@ -22,6 +15,7 @@ import type { WorkspaceRuntimeModelOption } from '../settings/workspaceRuntimePr
 import { ComposerPlusMenu } from '../chat/ComposerPlusMenu';
 import { appendComposerContextItem } from '../chat/chatComposerModel';
 import type { ComposerCatalogClient } from '../chat/composerCatalogModel';
+import { ComposerOptionsMenu } from '../chat/ComposerOptionsMenu';
 import { PickerMenu } from '../chat/PickerMenu';
 import { useComposerFileUpload } from '../chat/useComposerFileUpload';
 import '../chat/ComposerMenus.css';
@@ -59,19 +53,6 @@ type NewThreadComposerProps = {
   onManageModels: () => void;
 };
 
-const SUGGESTIONS: Record<AgentCapabilityMode, Array<{ title: string; prompt: string }>> = {
-  work: [
-    { title: 'task.suggestionBriefTitle', prompt: 'task.suggestionBriefPrompt' },
-    { title: 'task.suggestionResearchTitle', prompt: 'task.suggestionResearchPrompt' },
-    { title: 'task.suggestionDigestTitle', prompt: 'task.suggestionDigestPrompt' },
-  ],
-  code: [
-    { title: 'task.suggestionFixTitle', prompt: 'task.suggestionFixPrompt' },
-    { title: 'task.suggestionBuildTitle', prompt: 'task.suggestionBuildPrompt' },
-    { title: 'task.suggestionUpgradeTitle', prompt: 'task.suggestionUpgradePrompt' },
-  ],
-};
-
 export function NewThreadComposer({
   workspaceId,
   workspace,
@@ -90,7 +71,6 @@ export function NewThreadComposer({
   onModeChange,
   onWorkspaceChange,
   onCreate,
-  onOpenThread,
   onManageModels,
 }: NewThreadComposerProps) {
   const { t } = useI18n();
@@ -108,15 +88,16 @@ export function NewThreadComposer({
   const addContextItem = useCallback((item: ComposerContextItem) => {
     setContextItems((current) => appendComposerContextItem(current, item));
   }, []);
-  const {
-    uploadingFileCount,
-    uploadingAttachments,
-    fileUploadErrors,
-    uploadFiles,
-  } = useComposerFileUpload({
-    api, onAdd: addContextItem,
-    contextKey: JSON.stringify([workspace?.tenant_id ?? '', workspace?.project_id ?? '', workspaceId]),
-  });
+  const { uploadingFileCount, uploadingAttachments, fileUploadErrors, uploadFiles } =
+    useComposerFileUpload({
+      api,
+      onAdd: addContextItem,
+      contextKey: JSON.stringify([
+        workspace?.tenant_id ?? '',
+        workspace?.project_id ?? '',
+        workspaceId,
+      ]),
+    });
 
   const defaultModelValue = workspaceId
     ? (modelOptions.find((option) => option.selected)?.value ?? modelOptions[0]?.value ?? '')
@@ -139,14 +120,13 @@ export function NewThreadComposer({
     () => modelOptions.find((option) => option.value === modelValue) ?? null,
     [modelOptions, modelValue],
   );
-  const recentThreads = conversations.slice(0, 5);
   const canSend = Boolean(
     prompt.trim() &&
-      (!workspaceId || selectedModel) &&
-      !disabledReason &&
-      !creating &&
-      !loadingPolicy &&
-      !uploadingAttachments,
+    (!workspaceId || selectedModel) &&
+    !disabledReason &&
+    !creating &&
+    !loadingPolicy &&
+    !uploadingAttachments,
   );
   const send = () => {
     if (!canSend) return;
@@ -229,19 +209,10 @@ export function NewThreadComposer({
   ];
 
   return (
-    <main
-      className="new-thread-view"
-      aria-busy={creating || loadingPolicy || uploadingAttachments}
-    >
+    <main className="new-thread-view" aria-busy={creating || loadingPolicy || uploadingAttachments}>
       <div className="new-thread-content">
         <header className="new-thread-heading">
-          <span className="eyebrow">{t('task.newThreadEyebrow')}</span>
           <h1>{t('task.newThreadTitle')}</h1>
-          <p>{t('task.newThreadDescription')}</p>
-          <span className="new-thread-workspace">
-            <CubeIcon />{' '}
-            {workspace?.name ?? workspace?.title ?? t('task.noWorkspace')}
-          </span>
         </header>
 
         <section className="new-thread-composer">
@@ -268,7 +239,9 @@ export function NewThreadComposer({
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') send();
             }}
-            placeholder={t(mode === 'work' ? 'task.workPromptPlaceholder' : 'task.codePromptPlaceholder')}
+            placeholder={t(
+              mode === 'work' ? 'task.workPromptPlaceholder' : 'task.codePromptPlaceholder',
+            )}
             aria-label={t('task.newThreadPrompt')}
             disabled={creating}
           />
@@ -282,22 +255,16 @@ export function NewThreadComposer({
               uploadingFileCount={uploadingFileCount}
             />
             <div className="composer-pickers">
-              <div className="mode-picker" role="group" aria-label={t('task.mode')}>
-                <button
-                  className={mode === 'work' ? 'active' : ''}
-                  type="button"
-                  onClick={() => onModeChange('work')}
-                >
-                  <MixerHorizontalIcon /> {t('sidebar.workMode')}
-                </button>
-                <button
-                  className={mode === 'code' ? 'active' : ''}
-                  type="button"
-                  onClick={() => onModeChange('code')}
-                >
-                  <CodeIcon /> {t('sidebar.codeMode')}
-                </button>
-              </div>
+              <PickerMenu
+                label={t('task.mode')}
+                value={mode}
+                options={[
+                  { value: 'work', label: t('sidebar.workMode') },
+                  { value: 'code', label: t('sidebar.codeMode') },
+                ]}
+                hideLabel
+                onChange={(value) => onModeChange(value as AgentCapabilityMode)}
+              />
               <PickerMenu
                 label={t('task.workspace')}
                 value={workspaceId}
@@ -311,6 +278,7 @@ export function NewThreadComposer({
               />
               <PickerMenu
                 label={t('task.model')}
+                hideLabel
                 value={modelValue}
                 options={modelPickerOptions}
                 readOnly={Boolean(workspaceId) && !canManagePolicy}
@@ -323,7 +291,7 @@ export function NewThreadComposer({
               />
               {workspaceId ? (
                 <>
-                  <PickerMenu
+                  <ComposerOptionsMenu
                     label={t('task.effort')}
                     value={reasoningEffort}
                     options={effortOptions}
@@ -364,9 +332,13 @@ export function NewThreadComposer({
           </div>
         </section>
 
-        {compatibilityMode ? <p className="new-thread-notice">{t('task.policyUpgradeRequired')}</p> : null}
+        {compatibilityMode ? (
+          <p className="new-thread-notice">{t('task.policyUpgradeRequired')}</p>
+        ) : null}
         {disabledReason || error ? (
-          <p className="new-thread-error" role="alert">{error ?? disabledReason}</p>
+          <p className="new-thread-error" role="alert">
+            {error ?? disabledReason}
+          </p>
         ) : null}
         {fileUploadErrors.length ? (
           <div className="new-thread-error" role="alert">
@@ -375,41 +347,6 @@ export function NewThreadComposer({
             ))}
           </div>
         ) : null}
-
-        <section className="new-thread-suggestions" aria-label={t('task.suggestions')}>
-          {SUGGESTIONS[mode].map((suggestion) => (
-            <button type="button" key={suggestion.title} onClick={() => setPrompt(t(suggestion.prompt))}>
-              <FileTextIcon />
-              <span>
-                <b>{t(suggestion.title)}</b>
-                <small>{t(suggestion.prompt)}</small>
-              </span>
-            </button>
-          ))}
-        </section>
-
-        <section className="new-thread-recent" aria-label={t('task.recentThreads')}>
-          <header>
-            <span>{t('task.recentThreads')}</span>
-            <em>{workspace?.name ?? workspace?.title ?? ''}</em>
-          </header>
-          <div>
-            {recentThreads.map((conversation) => {
-              const isCode = conversation.agent_config?.capability_mode === 'code';
-              const ModeIcon = isCode ? CodeIcon : ActivityLogIcon;
-              return (
-                <button type="button" key={conversation.id} onClick={() => onOpenThread(conversation)}>
-                  <i className={`thread-status ${conversation.status}`} aria-hidden="true" />
-                  <ModeIcon />
-                  <span>
-                    <b>{conversation.title}</b>
-                    <small>{conversation.summary || t('task.planFirstStatus')}</small>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
       </div>
     </main>
   );

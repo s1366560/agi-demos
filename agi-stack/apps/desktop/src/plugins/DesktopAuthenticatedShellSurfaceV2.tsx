@@ -1,3 +1,4 @@
+import { TitlebarToolbarProvider } from '../features/chat/ConversationToolbar';
 import type { ComponentProps, CSSProperties, RefObject } from 'react';
 import { Theme } from '@radix-ui/themes';
 
@@ -73,52 +74,60 @@ export function DesktopAuthenticatedShellSurfaceV2({
     .filter(Boolean)
     .join(' ');
   return (
-    <Theme
-      appearance={meta.appearance}
-      accentColor="cyan"
-      grayColor="slate"
-      radius="medium"
-      scaling="95%"
-    >
-      <div
-        ref={meta.appShellRef}
-        data-plugin-generation-v2={meta.generation.digest ?? 'unavailable'}
-        data-plugin-generation-v2-status={meta.generation.status}
-        data-plugin-generation-v2-target={meta.generation.target}
-        className={shellClassName}
-        style={
-          {
-            '--desktop-sidebar-preferred-width': `${Math.round(
-              state.sidebarPreferredWidth,
-            )}px`,
-          } as CSSProperties
-        }
+    <TitlebarToolbarProvider>
+      <Theme
+        appearance={meta.appearance}
+        accentColor="cyan"
+        grayColor="slate"
+        radius="medium"
+        scaling="95%"
       >
-        <DesktopRendererTitlebarV2 input={surfaces.titlebar} />
-        <section className="desktop-body">
-          <DesktopRendererSidebarV2 input={surfaces.sidebar} />
+        <div
+          ref={meta.appShellRef}
+          data-plugin-generation-v2={meta.generation.digest ?? 'unavailable'}
+          data-plugin-generation-v2-status={meta.generation.status}
+          data-plugin-generation-v2-target={meta.generation.target}
+          className={shellClassName}
+          style={
+            {
+              '--desktop-sidebar-preferred-width': `${Math.round(
+                state.sidebarPreferredWidth,
+              )}px`,
+            } as CSSProperties
+          }
+        >
+          <DesktopRendererTitlebarV2 input={surfaces.titlebar} />
+          <section className="desktop-body">
+            <DesktopRendererSidebarV2 input={surfaces.sidebar} />
 
-          <main ref={meta.workbenchRef} className="workbench" tabIndex={-1}>
-            <DesktopRendererWorkbenchTabBarV2 input={surfaces.tabBar} />
-            <div className="workbench-content">
-              <DesktopRendererProductionRouterV2 {...surfaces.router} />
-            </div>
-          </main>
+            <main ref={meta.workbenchRef} className="workbench" tabIndex={-1}>
+              <DesktopRendererWorkbenchTabBarV2 input={surfaces.tabBar} />
+              <div className="workbench-content">
+                <DesktopRendererProductionRouterV2 {...surfaces.router} />
+              </div>
+            </main>
 
-          {surfaces.rightSidebar.kind === 'visible' ? (
-            <DesktopRendererRightSidebarV2 input={surfaces.rightSidebar.props} />
-          ) : null}
-        </section>
+            {surfaces.rightSidebar.kind === 'visible' ? (
+              <DesktopRendererRightSidebarV2
+                input={surfaces.rightSidebar.props}
+              />
+            ) : null}
+          </section>
 
-        <DesktopRendererStatusBarV2 input={surfaces.statusBar} />
+          <DesktopRendererStatusBarV2 input={surfaces.statusBar} />
 
-        <DesktopRendererCommandPaletteV2 input={surfaces.commandPalette} />
-        <DesktopRendererKeyboardShortcutsV2 input={surfaces.keyboardShortcuts} />
-        <DesktopRendererNewTaskFlowV2 input={surfaces.newTask} />
-        <DesktopRendererWorkspaceCreateV2 input={surfaces.workspaceCreate} />
-        <DesktopRendererWorkspaceSettingsV2 input={surfaces.workspaceSettings} />
-        <DesktopRendererSettingsWindowV2 input={surfaces.settings} />
-      </div>
-    </Theme>
+          <DesktopRendererCommandPaletteV2 input={surfaces.commandPalette} />
+          <DesktopRendererKeyboardShortcutsV2
+            input={surfaces.keyboardShortcuts}
+          />
+          <DesktopRendererNewTaskFlowV2 input={surfaces.newTask} />
+          <DesktopRendererWorkspaceCreateV2 input={surfaces.workspaceCreate} />
+          <DesktopRendererWorkspaceSettingsV2
+            input={surfaces.workspaceSettings}
+          />
+          <DesktopRendererSettingsWindowV2 input={surfaces.settings} />
+        </div>
+      </Theme>
+    </TitlebarToolbarProvider>
   );
 }

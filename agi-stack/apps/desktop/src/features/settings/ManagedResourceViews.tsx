@@ -134,7 +134,6 @@ export function ManagedResourceWorkspace({
       <section className="managed-resource-catalog">
         <header>
           <div>
-            <span>{t(meta.eyebrow)}</span>
             <h1>{t(meta.label)}</h1>
           </div>
           {(section === 'plugins' && canCreate) ||
@@ -241,14 +240,6 @@ export function ManagedResourceWorkspace({
             </button>
           ))}
         </div>
-        <div className="managed-resource-count">
-          <span>
-            {t('settings.resourceCount', {
-              count: items.length,
-              resource: t(meta.label),
-            })}
-          </span>
-        </div>
         <div className="managed-resource-list">
           {loading ? <CatalogState text={t('settings.loading')} /> : null}
           {!loading && error ? (
@@ -317,7 +308,6 @@ export function ManagedResourceWorkspace({
           />
         ) : (
           <div className="managed-resource-detail-empty">
-            <meta.Icon />
             <strong>{t('settings.noResourceSelected')}</strong>
             <span>{t('settings.noResourceSelectedDescription')}</span>
           </div>
@@ -537,10 +527,7 @@ function ResourceDetail({
       </header>
       <div className="managed-resource-detail-scroll">
         <section className="managed-resource-identity">
-          <div className={`managed-resource-identity-icon ${section}`}>
-            <meta.Icon />
-          </div>
-          <div>
+          <div className="managed-resource-identity-copy">
             <span>
               {t(meta.singular).toUpperCase()} ·{' '}
               {factValue(facts, 'scope')?.toUpperCase() || t('settings.currentScope').toUpperCase()}
@@ -568,9 +555,6 @@ function ResourceDetail({
           </section>
         </section>
 
-        <div className="managed-resource-overview-label">
-          <span>{t('settings.overview')}</span>
-        </div>
         <div className="managed-resource-overview">
           {actionError ? (
             <div className="managed-resource-action-error" role="alert">

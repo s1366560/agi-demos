@@ -191,7 +191,7 @@ test('titlebar projection rejects malformed, duplicate, and inactive generations
 
 test('titlebar keeps App state authority and native bridge lifecycle without fallback', () => {
   assert.match(app, /titlebar:\s*runsInNativeDesktop\s*\?/u);
-  assert.match(app, /contextTitle:\s*`\$\{activeTenantName\} · \$\{activeProjectName\}`/u);
+  assert.match(app, /contextTitle:\s*currentDesktopRouteLabel \? t\(currentDesktopRouteLabel\) : activeSection === 'chat' \? sessionTitle/u);
   assert.match(app, /sidebarCollapsed,/u);
   assert.match(app, /rightSidebarOpen,/u);
   assert.match(app, /onToggleSidebar:\s*\(\) =>/u);

@@ -763,3 +763,12 @@ test('unavailable authentication router without capability reload keeps route re
   await retryDesktopProductionRoute(async () => { retries += 1; }, { status: 'unavailable' });
   assert.equal(retries, 1);
 });
+
+test('route breadcrumb uses translated navigation labels while retaining diagnostic route identity', () => {
+  const markup = renderView({ state: { status: 'ready', match, module } });
+  assert.match(markup, /data-route-id="project-project-overview"/);
+  const breadcrumb = markup.match(/<nav[^>]*class="desktop-production-route-breadcrumb"[\s\S]*?<\/nav>/)?.[0];
+  assert.ok(breadcrumb);
+  assert.match(breadcrumb, /aria-current="page">Overview</);
+  assert.doesNotMatch(breadcrumb, /project-project-overview/);
+});

@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { TitlebarToolbarContext } from '../chat/ConversationToolbar';
 import { PinLeftIcon, PinRightIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -28,6 +30,7 @@ export function DesktopTitlebar({
   onToggleRightSidebar,
 }: DesktopTitlebarProps) {
   const { t } = useI18n();
+  const toolbar = useContext(TitlebarToolbarContext);
   const platform = window.__MEMSTACK_DESKTOP__?.platform ?? 'darwin';
 
   return (
@@ -49,17 +52,26 @@ export function DesktopTitlebar({
         {contextTitle}
       </span>
       <div className="desktop-titlebar-actions">
-        <button
-          type="button"
-          className="desktop-titlebar-button"
-          aria-label={t('titlebar.toggleRightPanel')}
-          aria-pressed={rightSidebarOpen}
-          title={t('titlebar.toggleRightPanel')}
-          disabled={!rightSidebarAvailable}
-          onClick={onToggleRightSidebar}
-        >
-          <PinRightIcon />
-        </button>
+        {toolbar ? (
+          <div
+            className="conversation-toolbar-host session-workspace-actions"
+            ref={toolbar.setHost}
+            role="group"
+            aria-label={t('chat.conversationTools')}
+          />
+        ) : null}
+        {rightSidebarAvailable ? (
+          <button
+            type="button"
+            className="desktop-titlebar-button"
+            aria-label={t('titlebar.toggleRightPanel')}
+            aria-pressed={rightSidebarOpen}
+            title={t('titlebar.toggleRightPanel')}
+            onClick={onToggleRightSidebar}
+          >
+            <PinRightIcon />
+          </button>
+        ) : null}
         {platform !== 'darwin' ? <WindowControls /> : null}
       </div>
     </header>

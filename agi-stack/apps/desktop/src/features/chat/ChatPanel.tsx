@@ -1,3 +1,4 @@
+import { ConversationToolbarItem } from './ConversationToolbar';
 import type { DesktopVoiceSessionOperationsV2 } from '../../plugins/desktopVoiceSessionAuthorityModuleV2';
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import {
@@ -30,6 +31,7 @@ import {
   Cross2Icon,
   DragHandleDots2Icon,
   MixerHorizontalIcon,
+  ReaderIcon,
   ReloadIcon,
   RocketIcon,
   StopIcon,
@@ -82,6 +84,7 @@ import {
   visibleQueuedRunInputs,
 } from '../session/sessionRunInputModel';
 import { ComposerControls } from './ComposerControls';
+import { ChatOverflowMenu } from './ChatOverflowMenu';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { PermissionPresetControl } from './PermissionPresetControl';
 import type { PermissionPreset } from './permissionPresetModel';
@@ -1582,7 +1585,9 @@ export const ChatPanel = memo(function ChatPanel({
         </header>
       ) : null}
       {comparisonAvailable || conversationExportSnapshot?.events.length ? (
+        <ConversationToolbarItem>
         <div className="chat-conversation-actions">
+          <ChatOverflowMenu label={t('chat.conversationTools')} icon={<ReaderIcon aria-hidden="true" />}>
           {comparisonAvailable ? (
             <button
               ref={comparisonTriggerRef}
@@ -1600,7 +1605,9 @@ export const ChatPanel = memo(function ChatPanel({
           {conversationExportSnapshot?.events.length ? (
             <ConversationExportMenu snapshot={conversationExportSnapshot} />
           ) : null}
+          </ChatOverflowMenu>
         </div>
+        </ConversationToolbarItem>
       ) : null}
       {conversationComparisonVisible &&
       comparisonClient &&
@@ -1710,6 +1717,7 @@ export const ChatPanel = memo(function ChatPanel({
                     onRespondToHitl={onRespondToHitl}
                     respondableHitlRequestIds={respondableHitlRequestIds}
                     activityPresence={activityPresence}
+                    running={sending}
                     onOpenMCPAppResult={onOpenMCPAppResult}
                     onReplyMessage={replyToTimelineMessage}
                     onEditMessage={editTimelineMessage}
@@ -2599,6 +2607,73 @@ function ChatComposer({
     onUnsupported: rejectFileDrop,
   });
 
+  const voiceButton = desktopRuntimeConfig ? (
+              <button
+                className={`composer-voice-button is-${voice.state}`}
+                type="button"
+                aria-label={t(
+                  voiceActive ? 'composer.voice.stop' : 'composer.voice.start',
+                )}
+                aria-pressed={voiceActive}
+                title={
+                  voiceDisabledReason ??
+                  t(
+                    voiceActive
+                      ? 'composer.voice.stop'
+                      : 'composer.voice.start',
+                  )
+                }
+                disabled={
+                  disabled ||
+                  sending ||
+                  uploadingAttachments ||
+                  voiceCallActive ||
+                  voiceConnection.availability !== 'available'
+                }
+                onClick={() => void toggleVoice()}
+              >
+                <VoiceMicrophoneIcon active={voiceActive} />
+                {voiceActive ? (
+                  <span className="composer-voice-wave" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                ) : null}
+              </button>
+
+  ) : null;
+  const voiceCallButton = desktopRuntimeConfig ? (
+              <button
+                className={`composer-voice-button composer-call-button is-${voiceCall.status}`}
+                type="button"
+                aria-label={t(
+                  voiceCallActive
+                    ? 'composer.voiceCall.end'
+                    : 'composer.voiceCall.start',
+                )}
+                aria-pressed={voiceCallActive}
+                title={
+                  voiceCallActive
+                    ? t('composer.voiceCall.end')
+                    : (voiceCallDisabledReason ?? t('composer.voiceCall.start'))
+                }
+                disabled={
+                  !voiceCallActive &&
+                  (disabled ||
+                    sending ||
+                    responseStreaming ||
+                    uploadingAttachments ||
+                    voiceActive ||
+                    voiceCallConnection.availability !== 'available')
+                }
+                onClick={() => void toggleVoiceCall()}
+              >
+                <VoiceCallIcon active={voiceCallActive} />
+              </button>
+
+  ) : null;
+
   return (
     <form
       className="composer chat-composer"
@@ -2851,8 +2926,7 @@ function ChatComposer({
           }}
         />
         <Flex align="center" justify="between" className="chat-composer-footer">
-          {composerVariant === 'session' ? (
-            <div className="session-composer-context-actions">
+          <div className="session-composer-context-actions">
               <ComposerPlusMenu
                 api={api}
                 conversations={conversations}
@@ -2862,23 +2936,24 @@ function ChatComposer({
                 onUploadFiles={uploadFiles}
                 uploadingFileCount={uploadingFileCount}
               />
-              <PromptTemplateLibrary
-                api={api}
-                tenantId={promptTemplateConversation?.tenant_id ?? ''}
-                projectId={promptTemplateConversation?.project_id ?? ''}
-                conversationId={promptTemplateConversation?.id ?? ''}
-                refreshToken={promptTemplateRefreshToken}
-                disabled={disabled}
-                onInsert={insertPromptTemplate}
-              />
-              <button
-                type="button"
-                onClick={(event) => onOpenCommands(event.currentTarget)}
-              >
-                <MixerHorizontalIcon aria-hidden="true" />
-                {t('session.context')}
-              </button>
-              {modelLabel && modelOptions?.length && onModelChange ? (
+              <ChatOverflowMenu label={t('composer.toolsLabel')} className="composer-utility-menu">
+                <PromptTemplateLibrary
+                  api={api}
+                  tenantId={promptTemplateConversation?.tenant_id ?? ''}
+                  projectId={promptTemplateConversation?.project_id ?? ''}
+                  conversationId={promptTemplateConversation?.id ?? ''}
+                  refreshToken={promptTemplateRefreshToken}
+                  disabled={disabled}
+                  onInsert={insertPromptTemplate}
+                />
+                <button type="button" onClick={(event) => onOpenCommands(event.currentTarget)}>
+                  <MixerHorizontalIcon aria-hidden="true" />
+                  {t('session.context')}
+                </button>
+                {!voiceActive ? voiceButton : null}
+                {!voiceCallActive ? voiceCallButton : null}
+              </ChatOverflowMenu>
+              {composerVariant === 'session' && modelLabel && modelOptions?.length && onModelChange ? (
                 <ComposerControls
                   modelLabel={modelLabel}
                   modelOptions={modelOptions}
@@ -2901,95 +2976,10 @@ function ChatComposer({
                   onAcknowledgeFullAccess={onAcknowledgeFullAccessWarning}
                 />
               ) : null}
-            </div>
-          ) : null}
-          {composerVariant !== 'session' ? (
-            <PromptTemplateLibrary
-              api={api}
-              tenantId={promptTemplateConversation?.tenant_id ?? ''}
-              projectId={promptTemplateConversation?.project_id ?? ''}
-              conversationId={promptTemplateConversation?.id ?? ''}
-              refreshToken={promptTemplateRefreshToken}
-              disabled={disabled}
-              onInsert={insertPromptTemplate}
-            />
-          ) : null}
+          </div>
           <Flex align="center" gap="2" className="composer-right-actions">
-            {desktopRuntimeConfig ? (
-              <button
-                className={`composer-voice-button is-${voice.state}`}
-                type="button"
-                aria-label={t(
-                  voiceActive ? 'composer.voice.stop' : 'composer.voice.start',
-                )}
-                aria-pressed={voiceActive}
-                title={
-                  voiceDisabledReason ??
-                  t(
-                    voiceActive
-                      ? 'composer.voice.stop'
-                      : 'composer.voice.start',
-                  )
-                }
-                disabled={
-                  disabled ||
-                  sending ||
-                  uploadingAttachments ||
-                  voiceCallActive ||
-                  voiceConnection.availability !== 'available'
-                }
-                onClick={() => void toggleVoice()}
-              >
-                <VoiceMicrophoneIcon active={voiceActive} />
-                {voiceActive ? (
-                  <span className="composer-voice-wave" aria-hidden="true">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                ) : null}
-              </button>
-            ) : null}
-            {desktopRuntimeConfig ? (
-              <button
-                className={`composer-voice-button composer-call-button is-${voiceCall.status}`}
-                type="button"
-                aria-label={t(
-                  voiceCallActive
-                    ? 'composer.voiceCall.end'
-                    : 'composer.voiceCall.start',
-                )}
-                aria-pressed={voiceCallActive}
-                title={
-                  voiceCallActive
-                    ? t('composer.voiceCall.end')
-                    : (voiceCallDisabledReason ?? t('composer.voiceCall.start'))
-                }
-                disabled={
-                  !voiceCallActive &&
-                  (disabled ||
-                    sending ||
-                    responseStreaming ||
-                    uploadingAttachments ||
-                    voiceActive ||
-                    voiceCallConnection.availability !== 'available')
-                }
-                onClick={() => void toggleVoiceCall()}
-              >
-                <VoiceCallIcon active={voiceCallActive} />
-              </button>
-            ) : null}
-            {composerPresentation.showCommands ? (
-              <button
-                className="composer-slash-button"
-                type="button"
-                aria-label={t('chat.slashCommands')}
-                title={t('chat.slashCommands')}
-                onClick={(event) => onOpenCommands(event.currentTarget)}
-              >
-                /
-              </button>
-            ) : null}
+            {voiceActive ? voiceButton : null}
+            {voiceCallActive ? voiceCallButton : null}
             {runInputDeliveryOptions.length ? (
               <div
                 className="composer-delivery-switch"

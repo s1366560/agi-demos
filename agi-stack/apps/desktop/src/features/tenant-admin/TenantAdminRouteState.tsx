@@ -1,3 +1,5 @@
+import '../management/ManagementSurfaces.css';
+
 import { useI18n } from '../../i18n';
 import type { TenantAdminViewState } from './tenantAdminController';
 

@@ -191,12 +191,11 @@ test('workbench tab bar projection rejects malformed, duplicate, and inactive ge
   );
 });
 
-test('tab bar retains tab identity, localization, activation, close, and App ownership', () => {
-  assert.match(tabBar, /tabKey\(tab\)/u);
-  assert.match(tabBar, /VIEW_TAB_LABEL_KEYS/u);
-  assert.match(tabBar, /tabs\.map\(\(tab\) =>/u);
-  assert.match(tabBar, /onClick=\{\(\) => onActivate\(tab\)\}/u);
-  assert.match(tabBar, /onClick=\{\(\) => onClose\(tab\)\}/u);
+test('hidden tab bar preserves its input interface and App ownership', () => {
+  assert.match(tabBar, /return null/u);
+  assert.doesNotMatch(tabBar, /role="tablist"|tabs\.map/u);
+  assert.match(tabBar, /onActivate: \(tab: WorkbenchTab\) => void/u);
+  assert.match(tabBar, /onClose: \(tab: WorkbenchTab\) => void/u);
 
   const inputStart = app.indexOf('tabBar: {');
   const inputEnd = app.indexOf('router: {', inputStart);

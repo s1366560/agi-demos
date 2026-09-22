@@ -1,3 +1,4 @@
+import { structuredToolResultFailed } from './toolResultStatus';
 import {
   protocolClientMessageId,
   protocolStreamMessageId,
@@ -294,7 +295,10 @@ export function timelineItemFromSocketEvent(
     item.toolOutput =
       data.observation ?? data.tool_output ?? data.toolOutput ?? '';
     item.error = readStringField(data, 'error');
-    item.isError = Boolean(data.is_error ?? data.isError ?? item.error);
+    item.isError =
+      data.is_error === true || data.isError === true ||
+      payload.is_error === true || payload.isError === true ||
+      structuredToolResultFailed(item.toolOutput) || Boolean(item.error);
   } else if (type === 'error') {
     item.content = socketErrorDetail(payload) ?? 'Agent run failed.';
     item.error = item.content;

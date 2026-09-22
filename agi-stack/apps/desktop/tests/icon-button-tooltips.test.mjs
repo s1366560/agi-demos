@@ -71,15 +71,8 @@ test('workspace tree expand/collapse toggles expose localized tooltips', () => {
 });
 
 test('chat timeline row toggles expose localized tooltips', () => {
-  // The tool-call pair toggle hoists the localized expression into a
-  // toggleLabel variable; assert the hoist stays localized and the button
-  // still mirrors the SAME expression into aria-label + title, adjacently.
-  assert.match(
-    chatTimelineSource,
-    /const toggleLabel = t\(expanded \? 'chat\.collapseItem' : 'chat\.expandItem', \{\s*item: label \?\? preview,?\s*\}\)/,
-    'tool-call pair toggle label stays localized',
-  );
-  assertTitleMirrorsAriaLabel(chatTimelineSource, 'toggleLabel', 'tool-call pair toggle');
+  assert.match(chatTimelineSource, /aria-label=\{t\('session.stepDetails'/);
+  assert.match(chatTimelineSource, /title=\{t\('session.stepDetails'/);
   assertTitleMirrorsAriaLabel(
     chatTimelineSource,
     "t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: timelineTitle(item, t), })",

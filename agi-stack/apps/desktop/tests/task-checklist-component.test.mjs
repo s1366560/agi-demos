@@ -238,14 +238,14 @@ test("a todowrite tool call renders a status-count row title", () => {
       ),
     );
   });
-  const preview = container.querySelector(".timeline-row-preview");
+  const preview = container.querySelector(".timeline-step-copy");
   assert.ok(preview, "tool-call row renders");
   assert.equal(
     preview.textContent,
     "Update 2 todos: 1 completed, 1 pending: Alpha, Beta",
   );
   const stepLabel = container.querySelector(".timeline-row-step-label");
-  assert.equal(stepLabel.textContent, "todowrite");
+  assert.equal(stepLabel, null, "redundant tool label is not repeated");
   act(() => root.unmount());
   container.remove();
 });

@@ -1,8 +1,8 @@
 .settings-panel {
   overflow: hidden;
-  background: var(--desktop-surface-12);
-  border: 1px solid var(--desktop-border-4);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .settings-account-page,
@@ -41,11 +41,11 @@
 
 .settings-panel > header {
   display: flex;
-  min-height: 64px;
+  min-height: 56px;
   align-items: center;
   gap: 9px;
-  padding: 12px 14px;
-  background: var(--desktop-surface-14);
+  padding: 12px 0;
+  background: transparent;
   border-bottom: 1px solid var(--desktop-border-4);
 }
 
@@ -139,8 +139,8 @@
   grid-template-columns: 52px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-  padding: 15px;
-  background: var(--desktop-surface-14);
+  padding: 15px 0;
+  background: transparent;
   border-bottom: 1px solid var(--desktop-border-4);
 }
 
@@ -230,10 +230,10 @@
 }
 
 .settings-context-step {
-  padding: 14px;
-  background: var(--desktop-surface-12);
-  border: 1px solid var(--desktop-border-4);
-  border-radius: 8px;
+  padding: 14px 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .settings-context-step > header {
@@ -776,4 +776,9 @@ button.active > .settings-choice-icon {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+/* Theme options have no language icon; let their copy use the full column. */
+.settings-theme-options > button {
+  grid-template-columns: minmax(0, 1fr) 18px;
 }

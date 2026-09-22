@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
 const featureRoot = '/tmp/agistack-desktop-test-dist/src/features/tenant-admin';
 const { DesktopApiError } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const {

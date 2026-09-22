@@ -23,10 +23,8 @@
 }
 .cloud-memories-page li,
 .cloud-memory-editor {
-  padding: 1rem;
-  background: var(--color-panel-solid);
-  border: 1px solid var(--gray-6);
-  border-radius: 0.5rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--gray-6);
 }
 .cloud-memory-editor {
   margin-block: 1rem;
@@ -85,4 +83,10 @@
   .cloud-memory-editor dl {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.cloud-memories-page > header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }

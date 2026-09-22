@@ -8,7 +8,7 @@
 }
 
 .new-thread-content {
-  width: min(680px, 100%);
+  width: min(800px, 100%);
 }
 
 .new-thread-heading {
@@ -16,55 +16,24 @@
   text-align: center;
 }
 
-/* prototype mission-control refactor 2026-09: eyebrow tracking per oracle */
-.new-thread-heading .eyebrow {
-  color: var(--accent-9, var(--desktop-cyan));
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
 .new-thread-heading h1 {
-  margin: 10px 0 8px;
-  font-size: 26px;
-  letter-spacing: -0.035em;
-}
-
-.new-thread-heading p {
   margin: 0;
-  color: var(--gray-10, var(--desktop-gray-13));
-  font-size: 10.5px;
-}
-
-.new-thread-workspace {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 13px;
-  padding: 5px 11px;
-  border: 1px solid var(--gray-a5, var(--desktop-border-10));
-  border-radius: 20px;
-  background: var(--gray-a2, var(--desktop-surface-14));
-  color: var(--desktop-gray-13);
-  font-size: 8.5px;
-}
-
-.new-thread-workspace svg {
-  width: 11px;
-  height: 11px;
-  color: var(--desktop-cyan);
+  color: var(--desktop-text-bright);
+  font-size: clamp(24px, 3vw, 30px);
+  font-weight: 550;
+  letter-spacing: -0.035em;
 }
 
 .new-thread-composer {
   border: 1px solid var(--desktop-border-17);
-  border-radius: 12px;
+  border-radius: 18px;
   background: var(--desktop-surface-12);
-  box-shadow: var(--desktop-shadow-raised);
+  box-shadow: none;
 }
 
 .new-thread-composer:focus-within {
-  border-color: var(--desktop-border-cyan-4);
-  box-shadow: 0 0 0 2px rgba(var(--desktop-cyan-rgb), 8%), var(--desktop-shadow-raised);
+  border-color: var(--desktop-gray-20);
+  box-shadow: none;
 }
 
 .new-thread-composer textarea {
@@ -76,7 +45,7 @@
   background: transparent;
   color: var(--gray-12, var(--desktop-text-bright));
   font: inherit;
-  font-size: 12.5px;
+  font-size: 15px;
   line-height: 1.55;
   resize: vertical;
 }
@@ -90,11 +59,8 @@
   align-items: center;
   gap: 8px;
   padding: 9px 11px;
-  border-top: 1px solid var(--desktop-border-7);
 }
 
-/* prototype mission-control refactor 2026-09: tighter rhythm so the control
-   row fits on one line inside the 680px composer column */
 .composer-pickers {
   display: flex;
   flex: 1;
@@ -105,59 +71,26 @@
   overflow: visible;
 }
 
-.mode-picker {
-  display: flex;
-  flex: none;
-  border: 1px solid var(--desktop-border-10);
-  border-radius: 7px;
-  overflow: hidden;
-}
-
-.mode-picker button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 27px;
-  padding: 0 9px;
-  border: 0;
-  background: transparent;
-  color: var(--desktop-gray-12);
-  font-size: 8.5px;
-  font-weight: 650;
-}
-
-.mode-picker button.active {
-  background: var(--desktop-surface-cyan-5);
-  color: var(--desktop-cyan);
-}
-
-.mode-picker svg {
-  width: 11px;
-  height: 11px;
-}
-
 .picker-chip {
   display: flex;
   flex: none;
   align-items: center;
   gap: 5px;
-  height: 27px;
+  height: 32px;
   padding: 0 7px;
-  border: 1px solid var(--desktop-border-10);
+  border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
   color: var(--desktop-gray-12);
-  font-size: 8.5px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
-/* prototype mission-control refactor 2026-09: tighter value truncation so the
-   control row stays on one line inside the 680px composer column */
 .picker-chip > b {
   max-width: 120px;
   overflow: hidden;
   color: var(--desktop-text-pale);
-  font-weight: 650;
+  font-weight: 500;
   text-overflow: ellipsis;
 }
 
@@ -168,7 +101,7 @@
   background: transparent;
   color: var(--desktop-text-pale);
   font: inherit;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .picker-chip select:disabled {
@@ -187,10 +120,10 @@
   height: 32px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--desktop-border-cyan-9);
-  border-radius: 8px;
-  background: var(--desktop-surface-cyan-4);
-  color: var(--desktop-text-ice);
+  border: 0;
+  border-radius: 50%;
+  background: var(--desktop-text-bright);
+  color: var(--desktop-bg);
 }
 
 .new-thread-view .send-button:disabled {
@@ -207,7 +140,7 @@
 .new-thread-error {
   margin: 9px 4px 0;
   color: var(--desktop-gray-30);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .new-thread-error {
@@ -216,163 +149,6 @@
 
 .new-thread-error span {
   display: block;
-}
-
-.new-thread-suggestions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.new-thread-suggestions > button {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-height: 64px;
-  padding: 10px 11px;
-  border: 1px solid var(--desktop-border-10);
-  border-radius: 8px;
-  background: var(--desktop-surface-14);
-  color: var(--desktop-gray-12);
-  text-align: left;
-}
-
-.new-thread-suggestions > button:hover {
-  border-color: var(--desktop-border-cyan-6);
-  background: var(--desktop-surface-15);
-}
-
-.new-thread-suggestions svg {
-  width: 13px;
-  height: 13px;
-  flex: none;
-  margin-top: 1px;
-  color: var(--desktop-gray-3);
-}
-
-.new-thread-suggestions span,
-.new-thread-recent span {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.new-thread-suggestions b {
-  color: var(--desktop-gray-34);
-  font-size: 9px;
-}
-
-.new-thread-suggestions small {
-  color: var(--desktop-gray-8);
-  font-size: 7.5px;
-  line-height: 1.4;
-}
-
-.new-thread-recent {
-  margin-top: 26px;
-}
-
-.new-thread-recent > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.new-thread-recent > header span {
-  color: var(--desktop-gray-20);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-}
-
-.new-thread-recent > header em {
-  color: var(--desktop-gray-17);
-  font-size: 8px;
-  font-style: normal;
-}
-
-.new-thread-recent > div {
-  display: grid;
-  gap: 4px;
-}
-
-.new-thread-recent > div > button {
-  display: grid;
-  grid-template-columns: 8px 14px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 6px 10px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--desktop-gray-12);
-  text-align: left;
-}
-
-.new-thread-recent > div > button:hover {
-  border-color: var(--desktop-border-10);
-  background: var(--desktop-surface-14);
-}
-
-/* prototype mission-control refactor 2026-09: 6px dots with the oracle status
-   color mapping (ready green / running cyan pulse / input amber pulse) */
-.new-thread-recent .thread-status {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--green-9);
-}
-
-.new-thread-recent .thread-status.active,
-.new-thread-recent .thread-status.running,
-.new-thread-recent .thread-status.planning {
-  background: var(--desktop-cyan);
-  animation: new-thread-status-pulse 2s ease-in-out infinite;
-}
-
-.new-thread-recent .thread-status.input,
-.new-thread-recent .thread-status.needs_input,
-.new-thread-recent .thread-status.needs_approval {
-  background: var(--amber-9);
-  animation: new-thread-status-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes new-thread-status-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.35;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .new-thread-recent .thread-status {
-    animation: none;
-  }
-}
-
-.new-thread-recent b,
-.new-thread-recent small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.new-thread-recent b {
-  color: var(--desktop-gray-29);
-  font-size: 9px;
-}
-
-.new-thread-recent small {
-  color: var(--desktop-gray-19);
-  font-size: 7.5px;
 }
 
 @media (max-width: 1180px) {

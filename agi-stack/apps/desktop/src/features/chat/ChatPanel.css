@@ -862,14 +862,10 @@
   }
 }
 
-/* Web conversation parity 2026-12 (§1.10 MessageArea): the conversation column
-   widens toward the web's near-full-width reading measure — web bubbles cap at
-   92-96% of a full-width pane (MESSAGE_MAX_WIDTH_CLASSES) with p-3/md:p-4 and
-   pb-20, so the desktop column keeps a wider ceiling, slimmer side padding and
-   the same 80px bottom clearance. */
+/* Keep conversation text at a comfortable reading measure. */
 .session-workspace-thread .session-chat-narrative .message-stack {
   width: 100%;
-  max-width: 1440px;
+  max-width: 800px;
   margin: 0 auto;
   gap: 0;
   padding: 16px clamp(16px, 3.2cqi, 48px) 80px;
@@ -5591,6 +5587,100 @@
   }
 }
 
+/* Conversation-first chrome: disclosures belong to the reading flow. */
+.session-chat-narrative .timeline-tool-group,
+.session-chat-narrative .timeline-debug-group {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+}
+.session-chat-narrative .timeline-tool-group.status-failed {
+  border-left: 2px solid var(--desktop-red);
+}
+.session-chat-narrative .timeline-tool-group > summary {
+  min-height: 36px;
+  padding-inline: 8px;
+}
+.session-chat-narrative .timeline-tool-group-preview {
+  color: var(--desktop-muted);
+}
+.workspace-chat-panel .message-stack {
+  width: 100%;
+  max-width: 800px;
+  margin-inline: auto;
+}
+@media (hover: none) {
+  .session-message-actions { opacity: 1; }
+}
+
+.desktop-conversation-surface {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.desktop-conversation-surface > .chat-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: var(--desktop-bg);
+}
+.desktop-conversation-surface > .platform-plugin-conversation-slots {
+  display: block;
+  flex: 0 0 auto;
+  max-height: 35%;
+  overflow: auto;
+  padding: 6px 20px;
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+.platform-plugin-conversation-slots > summary {
+  cursor: pointer;
+  width: fit-content;
+  border-radius: 4px;
+}
+.platform-plugin-conversation-slots > summary:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: 2px;
+}
+.desktop-conversation-surface .session-thread-message.agent .session-message-surface {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 8px 0;
+}
+.desktop-conversation-surface .chat-composer {
+  width: 100%;
+  max-width: 800px;
+  box-sizing: border-box;
+  margin-inline: auto;
+  padding: 12px 24px 20px;
+  border-top: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.desktop-conversation-surface .session-composer-editor {
+  --session-composer-radius: 18px;
+  border-radius: 18px;
+  background: var(--desktop-panel);
+  box-shadow: none;
+}
+.session-workspace-thread .desktop-conversation-surface .chat-composer {
+  max-width: 800px;
+  padding: 12px 24px 20px;
+  border-top: 0;
+  box-shadow: none;
+}
+.session-workspace-thread .desktop-conversation-surface > .chat-shell {
+  background: var(--desktop-chat-bg);
+}
+
 .platform-plugin-conversation-slots {
   display: grid;
   min-width: 0;
@@ -5600,4 +5690,245 @@
   width: 100%;
   border: 0;
   background: transparent;
+}
+
+/* Secondary transcript and composer tools stay out of the reading flow. */
+.chat-overflow-menu {
+  position: relative;
+  flex: none;
+}
+.chat-overflow-menu > summary {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--desktop-muted);
+  list-style: none;
+  cursor: pointer;
+}
+.chat-overflow-menu > summary::-webkit-details-marker { display: none; }
+.chat-overflow-menu > summary:hover,
+.chat-overflow-menu[open] > summary { background: var(--desktop-panel-raised); }
+.chat-overflow-menu > summary:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: 2px;
+}
+.chat-overflow-menu-content {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 200px;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 10px;
+  background: var(--desktop-panel-raised);
+  box-shadow: var(--desktop-shadow-popover);
+}
+.chat-overflow-menu-content > button,
+.chat-overflow-menu-content .prompt-template-library > button {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--desktop-text);
+  text-align: left;
+  font-size: 12px;
+}
+.chat-overflow-menu-content > button:hover { background: var(--desktop-panel-2); }
+.chat-overflow-menu-content .prompt-template-library { width: 100%; }
+.chat-overflow-menu-content .prompt-template-library > button span { display: inline; }
+.chat-overflow-menu-content .composer-voice-button::after { content: attr(aria-label); }
+.composer-utility-menu .chat-overflow-menu-content {
+  top: auto;
+  bottom: calc(100% + 8px);
+  right: auto;
+  left: 0;
+}
+.chat-conversation-actions { opacity: 0; }
+.chat-shell:hover > .chat-conversation-actions,
+.chat-shell:focus-within > .chat-conversation-actions,
+.chat-conversation-actions:has(details[open]) { opacity: 1; }
+
+.session-thread-message .session-message-time { opacity: 0; }
+.session-thread-message:hover .session-message-time,
+.session-thread-message:focus-within .session-message-time { opacity: 1; }
+.session-thread-message[data-has-identity='false'] .transcript-meta {
+  min-height: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}
+.session-thread-message[data-has-identity='false'] .session-message-identity {
+  position: absolute;
+  top: -16px;
+  left: 0;
+}
+.session-thread-message.user[data-has-identity='false'] .session-message-identity {
+  right: 0;
+  left: auto;
+}
+.session-thread-message .session-message-actions,
+.session-thread-message.user .session-message-actions {
+  top: -12px;
+  right: 0;
+}
+.session-chat-narrative .timeline-turn-collapse-control[aria-expanded='true'] { opacity: 0; }
+.session-chat-narrative .timeline-turn-collapse-control:hover,
+.session-chat-narrative .timeline-turn-collapse-control:focus-visible,
+.session-chat-narrative .transcript-message:hover + .timeline-turn-collapse-control,
+.session-chat-narrative .transcript-message:focus-within + .timeline-turn-collapse-control { opacity: 1; }
+
+.desktop-conversation-surface { position: relative; }
+.desktop-conversation-surface > .platform-plugin-conversation-slots {
+  position: absolute;
+  z-index: 12;
+  top: 8px;
+  right: 52px;
+  max-height: 45%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  opacity: 0;
+}
+.desktop-conversation-surface > .platform-plugin-conversation-slots[open] {
+  width: min(400px, calc(100% - 68px));
+  background: var(--desktop-panel-raised);
+  border: 1px solid var(--desktop-border);
+  box-shadow: var(--desktop-shadow-popover);
+}
+.desktop-conversation-surface:hover > .platform-plugin-conversation-slots,
+.desktop-conversation-surface:focus-within > .platform-plugin-conversation-slots,
+.desktop-conversation-surface > .platform-plugin-conversation-slots[open],
+.desktop-conversation-surface > .platform-plugin-conversation-slots[data-error] { opacity: 1; }
+@media (hover: none) {
+  .chat-conversation-actions,
+  .session-thread-message .session-message-time,
+  .session-chat-narrative .timeline-turn-collapse-control[aria-expanded='true'],
+  .desktop-conversation-surface > .platform-plugin-conversation-slots { opacity: 1; }
+}
+
+/* Use the same card anatomy as the idle new-thread composer. */
+.chat-shell .chat-composer,
+.desktop-conversation-surface .chat-composer,
+.session-workspace-thread .desktop-conversation-surface .chat-composer {
+  width: calc(100% - 40px);
+  max-width: 800px;
+  margin-inline: auto;
+  padding: 12px 0 20px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.chat-shell .session-composer-editor,
+.desktop-conversation-surface .session-composer-editor {
+  --session-composer-radius: 18px;
+  --session-composer-control-radius: 7px;
+  --session-composer-font-size: 12px;
+  display: block;
+  min-width: 0;
+  border: 1px solid var(--desktop-border-17);
+  border-radius: 18px;
+  background: var(--desktop-surface-12);
+  box-shadow: none;
+}
+.chat-shell .session-composer-editor:focus-within {
+  border-color: var(--desktop-gray-20);
+  box-shadow: none;
+}
+.chat-shell .session-composer-editor .chat-composer-input {
+  min-height: 108px;
+  padding: 0;
+  border: 0;
+  border-radius: 18px 18px 0 0;
+  background: transparent;
+  box-shadow: none;
+}
+.chat-shell .session-composer-editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 108px;
+  padding: 15px 16px 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--gray-12, var(--desktop-text-bright));
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.55;
+  box-shadow: none;
+  resize: vertical;
+}
+.chat-shell .session-composer-editor textarea::placeholder {
+  color: var(--desktop-gray-17);
+}
+.chat-shell .chat-composer-footer {
+  min-height: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-top: 0;
+}
+.chat-shell .session-composer-context-actions {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.chat-shell .composer-right-actions { flex: 0 0 auto; }
+.chat-shell .session-composer-context-actions .composer-plus-compact,
+.chat-shell .session-composer-context-actions .composer-mode-button,
+.chat-shell .composer-utility-menu > summary,
+.chat-shell .composer-right-actions > .composer-voice-button {
+  height: 32px;
+  min-height: 32px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.chat-shell .session-composer-context-actions .composer-plus-compact,
+.chat-shell .composer-utility-menu > summary { width: 32px; }
+.chat-shell .send-pill,
+.chat-shell .stop-response-pill {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--desktop-text-bright);
+  color: var(--desktop-bg);
+  box-shadow: none;
+}
+.chat-shell .send-pill:disabled { opacity: 0.4; }
+.chat-shell .send-pill svg,
+.chat-shell .stop-response-pill svg { width: 14px; height: 14px; }
+.chat-shell .composer-context-chips {
+  align-items: center;
+  align-content: flex-start;
+  min-height: 0;
+  height: auto;
+  gap: 6px;
+  padding: 8px 11px 0;
+}
+.chat-shell .composer-context-chips > button {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: min(320px, 100%);
+  min-height: 26px;
+  height: auto;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 18px;
 }

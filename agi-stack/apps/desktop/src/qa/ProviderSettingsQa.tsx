@@ -12,6 +12,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { SettingsWindow, type SettingsSection } from '../features/settings/SettingsWindow';
 import { managedPluginFromMarketplaceEntry } from '../api/pluginMarketplaceModel';
 import { I18nProvider } from '../i18n';
+import { ThemePreferenceProvider } from '../theme';
 import type { DesktopPluginMarketplaceOperationsV2 } from '../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type {
   AuthState,
@@ -1939,7 +1940,9 @@ globalThis.__providerSettingsQaRoot = qaRoot;
 qaRoot.render(
   <React.StrictMode>
     <I18nProvider>
-      <ProviderSettingsQa />
+      <ThemePreferenceProvider>
+        <ProviderSettingsQa />
+      </ThemePreferenceProvider>
     </I18nProvider>
   </React.StrictMode>
 );

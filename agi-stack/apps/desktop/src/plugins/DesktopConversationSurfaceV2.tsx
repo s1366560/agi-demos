@@ -11,7 +11,7 @@ export interface DesktopConversationSurfacePropsV2 {
 
 export function DesktopConversationSurfaceV2({ input }: DesktopConversationSurfacePropsV2) {
   return (
-    <>
+    <div className="desktop-conversation-surface">
       <ChatPanel {...input} />
       <PlatformPluginConversationSlots
         active
@@ -22,6 +22,6 @@ export function DesktopConversationSurfaceV2({ input }: DesktopConversationSurfa
         sending={input.sending}
         workflowTarget={input.activeWorkflowTarget}
       />
-    </>
+    </div>
   );
 }

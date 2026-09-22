@@ -1,7 +1,9 @@
+import { timelineToolResultFailed } from '../chat/toolResultStatus';
 import type { AgentTimelineItem, DesktopRunStatus, ToolDisplayData } from '../../types';
-import { pairToolCallItems } from '../chat/chatTimelineModel';
+import { exactToolResults, timelineExecutionScope } from '../chat/timelineExecutionIdentity';
+import { pairToolCallItems, toolCallPairStatus } from '../chat/chatTimelineModel';
 
-export type SessionToolGroupStatus = 'running' | 'complete' | 'failed';
+export type SessionToolGroupStatus = 'running' | 'complete' | 'failed' | 'stopped';
 
 export type SessionNarrativeNode =
   | {
@@ -50,7 +52,8 @@ export function buildSessionNarrative(
   items: AgentTimelineItem[],
   conversationId?: string,
 ): SessionNarrativeNode[] {
-  const linkedResults = exactExecutionResults(items, conversationId);
+  const uniqueItems = [...new Map(items.map((item) => [item.id, item])).values()];
+  const linkedResults = exactExecutionResults(uniqueItems, conversationId);
   const linkedResultIds = new Set([...linkedResults.values()].map((item) => item.id));
   const narrative: SessionNarrativeNode[] = [];
   let structuredItems: AgentTimelineItem[] = [];
@@ -60,7 +63,7 @@ export function buildSessionNarrative(
     structuredItems = [];
   };
 
-  items.forEach((item) => {
+  uniqueItems.forEach((item) => {
     if (
       item.role !== 'user' &&
       item.role !== 'assistant' &&
@@ -139,10 +142,7 @@ export function sessionActivitySummary(input: {
 }
 
 function toolGroupCount(items: AgentTimelineItem[]): number {
-  const calls = items.filter((item) => item.type === 'act').length;
-  if (calls) return calls;
-  const namedTools = new Set(items.map((item) => item.toolName).filter(Boolean));
-  return Math.max(namedTools.size, items.length ? 1 : 0);
+  return pairToolCallItems(items.filter((item) => item.type === 'act' || item.type === 'observe')).length;
 }
 
 function appendStructuredNarrative(
@@ -170,7 +170,7 @@ function appendStructuredNarrative(
       kind: 'tool_group',
       id: `tool-group:${toolItems[0].id}`,
       toolCount: toolGroupCount(toolItems),
-      status: toolGroupStatus(toolItems),
+      status: sessionToolGroupStatus(toolItems),
       items: toolItems,
     });
     toolItems = [];
@@ -178,6 +178,12 @@ function appendStructuredNarrative(
 
   items.forEach((item) => {
     if (item.type !== 'act' && item.type !== 'observe') {
+      const scope = timelineExecutionScope(item);
+      const owner = toolItems.find((candidate) => candidate.type === 'act' || candidate.type === 'observe');
+      if (owner && scope && scope === timelineExecutionScope(owner) && isSessionDiagnostic(item)) {
+        toolItems.push(item);
+        return;
+      }
       flushToolItems();
       narrative.push({ kind: 'item', id: item.id, item });
       return;
@@ -185,6 +191,8 @@ function appendStructuredNarrative(
     if (claimedResultIds.has(item.id) || linkedResultIds.has(item.id)) return;
     const pair = pairsByCallId.get(item.id);
     if (!pair) return;
+    const owner = toolItems.find((candidate) => candidate.type === 'act' || candidate.type === 'observe');
+    if (owner && timelineExecutionScope(owner) !== timelineExecutionScope(pair.call)) flushToolItems();
     toolItems.push(pair.call);
     if (pair.result) toolItems.push(pair.result);
   });
@@ -211,12 +219,22 @@ function checkpointTitleKey(item: AgentTimelineItem | undefined): string | null 
   return null;
 }
 
-function toolGroupStatus(items: AgentTimelineItem[]): SessionToolGroupStatus {
-  if (items.some((item) => item.isError || Boolean(item.error))) return 'failed';
-  const acts = items.filter((item) => item.type === 'act').length;
-  const observations = items.filter((item) => item.type === 'observe').length;
-  if (items[items.length - 1]?.type === 'act' || acts > observations) return 'running';
-  return 'complete';
+export function sessionToolGroupStatus(items: AgentTimelineItem[]): SessionToolGroupStatus {
+  if (items.some((item) => item.isError || Boolean(item.error) ||
+    (item.type === 'observe' && timelineToolResultFailed(item)))) return 'failed';
+  const statuses = items.filter((item) => item.type === 'run_status').map((item) => {
+    const payload = isRecord(item.payload) ? item.payload : {};
+    return payload.status ?? item.status;
+  });
+  const status = statuses.at(-1);
+  if (status === 'failed') return 'failed';
+  if (status === 'stopped' || status === 'cancelled' || status === 'canceled') return 'stopped';
+  if (status === 'running' || status === 'pending' || status === 'queued') return 'running';
+  const pairs = pairToolCallItems(items.filter((item) => item.type === 'act' || item.type === 'observe'));
+  if (!pairs.length) return status === 'completed' ? 'complete' : 'running';
+  if (pairs.some((pair) => toolCallPairStatus(pair) === 'failed')) return 'failed';
+  return pairs.some((pair) => ['running', 'preparing'].includes(toolCallPairStatus(pair)))
+    ? 'running' : 'complete';
 }
 
 function timelineDisplay(item: AgentTimelineItem): ToolDisplayData | null {
@@ -240,38 +258,33 @@ function exactExecutionResults(
   conversationId: string | undefined,
 ): Map<string, AgentTimelineItem> {
   const results = new Map<string, AgentTimelineItem>();
-  if (!conversationId) return results;
-  const pending = new Map<string, AgentTimelineItem | null>();
+  let segment: AgentTimelineItem[] = [];
+  const flush = () => {
+    for (const [id, result] of exactToolResults(segment)) results.set(id, result);
+    segment = [];
+  };
   for (const item of items) {
     if (item.role === 'user' || ['user_message', 'complete', 'run_status', 'environment_selected'].includes(item.type)) {
-      pending.clear();
+      flush();
       continue;
     }
-    if (item.type !== 'act' && item.type !== 'observe') continue;
-    const records = [item, item.payload, item.metadata].filter(
-      (value): value is Record<string, unknown> =>
-        typeof value === 'object' && value !== null && !Array.isArray(value),
-    );
-    const identity = (names: string[]): string | null => {
-      const values = records.flatMap((record) => names.map((name) => record[name]))
-        .filter((value) => value !== undefined && value !== null);
-      if (values.some((value) => typeof value !== 'string' || !value)) return null;
-      return new Set(values).size === 1 ? values[0] as string : values.length === 0 ? '' : null;
-    };
-    const cid = identity(['conversation_id', 'conversationId']);
-    const execution = identity(['execution_id', 'tool_execution_id']);
-    const run = identity(['run_id', 'runId']);
-    const round = identity(['round_id', 'roundId']);
-    const child = identity(['subagent_id', 'subagentId']);
-    if (cid === null || (cid && cid !== conversationId) || !execution || run === null || round === null || child === null) continue;
-    const key = JSON.stringify([conversationId, execution, run, round, child]);
-    if (item.type === 'act') {
-      pending.set(key, pending.has(key) ? null : item);
-    } else {
-      const call = pending.get(key);
-      if (call) results.set(call.id, item);
-      pending.delete(key);
-    }
+    const records = [item, item.payload, item.metadata].filter(isRecord);
+    if (conversationId && records.some((record) =>
+      ['conversation_id', 'conversationId'].some((key) => record[key] != null && record[key] !== conversationId))) continue;
+    segment.push(item);
   }
+  flush();
   return results;
+}
+
+// These protocol events are internal observations, never user requests or agent prose.
+const diagnosticTypes = new Set([
+  'ack', 'knowledge_tool_audit', 'tool_progress', 'tool_execution_progress',
+  'tool_selection', 'tool_policy', 'toolset_changed', 'tool_selected',
+  'context_usage', 'context_compressed', 'context_compacted',
+  'agent_decision_logged', 'agent_supervisor_verdict',
+]);
+
+function isSessionDiagnostic(item: AgentTimelineItem): boolean {
+  return diagnosticTypes.has(item.type) && !item.isError && !item.error;
 }

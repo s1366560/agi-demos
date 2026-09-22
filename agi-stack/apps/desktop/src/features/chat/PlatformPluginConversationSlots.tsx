@@ -1,3 +1,6 @@
+import { CubeIcon } from '@radix-ui/react-icons';
+import { ConversationToolbarItem } from './ConversationToolbar';
+import { ChatOverflowMenu } from './ChatOverflowMenu';
 /** Desktop V2 conversation-slot outlet. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -64,30 +67,40 @@ export function PlatformPluginConversationSlots({
     [conversationId, disabled, messageCount, sending, t, workflowTarget],
   );
   const visible = slots.filter((slot) => slot.slot === 'conversation_renderer');
-  if (visible.length === 0) return null;
+  if (visible.length === 0 && !error && !hostError) return null;
 
   return (
-    <section
-      className="platform-plugin-conversation-slots"
-      aria-live="polite"
-      data-loading={loading || undefined}
-      data-error={hostError ?? error ?? undefined}
-    >
-      {visible.map((slot) => {
-        const module = composition.resolveConversationRendererModule(slot);
-        if (module === null) return null;
-        return (
-          <DesktopConversationRendererFrameV2
-            key={`${slot.pluginId}:${slot.id}`}
-            module={module}
-            onError={setHostError}
-            onOpenCommands={onOpenCommands}
-            payload={payload}
-            slot={slot}
-          />
-        );
-      })}
-    </section>
+    <ConversationToolbarItem>
+      <ChatOverflowMenu
+        className="conversation-plugin-menu"
+        label={t('settings.plugins')}
+        icon={<CubeIcon aria-hidden="true" />}
+        forceOpen={Boolean(hostError || error)}
+      >
+        <div
+          className="platform-plugin-conversation-slots"
+          aria-live="polite"
+          data-loading={loading || undefined}
+          data-error={hostError ?? error ?? undefined}
+        >
+          {hostError || error ? <p role="alert">{hostError ?? error}</p> : null}
+          {visible.map((slot) => {
+            const module = composition.resolveConversationRendererModule(slot);
+            if (module === null) return null;
+            return (
+              <DesktopConversationRendererFrameV2
+                key={`${slot.pluginId}:${slot.id}`}
+                module={module}
+                onError={setHostError}
+                onOpenCommands={onOpenCommands}
+                payload={payload}
+                slot={slot}
+              />
+            );
+          })}
+        </div>
+      </ChatOverflowMenu>
+    </ConversationToolbarItem>
   );
 }
 

@@ -180,3 +180,33 @@ test('signed plugin events preserve authorized JSON output without fabricating w
     assert.equal(toolCallPairStatus(pairs[0]),'complete');
   }
 });
+
+test('observe failure normalization trusts boolean envelope status without scanning content', () => {
+  for (const toolOutput of [{ isError: true }, JSON.stringify({ is_error: true })]) {
+    const item = timelineItemFromSocketEvent({ type: 'observe', data: { is_error: false, tool_output: toolOutput } });
+    assert.equal(item.isError, true);
+    assert.deepEqual(item.toolOutput, toolOutput);
+  }
+  for (const toolOutput of ['error', { isError: 'true' }, { content: [{ text: 'failed' }], isError: false }, { data: { isError: true } }]) {
+    assert.equal(timelineItemFromSocketEvent({ type: 'observe', data: { tool_output: toolOutput } }).isError, false);
+  }
+  assert.equal(timelineItemFromSocketEvent({ type: 'observe', isError: true, data: { is_error: false } }).isError, true);
+  assert.equal(timelineItemFromSocketEvent({ type: 'observe', data: { is_error: false, error: 'Denied' } }).isError, true);
+});
+
+test('runtime errors stay failed and preserve known metadata without requiring a flag', () => {
+  const item = timelineItemFromSocketEvent({ type: 'error', payload: { error: 'Busy', error_code: 'runtime_conflict' } });
+  assert.equal(item.isError, true);
+  assert.equal(item.error, 'Busy');
+  assert.equal(item.payload.error_code, 'runtime_conflict');
+});
+
+test('live todowrite preserves structured failure without classifying error prose', () => {
+  const output = { success: false, code: 'PLAN_EXECUTION_NOT_APPROVED', error: 'Plan mode requires approval' };
+  for (const toolOutput of [output, JSON.stringify(output), { success: false }, { error: { code: 'DENIED' } }]) {
+    const item = timelineItemFromSocketEvent({ type: 'observe', data: { tool_name: 'todowrite', tool_output: toolOutput, is_error: false } });
+    assert.equal(item.isError, true);
+    assert.deepEqual(item.toolOutput, toolOutput);
+  }
+  assert.equal(timelineItemFromSocketEvent({type:'observe',data:{tool_output:{success:'false',error:null}}}).isError,false);
+});

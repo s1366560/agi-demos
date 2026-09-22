@@ -13,13 +13,13 @@
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  background: var(--desktop-surface-12);
+  background: transparent;
   border-right: 1px solid var(--desktop-border-5);
 }
 
 .managed-resource-catalog > header {
   display: flex;
-  min-height: 68px;
+  min-height: 64px;
   align-items: center;
   flex-shrink: 0;
   flex-wrap: wrap;
@@ -34,7 +34,7 @@
 }
 
 .managed-resource-catalog > header span,
-.managed-resource-identity > div:nth-child(2) > span,
+.managed-resource-identity-copy > span,
 .managed-resource-card header span {
   color: var(--desktop-gray-3);
   font-size: 10.5px;
@@ -371,7 +371,7 @@
   flex-wrap: wrap;
   gap: 6px 12px;
   padding: 6px 14px;
-  background: var(--desktop-surface-7);
+  background: transparent;
   border-bottom: 1px solid var(--desktop-border-5);
 }
 
@@ -463,10 +463,10 @@
 
 .managed-resource-identity {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 150px;
+  grid-template-columns: minmax(0, 1fr) 150px;
   align-items: start;
   gap: 13px;
-  padding: 22px 24px 18px;
+  padding: 24px;
 }
 
 .managed-resource-identity-icon {
@@ -519,7 +519,7 @@
   line-height: 1.55;
 }
 
-.managed-resource-identity > div:nth-child(2) > div {
+.managed-resource-identity-copy > div {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -606,8 +606,8 @@
 .managed-resource-overview {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 10px;
-  padding: 16px 20px 30px;
+  gap: 20px;
+  padding: 0 24px 32px;
 }
 
 .managed-resource-action-error {
@@ -632,10 +632,12 @@
 
 .managed-resource-fact-grid > div {
   min-width: 0;
-  padding: 11px;
-  background: var(--desktop-surface-12);
-  border: 1px solid var(--desktop-border-5);
-  border-radius: 6px;
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+
+  border-bottom: 1px solid var(--desktop-border-5);
 }
 
 .managed-resource-fact-grid span {
@@ -657,10 +659,10 @@
 .managed-resource-card {
   grid-column: span 6;
   min-width: 0;
-  padding: 13px;
-  background: var(--desktop-surface-12);
-  border: 1px solid var(--desktop-border-5);
-  border-radius: 7px;
+  padding: 12px 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .managed-resource-card > header {
@@ -675,7 +677,7 @@
 .managed-resource-card h2 {
   margin: 4px 0 0;
   color: var(--desktop-text-mist);
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .managed-resource-chips {
@@ -756,7 +758,7 @@
   }
 
   .managed-resource-identity {
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     padding-right: 18px;
     padding-left: 18px;
   }

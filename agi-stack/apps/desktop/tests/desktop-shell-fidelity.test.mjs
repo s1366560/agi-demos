@@ -544,18 +544,9 @@ test('notifications never open a standalone workspace review route', () => {
   assert.doesNotMatch(globalStyles, /review-panel-collapsed/);
 });
 
-test('sidebar bell opens the real Activity inbox workbench section', () => {
-  // The bell now lives in the primary view nav and navigates via onNavigate(id).
-  assert.match(
-    sidebarSource,
-    /\{ id: 'activity', labelKey: 'sidebar\.activity', icon: BellIcon \}/,
-  );
-  assert.match(sidebarSource, /onNavigate\(id\)/);
-  assert.doesNotMatch(sidebarSource, /<i \/>/);
-  assert.match(
-    sidebarSource,
-    /id === 'activity' && activityUnreadCount > 0 \? \(\s*<small>\{activityUnreadCount\}<\/small>\s*\) : null/,
-  );
+test('Activity inbox remains reachable through the unified feature directory', () => {
+  assert.match(sidebarSource, /onOpenFeatureDirectory\(event\.currentTarget\)/);
+  assert.doesNotMatch(sidebarSource, /icon: BellIcon/);
   assert.match(appSource, /if \(section === 'activity'\) switchSection\('activity'\)/);
   assert.match(
     appSource,
@@ -613,7 +604,7 @@ test('command palette derives Tenant Tasks with every canonical production route
 });
 
 test('sidebar exposes one focus-restoring all-features launcher', () => {
-  assert.equal((sidebarSource.match(/featureDirectory\.open/g) ?? []).length, 1);
+  assert.equal((sidebarSource.match(/onClick=\{\(event\) => onOpenFeatureDirectory\(event\.currentTarget\)\}/g) ?? []).length, 1);
   assert.match(sidebarSource, /aria-haspopup="dialog"/);
   assert.match(sidebarSource, /onOpenFeatureDirectory\(event\.currentTarget\)/);
   assert.match(
@@ -698,12 +689,13 @@ test('conversation detail restores the mission-control context rail without dupl
   assert.doesNotMatch(sessionWorkspaceSource, /surface !== 'conversation'/);
 });
 
-test('conversation header and thread chrome follow the prototype hierarchy', () => {
-  assert.match(sessionStyles, /grid-template-rows:\s*76px minmax\(0, 1fr\)/);
-  assert.match(sessionWorkspaceSource, /session\.sessionLog/);
+test('conversation chrome keeps actions without duplicating title and runtime details', () => {
+  assert.match(sessionStyles, /grid-template-rows:\s*auto minmax\(0, 1fr\)/);
+  assert.doesNotMatch(sessionWorkspaceSource, /session\.sessionLog|session-pane-label/);
   assert.match(sessionWorkspaceSource, /session\.openTask/);
-  assert.match(sessionWorkspaceSource, /session\.openCanvas/);
-  assert.match(sessionWorkspaceSource, /viewModel\.participantCount/);
+  assert.match(sessionWorkspaceSource, /onOpenCanvas\('overview'\)/);
+  assert.doesNotMatch(sessionWorkspaceSource, /viewModel\.participantCount/);
+  assert.match(sessionWorkspaceSource, /className="session-workspace-details"/);
 });
 
 test('conversation more-actions menu dismisses outside and restores focus on Escape', () => {
@@ -729,7 +721,7 @@ test('conversation more-actions menu dismisses outside and restores focus on Esc
   );
   assert.match(
     sessionWorkspaceSource,
-    /onToggle=\{\(event\) => setMoreActionsOpen\(event\.currentTarget\.open\)\}/,
+    /onToggle=\{\(event\) =>\s*setMoreActionsOpen\(event\.currentTarget\.open\)\s*\}/,
   );
 });
 
@@ -748,12 +740,7 @@ test('session status chrome localizes every workspace-attempt state', () => {
     sessionWorkspaceSource,
     /return labels\[normalized\] \? t\(labels\[normalized\]\) : status/,
   );
-  assert.match(sessionWorkspaceSource, /status === 'accepted'[\s\S]*return 'green'/);
-  assert.match(
-    sessionWorkspaceSource,
-    /status === 'awaiting_leader_adjudication'[\s\S]*return 'amber'/,
-  );
-  assert.match(sessionWorkspaceSource, /status === 'rejected'[\s\S]*return 'red'/);
+  assert.doesNotMatch(sessionWorkspaceSource, /<Badge/);
 });
 
 test('primary work canvases keep governance identifiers out of the user narrative', () => {
@@ -892,8 +879,8 @@ test('session chrome never renders raw placeholder or mislabeled copy', () => {
   // prototype mission-control refactor 2026-09: snapshot rows are now <dt>/<dd>.)
   assert.match(contextRailSource, /<dt>\{t\('session\.runMode'\)\}<\/dt>/);
   assert.doesNotMatch(contextRailSource, /<span>\{t\('session\.currentStage'\)\}<\/span>/);
-  // An untitled session falls back to localized copy instead of a hardcoded English literal.
-  assert.match(sessionWorkspaceSource, /viewModel\.title \|\| t\('session\.untitled'\)/);
+  // The session title is owned by the application titlebar rather than duplicated here.
+  assert.doesNotMatch(sessionWorkspaceSource, /<h1/);
   for (const key of ['session.runMode', 'session.untitled', 'chat.modelNotConfigured']) {
     assert.equal(
       i18nSource.match(new RegExp(`'${key.replace('.', '\\.')}'`, 'g'))?.length,
@@ -918,9 +905,10 @@ test('sidebar and context rail widths are user resizable', () => {
     globalStyles,
     /--desktop-sidebar-width:\s*var\(--desktop-sidebar-preferred-width,\s*220px\)/,
   );
-  assert.match(
+  assert.doesNotMatch(
     sidebarStyles,
-    /--desktop-sidebar-width:\s*min\(\s*var\(--desktop-sidebar-preferred-width,\s*220px\),\s*200px\s*\)/,
+    /--desktop-sidebar-width:\s*min\([^;]*200px/,
+    'narrow viewports must retain the user-selected sidebar width',
   );
   assert.match(sidebarSurfaceSource, /<ResizeHandle/);
   assert.doesNotMatch(authenticatedShellSurfaceSource, /<ResizeHandle/);

@@ -717,3 +717,36 @@
   .workspace-design-system-card:last-child { grid-column: 1 / -1; }
   .workspace-design-lower-grid { grid-template-columns: 1fr; }
 }
+
+/* Shared workspace content uses spacing to establish hierarchy. */
+.workspace-design-overview {
+  padding: 28px clamp(20px, 4vw, 56px) 40px;
+  background: var(--desktop-bg);
+}
+.workspace-design-title-line h1 { font-size: 24px; }
+.workspace-design-header p { font-size: 13px; }
+.workspace-design-goal-card,
+.workspace-design-system-card,
+.workspace-design-sessions-card,
+.workspace-design-activity-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.workspace-design-metric {
+  border: 0;
+  background: var(--desktop-panel);
+}
+.workspace-design-goal-facts > span,
+.workspace-design-knowledge-metrics > div {
+  border: 0;
+  background: transparent;
+}
+.workspace-design-summary-grid,
+.workspace-design-system-grid,
+.workspace-design-lower-grid { gap: 24px; }
+.workspace-design-system-grid {
+  padding-block: 20px;
+  border-block: 1px solid var(--desktop-border-soft);
+}

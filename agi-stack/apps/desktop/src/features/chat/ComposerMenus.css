@@ -649,3 +649,28 @@
     display: none;
   }
 }
+
+.composer-options-button {
+  display: inline-flex;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--desktop-gray-26);
+}
+
+.composer-options-button:hover,
+.new-thread-view .picker-chip:hover {
+  background: var(--desktop-surface-31);
+}
+
+.composer-options-button:focus-visible,
+.new-thread-view .picker-chip:focus-visible,
+.new-thread-view .send-button:focus-visible {
+  outline: 2px solid var(--desktop-gray-26);
+  outline-offset: 2px;
+}

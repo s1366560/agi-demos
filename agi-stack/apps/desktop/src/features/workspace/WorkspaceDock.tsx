@@ -580,6 +580,8 @@ function ConversationTreeRow({
   const timeLabel = recencyTimeLabel(recencyGroup, activityAt, locale, t);
 
   const title = conversation.title || conversation.id;
+  const showStatus = statusPresentation.tone !== 'idle' && statusPresentation.tone !== 'completed';
+  const details = [title, sessionSummary, statusTitle, timeLabel].filter(Boolean).join('\n');
   const hasLifecycleActions = Boolean(onRename || onDelete);
 
   return (
@@ -588,21 +590,22 @@ function ConversationTreeRow({
         className={`workspace-tree-session-row ${selected ? 'selected' : ''}`}
         type="button"
         aria-current={selected ? 'page' : undefined}
+        title={details}
         onClick={onSelect}
       >
-        <i
-          className="workspace-tree-session-status"
-          data-status={statusPresentation.tone}
-          data-stale={statusPresentation.stale ? 'true' : undefined}
-          role="img"
-          aria-label={statusTitle}
-          title={statusTitle}
-        />
+        {showStatus ? (
+          <i
+            className="workspace-tree-session-status"
+            data-status={statusPresentation.tone}
+            data-stale={statusPresentation.stale ? 'true' : undefined}
+            role="img"
+            aria-label={statusTitle}
+            title={statusTitle}
+          />
+        ) : null}
         <span>
           <strong>{title}</strong>
-          {sessionSummary ? <small>{sessionSummary}</small> : null}
         </span>
-        {timeLabel ? <time dateTime={activityAt}>{timeLabel}</time> : null}
       </button>
       {hasLifecycleActions ? (
         <details className="workspace-tree-session-actions">

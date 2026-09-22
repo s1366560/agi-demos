@@ -92,7 +92,9 @@ export function deriveDesktopNavigationDiscoveryEntries<TModule>({
       const groupLabel = translate(group.labelKey);
       const description =
         metadata.descriptionKey === 'featureDirectory.routeDescription'
-          ? translate(metadata.descriptionKey, { label })
+          ? translate(
+              `featureDirectory.scope.${definition.scope.includes('project') ? 'project' : 'tenant'}`,
+            )
           : translate(metadata.descriptionKey);
       const searchText = [
         label,

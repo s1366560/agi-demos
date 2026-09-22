@@ -14,10 +14,10 @@ test('consecutive tool calls are grouped without merging surrounding conversatio
   const narrative = buildSessionNarrative([
     { id: 'user-1', type: 'user_message', role: 'user', content: 'Inspect the runner.' },
     { id: 'thought-1', type: 'thought', content: 'The fixture may be shared.' },
-    { id: 'act-1', type: 'act', toolName: 'read_file' },
-    { id: 'observe-1', type: 'observe', toolName: 'read_file' },
-    { id: 'act-2', type: 'act', toolName: 'run_tests' },
-    { id: 'observe-2', type: 'observe', toolName: 'run_tests' },
+    { id: 'act-1', type: 'act', toolName: 'read_file', tool_call_id: 'read' },
+    { id: 'observe-1', type: 'observe', toolName: 'read_file', tool_call_id: 'read' },
+    { id: 'act-2', type: 'act', toolName: 'run_tests', tool_call_id: 'test' },
+    { id: 'observe-2', type: 'observe', toolName: 'run_tests', tool_call_id: 'test' },
     { id: 'agent-1', type: 'assistant_message', role: 'assistant', content: 'Fixed.' },
   ]);
 
@@ -40,14 +40,14 @@ test('thought does not split a structurally matched act and observe pair', () =>
     {
       id: 'act-1',
       type: 'act',
-      toolName: 'read_file',
+      toolName: 'read_file', tool_call_id: 'read',
       tool_execution_id: 'execution-1',
     },
     { id: 'thought-1', type: 'thought', content: 'I should inspect the result.' },
     {
       id: 'observe-1',
       type: 'observe',
-      toolName: 'read_file',
+      toolName: 'read_file', tool_call_id: 'read',
       tool_execution_id: 'execution-1',
     },
   ]);
@@ -75,9 +75,9 @@ test('group disclosure keeps explicit user state ahead of changing defaults', ()
 });
 
 test('knowledge audit preserves paired tool results without becoming completion evidence', () => {
-  const call = { id: 'search-call', type: 'act', toolName: 'knowledge_search' };
+  const call = { id: 'search-call', type: 'act', toolName: 'knowledge_search', tool_call_id: 'search' };
   const audit = { id: 'search-audit', type: 'knowledge_tool_audit', data: { status: 'returned' } };
-  const result = { id: 'search-result', type: 'observe', toolName: 'knowledge_search' };
+  const result = { id: 'search-result', type: 'observe', toolName: 'knowledge_search', tool_call_id: 'search' };
   for (const isError of [false, true]) {
     const narrative = buildSessionNarrative([call, audit, { ...result, isError }]);
     assert.deepEqual(narrative.map((node) => node.kind), ['tool_group', 'item']);
@@ -106,13 +106,13 @@ test('knowledge audit does not pair tools across a conversation message boundary
 
 test('tool groups expose running and failed states from structural events', () => {
   const running = buildSessionNarrative([
-    { id: 'act-1', type: 'act', toolName: 'run_tests' },
+    { id: 'act-1', type: 'act', toolName: 'run_tests', tool_call_id: 'test' },
   ]);
   assert.equal(running[0].status, 'running');
 
   const failed = buildSessionNarrative([
-    { id: 'act-1', type: 'act', toolName: 'run_tests' },
-    { id: 'observe-1', type: 'observe', toolName: 'run_tests', isError: true },
+    { id: 'act-1', type: 'act', toolName: 'run_tests', tool_call_id: 'test' },
+    { id: 'observe-1', type: 'observe', toolName: 'run_tests', tool_call_id: 'test', isError: true },
   ]);
   assert.equal(failed[0].status, 'failed');
 });
@@ -137,7 +137,7 @@ test('activity summary uses the latest event and leaves missing evidence unavail
       {
         id: 'tool-1',
         type: 'observe',
-        toolName: 'run_tests',
+        toolName: 'run_tests', tool_call_id: 'test',
         display: { title: 'Targeted tests', summary: '18 tests passed' },
       },
     ],
@@ -232,11 +232,11 @@ test('unknown protocol identifiers use localized fallbacks instead of leaking wi
 
 test('subagent lifecycle and control acknowledgments preserve the parent tool pair', () => {
   const events = [
-    { id: 'mcp-call', type: 'act', toolName: 'native-audit' },
-    { id: 'mcp-result', type: 'observe', toolName: 'native-audit' },
-    { id: 'child-call', type: 'act', toolName: 'subagent' },
+    { id: 'mcp-call', type: 'act', toolName: 'native-audit', tool_call_id: 'audit' },
+    { id: 'mcp-result', type: 'observe', toolName: 'native-audit', tool_call_id: 'audit' },
+    { id: 'child-call', type: 'act', toolName: 'subagent', tool_call_id: 'child' },
     ...['subagent_routed', 'subagent_started', 'ack', 'subagent_session_update', 'subagent_completed'].map((type) => ({ id: type, type })),
-    { id: 'child-result', type: 'observe', toolName: 'subagent' },
+    { id: 'child-result', type: 'observe', toolName: 'subagent', tool_call_id: 'child' },
   ];
   for (const isError of [false, true]) {
     const narrative = buildSessionNarrative(events.map((event) => event.id === 'child-result' ? { ...event, isError } : event));

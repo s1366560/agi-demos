@@ -1,0 +1,142 @@
+/* Shared presentation for native management pages; permission and state rendering
+   remain owned by each route. */
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1120px;
+  min-width: 0;
+  margin-inline: auto;
+  padding: 24px clamp(20px, 3vw, 40px) 40px;
+  color: var(--desktop-text);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page) h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page) h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page) > header {
+  margin-bottom: 20px;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page) > header p {
+  margin: 0 0 8px;
+  color: var(--desktop-muted);
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page) > section {
+  padding-block: 20px;
+  border-top: 1px solid var(--desktop-border);
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page) :is(ul, ol) {
+  padding: 0;
+  margin: 16px 0;
+  list-style: none;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page) li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--desktop-border);
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-block: 16px;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) :is(input, select, textarea) {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  color: var(--desktop-text);
+  font: inherit;
+  background: var(--desktop-surface-3);
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) input[type='checkbox'] {
+  min-height: auto;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page, [data-tenant-admin-state]) button {
+  min-height: 32px;
+  padding: 6px 12px;
+  color: var(--desktop-text);
+  font: inherit;
+  background: var(--gray-3);
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page, [data-tenant-admin-state]) button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) :is(th, td) {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--desktop-border);
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) pre {
+  max-width: 100%;
+  padding: 12px;
+  overflow: auto;
+  background: var(--gray-2);
+  border-radius: 6px;
+}
+
+[data-tenant-admin-state] {
+  padding: 32px;
+  color: var(--desktop-muted);
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) :is([role='alert'], [role='status']) {
+  margin-block: 12px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--desktop-border-strong);
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route]) [role='alert'] {
+  color: var(--desktop-red);
+}
+
+:is([data-tenant-admin-route], [data-tenant-management-route], .project-administration-page, [data-tenant-admin-state]) :focus-visible {
+  outline: 2px solid var(--desktop-cyan);
+  outline-offset: 3px;
+}

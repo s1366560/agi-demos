@@ -73,18 +73,10 @@ test('preparing status flows from the stream-merge model into the timeline row',
   );
   assert.match(chatTimelineModelSource, /if \(toolCallArgumentsStreaming\(pair\.call\)\) return 'preparing'/);
 
-  // The row renders the web-style blue pill with a pulsing dot and keeps the
-  // live arguments block visible instead of the collapsed details.
-  assert.match(chatTimelineSource, /status === 'preparing'/);
-  assert.match(chatTimelineSource, /className="timeline-status preparing"/);
-  assert.match(chatTimelineSource, /className="timeline-status-dot"/);
-  assert.match(chatTimelineSource, /t\('chat\.status\.preparing'\)/);
-  assert.match(chatTimelineSource, /<ToolCallPreparingBody pair=\{pair\} \/>/);
-  assert.match(chatTimelineSource, /t\('chat\.buildingArguments'\)/);
-  assert.match(chatTimelineSource, /t\('chat\.preparingToolCall'\)/);
-  assert.match(chatTimelineSource, /className="timeline-tool-args-stream"/);
-  assert.match(chatTimelineSource, /className="timeline-tool-args-caret"/);
-  assert.match(chatTimelineSource, /className="timeline-tool-preparing-empty"/);
+  assert.match(chatTimelineSource, /timeline-step-status/);
+  assert.match(chatTimelineSource, /inspect\(items, event.currentTarget\)/);
+  assert.doesNotMatch(chatTimelineSource, /<ToolCallPreparingBody pair=\{pair\} \/>/);
+
 });
 
 test('preparing styles use the running blue family with reduced-motion fallbacks', () => {

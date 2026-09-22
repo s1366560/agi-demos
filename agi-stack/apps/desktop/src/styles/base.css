@@ -97,3 +97,38 @@ button:active {
     transform: none;
   }
 }
+
+/* Scrollbar dimensions are independent of the theme's spacing scale. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a8, var(--desktop-border)) transparent;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--gray-a8, var(--desktop-border));
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--gray-a10, var(--desktop-border)); }
+.radix-themes .rt-ScrollAreaScrollbar {
+  --scrollarea-scrollbar-size: 6px;
+  --scrollarea-scrollbar-border-radius: 999px;
+  background: transparent;
+}
+.radix-themes .rt-ScrollAreaScrollbar[data-orientation='vertical'] { width: 6px; }
+.radix-themes .rt-ScrollAreaScrollbar[data-orientation='horizontal'] { height: 6px; }
+.radix-themes .rt-ScrollAreaThumb { background: var(--gray-a8); }
+.radix-themes .rt-ScrollAreaThumb:hover { background: var(--gray-a10); }
+
+/* A scroll viewport is a keyboard scroll target, not a selected content card. */
+.chat-shell .message-scroll:focus,
+.chat-shell .message-scroll [data-radix-scroll-area-viewport]:focus {
+  outline: none;
+}
+.chat-shell .message-scroll:focus-visible,
+.chat-shell .message-scroll [data-radix-scroll-area-viewport]:focus-visible {
+  box-shadow: inset 2px 0 0 var(--desktop-border);
+}
+.chat-shell .message-scroll .rt-ScrollAreaViewportFocusRing {
+  outline: none;
+}

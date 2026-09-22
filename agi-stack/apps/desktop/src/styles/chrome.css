@@ -8,12 +8,12 @@
   width: 100vw;
   height: 100vh;
   grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr) auto;
-  grid-template-rows: 0 minmax(0, 1fr) 24px;
+  grid-template-rows: 0 minmax(0, 1fr) auto;
   background: var(--desktop-bg);
 }
 
 .app-shell.desktop-window {
-  grid-template-rows: 36px minmax(0, 1fr) 24px;
+  grid-template-rows: 36px minmax(0, 1fr) auto;
 }
 
 .app-shell.sidebar-collapsed {
@@ -134,12 +134,17 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 32px minmax(0, 1fr);
+  grid-template-rows: 0 minmax(0, 1fr);
   overflow: hidden;
   background: var(--desktop-bg);
 }
 
+.workbench:has(> .workbench-tab-bar) {
+  grid-template-rows: 32px minmax(0, 1fr);
+}
+
 .workbench-content {
+  grid-row: 2;
   position: relative;
   display: grid;
   min-width: 0;
@@ -267,11 +272,11 @@
 .app-shell,
 .app-shell.desktop-window {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 0 minmax(0, 1fr) 24px;
+    grid-template-rows: 0 minmax(0, 1fr) auto;
   }
 
 .app-shell.desktop-window {
-    grid-template-rows: 36px minmax(0, 1fr) 24px;
+    grid-template-rows: 36px minmax(0, 1fr) auto;
   }
 
 .titlebar {

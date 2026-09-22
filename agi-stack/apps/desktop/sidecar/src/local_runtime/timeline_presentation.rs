@@ -45,6 +45,38 @@ pub(super) fn display(tool: &str) -> Value {
     json!({ "kind": tool_kind(tool).as_str() })
 }
 
+/// Only protocol-level status fields determine failure, never prose in tool content.
+pub(super) fn tool_result_is_error(output_json: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<Value>(output_json) else {
+        return false;
+    };
+    value.get("isError").and_then(Value::as_bool) == Some(true)
+        || value.get("is_error").and_then(Value::as_bool) == Some(true)
+        || value.get("success").and_then(Value::as_bool) == Some(false)
+        || value.get("error").is_some_and(|error| {
+            error.as_str().is_some_and(|text| !text.trim().is_empty()) || error.is_object()
+        })
+}
+
+/// These first-party tools share adapters-local-tools::input_path's schema.
+/// Inspect the already-redacted input; never infer paths from output prose.
+pub(super) fn input_file_metadata(tool: &str, input_json: &str) -> Option<Value> {
+    if !matches!(tool, "read" | "write" | "edit") {
+        return None;
+    }
+    let input = serde_json::from_str::<Value>(input_json).ok()?;
+    let path = ["path", "file_path", "filename", "file"]
+        .iter()
+        .find_map(|key| {
+            input
+                .get(*key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+        })?;
+    Some(json!({ "paths": [{ "path": path }] }))
+}
+
 pub(super) fn file_metadata(output_json: &str) -> Option<Value> {
     let value = serde_json::from_str::<Value>(output_json).ok()?;
     diff_stat(&value, 0).map(|stat| {
@@ -179,6 +211,53 @@ const CHECK_TOOLS: &[&str] = &["run_tests", "analyze_coverage"];
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_file_paths_follow_declared_first_party_schema() {
+        assert_eq!(
+            input_file_metadata("read", r#"{"path":"src/main.rs","file":"other"}"#),
+            Some(json!({"paths":[{"path":"src/main.rs"}]}))
+        );
+        assert_eq!(
+            input_file_metadata("edit", r#"{"file":"README.md"}"#),
+            Some(json!({"paths":[{"path":"README.md"}]}))
+        );
+        assert_eq!(
+            input_file_metadata("plugin__read", r#"{"path":"private"}"#),
+            None
+        );
+        assert_eq!(
+            input_file_metadata("read", r#"{"content":"src/main.rs"}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn result_status_preserves_explicit_todowrite_failure() {
+        assert!(tool_result_is_error(
+            r#"{"success":false,"code":"PLAN_EXECUTION_NOT_APPROVED","error":"Plan mode requires approval"}"#
+        ));
+        assert!(tool_result_is_error(r#"{"success":false}"#));
+        assert!(tool_result_is_error(r#"{"error":{"code":"DENIED"}}"#));
+        assert!(tool_result_is_error(r#"{"error":"Denied"}"#));
+        assert!(!tool_result_is_error(r#"{"success":"false","error":null}"#));
+        assert!(!tool_result_is_error(r#"{"nested":{"success":false}}"#));
+    }
+
+    #[test]
+    fn result_status_uses_only_envelope_boolean_flags() {
+        assert!(tool_result_is_error(r#"{"isError":true}"#));
+        assert!(tool_result_is_error(r#"{"is_error":true}"#));
+        assert!(tool_result_is_error(r#"{"isError":false,"is_error":true}"#));
+        for output in [
+            "error",
+            r#"{"isError":"true"}"#,
+            r#"{"content":[{"text":"error"}],"isError":false}"#,
+            r#"{"data":{"isError":true}}"#,
+        ] {
+            assert!(!tool_result_is_error(output), "{output}");
+        }
+    }
 
     #[test]
     fn tool_kind_uses_declared_tool_membership() {

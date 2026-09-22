@@ -9,7 +9,7 @@
   gap: 10px;
   padding: 10px 12px;
   overflow: hidden;
-  border-right: 1px solid var(--desktop-border-soft);
+  border-right: 0;
   background: var(--desktop-sidebar-bg);
   color: var(--desktop-muted);
 }
@@ -67,8 +67,7 @@
 .desktop-design-primary-nav {
   display: grid;
   gap: 2px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--desktop-border-soft);
+  padding-bottom: 4px;
 }
 
 .desktop-design-primary-nav button {
@@ -110,7 +109,7 @@
 }
 
 .desktop-design-primary-nav span {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .desktop-design-primary-nav small {
@@ -167,11 +166,11 @@
 .desktop-design-header-row span {
   overflow: hidden;
   color: var(--desktop-gray-3);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
   text-overflow: ellipsis;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -303,11 +302,12 @@
 }
 
 .desktop-design-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 4px;
   padding-top: 8px;
-  border-top: 1px solid var(--desktop-border-soft);
+  border-top: 0;
 }
 
 .desktop-design-toolbar-button {
@@ -377,12 +377,12 @@
 
 .desktop-design-profile strong {
   color: var(--desktop-text);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .desktop-design-profile small {
   color: var(--desktop-muted);
-  font-size: 7px;
+  font-size: 10px;
 }
 
 .desktop-design-profile > svg {
@@ -475,14 +475,44 @@
 }
 
 @media (max-width: 1180px) {
-  .app-shell {
-    --desktop-sidebar-width: min(
-      var(--desktop-sidebar-preferred-width, 220px),
-      200px
-    );
-  }
-
   .desktop-design-sidebar {
     padding-inline: 9px;
   }
+}
+
+.desktop-design-feature-button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  gap: 6px;
+  padding: 0 6px;
+  font-size: 12px !important;
+}
+
+.desktop-design-sidebar button:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: 2px;
+}
+
+.app-shell.sidebar-collapsed .desktop-design-feature-button span {
+  display: none;
+}
+
+.desktop-design-feature-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desktop-design-feature-button svg { flex: 0 0 16px; }
+.desktop-design-profile { min-width: 0; }
+.app-shell.hierarchy-shell.sidebar-collapsed,
+.app-shell.desktop-window.hierarchy-shell.sidebar-collapsed {
+  --desktop-sidebar-width: 0px;
+  grid-template-columns: 0 minmax(0, 1fr) auto;
+}
+.app-shell.hierarchy-shell.sidebar-collapsed .desktop-design-sidebar {
+  display: none;
 }

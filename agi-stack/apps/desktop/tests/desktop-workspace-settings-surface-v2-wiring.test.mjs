@@ -67,7 +67,7 @@ test('workspace settings is selected from one typed pinned-generation V2 surface
   assert.match(shell, /workspaceSettings:\s*DesktopWorkspaceSettingsInputV2/u);
   assert.match(
     shell,
-    /<DesktopRendererWorkspaceSettingsV2 input=\{surfaces\.workspaceSettings\}\s*\/>/u,
+    /<DesktopRendererWorkspaceSettingsV2\s+input=\{surfaces\.workspaceSettings\}\s*\/>/u,
   );
   assert.doesNotMatch(shell, /<WorkspaceSettingsDialog\b/u);
   assert.doesNotMatch(shell, /features\/workspace\/WorkspaceSettingsDialog/u);

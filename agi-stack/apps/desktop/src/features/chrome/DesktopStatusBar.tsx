@@ -8,6 +8,7 @@ type DesktopStatusBarProps = {
   liveError: string | null;
   tenantName: string;
   projectName: string;
+  onOpenConnectionSettings?: () => void;
 };
 
 /**
@@ -18,28 +19,27 @@ export function DesktopStatusBar({
   connection,
   liveConnected,
   liveError,
-  tenantName,
-  projectName,
+  onOpenConnectionSettings,
 }: DesktopStatusBarProps) {
   const { t } = useI18n();
 
+  // Healthy connections remain available in Settings without occupying a row.
+  const runtimeUnavailable = connection !== 'ready';
+  if (!runtimeUnavailable && liveConnected && !liveError) return null;
+
   return (
-    <footer className="desktop-status-bar">
+    <footer className="desktop-status-bar" role="status" aria-live="polite">
       <span className="desktop-status-bar-segment" data-tone={connection}>
-        {t('statusbar.runtime')}: {t(`runtime.status.${connection}`)}
+        {runtimeUnavailable
+          ? `${t('statusbar.runtime')}: ${t(`runtime.status.${connection}`)}`
+          : `${t('statusbar.live')}: ${t('statusbar.disconnected')}`}
       </span>
-      <span
-        className="desktop-status-bar-segment"
-        data-tone={liveError ? 'error' : liveConnected ? 'ready' : 'idle'}
-        title={liveError ?? undefined}
-      >
-        {t('statusbar.live')}:{' '}
-        {liveConnected ? t('statusbar.connected') : t('statusbar.disconnected')}
-      </span>
-      <span className="desktop-status-bar-spacer" />
-      <span className="desktop-status-bar-segment desktop-status-bar-context">
-        {tenantName} · {projectName}
-      </span>
+      {liveError ? <span className="desktop-status-bar-error">{liveError}</span> : null}
+      {onOpenConnectionSettings ? (
+        <button type="button" onClick={onOpenConnectionSettings}>
+          {t('settings.connectionRecovery')}
+        </button>
+      ) : null}
     </footer>
   );
 }

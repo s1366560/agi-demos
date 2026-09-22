@@ -31,9 +31,8 @@
 }
 .native-memories-page li,
 .native-memory-editor:not(:empty) {
-  border: 1px solid var(--gray-6);
-  border-radius: 0.5rem;
-  padding: 1rem;
+  border-bottom: 1px solid var(--gray-6);
+  padding: 1rem 0;
 }
 .native-memory-editor:empty {
   display: none;
@@ -173,4 +172,10 @@
 }
 .native-knowledge-sync li > span {
   margin-inline-start: 0.5rem;
+}
+
+.native-memories-page > header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }

@@ -6,6 +6,7 @@ process.env.NODE_PATH = new URL('../node_modules', import.meta.url).pathname;
 Module._initPaths();
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
 const distRoot =
   process.env.AGISTACK_PROJECT_ADMIN_TEST_DIST ??
   '/tmp/agistack-project-administration-test-dist';

@@ -1957,7 +1957,7 @@ impl LocalRuntimeState {
                     None,
                     None,
                     Some("a local run is already active for this conversation".to_string()),
-                    json!({ "error": "conversation already running" }),
+                    json!({ "error": "conversation already running", "error_code": "runtime_conflict" }),
                 );
                 self.append_timeline(&conversation_id, item);
                 return;
@@ -9843,6 +9843,11 @@ impl ReActObserver for LocalTimelineObserver {
                 "tool_name": tool,
                 "tool_input": redacted_input,
                 "round": round,
+                // ReAct dispatches exactly one tool action per round. The message
+                // identifies the execution; replay retains the same protocol ID.
+                "tool_call_id": format!("{}:tool:{round}", self.message_id),
+                "conversation_id": self.conversation_id,
+                "message_id": self.message_id,
                 "display": timeline_presentation::display(tool),
             }),
         );
@@ -9850,6 +9855,11 @@ impl ReActObserver for LocalTimelineObserver {
         item["toolInput"] = json!(redacted_input);
         item["round"] = json!(round);
         item["display"] = timeline_presentation::display(tool);
+        if let Some(metadata) = timeline_presentation::input_file_metadata(tool, &redacted_input) {
+            item["fileMetadata"] = metadata.clone();
+            item["payload"]["file_metadata"] = metadata.clone();
+            item["data"]["file_metadata"] = metadata;
+        }
         self.state.append_timeline(&self.conversation_id, item);
         if let Some(skill) = self.profile.skill.as_ref() {
             let item = self.state.timeline_item(
@@ -9880,6 +9890,7 @@ impl ReActObserver for LocalTimelineObserver {
         input_json: &str,
         output_json: &str,
     ) -> CoreResult<()> {
+        let is_error = timeline_presentation::tool_result_is_error(output_json);
         let redacted_input = self.redact_tool_payload(tool, input_json);
         let redacted_output = self.redact_tool_payload(tool, output_json);
         let mut item = self.state.timeline_item(
@@ -9893,20 +9904,35 @@ impl ReActObserver for LocalTimelineObserver {
                 "tool_input": redacted_input,
                 "tool_output": redacted_output,
                 "observation": redacted_output,
-                "is_error": false,
+                "is_error": is_error,
                 "round": round,
+                // ReAct dispatches exactly one tool action per round. The message
+                // identifies the execution; replay retains the same protocol ID.
+                "tool_call_id": format!("{}:tool:{round}", self.message_id),
+                "conversation_id": self.conversation_id,
+                "message_id": self.message_id,
                 "display": timeline_presentation::display(tool),
             }),
         );
         item["toolName"] = json!(tool);
         item["toolInput"] = json!(redacted_input);
         item["toolOutput"] = json!(redacted_output);
-        item["isError"] = json!(false);
+        item["isError"] = json!(is_error);
         item["round"] = json!(round);
         item["display"] = timeline_presentation::display(tool);
+        if let Some(metadata) = timeline_presentation::input_file_metadata(tool, &redacted_input) {
+            item["fileMetadata"] = metadata.clone();
+            item["payload"]["file_metadata"] = metadata.clone();
+            item["data"]["file_metadata"] = metadata;
+        }
         if let Some(file_metadata) = timeline_presentation::file_metadata(&redacted_output) {
-            item["fileMetadata"] = file_metadata.clone();
-            item["payload"]["file_metadata"] = file_metadata;
+            if let Some(metadata) = item["fileMetadata"].as_object_mut() {
+                metadata.extend(file_metadata.as_object().into_iter().flatten().map(|(key, value)| (key.clone(), value.clone())));
+            } else {
+                item["fileMetadata"] = file_metadata;
+            }
+            item["payload"]["file_metadata"] = item["fileMetadata"].clone();
+            item["data"]["file_metadata"] = item["fileMetadata"].clone();
         }
         self.state.append_timeline(&self.conversation_id, item);
         if let Some(skill) = self.profile.skill.as_ref() {
@@ -9922,12 +9948,12 @@ impl ReActObserver for LocalTimelineObserver {
                     "tool_name": tool,
                     "result": redacted_output,
                     "step_index": self.tool_calls.load(Ordering::Acquire),
-                    "status": "completed",
+                    "status": if is_error { "failed" } else { "completed" },
                 }),
             );
             self.state.append_timeline(&self.conversation_id, item);
         }
-        if tool == SUBMIT_PLAN_TOOL_NAME {
+        if !is_error && tool == SUBMIT_PLAN_TOOL_NAME {
             let item = self.state.timeline_item(
                 "assistant_message",
                 self.conversation_id.clone(),
@@ -9939,7 +9965,7 @@ impl ReActObserver for LocalTimelineObserver {
             self.state.append_timeline(&self.conversation_id, item);
             self.complete_profile("Structured plan submitted", true);
         }
-        if matches!(tool, "export_artifact" | "batch_export_artifacts") {
+        if !is_error && matches!(tool, "export_artifact" | "batch_export_artifacts") {
             let run_id = self
                 .state
                 .session_store
@@ -10006,6 +10032,11 @@ impl ReActObserver for LocalTimelineObserver {
                 "error": redacted_error,
                 "is_error": true,
                 "round": round,
+                // ReAct dispatches exactly one tool action per round. The message
+                // identifies the execution; replay retains the same protocol ID.
+                "tool_call_id": format!("{}:tool:{round}", self.message_id),
+                "conversation_id": self.conversation_id,
+                "message_id": self.message_id,
                 "display": timeline_presentation::display(tool),
             }),
         );
@@ -10016,6 +10047,11 @@ impl ReActObserver for LocalTimelineObserver {
         item["isError"] = json!(true);
         item["round"] = json!(round);
         item["display"] = timeline_presentation::display(tool);
+        if let Some(metadata) = timeline_presentation::input_file_metadata(tool, &redacted_input) {
+            item["fileMetadata"] = metadata.clone();
+            item["payload"]["file_metadata"] = metadata.clone();
+            item["data"]["file_metadata"] = metadata;
+        }
         self.state.append_timeline(&self.conversation_id, item);
         if let Some(skill) = self.profile.skill.as_ref() {
             let item = self.state.timeline_item(
@@ -15585,6 +15621,100 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn timeline_run_conflict_has_structured_error_code() {
+        let state = test_state("timeline-run-conflict");
+        let conversation_id = "timeline-run-conflict-conversation";
+        seed_plan_conversation(&state, conversation_id);
+        let conversation = state
+            .session_store
+            .conversation(conversation_id)
+            .unwrap()
+            .unwrap();
+        let control = state.claim_agent_run(conversation_id, None).unwrap();
+        Arc::clone(&state)
+            .run_agent_message_for_role_with_generation(
+                conversation_id.into(),
+                conversation.project_id,
+                "read".into(),
+                "conflict-message".into(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        let events = state.session_store.timeline(conversation_id, 20).unwrap();
+        assert!(events
+            .iter()
+            .any(|item| item["type"] == "error"
+                && item["payload"]["error_code"] == "runtime_conflict"));
+        state.release_agent_run_if_control(conversation_id, &control);
+    }
+
+    #[tokio::test]
+    async fn local_timeline_observer_preserves_structured_tool_failure_status() {
+        let state = test_state("structured-tool-status");
+        let conversation_id = "structured-tool-status-conversation";
+        seed_plan_conversation(&state, conversation_id);
+        let conversation = state
+            .session_store
+            .conversation(conversation_id)
+            .unwrap()
+            .unwrap();
+        let profile = state.execution_profile(&conversation).unwrap();
+        let observer = LocalTimelineObserver::new(
+            Arc::clone(&state),
+            conversation_id.into(),
+            "structured-result".into(),
+            profile,
+            "read".into(),
+        );
+        for (round, output) in [
+            r#"{"isError":true,"content":[{"text":"denied"}]}"#,
+            r#"{"isError":false,"content":[{"text":"error documentation"}]}"#,
+        ]
+        .iter()
+        .enumerate()
+        {
+            observer.on_tool_call(conversation_id, round as u64, "read", r#"{"file_path":"README.md","limit":50}"#).await.unwrap();
+            observer
+                .on_tool_result(conversation_id, round as u64, "read", r#"{"file_path":"README.md","limit":50}"#, output)
+                .await
+                .unwrap();
+        }
+        let events = state.session_store.timeline(conversation_id, 20).unwrap();
+        let observations: Vec<_> = events
+            .iter()
+            .filter(|item| item["type"] == "observe")
+            .collect();
+        assert_eq!(observations.len(), 2);
+        let calls: Vec<_> = events.iter().filter(|item| item["type"] == "act").collect();
+        assert_eq!(calls.len(), 2);
+        for (round, (call, result)) in calls.iter().zip(&observations).enumerate() {
+            assert_eq!(call["payload"]["tool_call_id"], format!("structured-result:tool:{round}"));
+            assert_eq!(call["payload"]["tool_call_id"], result["payload"]["tool_call_id"]);
+            assert_eq!(call["payload"]["conversation_id"], conversation_id);
+            assert_eq!(result["payload"]["message_id"], "structured-result");
+            for event in [*call, *result] {
+                let expected = json!({"paths":[{"path":"README.md"}]});
+                assert_eq!(event["fileMetadata"], expected);
+                assert_eq!(event["payload"]["file_metadata"], expected);
+                assert_eq!(event["data"]["file_metadata"], expected);
+                assert_eq!(event["data"]["tool_name"], "read");
+                assert_eq!(event["data"]["tool_call_id"], event["payload"]["tool_call_id"]);
+                let input: Value = serde_json::from_str(event["data"]["tool_input"].as_str().unwrap()).unwrap();
+                assert_eq!(input, json!({"file_path":"README.md","limit":50}));
+            }
+        }
+        assert_ne!(calls[0]["payload"]["tool_call_id"], calls[1]["payload"]["tool_call_id"]);
+        assert_eq!(observations[0]["isError"], true);
+        assert_eq!(observations[0]["payload"]["is_error"], true);
+        assert_eq!(observations[1]["isError"], false);
+        assert_eq!(observations[1]["payload"]["is_error"], false);
+    }
+
+    #[tokio::test]
     async fn local_timeline_observer_projects_tool_failures_as_terminal_redacted_events() {
         let state = test_state("tool-failure-observer-secret");
         let conversation_id = "conversation-tool-failure-observer";
@@ -15641,6 +15771,9 @@ mod tests {
             .iter()
             .find(|event| event["type"] == "observe")
             .expect("terminal observe");
+        let call = timeline.iter().find(|event| event["type"] == "act").unwrap();
+        assert_eq!(call["payload"]["tool_call_id"], observe["payload"]["tool_call_id"]);
+        assert_eq!(observe["payload"]["tool_call_id"], "message-tool-failure-observer:tool:0");
         assert_eq!(observe["isError"], true);
         assert_eq!(observe["payload"]["is_error"], true);
         assert_eq!(observe["toolName"], "read");

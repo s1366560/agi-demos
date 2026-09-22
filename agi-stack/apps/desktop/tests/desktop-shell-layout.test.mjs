@@ -103,7 +103,7 @@ test('app shell mounts the desktop titlebar and status bar exactly once', () => 
     /<DesktopRendererTitlebarV2 input=\{surfaces\.titlebar\}\s*\/>/u,
   );
   // The right sidebar toggle state is owned by the shell for later phases.
-  assert.match(appSource, /const \[rightSidebarOpen, setRightSidebarOpen\] = useState\(true\)/);
+  assert.match(appSource, /localStorage\.getItem\('agistack\.desktop\.rightSidebarOpen'\) === 'true'/);
   assert.match(appSource, /rightSidebarOpen,/);
   assert.match(appSource, /onToggleRightSidebar:\s*\(\) => \{/);
   // The titlebar reuses the existing sidebar collapse state.
@@ -135,16 +135,16 @@ test('window controls reach the main window through the allowed command list', (
   assert.match(bridgeTypes, /platform\??:/);
 });
 
-test('shell grid reserves a titlebar row and a status bar row', () => {
-  // Native shell: 36px titlebar, flexible content, 24px status bar.
+test('shell grid reserves titlebar and content with an optional recovery row', () => {
+  // Healthy runtime connections consume no footer space.
   assert.match(
     chromeStyles,
-    /grid-template-rows:\s*36px minmax\(0, 1fr\) 24px\s*;/,
+    /grid-template-rows:\s*36px minmax\(0, 1fr\) auto\s*;/,
   );
-  // Browser shell: no titlebar, content, 24px status bar.
+  // The same conditional recovery row works without a native titlebar.
   assert.match(
     chromeStyles,
-    /grid-template-rows:\s*0 minmax\(0, 1fr\) 24px\s*;/,
+    /grid-template-rows:\s*0 minmax\(0, 1fr\) auto\s*;/,
   );
   // Titlebar and status bar span the full grid width.
   assert.match(chromeStyles, /\.desktop-titlebar\s*\{[\s\S]*?grid-column:\s*1 \/ -1;/);
@@ -178,16 +178,14 @@ test('titlebar is a drag region with no-drag interactive controls', () => {
   assert.match(windowControlsSource, /bridge\.close\(\)/);
 });
 
-test('status bar surfaces runtime, socket, and scope context', () => {
-  assert.match(statusBarSource, /className="desktop-status-bar"/);
-  assert.match(statusBarSource, /t\(`runtime\.status\.\$\{connection\}`\)/);
-  assert.match(statusBarSource, /statusbar\.live/);
-  assert.match(statusBarSource, /statusbar\.connected/);
+test('status bar only exposes unavailable connections with recovery actions', () => {
+  assert.match(statusBarSource, /if \(!runtimeUnavailable && liveConnected && !liveError\) return null/);
+  assert.match(statusBarSource, /className="desktop-status-bar" role="status" aria-live="polite"/);
+  assert.match(statusBarSource, /runtime\.status\.\$\{connection\}/);
   assert.match(statusBarSource, /statusbar\.disconnected/);
-  assert.match(statusBarSource, /title=\{liveError \?\? undefined\}/);
-  assert.match(statusBarSource, /\{tenantName\}/);
-  assert.match(statusBarSource, /\{projectName\}/);
-  assert.match(statusBarStyles, /\.desktop-status-bar\s*\{[\s\S]*?height:\s*24px;/);
+  assert.match(statusBarSource, /className="desktop-status-bar-error">\{liveError\}/);
+  assert.match(statusBarSource, /onClick=\{onOpenConnectionSettings\}/);
+  assert.doesNotMatch(statusBarStyles, /height:\s*24px;/);
 });
 
 test('sidebar is partitioned into brand, nav, header, list, and toolbar zones', () => {
@@ -204,36 +202,20 @@ test('sidebar is partitioned into brand, nav, header, list, and toolbar zones', 
     assert.ok(index > previousIndex, `${zone} must render after the previous zone`);
     previousIndex = index;
   }
-  // Activity moved from the retired footer nav into the primary view nav.
-  assert.match(
-    sidebarSource,
-    /\{ id: 'activity', labelKey: 'sidebar\.activity', icon: BellIcon \}/,
-  );
+  assert.match(sidebarSource, /onClick=\{onOpenSearch\}/);
   assert.doesNotMatch(sidebarSource, /desktop-design-footer-nav/);
   // The bottom toolbar keeps the settings entry next to the profile trigger.
   assert.match(sidebarSource, /desktop-design-toolbar-button/);
   assert.match(
     sidebarStyles,
-    /\.desktop-design-toolbar\s*\{[\s\S]*?border-top:\s*1px solid/,
+    /\.desktop-design-toolbar\s*\{[\s\S]*?border-top:\s*0;/,
   );
-  assert.match(sidebarStyles, /\.desktop-design-primary-nav\s*\{[\s\S]*?border-bottom:/);
+  assert.match(sidebarStyles, /\.desktop-design-primary-nav\s*\{/);
 });
 
-test('sidebar renders the authoritative project conversation status summary', () => {
-  assert.match(sidebarSource, /conversationStatusSummary/);
-  assert.match(sidebarSource, /desktop-conversation-status-summary/);
-  assert.match(
-    sidebarSource,
-    /className="desktop-conversation-status-summary"[\s\S]{0,180}role="group"/,
-  );
-  assert.match(sidebarSource, /t\('overview\.conversations'\)/);
-  assert.doesNotMatch(sidebarSource, /workspaceTree\.conversations/);
-  assert.match(sidebarSource, /workspaceTree\.running/);
-  assert.match(sidebarSource, /workspaceTree\.queued/);
-  assert.match(sidebarSource, /settings\.attention/);
-  assert.match(sidebarSource, /workspaceTree\.completed/);
-  assert.match(sidebarSource, /workspaceTree\.failed/);
-  assert.match(sidebarStyles, /\.desktop-conversation-status-summary\s*\{/);
+test('sidebar omits summary chips while shell retains authoritative conversation state', () => {
+  assert.doesNotMatch(sidebarSource, /className="desktop-conversation-status-summary"/);
+  assert.match(sidebarSource, /<WorkspaceDock/);
   assert.match(appSource, /conversationStatusSummary,/);
   assert.doesNotMatch(appSource, /conversationStatusSummary=\{[^}]*conversationsByWorkspace/);
   assert.match(appSource, /conversationStatusScopeRef/);
@@ -293,12 +275,11 @@ test('tab state flows through the pure workbench tab model', () => {
   assert.match(appSource, /setOpenTabs\(\(tabs\) => clearConversationTabs\(tabs\)\)/);
 });
 
-test('tab bar exposes localized activation and close controls', () => {
-  assert.match(tabBarSource, /role="tablist"/);
-  assert.match(tabBarSource, /role="tab"/);
-  assert.match(tabBarSource, /aria-selected=\{active\}/);
-  assert.match(tabBarSource, /aria-label=\{t\('tabs\.close'\)\}/);
-  assert.match(tabBarSource, /t\('session\.untitled'\)/);
+test('the retired tab bar renders nothing while preserving the conversation callback interface', () => {
+  assert.match(tabBarSource, /return null/);
+  assert.doesNotMatch(tabBarSource, /role="tablist"|role="tab"/);
+  assert.match(tabBarSource, /onActivate:/);
+  assert.match(tabBarSource, /onClose:/);
 });
 
 test('right sidebar hosts the context rail and canvas behind an activity bar', () => {
@@ -352,7 +333,7 @@ test('SessionWorkspace keeps only the thread column after the rail migration', (
   assert.doesNotMatch(sessionWorkspaceSource, /session-context-rail/);
   assert.doesNotMatch(sessionWorkspaceSource, /canvasRevealKey|onCloseCanvas/);
   assert.match(sessionWorkspaceSource, /className="session-workspace-body"/);
-  assert.match(sessionWorkspaceSource, /onOpenCanvas=\{onOpenCanvas\}|onOpenCanvas\(\)/);
+  assert.match(sessionWorkspaceSource, /onOpenCanvas\('overview'\)/);
 });
 
 test('titlebar and status bar copy exists in both locales', () => {
@@ -382,4 +363,11 @@ test('titlebar and status bar copy exists in both locales', () => {
       `${key} must exist in both locales`,
     );
   }
+});
+
+
+test('workbench content stays in the flexible row when a single conversation hides tabs', () => {
+  assert.match(chromeStyles, /\.workbench\s*\{[^}]*grid-template-rows:\s*0 minmax\(0, 1fr\)/);
+  assert.match(chromeStyles, /\.workbench:has\(> \.workbench-tab-bar\)\s*\{[^}]*grid-template-rows:\s*32px minmax\(0, 1fr\)/);
+  assert.match(chromeStyles, /\.workbench-content\s*\{[^}]*grid-row:\s*2;/);
 });

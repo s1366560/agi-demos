@@ -160,12 +160,13 @@
 
 .workspace-tree-session-row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 8px;
   align-items: center;
   gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 6px 26px 6px 8px;
+  min-height: 34px;
+  padding: 7px 28px 7px 10px;
   border-radius: 8px;
   text-align: left;
 }
@@ -179,32 +180,23 @@
   background: rgba(var(--desktop-slate-rgb), 0.12);
 }
 
+.workspace-tree-session-row > span {
+  grid-column: 1;
+  grid-row: 1;
+}
+
 .workspace-tree-session-row strong {
   overflow: hidden;
   color: var(--desktop-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.workspace-tree-session-row small {
-  overflow: hidden;
-  color: var(--desktop-faint);
-  font-size: 10px;
-  font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspace-tree-session-row > time {
-  color: var(--desktop-faint);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .workspace-tree-session-status {
+  grid-column: 2;
+  grid-row: 1;
   width: 6px;
   height: 6px;
   border-radius: 50%;

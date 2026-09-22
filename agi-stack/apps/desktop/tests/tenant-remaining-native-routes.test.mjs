@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { afterEach, test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
 const featureRoot = '/tmp/agistack-desktop-test-dist/src/features/tenant-admin';
 const {
   createDesktopTenantPatternsHttpProjectionV2: createTenantPatternsClient,
