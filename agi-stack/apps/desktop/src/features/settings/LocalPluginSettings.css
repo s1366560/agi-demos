@@ -1,7 +1,10 @@
 .local-plugin-settings {
   display: grid;
   gap: 16px;
-  padding: 20px;
+  padding: 24px;
+  align-content: start;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
 }
 .local-plugin-settings header {
@@ -45,9 +48,10 @@
 }
 .local-plugin-list article,
 .local-plugin-review {
-  border: 1px solid var(--gray-6);
-  border-radius: 8px;
-  padding: 16px;
+  border: 0;
+  border-top: 1px solid var(--gray-6);
+  border-radius: 0;
+  padding: 20px 0;
 }
 .local-plugin-review fieldset {
   margin: 12px 0;
@@ -69,3 +73,9 @@
 .local-plugin-error {
   color: var(--red-11);
 }
+
+.local-plugin-settings header h2 { font-size: 20px; }
+.local-plugin-settings h3 { font-size: 15px; overflow-wrap: anywhere; }
+.local-plugin-settings p { font-size: 13px; line-height: 1.6; color: var(--desktop-gray-12); }
+.local-plugin-settings .local-plugin-error { color: var(--red-11); }
+.local-plugin-review fieldset { border: 1px solid var(--gray-6); border-radius: 8px; min-width: 0; }

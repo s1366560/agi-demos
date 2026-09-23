@@ -83,11 +83,11 @@ test('preparing styles use the running blue family with reduced-motion fallbacks
   assert.match(chatTimelineCss, /\.timeline-status\.preparing \{[\s\S]*?--desktop-status-running-rgb/);
   assert.match(chatTimelineCss, /\.timeline-rail-dot\.is-preparing \{/);
   assert.match(chatTimelineCss, /\.timeline-details pre\.timeline-tool-args-stream \{/);
-  assert.match(chatTimelineCss, /\.timeline-tool-args-caret \{[\s\S]*?animation: tool-preparing-pulse/);
+  assert.doesNotMatch(chatTimelineCss, /timeline-tool-args-caret/);
   assert.match(chatTimelineCss, /\.timeline-tool-preparing-empty \{[\s\S]*?border: 1px dashed/);
   assert.match(
     chatTimelineCss,
-    /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.timeline-status-dot,[\s\S]*?\.timeline-tool-args-caret[\s\S]*?animation: none/,
+    /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.timeline-status-dot[\s\S]*?animation: none/,
   );
 });
 

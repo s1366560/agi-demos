@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Badge, Button } from '@radix-ui/themes';
 import {
   BellIcon,
   CheckCircledIcon,
-  ComponentInstanceIcon,
   CubeIcon,
   FontStyleIcon,
   GlobeIcon,
   LockClosedIcon,
-  MagicWandIcon,
   PersonIcon,
   ReloadIcon,
 } from '@radix-ui/react-icons';
@@ -17,12 +15,7 @@ import { useI18n } from '../../i18n';
 import { useDesktopRendererGenerationV2 } from '../../plugins/desktopRendererGenerationContextV2';
 import { withDesktopWorkspaceContextAuthorityOperationV2 } from '../../plugins/desktopWorkspaceContextAuthorityModuleV2';
 import { useThemePreference, type ThemePreference } from '../../theme';
-import type {
-  AuthState,
-  DesktopRuntimeConfig,
-  ProjectSummary,
-  TenantSummary,
-} from '../../types';
+import type { AuthState, DesktopRuntimeConfig, ProjectSummary, TenantSummary } from '../../types';
 import { SettingsState } from './ManagedResourceViews';
 import {
   type CompletionNotificationMode,
@@ -45,7 +38,7 @@ export function SettingsPage({
   children,
   className = '',
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description: string;
   action?: ReactNode;
@@ -80,6 +73,7 @@ export function AccountSettingsPage({
   const { locale, t } = useI18n();
   const [signingOut, setSigningOut] = useState(false);
   const session = auth.session;
+  const isLocal = config.mode === 'local';
   const user = auth.user;
 
   const signOut = async () => {
@@ -121,14 +115,20 @@ export function AccountSettingsPage({
             value={tenant?.name || t('settings.notAvailable')}
             description={tenant?.plan || tenant?.slug || undefined}
           />
-          <SettingsRow
-            label={t('settings.sessionSecurity')}
-            value={
-              session
-                ? t(session.trusted_device ? 'settings.trustedDevice' : 'settings.temporarySession')
-                : t('settings.notAvailable')
-            }
-          />
+          {!isLocal ? (
+            <SettingsRow
+              label={t('settings.sessionSecurity')}
+              value={
+                session
+                  ? t(
+                      session.trusted_device
+                        ? 'settings.trustedDevice'
+                        : 'settings.temporarySession',
+                    )
+                  : t('settings.notAvailable')
+              }
+            />
+          ) : null}
         </div>
       </section>
 
@@ -141,14 +141,16 @@ export function AccountSettingsPage({
           </span>
         </header>
         <div className="settings-rows">
-          <SettingsRow
-            label={t('settings.sessionExpires')}
-            value={
-              session?.expires_at
-                ? new Date(session.expires_at).toLocaleString(locale)
-                : t('settings.notAvailable')
-            }
-          />
+          {!isLocal ? (
+            <SettingsRow
+              label={t('settings.sessionExpires')}
+              value={
+                session?.expires_at
+                  ? new Date(session.expires_at).toLocaleString(locale)
+                  : t('settings.notAvailable')
+              }
+            />
+          ) : null}
           <SettingsRow
             label={t('settings.accountCreated')}
             value={
@@ -190,13 +192,10 @@ export function WorkspaceSettingsPage({
   onApplied: () => void;
 }) {
   const { t } = useI18n();
-  const { actions: desktopRendererGenerationActionsV2 } =
-    useDesktopRendererGenerationV2();
+  const { actions: desktopRendererGenerationActionsV2 } = useDesktopRendererGenerationV2();
   const [tenantId, setTenantId] = useState(config.tenantId);
   const [projectId, setProjectId] = useState(config.projectId);
-  const [projects, setProjects] = useState(() =>
-    projectsForTenant(auth.projects, config.tenantId),
-  );
+  const [projects, setProjects] = useState(() => projectsForTenant(auth.projects, config.tenantId));
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -270,7 +269,7 @@ export function WorkspaceSettingsPage({
         setProjectId((current) =>
           scopedItems.some((project) => project.id === current)
             ? current
-            : scopedItems[0]?.id ?? '',
+            : (scopedItems[0]?.id ?? ''),
         );
       })
       .catch((caught) => {
@@ -489,10 +488,7 @@ export function WorkspaceSettingsPage({
   );
 }
 
-export function GeneralSettingsPage({
-  counts,
-  onOpenResource,
-}: {
+export function GeneralSettingsPage(_props: {
   counts: SettingsResourceCounts;
   onOpenResource: (section: ResourceSection) => void;
 }) {
@@ -502,17 +498,11 @@ export function GeneralSettingsPage({
     return {
       timezone: new Intl.DateTimeFormat(locale).resolvedOptions().timeZone,
       date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date),
-      number: new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(12345.67),
+      number: new Intl.NumberFormat(locale, {
+        maximumFractionDigits: 2,
+      }).format(12345.67),
     };
   }, [locale]);
-  const resources = [
-    ['models', CubeIcon],
-    ['mcp', ComponentInstanceIcon],
-    ['skills', MagicWandIcon],
-    ['plugins', ComponentInstanceIcon],
-    ['agents', PersonIcon],
-    ['subagents', PersonIcon],
-  ] as const;
 
   return (
     <SettingsPage
@@ -530,7 +520,12 @@ export function GeneralSettingsPage({
           </span>
           <em>{locale === 'zh-CN' ? 'ZH-CN' : 'EN'}</em>
         </header>
-        <div className="settings-language-options" role="group" aria-label={t('settings.language')}>
+        <div
+          className="settings-language-options"
+          onKeyDown={handlePreferenceRadioKeyDown}
+          role="radiogroup"
+          aria-label={t('settings.language')}
+        >
           <LanguageOption
             badge={t('settings.chineseBadge')}
             label={t('settings.chinese')}
@@ -565,42 +560,19 @@ export function GeneralSettingsPage({
           <SettingsRow label={t('settings.numberFormat')} value={formatPreview.number} />
         </div>
       </section>
-
-      <section className="settings-panel settings-resource-entry-panel">
-        <header>
-          <LockClosedIcon />
-          <span>
-            <strong>{t('settings.aiResources')}</strong>
-            <small>{t('settings.agentResourcesDescription')}</small>
-          </span>
-        </header>
-        <div className="settings-resource-entry-grid">
-          {resources.map(([section, Icon]) => (
-            <button type="button" key={section} onClick={() => onOpenResource(section)}>
-              <Icon />
-              <span>
-                <strong>{t(`settings.${section}`)}</strong>
-                <small>{t(`settings.${section}Description`)}</small>
-              </span>
-              <em>{counts[section] ?? '—'}</em>
-              <b>{t('settings.open')}</b>
-            </button>
-          ))}
-        </div>
-      </section>
     </SettingsPage>
   );
 }
 
-export function PreferenceSummaryPage({
-  section,
-}: {
-  section: 'appearance' | 'notifications';
-}) {
+export function PreferenceSummaryPage({ section }: { section: 'appearance' | 'notifications' }) {
   const { t } = useI18n();
   const { preference, setPreference } = useThemePreference();
   const Icon = section === 'appearance' ? FontStyleIcon : BellIcon;
-  const themeOptions: { value: ThemePreference; label: string; description: string }[] = [
+  const themeOptions: {
+    value: ThemePreference;
+    label: string;
+    description: string;
+  }[] = [
     {
       value: 'dark',
       label: t('settings.themeDark'),
@@ -643,6 +615,7 @@ export function PreferenceSummaryPage({
           </header>
           <div
             className="settings-language-options settings-theme-options"
+            onKeyDown={handlePreferenceRadioKeyDown}
             role="radiogroup"
             aria-label={t('settings.themeGroupLabel')}
           >
@@ -732,19 +705,22 @@ function NotificationPreferenceControls() {
           label={t('settings.reviewAlerts')}
           description={t('settings.reviewAlertsDescription')}
           checked={preferences.reviewAlerts}
-          onChange={(reviewAlerts) =>
-            setPreferences((current) => ({ ...current, reviewAlerts }))
-          }
+          onChange={(reviewAlerts) => setPreferences((current) => ({ ...current, reviewAlerts }))}
         />
         <fieldset className="settings-delivery-options">
           <legend>{t('settings.delivery')}</legend>
           <p>{t('settings.deliveryDescription')}</p>
-          <div role="radiogroup" aria-label={t('settings.deliveryGroupLabel')}>
+          <div
+            role="radiogroup"
+            onKeyDown={handlePreferenceRadioKeyDown}
+            aria-label={t('settings.deliveryGroupLabel')}
+          >
             {deliveryOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 role="radio"
+                tabIndex={preferences.delivery === option.value ? 0 : -1}
                 aria-checked={preferences.delivery === option.value}
                 className={preferences.delivery === option.value ? 'active' : ''}
                 onClick={() =>
@@ -763,12 +739,17 @@ function NotificationPreferenceControls() {
         <fieldset className="settings-delivery-options">
           <legend>{t('settings.completionNotifications')}</legend>
           <p>{t('settings.completionNotificationsDescription')}</p>
-          <div role="radiogroup" aria-label={t('settings.completionNotificationsGroupLabel')}>
+          <div
+            role="radiogroup"
+            onKeyDown={handlePreferenceRadioKeyDown}
+            aria-label={t('settings.completionNotificationsGroupLabel')}
+          >
             {completionModeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 role="radio"
+                tabIndex={preferences.completionMode === option.value ? 0 : -1}
                 aria-checked={preferences.completionMode === option.value}
                 className={preferences.completionMode === option.value ? 'active' : ''}
                 onClick={() =>
@@ -857,6 +838,7 @@ function PreferenceSwitch({
       <button
         type="button"
         role="switch"
+        aria-label={label}
         aria-checked={checked}
         className={checked ? 'active' : ''}
         onClick={() => onChange(!checked)}
@@ -883,6 +865,7 @@ function ThemeOption({
     <button
       type="button"
       role="radio"
+      tabIndex={selected ? 0 : -1}
       aria-checked={selected}
       className={selected ? 'active' : ''}
       onClick={onSelect}
@@ -1005,7 +988,14 @@ function LanguageOption({
   onSelect: () => void;
 }) {
   return (
-    <button type="button" className={selected ? 'active' : ''} onClick={onSelect}>
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
+      className={selected ? 'active' : ''}
+      onClick={onSelect}
+    >
       <span>{badge}</span>
       <div>
         <strong>{label}</strong>
@@ -1025,4 +1015,26 @@ function authMethodLabel(method: string, t: (key: string) => string): string {
   };
   const key = keyByMethod[method];
   return key ? t(key) : method;
+}
+
+function handlePreferenceRadioKeyDown(event: KeyboardEvent<HTMLElement>) {
+  const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+  if (!keys.includes(event.key)) return;
+  const items = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)'),
+  );
+  const index = items.indexOf(event.target as HTMLButtonElement);
+  if (index < 0 || items.length === 0) return;
+  event.preventDefault();
+  const next =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? items.length - 1
+        : (index +
+            (event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1) +
+            items.length) %
+          items.length;
+  items[next]?.focus();
+  items[next]?.click();
 }

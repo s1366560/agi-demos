@@ -44,8 +44,18 @@ export function ProfileSettingsHost({
     };
   }, [config.mode, loader]);
 
-  if (reasonCode) return <code role="alert">{reasonCode}</code>;
-  if (!module) return <div role="status">{t('common.loading')}</div>;
+  if (reasonCode)
+    return (
+      <p className="settings-profile-load-state" role="alert" data-reason-code={reasonCode}>
+        {t('desktopProductionRouter.reason.authorityUnavailable')}
+      </p>
+    );
+  if (!module)
+    return (
+      <div className="settings-profile-load-state" role="status">
+        {t('common.loading')}
+      </div>
+    );
   const Surface = module.Surface;
   return (
     <Surface

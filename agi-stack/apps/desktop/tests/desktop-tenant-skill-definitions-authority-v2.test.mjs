@@ -500,3 +500,18 @@ test('list preserves project overrides while create verifies the requested resou
     /response invalid/u,
   );
 });
+
+
+test('marketplace project skill requires tenant ownership and preserves plugin metadata', () => {
+  const contract = require(`${ROOT}/src/plugins/desktopTenantSkillDefinitionsOperationContractV2.js`);
+  const pluginSkill = skill({
+    id: 'plugin:installation-id:example', scope: 'project', project_id: 'project-1',
+    tools: ['*'], full_content: '# Example skill', plugin_id: 'example', plugin_version: '1.0.0',
+  });
+  const result = contract.requireDesktopTenantSkillDefinitionV2(pluginSkill, scope('project-1', 'local'));
+  assert.equal(result.plugin_id, 'example');
+  assert.equal(result.project_id, 'project-1');
+  const { tenant_id, ...missingOwnership } = pluginSkill;
+  assert.throws(() => contract.requireDesktopTenantSkillDefinitionV2(missingOwnership, scope('project-1', 'local')), /response invalid/);
+  assert.throws(() => contract.requireDesktopTenantSkillDefinitionV2({ ...pluginSkill, tenant_id: 'other-tenant' }, scope('project-1', 'local')), /response invalid/);
+});

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent.conversation_manager import ConversationManager
@@ -19,6 +20,9 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_governanc
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginRepositoryV2,
+)
+from src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models_v3 import (
+    MarketplaceRecordV3,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_repository import (
     SqlAgentExecutionRepository,
@@ -55,7 +59,7 @@ class SqlWasmOperationAuthorityV2:
     def __init__(self, *, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = session_factory
 
-    async def authorize(  # noqa: C901, PLR0911, PLR0912 -- independent fail-closed checks
+    async def authorize(  # noqa: C901, PLR0911, PLR0912, PLR0915 -- independent fail-closed checks
         self, *, operation: OperationContextV2, attribution: WasmToolAttributionV2
     ) -> bool:
         scope = operation.context.scope
@@ -126,6 +130,42 @@ class SqlWasmOperationAuthorityV2:
                 attribution.artifact_source,
             ):
                 return False
+            ownership = None
+            for project_id in (scope.project_id, ""):
+                ownership = await session.scalar(
+                    select(MarketplaceRecordV3).where(
+                        MarketplaceRecordV3.kind == "signed_installation",
+                        MarketplaceRecordV3.tenant_id == scope.tenant_id,
+                        MarketplaceRecordV3.project_id == project_id,
+                        MarketplaceRecordV3.record_key == reference.bundle_id,
+                    )
+                )
+                if ownership is not None:
+                    break
+            if ownership is not None:
+                if (
+                    ownership.payload.get("status") != "enabled"
+                    or ownership.payload.get("version") != reference.version
+                ):
+                    return False
+                owner = ScopeV2(
+                    kind=ScopeKindV2.PROJECT if ownership.project_id else ScopeKindV2.TENANT,
+                    tenant_id=scope.tenant_id,
+                    project_id=ownership.project_id or None,
+                )
+                if not await governance.permission_is_granted(
+                    plugin_id=reference.bundle_id,
+                    permission="tools.execute",
+                    scope_type=owner.kind.value,
+                    scope_id=owner.project_id or scope.tenant_id,
+                ):
+                    return False
+                payload = await PlatformPluginRepositoryV2(
+                    session, scope=owner
+                ).latest_requested_distribution()
+                return payload is not None and _snapshot_allows(
+                    parse_profile_snapshot_v2(payload.get("snapshot")), captured, attribution, scope
+                )
             if not await governance.permission_is_granted(
                 plugin_id=reference.bundle_id,
                 permission="tools.execute",

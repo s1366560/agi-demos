@@ -293,7 +293,7 @@ downstream patch。没有修改上游 manifest/tree，也没有通过重算上�
 5. Renderer 继续只访问 Sidecar API；Sidecar 校验 launch capability、session 和 active scope 后代理整组 Workspace 路由。
 6. 第一条 Avernet 写入前允许本版本回退 legacy；出现新写入后禁止自动回退，必须走反向 outbox export。
 
-`data_migration::migrate_legacy_data` 的 GitNexus upstream impact 为 HIGH（4 个直接依赖、3 个模块），后续不得直接扩写；使用新增 `workspace_core_migration` 模块。当前 release CI 也没有真实 updater apply/失败回滚测试，这在 Desktop 同波次发布前是硬阻断项。
+后续迁移逻辑使用新增 `workspace_core_migration` 模块，不直接扩写 `data_migration::migrate_legacy_data`。当前 release CI 也没有真实 updater apply/失败回滚测试，这在 Desktop 同波次发布前是硬阻断项。
 
 当前本地 helper 合同、Supervisor、真实 Sidecar 到 Core、退出清理和 updater 事务原语均已通过；
 `make -C agi-stack run-desktop` 已确认 Electron 只启动 Sidecar，再由 Sidecar 监管统一缓存路径中的

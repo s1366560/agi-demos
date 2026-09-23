@@ -1,0 +1,140 @@
+{
+  "source": "canonical Electron runtime; read-only export after graceful stop",
+  "invocations": [
+    {
+      "run_id": "local-run-b2c7e5cd-55e4-45e2-b0e2-7c49bccb875a",
+      "tool_name": "skill_loader",
+      "status": "completed"
+    },
+    {
+      "run_id": "local-run-287fddfd-62f8-4e85-94d0-04f0763a923f",
+      "tool_name": "skill_loader",
+      "status": "completed"
+    },
+    {
+      "run_id": "local-run-287fddfd-62f8-4e85-94d0-04f0763a923f",
+      "tool_name": "mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc",
+      "status": "completed"
+    },
+    {
+      "run_id": "local-run-287fddfd-62f8-4e85-94d0-04f0763a923f",
+      "tool_name": "mcp__plugin_56127b0f_812__echo__5dfa0e6900092665",
+      "status": "completed"
+    }
+  ],
+  "tool_events": [
+    {
+      "conversation_id": "b72a802a-c9eb-58d8-8f0b-199b311e7e99",
+      "timestamp": 1790131482573,
+      "type": "act",
+      "toolName": "skill_loader",
+      "toolInput": "{\"skill_id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\"}"
+    },
+    {
+      "conversation_id": "402f7bfc-db95-5820-a34d-22f42ba3bd65",
+      "timestamp": 1790136017922,
+      "type": "act",
+      "toolName": "skill_loader",
+      "toolInput": "{\"skill_id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\"}"
+    },
+    {
+      "conversation_id": "b72a802a-c9eb-58d8-8f0b-199b311e7e99",
+      "timestamp": 1790131482613,
+      "type": "observe",
+      "toolName": "skill_loader",
+      "toolInput": "{\"skill_id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\"}",
+      "toolOutput": "{\"authority_changed\":false,\"available_tools\":[\"read\",\"batch_read\",\"glob\",\"grep\",\"list\",\"list_artifacts\",\"ast_parse\",\"ast_find_symbols\",\"ast_extract_function\",\"ast_get_imports\",\"find_definition\",\"find_references\",\"call_graph\",\"dependency_graph\",\"preview_edit\",\"git_diff\",\"git_log\",\"knowledge_search\",\"knowledge_source\",\"submit_plan\"],\"content\":\"---\\nname: plugin-demo\\ndescription: Verify the installed marketplace example using its echo tool.\\n---\\n\\nWhen asked to verify this example plugin, call its `echo` MCP tool with the user's\\ntext and report the returned text. Do not claim the tool ran without its result.\\n\",\"declared_tools\":[\"*\"],\"description\":\"A local, credential-free example of Skills, MCP tools, lifecycle hooks and an MCP app.\",\"execution_started\":false,\"id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\",\"name\":\"plugin-demo\",\"scope\":\"project\",\"status\":\"loaded\"}",
+      "isError": false
+    },
+    {
+      "conversation_id": "402f7bfc-db95-5820-a34d-22f42ba3bd65",
+      "timestamp": 1790136017969,
+      "type": "observe",
+      "toolName": "skill_loader",
+      "toolInput": "{\"skill_id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\"}",
+      "toolOutput": "{\"authority_changed\":false,\"available_tools\":[\"read\",\"batch_read\",\"glob\",\"grep\",\"list\",\"list_artifacts\",\"ast_parse\",\"ast_find_symbols\",\"ast_extract_function\",\"ast_get_imports\",\"find_definition\",\"find_references\",\"call_graph\",\"dependency_graph\",\"preview_edit\",\"git_diff\",\"git_log\",\"knowledge_search\",\"knowledge_source\",\"submit_plan\"],\"content\":\"---\\nname: plugin-demo\\ndescription: Verify the installed marketplace example using its echo tool.\\n---\\n\\nWhen asked to verify this example plugin, call its `echo` MCP tool with the user's\\ntext and report the returned text. Do not claim the tool ran without its result.\\n\",\"declared_tools\":[\"*\"],\"description\":\"A local, credential-free example of Skills, MCP tools, lifecycle hooks and an MCP app.\",\"execution_started\":false,\"id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\",\"name\":\"plugin-demo\",\"scope\":\"project\",\"status\":\"loaded\"}",
+      "isError": false
+    },
+    {
+      "conversation_id": "402f7bfc-db95-5820-a34d-22f42ba3bd65",
+      "timestamp": 1790137768444,
+      "type": "act",
+      "toolName": "skill_loader",
+      "toolInput": "{\"skill_id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\"}"
+    },
+    {
+      "conversation_id": "402f7bfc-db95-5820-a34d-22f42ba3bd65",
+      "timestamp": 1790137768483,
+      "type": "observe",
+      "toolName": "skill_loader",
+      "toolInput": "{\"skill_id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\"}",
+      "toolOutput": "{\"authority_changed\":false,\"available_tools\":[\"read\",\"batch_read\",\"write\",\"edit\",\"glob\",\"grep\",\"list\",\"patch\",\"export_artifact\",\"list_artifacts\",\"batch_export_artifacts\",\"bash\",\"ast_parse\",\"ast_find_symbols\",\"ast_extract_function\",\"ast_get_imports\",\"code_index_build\",\"find_definition\",\"find_references\",\"call_graph\",\"dependency_graph\",\"edit_by_ast\",\"batch_edit\",\"preview_edit\",\"generate_tests\",\"run_tests\",\"analyze_coverage\",\"git_diff\",\"git_log\",\"generate_commit\",\"start_terminal\",\"stop_terminal\",\"get_terminal_status\",\"restart_terminal\",\"start_desktop\",\"stop_desktop\",\"get_desktop_status\",\"change_resolution\",\"restart_desktop\",\"import_file\",\"import_files_batch\",\"deps_install\",\"deps_check\",\"knowledge_search\",\"knowledge_source\",\"mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc\",\"mcp__plugin_56127b0f_812__echo__5dfa0e6900092665\",\"plugin-02a2a455-1743-4254-8b8b-7c68d98da342-demo\",\"plugin-56127b0f-812a-4550-88a3-db33d1af46e9-fixture\"],\"content\":\"---\\nname: plugin-demo\\ndescription: Verify the installed marketplace example using its echo tool.\\n---\\n\\nWhen asked to verify this example plugin, call its `echo` MCP tool with the user's\\ntext and report the returned text. Do not claim the tool ran without its result.\\n\",\"declared_tools\":[\"*\"],\"description\":\"A local, credential-free example of Skills, MCP tools, lifecycle hooks and an MCP app.\",\"execution_started\":false,\"id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\",\"name\":\"plugin-demo\",\"scope\":\"project\",\"status\":\"loaded\"}",
+      "isError": false
+    },
+    {
+      "conversation_id": "402f7bfc-db95-5820-a34d-22f42ba3bd65",
+      "timestamp": 1790137772385,
+      "type": "act",
+      "toolName": "mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc",
+      "toolInput": "{\"text\":\"MARKETPLACE_NATIVE_MODEL_OK\"}"
+    },
+    {
+      "conversation_id": "402f7bfc-db95-5820-a34d-22f42ba3bd65",
+      "timestamp": 1790137772438,
+      "type": "observe",
+      "toolName": "mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc",
+      "toolInput": "{\"text\":\"MARKETPLACE_NATIVE_MODEL_OK\"}",
+      "toolOutput": "{\"content\":[{\"text\":\"MARKETPLACE_NATIVE_MODEL_OK\",\"type\":\"text\"}],\"duplicate\":false,\"is_error\":false,\"server_name\":\"plugin-02a2a455-1743-4254-8b8b-7c68d98da342-demo\",\"tool_name\":\"echo\"}",
+      "isError": false
+    },
+    {
+      "conversation_id": "402f7bfc-db95-5820-a34d-22f42ba3bd65",
+      "timestamp": 1790137783808,
+      "type": "act",
+      "toolName": "mcp__plugin_56127b0f_812__echo__5dfa0e6900092665",
+      "toolInput": "{\"text\":\"MARKETPLACE_NATIVE_MODEL_OK\"}"
+    },
+    {
+      "conversation_id": "402f7bfc-db95-5820-a34d-22f42ba3bd65",
+      "timestamp": 1790137783887,
+      "type": "observe",
+      "toolName": "mcp__plugin_56127b0f_812__echo__5dfa0e6900092665",
+      "toolInput": "{\"text\":\"MARKETPLACE_NATIVE_MODEL_OK\"}",
+      "toolOutput": "{\"content\":[{\"text\":\"MARKETPLACE_NATIVE_MODEL_OK\",\"type\":\"text\"}],\"duplicate\":false,\"is_error\":false,\"server_name\":\"plugin-56127b0f-812a-4550-88a3-db33d1af46e9-fixture\",\"tool_name\":\"echo\"}",
+      "isError": false
+    },
+    {
+      "conversation_id": "b72a802a-c9eb-58d8-8f0b-199b311e7e99",
+      "timestamp": 1790136226187,
+      "type": "act",
+      "toolName": "skill_loader",
+      "toolInput": "{\"skill_id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\"}"
+    },
+    {
+      "conversation_id": "b72a802a-c9eb-58d8-8f0b-199b311e7e99",
+      "timestamp": 1790136226236,
+      "type": "observe",
+      "toolName": "skill_loader",
+      "toolInput": "{\"skill_id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\"}",
+      "toolOutput": "{\"authority_changed\":false,\"available_tools\":[\"read\",\"batch_read\",\"write\",\"edit\",\"glob\",\"grep\",\"list\",\"patch\",\"export_artifact\",\"list_artifacts\",\"batch_export_artifacts\",\"bash\",\"ast_parse\",\"ast_find_symbols\",\"ast_extract_function\",\"ast_get_imports\",\"code_index_build\",\"find_definition\",\"find_references\",\"call_graph\",\"dependency_graph\",\"edit_by_ast\",\"batch_edit\",\"preview_edit\",\"generate_tests\",\"run_tests\",\"analyze_coverage\",\"git_diff\",\"git_log\",\"generate_commit\",\"start_terminal\",\"stop_terminal\",\"get_terminal_status\",\"restart_terminal\",\"start_desktop\",\"stop_desktop\",\"get_desktop_status\",\"change_resolution\",\"restart_desktop\",\"import_file\",\"import_files_batch\",\"deps_install\",\"deps_check\",\"knowledge_search\",\"knowledge_source\",\"mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc\",\"mcp__plugin_56127b0f_812__echo__5dfa0e6900092665\",\"plugin-02a2a455-1743-4254-8b8b-7c68d98da342-demo\",\"plugin-56127b0f-812a-4550-88a3-db33d1af46e9-fixture\"],\"content\":\"---\\nname: plugin-demo\\ndescription: Verify the installed marketplace example using its echo tool.\\n---\\n\\nWhen asked to verify this example plugin, call its `echo` MCP tool with the user's\\ntext and report the returned text. Do not claim the tool ran without its result.\\n\",\"declared_tools\":[\"*\"],\"description\":\"A local, credential-free example of Skills, MCP tools, lifecycle hooks and an MCP app.\",\"execution_started\":false,\"id\":\"plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo\",\"name\":\"plugin-demo\",\"scope\":\"project\",\"status\":\"loaded\"}",
+      "isError": false
+    },
+    {
+      "conversation_id": "b72a802a-c9eb-58d8-8f0b-199b311e7e99",
+      "timestamp": 1790136231479,
+      "type": "act",
+      "toolName": "mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc",
+      "toolInput": "{\"text\":\"MARKETPLACE_NATIVE_MODEL_OK\"}"
+    },
+    {
+      "conversation_id": "b72a802a-c9eb-58d8-8f0b-199b311e7e99",
+      "timestamp": 1790136231481,
+      "type": "observe",
+      "toolName": "mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc",
+      "toolInput": "{\"text\":\"MARKETPLACE_NATIVE_MODEL_OK\"}",
+      "toolOutput": "{\"error\":\"tool error: tool 'mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc' is outside the approved permission profile; request human permission with the exact canonical tool name\"}",
+      "isError": true,
+      "error": "{\"error\":\"tool error: tool 'mcp__plugin_02a2a455_174__echo__987197ac5ee73cbc' is outside the approved permission profile; request human permission with the exact canonical tool name\"}"
+    }
+  ]
+}

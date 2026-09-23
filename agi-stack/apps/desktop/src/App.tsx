@@ -295,6 +295,7 @@ import {
 } from './features/chat/conversationTitleEventModel';
 import { coalesceStreamingTextEvents } from './features/chat/streamingTextEventModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
+import { localLlmUnconfiguredFromProviders } from './features/chat/localLlmReadinessModel';
 import {
   acknowledgeFullAccessWarning,
   autoApprovalSubmission,
@@ -5298,6 +5299,50 @@ export function App() {
     runInputDelivery,
     runInputDeliveryOptions,
   );
+  // Local runtime: a conversation turn can only run when at least one provider
+  // passes the sidecar's LLM admission. Probe the provider catalog so the
+  // composer fails fast with an actionable state instead of launching a run
+  // that can only die with model_unconfigured.
+  const [localLlmUnconfigured, setLocalLlmUnconfigured] = useState(false);
+  // App is the persistent root: returning from the provider settings route
+  // never remounts the conversation, so re-probe on every hash change.
+  const [localLlmProbeNonce, setLocalLlmProbeNonce] = useState(0);
+  useEffect(() => {
+    const onHashChange = () => setLocalLlmProbeNonce((nonce) => nonce + 1);
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+  useEffect(() => {
+    if (config.mode !== 'local' || !selectedConversation) {
+      setLocalLlmUnconfigured(false);
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    desktopTenantProvidersClientV2
+      .listLlmProviders(controller.signal)
+      .then((providers) => {
+        if (active) setLocalLlmUnconfigured(localLlmUnconfiguredFromProviders(providers));
+      })
+      .catch(() => {
+        // A catalog read failure must not block the composer; the runtime
+        // still surfaces its own structured error when it cannot route.
+        if (active) setLocalLlmUnconfigured(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    config.mode,
+    config.tenantId,
+    desktopTenantProvidersClientV2,
+    localLlmProbeNonce,
+    selectedConversation?.id,
+  ]);
+  const openProviderSettings = useCallback(() => {
+    window.location.hash = `/tenant/${encodeURIComponent(config.tenantId)}/providers`;
+  }, [config.tenantId]);
   const sessionChatDisabledReason =
     chatDisabledReason ??
     (selectedConversation
@@ -5310,8 +5355,19 @@ export function App() {
                 sessionProjection.capabilities.allowedActions.includes('send_message')
               ) && !runInputDeliveryOptions.length
             ? t('session.composerBlockedByRunState')
-            : null
+            : localLlmUnconfigured
+              ? t('session.localLlmUnconfigured')
+              : null
       : null);
+  const sessionLocalLlmNotice = useMemo(() => {
+    if (!selectedConversation || !localLlmUnconfigured) return null;
+    return {
+      tone: 'warning' as const,
+      title: t('session.localLlmUnconfiguredTitle'),
+      description: t('session.localLlmUnconfiguredDescription'),
+      actionLabel: t('session.localLlmUnconfiguredAction'),
+    };
+  }, [localLlmUnconfigured, selectedConversation, t]);
   const sessionAuthorityNotice = useMemo(() => {
     if (!selectedConversation || sessionProjectionState.status === 'ready') return null;
     if (sessionProjectionState.status === 'idle' || sessionProjectionState.status === 'loading') {
@@ -6948,6 +7004,10 @@ export function App() {
       : undefined,
     searchText: entry.searchText,
     onSelect: () => {
+      if (entry.routeId === 'tenant-tenant-plugins') {
+        openSettingsEntry('plugins');
+        return;
+      }
       if (entry.destinationPath) {
         desktopProductionRouteNavigation.openPath(entry.destinationPath);
       }
@@ -7155,9 +7215,12 @@ export function App() {
       onAcknowledgeFullAccessWarning: selectedConversation
         ? handleAcknowledgeFullAccessWarning
         : undefined,
-      authorityNotice: sessionAuthorityNotice,
-      onAuthorityAction:
-        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined,
+      authorityNotice: sessionAuthorityNotice ?? sessionLocalLlmNotice,
+      onAuthorityAction: sessionLocalLlmNotice
+        ? openProviderSettings
+        : sessionProjectionState.status === 'error'
+          ? invalidateSessionAuthority
+          : undefined,
       onWorkflowSelect: selectChatWorkflowTarget,
       onModelChange: selectChatRuntimeModel,
       onModelReset:
@@ -7554,7 +7617,7 @@ export function App() {
     return (
       <Theme
         appearance={themeAppearance}
-        accentColor="cyan"
+        accentColor="gray"
         grayColor="slate"
         radius="medium"
         scaling="95%"
@@ -7579,7 +7642,7 @@ export function App() {
       <DesktopRendererGenerationProviderV2 value={desktopRendererGenerationV2}>
         <Theme
           appearance={themeAppearance}
-          accentColor="cyan"
+          accentColor="gray"
           grayColor="slate"
           radius="medium"
           scaling="95%"

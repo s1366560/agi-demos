@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CheckCircledIcon, ReloadIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import { SettingsPage } from './SettingsCorePages';
-import {
-  updateLifecyclePresentation,
-  type UpdateLifecycleState,
-} from './updateSettingsModel';
+import { updateLifecyclePresentation, type UpdateLifecycleState } from './updateSettingsModel';
 import './UpdateSettingsPage.css';
 
 const unavailableState: UpdateLifecycleState = Object.freeze({
@@ -37,7 +33,8 @@ export function UpdateSettingsPage() {
     const unsubscribe = updates.subscribe((nextState) => {
       if (active) setState(nextState);
     });
-    void updates.getState()
+    void updates
+      .getState()
       .then((nextState) => {
         if (active) setState(nextState);
       })
@@ -95,17 +92,19 @@ export function UpdateSettingsPage() {
         aria-busy={busyAction !== null}
       >
         <header>
-          <span className="settings-update-state-icon" aria-hidden="true">
-            {presentation.tone === 'success' ? <CheckCircledIcon /> : <ReloadIcon />}
-          </span>
           <span>
             <strong aria-live="polite">{t(presentation.phaseKey)}</strong>
-            <small>{t('settings.updatesCurrentVersion', { version: state.currentVersion || '—' })}</small>
+            <small>
+              {t('settings.updatesCurrentVersion', { version: state.currentVersion || '—' })}
+            </small>
           </span>
         </header>
 
         {presentation.reasonKey ? (
-          <p className="settings-update-message" role={state.phase === 'failed' ? 'alert' : undefined}>
+          <p
+            className="settings-update-message"
+            role={state.phase === 'failed' ? 'alert' : undefined}
+          >
             {t(presentation.reasonKey)}
           </p>
         ) : null}
@@ -125,16 +124,18 @@ export function UpdateSettingsPage() {
           </div>
         ) : null}
 
-        <dl className="settings-update-versions">
-          <div>
-            <dt>{t('settings.updatesCandidateVersion')}</dt>
-            <dd>{state.candidateVersion ?? t('settings.notAvailable')}</dd>
-          </div>
-          <div>
-            <dt>{t('settings.updatesRecoveryVersion')}</dt>
-            <dd>{state.recoveryVersion ?? t('settings.notAvailable')}</dd>
-          </div>
-        </dl>
+        {state.candidateVersion || state.recoveryVersion ? (
+          <dl className="settings-update-versions">
+            <div>
+              <dt>{t('settings.updatesCandidateVersion')}</dt>
+              <dd>{state.candidateVersion ?? t('settings.notAvailable')}</dd>
+            </div>
+            <div>
+              <dt>{t('settings.updatesRecoveryVersion')}</dt>
+              <dd>{state.recoveryVersion ?? t('settings.notAvailable')}</dd>
+            </div>
+          </dl>
+        ) : null}
 
         {canCheck || canRestart ? (
           <footer>
@@ -144,7 +145,9 @@ export function UpdateSettingsPage() {
                 disabled={busyAction !== null}
                 onClick={() => void runAction('check')}
               >
-                {busyAction === 'check' ? t('settings.updatesChecking') : t('settings.updatesCheck')}
+                {busyAction === 'check'
+                  ? t('settings.updatesChecking')
+                  : t('settings.updatesCheck')}
               </button>
             ) : null}
             {canRestart ? (

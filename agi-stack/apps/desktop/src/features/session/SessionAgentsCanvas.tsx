@@ -55,7 +55,7 @@ export function SessionAgentsCanvas({
           <strong>{t('session.agents.title')}</strong>
           <small>{t('session.agents.description')}</small>
         </span>
-        <Badge color="cyan" variant="soft">
+        <Badge color="gray" variant="soft">
           {t('session.agents.total', { count: model.summary.total })}
         </Badge>
       </header>

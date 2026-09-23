@@ -112,7 +112,7 @@ export function SessionExecutionGraphCanvas({
           <header>
             <Share2Icon aria-hidden="true" />
             <strong>{t('session.graph.handoffs')}</strong>
-            <Badge color="cyan" variant="soft">
+            <Badge color="gray" variant="soft">
               {run.handoffs.length}
             </Badge>
           </header>

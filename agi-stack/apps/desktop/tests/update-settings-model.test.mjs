@@ -82,7 +82,7 @@ test('update settings clamp progress and distinguish successful verification', (
 
 test('update settings page subscribes to preload authority and exposes only allowed actions', () => {
   assert.match(updatePageSource, /window\.__MEMSTACK_DESKTOP__\?\.updates/u);
-  assert.match(updatePageSource, /updates\.getState\(\)/u);
+  assert.match(updatePageSource, /updates\s*\.getState\(\)/u);
   assert.match(updatePageSource, /updates\.subscribe/u);
   assert.match(updatePageSource, /allowedActions\.includes\('check'\)/u);
   assert.match(updatePageSource, /allowedActions\.includes\('restart_to_apply'\)/u);

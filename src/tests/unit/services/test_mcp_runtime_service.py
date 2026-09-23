@@ -509,3 +509,25 @@ class TestMCPRuntimeService:
             level="debug",
         )
         lifecycle_event_repo.record_event.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_disable_retries_failed_stop_even_when_enabled_already_false():
+    server = _make_server(enabled=False)
+    repository = SimpleNamespace(
+        get_by_id=AsyncMock(return_value=server), update=AsyncMock(return_value=True)
+    )
+    service = MCPRuntimeService(
+        server_repo=repository,
+        app_repo=AsyncMock(),
+        app_service=AsyncMock(),
+        sandbox_manager=AsyncMock(),
+        lifecycle_event_repo=AsyncMock(),
+        project_repo=AsyncMock(),
+    )
+    service._stop_server_runtime = AsyncMock(side_effect=[RuntimeError("offline"), None])
+    with pytest.raises(RuntimeError, match="offline"):
+        await service.update_server(server_id="srv-1", tenant_id="tenant-1", enabled=False)
+    result = await service.update_server(server_id="srv-1", tenant_id="tenant-1", enabled=False)
+    assert result.enabled is False
+    assert service._stop_server_runtime.await_count == 2

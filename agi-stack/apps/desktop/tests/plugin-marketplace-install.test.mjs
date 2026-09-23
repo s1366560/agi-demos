@@ -30,7 +30,13 @@ const signedEntry = {
       { permissions: ['tools.execute'] },
     ],
   },
-  signature: { algorithm: 'Ed25519', public_key_pem: 'pem-public', signature_base64: 'c2ln' },
+  // Catalog rows redact signature secrets; the anchors below are what the
+  // backend resolution verifies against.
+  signature: {
+    algorithm: 'Ed25519',
+    public_key_sha256: 'f'.repeat(64),
+    signature_sha256: 'e'.repeat(64),
+  },
   provenance: {
     predicateType: 'https://slsa.dev/provenance/v1',
     builderId: 'builder-v2',
@@ -59,8 +65,11 @@ test('install availability distinguishes ready, installed, revoked, scan, unsign
     marketplaceInstallAvailability('cloud', {
       ...signedEntry,
       signature: { algorithm: 'Ed25519' },
-      provenance: { builder_id: 'builder-v2' },
     }),
+    'unsigned',
+  );
+  assert.equal(
+    marketplaceInstallAvailability('cloud', { ...signedEntry, provenance: {} }),
     'unsigned',
   );
   assert.equal(marketplaceInstallAvailability('local', signedEntry), 'local_unavailable');
@@ -88,41 +97,24 @@ test('install request pins the exact protocol-v2 contract shape', () => {
     },
     artifact_sha256: 'a'.repeat(64),
     manifest: signedEntry.manifest,
-    signature: {
-      algorithm: 'Ed25519',
-      public_key_pem: 'pem-public',
-      signature_base64: 'c2ln',
-    },
-    provenance: {
-      predicate_type: 'https://slsa.dev/provenance/v1',
-      builder_id: 'builder-v2',
-      subject_name: 'release/notifier',
-    },
     approved_permissions: ['network.egress', 'tools.execute'],
     tenant_admin_approved: true,
     security_scan_passed: true,
   });
 });
 
-test('install request falls back to snake_case provenance and manifest signature', () => {
-  const request = buildMarketplaceInstallRequest(
-    {
-      ...signedEntry,
-      signature: { public_key_pem: 'pem-public' },
-      provenance: {
-        predicate_type: 'https://slsa.dev/provenance/v1',
-        builder_id: 'builder-v2',
-        subject_name: 'release/notifier',
-      },
-    },
-    'tenant-1',
-  );
-  assert.equal(request?.signature.signature_base64, 'c2ln');
-  assert.equal(request?.provenance.builder_id, 'builder-v2');
+test('install request omits signature material and refuses entries without anchors', () => {
+  const request = buildMarketplaceInstallRequest(signedEntry, 'tenant-1');
+  assert.equal('signature' in request, false);
+  assert.equal('provenance' in request, false);
   assert.equal(
-    buildMarketplaceInstallRequest(signedEntry, '  '),
+    buildMarketplaceInstallRequest(
+      { ...signedEntry, signature: { public_key_pem: 'pem-public' } },
+      'tenant-1',
+    ),
     null,
   );
+  assert.equal(buildMarketplaceInstallRequest(signedEntry, '  '), null);
 });
 
 test('client install, approve and revoke hit exact V2 endpoints with contract bodies', async () => {
@@ -414,7 +406,8 @@ test('install dialog requires permission approval, then shows busy and closes on
   assert.equal(container.querySelector('[data-testid="busy"]').textContent, 'true');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].tenant_id, 'tenant-1');
-  assert.equal(calls[0].signature.public_key_pem, 'pem-public');
+  assert.equal('signature' in calls[0], false);
+  assert.equal('provenance' in calls[0], false);
 
   await act(async () => {
     pending.resolve({

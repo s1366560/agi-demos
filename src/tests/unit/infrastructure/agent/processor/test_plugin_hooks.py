@@ -408,3 +408,22 @@ class TestExecuteToolHooks:
         assert ap["tool_name"] == "my_tool"
         assert ap["session_id"] == "sess-4"
         assert ap["tenant_id"] == "tenant-1"
+
+
+@pytest.mark.unit
+async def test_after_tool_marketplace_failure_terminates_operation():
+    from src.infrastructure.plugins.marketplace_hooks import MarketplaceHookError
+
+    async def dispatch(name, payload=None):
+        if name == "after_tool_execution":
+            raise MarketplaceHookError("approved hook failed")
+        return AgentRuntimeDispatchResultV2(payload=dict(payload or {}))
+
+    tool = _make_tool(name="my_tool")
+    processor = _make_processor(dispatcher=_make_dispatcher(dispatch), tools=[tool])
+    processor._pending_tool_calls["call"] = ToolPart(
+        call_id="call", tool="my_tool", status=ToolState.PENDING
+    )
+    with pytest.raises(MarketplaceHookError, match="approved hook failed"):
+        async for _ in processor._execute_tool("session", "call", "my_tool", {}):
+            pass

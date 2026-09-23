@@ -38,7 +38,7 @@
 .session-evidence-record-icon {
   display: inline-grid;
   place-items: center;
-  color: var(--cyan-10);
+  color: var(--gray-10);
   background: var(--gray-3);
   border-radius: 6px;
 }
@@ -78,7 +78,7 @@
 .session-evidence-record > button:focus-visible {
   position: relative;
   z-index: 1;
-  outline: 2px solid var(--cyan-8);
+  outline: 2px solid var(--gray-8);
   outline-offset: -2px;
 }
 

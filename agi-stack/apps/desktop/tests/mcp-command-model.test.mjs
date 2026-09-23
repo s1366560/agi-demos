@@ -8,9 +8,9 @@ const { formatMCPStdioCommand, mcpStdioCommandArgv, parseMCPStdioCommand } = req
 );
 
 test('MCP stdio commands are normalized to absolute direct argv without a shell', () => {
-  assert.deepEqual(parseMCPStdioCommand('/opt/homebrew/bin/node /opt/homebrew/bin/gitnexus mcp'), {
+  assert.deepEqual(parseMCPStdioCommand('/opt/homebrew/bin/node /opt/homebrew/bin/example-mcp-server mcp'), {
     ok: true,
-    argv: ['/opt/homebrew/bin/node', '/opt/homebrew/bin/gitnexus', 'mcp'],
+    argv: ['/opt/homebrew/bin/node', '/opt/homebrew/bin/example-mcp-server', 'mcp'],
   });
   assert.deepEqual(parseMCPStdioCommand('/usr/bin/python -m "example server" --flag=\\ value'), {
     ok: true,
@@ -32,7 +32,7 @@ test('MCP stdio command parsing rejects incomplete structural input', () => {
     ok: false,
     reason: 'trailing_escape',
   });
-  assert.deepEqual(parseMCPStdioCommand('node /opt/homebrew/bin/gitnexus mcp'), {
+  assert.deepEqual(parseMCPStdioCommand('node /opt/homebrew/bin/example-mcp-server mcp'), {
     ok: false,
     reason: 'executable_not_absolute',
   });

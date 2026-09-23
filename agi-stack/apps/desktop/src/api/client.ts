@@ -1,3 +1,4 @@
+import { createMarketplaceClient, type MarketplaceClient } from '../../../../packages/plugin-marketplace-ui/src/client';
 import { validMessageDisplayContent } from '../features/chat/messageDisplayModel';
 import { createLocalPluginClient, type LocalPluginClient } from './localPluginClient';
 import type {
@@ -217,7 +218,14 @@ export type DesktopMCPServerCreateInput = {
   idempotency_key: string;
 };
 
-export type DesktopMCPServerUpdateInput = DesktopMCPServerCreateInput & {
+export type DesktopMCPServerUpdateInput = Omit<
+  DesktopMCPServerCreateInput,
+  'server_type' | 'transport_config'
+> & {
+  // Omitted on unchanged edits: the backend treats a present server_type or
+  // transport_config as a config change and re-installs the running runtime.
+  server_type?: DesktopMCPTransport;
+  transport_config?: DesktopMCPTransportConfig;
   expected_revision?: number;
 };
 
@@ -1882,6 +1890,13 @@ export class DesktopApiClient {
   private workspaceRoot(suffix: string): string {
     const workspaceId = requireValue(this.config.workspaceId, 'workspace id');
     return `/api/v1/workspaces/${encodeURIComponent(workspaceId)}${suffix}`;
+  }
+
+  pluginMarketplaceV3(): MarketplaceClient {
+    return createMarketplaceClient((path, options) => this.request(path, options), {
+      tenant_id: this.config.tenantId,
+      ...(this.config.projectId ? { project_id: this.config.projectId } : {}),
+    }, this.config.mode === 'cloud');
   }
 
   localPlugins(): LocalPluginClient {

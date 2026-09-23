@@ -1647,7 +1647,7 @@ export const ChatPanel = memo(function ChatPanel({
             <div className="message-stack">
               {timelineState ? (
                 <>
-                  {activitySummary ? (
+                  {activitySummary && activityPresence === 'live' ? (
                     <section
                       className="session-current-activity"
                       aria-label={t('session.currentActivity')}
@@ -1674,10 +1674,7 @@ export const ChatPanel = memo(function ChatPanel({
                                 t('session.waitingForActivity')}
                           </strong>
                         </span>
-                        <Badge
-                          color={activityPresence === 'live' ? 'cyan' : 'gray'}
-                          variant="soft"
-                        >
+                        <Badge color="gray" variant="soft">
                           {t(
                             activityPresence === 'live'
                               ? 'session.live'
@@ -2742,7 +2739,7 @@ function ChatComposer({
               >
                 <div className="run-input-queue-copy">
                   <div>
-                    <Badge color={handoffState === 'ready' ? 'cyan' : 'gray'}>
+                    <Badge color={handoffState === 'ready' ? 'green' : 'gray'}>
                       {statusLabel}
                     </Badge>
                     <small>
@@ -2758,7 +2755,7 @@ function ChatComposer({
                   <Button
                     type="button"
                     size="1"
-                    color="cyan"
+                    color="gray"
                     loading={promotingRunInputId === queuedInput.id}
                     disabled={
                       Boolean(promotingRunInputId) ||

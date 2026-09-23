@@ -81,6 +81,7 @@ export function validateSkillDraft(draft: SkillEditorDraft): SkillDraftErrors {
   const name = draft.name.trim();
   if (!name) errors.name = 'required';
   else if (!SKILL_NAME_PATTERN.test(name)) errors.name = 'invalid_name';
+  else if (name.length > 64) errors.name = 'too_long';
   if (!draft.description.trim()) errors.description = 'required';
   else if (draft.description.trim().length > 1024) errors.description = 'too_long';
   if (draft.scope === 'project' && !draft.projectId.trim()) errors.projectId = 'required';

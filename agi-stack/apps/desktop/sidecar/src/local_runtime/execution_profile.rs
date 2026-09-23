@@ -510,7 +510,7 @@ mod tests {
             "system_prompt": "Verify with direct evidence.",
             "allowed_tools": ["read", "grep"],
             "allowed_skills": ["code-exploration"],
-            "allowed_mcp_servers": ["gitnexus"]
+            "allowed_mcp_servers": ["example-mcp-server"]
         });
 
         let profile = ExecutionProfile::resolve(
@@ -522,7 +522,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(profile.allowed_tools, ["grep", "read"]);
-        assert_eq!(profile.allowed_mcp_servers, ["gitnexus"]);
+        assert_eq!(profile.allowed_mcp_servers, ["example-mcp-server"]);
         assert_eq!(profile.skill.as_ref().unwrap().id, "code-exploration");
         assert_eq!(profile.subagent.as_ref().unwrap().id, "qa-reviewer");
         assert!(profile

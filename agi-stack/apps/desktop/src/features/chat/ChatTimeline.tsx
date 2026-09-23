@@ -47,6 +47,7 @@ import {
   timelineWorkingStartedAtUs,
   timelineDayKey,
   timelineDayLabel,
+  timelineRowDurationMs,
   toolActivityRows,
   toolCallDiffStat,
   toolCallPairDurationMs,
@@ -859,10 +860,9 @@ function ToolCallPreparingBody({ pair }: { pair: ToolCallPair }) {
     <div className="timeline-details">
       <div className="timeline-detail-block">
         <span>{t('chat.buildingArguments')}</span>
-        <pre className="timeline-tool-args-stream">
-          {streamingArgs}
-          <span className="timeline-tool-args-caret" aria-hidden="true" />
-        </pre>
+        {/* Web parity (MessageStream): the live args block renders with no
+            trailing caret element. */}
+        <pre className="timeline-tool-args-stream">{streamingArgs}</pre>
       </div>
     </div>
   );
@@ -1059,10 +1059,8 @@ function TimelineItemView({
     return (
       <NarrativeMessageFrame
         kind={kind}
-        label={timelineTitle(item, t)}
         time={formatTimelineTime(item)}
         content={item.content ?? ''}
-        badge={kind === 'agent' ? t('session.workspaceAgent') : null}
         className="timeline-item"
         timelineItemId={item.id}
         streaming={Boolean(item.metadata?.streaming)}
@@ -1117,6 +1115,16 @@ function TimelineItemView({
 
   const hasDetails = timelineHasDetails(item, kind);
   const status = timelineStatus(item);
+  /* Web conversation parity 2026-12 (execution rows): the trailing meta shows
+     a duration when the event reports one and nothing otherwise — never a
+     wall-clock time. */
+  const rowDurationMs = timelineRowDurationMs(item);
+  const rowDuration =
+    rowDurationMs !== null ? formatToolCallDuration(rowDurationMs) : '';
+  /* Web conversation parity 2026-12 (InlineHITLCard): HITL rows render the
+     standalone card directly — no uppercase type eyebrow, no collapse toggle,
+     no trailing meta row (the web card has none of those). */
+  const hitlCard = timelineHitlType(item) !== null;
   return (
     <article
       className={`message timeline-row timeline-item ${kind} ${expanded ? 'is-expanded' : ''} ${
@@ -1125,7 +1133,9 @@ function TimelineItemView({
       data-timeline-anchor-id={item.id}
       tabIndex={-1}
     >
-      {hasDetails ? (
+      {hitlCard ? (
+        <span className="timeline-row-spacer" aria-hidden="true" />
+      ) : hasDetails ? (
         <button
           type="button"
           className="timeline-row-toggle"
@@ -1140,14 +1150,16 @@ function TimelineItemView({
         <span className="timeline-row-spacer" aria-hidden="true" />
       )}
       <div className="timeline-row-main">
-        <div className="timeline-row-line">
-          <span className="timeline-row-icon" aria-hidden="true">
-            {timelineIcon(kind, item)}
-          </span>
-          <span className="timeline-row-title">{timelineTitle(item, t)}</span>
-          <span className="timeline-row-summary">{summary}</span>
-        </div>
-        {expanded && hasDetails ? (
+        {hitlCard ? null : (
+          <div className="timeline-row-line">
+            <span className="timeline-row-icon" aria-hidden="true">
+              {timelineIcon(kind, item)}
+            </span>
+            <span className="timeline-row-title">{timelineTitle(item, t)}</span>
+            <span className="timeline-row-summary">{summary}</span>
+          </div>
+        )}
+        {hitlCard || (expanded && hasDetails) ? (
           <TimelineItemBody
             item={item}
             kind={kind}
@@ -1159,17 +1171,21 @@ function TimelineItemView({
           />
         ) : null}
       </div>
-      <div className="timeline-row-meta">
-        {status ? (
-          <span className={`timeline-status ${status.kind}`}>
-            {status.localized ? t(status.label) : status.label}
-          </span>
-        ) : null}
-        {lineCount > 1 ? (
-          <span>{t('chat.lineCount', { count: lineCount })}</span>
-        ) : null}
-        <span>{formatTimelineTime(item)}</span>
-      </div>
+      {hitlCard ? null : (
+        <div className="timeline-row-meta">
+          {status ? (
+            <span className={`timeline-status ${status.kind}`}>
+              {status.localized ? t(status.label) : status.label}
+            </span>
+          ) : null}
+          {lineCount > 1 ? (
+            <span>{t('chat.lineCount', { count: lineCount })}</span>
+          ) : null}
+          {rowDuration ? (
+            <span className="timeline-row-duration">{rowDuration}</span>
+          ) : null}
+        </div>
+      )}
     </article>
   );
 }

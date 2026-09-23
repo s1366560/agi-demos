@@ -669,6 +669,13 @@
   white-space: nowrap;
 }
 
+/* Web conversation parity 2026-12: row meta carries duration only (same 2xs
+   tabular-nums treatment as the rail duration) — never a wall-clock time. */
+.timeline-row-duration {
+  color: var(--desktop-chat-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Web conversation parity 2026-12: status pills follow the web ToolExecution
    vocabulary — 10px font-medium rounded-full tints (running = web blue,
    done = emerald, error = red). */
@@ -729,9 +736,9 @@
   color: var(--desktop-status-running);
 }
 
-/* Live argument stream: blue-tinted mono panel with an inline pulsing caret
-   (web bg-blue-50 dark:bg-blue-500/5, border-blue-200 dark:border-blue-500/20,
-   max-h-32 scroll). */
+/* Live argument stream: blue-tinted mono panel with no caret element (web
+   bg-blue-50 dark:bg-blue-500/5, border-blue-200 dark:border-blue-500/20,
+   max-h-32 scroll — MessageStream renders the block caret-free). */
 .timeline-details pre.timeline-tool-args-stream {
   max-height: 128px;
   overflow-y: auto;
@@ -740,17 +747,6 @@
   color: var(--desktop-chat-text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.timeline-tool-args-caret {
-  display: inline-block;
-  width: 6px;
-  height: 14px;
-  margin-left: 2px;
-  border-radius: 1px;
-  background: var(--desktop-status-running);
-  vertical-align: -2px;
-  animation: tool-preparing-pulse 1.2s ease-in-out infinite;
 }
 
 /* Preparing with no arguments yet: dashed blue placeholder (web
@@ -1335,8 +1331,7 @@
 
 @media (prefers-reduced-motion: reduce) {
 .tool-call-icon.is-running svg,
-.timeline-status-dot,
-.timeline-tool-args-caret {
+.timeline-status-dot {
     animation: none;
   }
 
@@ -1863,10 +1858,10 @@
   gap: 5px;
   max-width: 320px;
   padding: 4px 5px 4px 7px;
-  color: var(--cyan-11);
-  border: 1px solid var(--cyan-a6);
+  color: var(--gray-11);
+  border: 1px solid var(--gray-a6);
   border-radius: 6px;
-  background: var(--cyan-a3);
+  background: var(--gray-a3);
   font-size: 11px;
 }
 
@@ -1890,7 +1885,7 @@
 }
 
 .composer-reference-chips button:hover {
-  background: var(--cyan-a5);
+  background: var(--gray-a5);
 }
 
 .composer-delivery-switch {
@@ -1912,9 +1907,9 @@
 }
 
 .composer-delivery-switch button.is-active {
-  color: var(--cyan-11);
-  background: var(--cyan-a5);
-  box-shadow: inset 0 0 0 1px var(--cyan-a6);
+  color: var(--gray-11);
+  background: var(--gray-a5);
+  box-shadow: inset 0 0 0 1px var(--gray-a6);
 }
 
 @media (max-width: 1100px) {

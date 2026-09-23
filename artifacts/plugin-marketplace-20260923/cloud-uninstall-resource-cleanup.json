@@ -1,0 +1,25 @@
+{
+  "Skill": [],
+  "MCPServer": [],
+  "MCPAppModel": [],
+  "installations": [
+    {
+      "id": "708f357d-e539-400b-97ae-6fa76081bc4e",
+      "status": "uninstalled",
+      "owned_skills": [],
+      "owned_servers": [],
+      "configuration_present": false,
+      "runtime_snapshot_removed": true
+    },
+    {
+      "id": "6ac81710-135c-46ee-bbd8-045b2ff9a0b4",
+      "status": "uninstalled",
+      "owned_skills": [],
+      "owned_servers": [],
+      "configuration_present": false,
+      "runtime_snapshot_removed": true
+    }
+  ],
+  "dedicated_oauth_records": [],
+  "registered_runtime_roots": []
+}

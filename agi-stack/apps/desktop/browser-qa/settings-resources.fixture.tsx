@@ -1,0 +1,46 @@
+import React, { useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { Theme } from '@radix-ui/themes';
+import '@radix-ui/themes/styles.css';
+import '../src/styles/global.css';
+import { I18nProvider } from '../src/i18n';
+import { LocalPluginSettings } from '../src/features/settings/LocalPluginSettings';
+import { ModelProviderWorkspace } from '../src/features/settings/ModelProviderWorkspace';
+import { ManagedResourceWorkspace } from '../src/features/settings/ManagedResourceViews';
+import { AgentDefinitionEditorDialog } from '../src/features/settings/AgentDefinitionEditorDialog';
+import { SubAgentEditorDialog } from '../src/features/settings/SubAgentEditorDialog';
+import { SkillEditorDialog } from '../src/features/settings/SkillEditorDialog';
+import { MCPServerDialog } from '../src/features/settings/MCPServerDialog';
+import { PluginInstallDialog, PluginUninstallDialog } from '../src/features/settings/PluginManagementDialogs';
+import { SkillImportDialog, SkillVersionsDialog } from '../src/features/settings/SkillPackageDialogs';
+import { SkillEvolutionDialog } from '../src/features/settings/SkillEvolutionDialog';
+import { SubAgentLibraryDialog } from '../src/features/settings/SubAgentLibraryDialog';
+const noop=()=>{};
+const project={id:'project-1',name:'Workspace',tenant_id:'tenant-1'};
+const skill={id:'skill-1',name:'Review changes',description:'Review changes and report actionable findings.',status:'active',scope:'tenant',source:'database',version:'1.0',tools:['read','search'],content:'---\nname: review\ndescription: Review changes\n---\nReview the changes.'};
+const plugin={id:'plugin-1',plugin_id:'workspace-tools',name:'Workspace tools',description:'Tools for the current workspace.',version:'1.2.0',publisher:'Example',install_status:'installed',manifest:{permissions:['workspace.read']},tools:['read','search']};
+const provider={id:'provider-1',tenant_id:'tenant-1',name:'Workspace provider',provider_type:'openai',auth_method:'api_key',is_active:true,credential_configured:true,api_key_masked:'••••••',base_url:'https://api.example.com/v1',llm_model:'model-one',allowed_models:['model-one','model-two'],health_status:'healthy',revision:1};
+const descriptor={operationType:'llm',providerType:'openai',displayName:'OpenAI',authMethods:['api_key'],unavailableAuthMethods:[],probeSupported:true};
+const client={testLlmProviderDraft:async()=>({status:'healthy',success:true,probed:true,catalog:{availability:'unavailable',models:[]}}),getLlmProviderUsage:async()=>({available:false}),getLlmProviderModelCatalog:async()=>({models:[]}),listLlmProviders:async()=>[provider],listLlmProviderTypes:async()=>[descriptor]};
+const config={apiKey:'fixture',localApiToken:'fixture',mode:'cloud',apiBaseUrl:'https://example.com',tenantId:'tenant-1',projectId:'project-1',workspaceId:'workspace-1'};
+const common={busy:false,error:null,onClose:noop,onSave:noop,onDelete:null};
+function Fixture(){const params=new URLSearchParams(location.search);const scene=params.get('scene');const [query,setQuery]=useState('');
+let content;
+switch(scene){
+case 'local-plugins':content=<LocalPluginSettings config={{...config,mode:'local',localApiToken:'fixture'} as any} canManage/>;break;
+case 'provider':content=<ModelProviderWorkspace config={config as any} client={client as any} canManage onRuntimeStatusRefresh={async()=>{}}/>;break;
+case 'agent':content=<AgentDefinitionEditorDialog {...common} definition={null} projects={[project] as any} initialProjectId="project-1" externalAcpAgents={[]} externalAcpAgentsLoading={false} externalAcpAgentsError={null}/>;break;
+case 'subagent':content=<SubAgentEditorDialog {...common} definition={null} projects={[project] as any} initialProjectId="project-1"/>;break;
+case 'skill':content=<SkillEditorDialog {...common} skill={null} projects={[project] as any} initialProjectId="project-1" allowTenantScope loading={false} contentReady/>;break;
+case 'mcp':content=<MCPServerDialog {...common} server={null} onSubmit={noop}/>;break;
+case 'plugin-install':content=<PluginInstallDialog {...common} plugin={plugin as any} onInstall={noop}/>;break;
+case 'plugin-uninstall':content=<PluginUninstallDialog {...common} plugin={plugin as any} onUninstall={noop}/>;break;
+case 'skill-import':content=<SkillImportDialog {...common} projects={[project] as any} initialProjectId="project-1" allowTenantScope onImport={noop}/>;break;
+case 'skill-versions':content=<SkillVersionsDialog {...common} skill={skill as any} versions={[{id:"version-1",version_number:1,version_label:"1.0",change_summary:"Improve review instructions",created_by:"User",created_at:"2026-09-22T00:00:00Z"}] as any} loading={false} rollbackVersion={null} preview={null} previewLoading={false} canRollback onRollback={noop} onPreview={noop} onClosePreview={noop}/>;break;
+case 'skill-evolution':content=<SkillEvolutionDialog {...common} skill={skill as any} detail={{captured_session_count:4,trigger:{capture_hook:'session_complete',min_sessions_per_skill:3,min_avg_score:0.7,capture_timing:'After a conversation',scheduled_timing:'Daily',enabled:true},route:[{id:"job-1",kind:"evolution_job",status:"pending_review",label:"Review proposed improvements",candidate_preview:"Add a concise summary before findings.",created_at:"2026-09-22T00:00:00Z"}]} as any} loading={false} running={false} processingJobId={null} canManage onRun={noop} onProcessJob={noop}/>;break;
+case 'library-error':content=<SubAgentLibraryDialog {...common} templates={[]} error={params.get('error')} loading={false} busyId={null} onInstall={noop}/>;break;
+case 'subagent-library':content=<SubAgentLibraryDialog {...common} templates={[{id:'template-1',name:'Reviewer',display_name:'Review assistant',category:'Development',description:'Review files and report findings.',model:'model-one',version:'1.0',install_count:2,tags:['code','review']}] as any} loading={false} busyId={null} onInstall={noop}/>;break;
+default:content=<ManagedResourceWorkspace section="plugins" items={[plugin] as any} selected={plugin as any} query={query} filter="all" loading={false} error={null} actionError={null} busy={false} canManage canCreate hasAvailableProjects mode={scene==='plugin-local'?'local':'cloud'} onQueryChange={setQuery} onFilterChange={noop} onSelect={noop} onRetry={noop} onAction={noop} onCreate={noop} onImport={noop} onEdit={noop} onVersions={noop} onExport={noop} onEvolution={noop} onSubAgentLibrary={noop} onImportSubAgent={noop} onChannels={noop} onReload={noop} onRemove={noop} onInstall={noop}/>;
+}
+return <I18nProvider><Theme appearance={(params.get('theme')||'dark') as any}><div style={{height:'100vh',minWidth:0}}>{content}</div></Theme></I18nProvider>}
+createRoot(document.getElementById('root')!).render(<Fixture/>);

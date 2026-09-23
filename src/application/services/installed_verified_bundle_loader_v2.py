@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import hashlib
 
-from src.domain.model.plugins.generated_v2 import BundleManifestV2, BundleReferenceV2
+from src.domain.model.plugins.generated_v2 import (
+    BundleManifestV2,
+    BundleReferenceV2,
+    ScopeKindV2,
+    ScopeV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
@@ -46,8 +51,10 @@ class InstalledVerifiedBundleLoaderV2:
         production_sources: ProductionBundleSourcesV2,
         trusted_public_keys: tuple[str, ...],
         allowed_registries: frozenset[str] | None = None,
+        scope: ScopeV2 = ScopeV2(kind=ScopeKindV2.ROOT),
     ) -> None:
         super().__init__()
+        self._scope = scope
         self._governance_repository = governance_repository
         self._artifact_client = artifact_client
         self._production_sources = production_sources
@@ -112,9 +119,20 @@ class InstalledVerifiedBundleLoaderV2:
             manifest_digest=package.oci_manifest_digest,
         )
         self._validate_artifact(package.artifact_digest, package.oci_manifest_digest, artifact)
-        permissions = await self._governance_repository.list_active_permissions_for_plugin(
-            reference.bundle_id
-        )
+        permissions = []
+        grants = [("root", "global")] if self._scope.kind is ScopeKindV2.ROOT else []
+        if self._scope.tenant_id:
+            grants.append(("tenant", self._scope.tenant_id))
+        if self._scope.project_id:
+            grants.append(("project", self._scope.project_id))
+        for kind, identifier in grants:
+            permissions.extend(
+                await self._governance_repository.list_permissions(
+                    reference.bundle_id,
+                    scope_type=kind,
+                    scope_id=identifier,
+                )
+            )
         verified = parse_bundle_archive_v2(
             artifact.archive,
             source=reference.source,

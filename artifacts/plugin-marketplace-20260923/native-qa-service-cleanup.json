@@ -1,0 +1,20 @@
+{
+  "checked_at": "2026-09-23T05:08:28.012203+00:00",
+  "task_ports": {
+    "18891": {
+      "listening": false
+    },
+    "18000": {
+      "listening": false
+    },
+    "3001": {
+      "listening": false
+    },
+    "5173": {
+      "listening": false
+    }
+  },
+  "normal_api_8000": 200,
+  "task_browser_tabs_closed": true,
+  "profile_and_workspace_preserved": true
+}

@@ -135,12 +135,17 @@ export function composerAgentExecutionContext(
     'skill',
     'execution_skill_name',
   );
-  const subAgentId = lastExecutionResourceId(contextItems, 'subagent');
   const command = lastExecutionResourceId(contextItems, 'command');
   const content = rawMessage.trim();
   const fileMetadata = composerFileMetadata(contextItems);
   const commandMessage = command ? `${command} ${content}` : content;
   const message = commandMessage;
+  // Direct subagent addressing is a local-runtime selector only. The cloud
+  // send_message contract has no subagent_id field, so emitting one would
+  // silently route to the default agent; cloud subagent chips stay context
+  // references (and live steering runs through the subagent control panel).
+  const subAgentId =
+    mode === 'local' ? lastExecutionResourceId(contextItems, 'subagent') : null;
   const resources = contextItems
     .filter(
       (item) =>

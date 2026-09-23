@@ -1,0 +1,29 @@
+{
+  "oauth_receipts": 1,
+  "installations": [
+    {
+      "id": "02a2a455-1743-4254-8b8b-7c68d98da342",
+      "status": "uninstalled",
+      "oauth_services": 0,
+      "resources": null
+    },
+    {
+      "id": "56127b0f-812a-4550-88a3-db33d1af46e9",
+      "status": "uninstalled",
+      "oauth_services": 0,
+      "resources": null
+    },
+    {
+      "id": "cd24397a-1451-4dc6-95c0-9508b6ff0bc1",
+      "status": "uninstalled",
+      "oauth_services": 0,
+      "resources": null
+    },
+    {
+      "id": "bff4f657-070b-4ede-b73c-85f216d0c967",
+      "status": "enabled",
+      "oauth_services": 1,
+      "resources": null
+    }
+  ]
+}

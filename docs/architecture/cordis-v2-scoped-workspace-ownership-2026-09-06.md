@@ -4,7 +4,7 @@ Scoped builtin definitions now borrow the supplying ROOT generation's typed Work
 
 This makes explicitly enabled workspace prompt-context profiles loadable with the application-owned Workspace Core resources. It does not enable disabled Profile entries or change stored source content.
 
-The new definition checks the declared strategy, resolves the exact Workspace Core service from its leased owner, checks the service type, and releases the lease on failure. Existing scope validation and the Loader's dependency ordering still apply. Scoped factory impact is UNKNOWN because GitNexus has not indexed it; focused runtime tests provide the ownership evidence.
+The new definition checks the declared strategy, resolves the exact Workspace Core service from its leased owner, checks the service type, and releases the lease on failure. Existing scope validation and the Loader's dependency ordering still apply. Focused runtime tests provide the ownership evidence.
 
 ## Validation scope
 

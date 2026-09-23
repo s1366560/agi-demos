@@ -17,7 +17,7 @@ Persistence failure retains the actual ACK or NACK in `pending_receipt`. New `ac
 - Focused production Pyright: **0 errors, 4 warnings**.
 - Logs and SHA256 manifest: `/var/tmp/cordis-host-receipt-wvah7m3r`.
 
-GitNexus reported apply HIGH (3 direct callers, 5 total), apply_distribution HIGH (1 direct, 3 total), class MEDIUM (12 direct, 71 total), acquire LOW, and close LOW after resolving its UID without the file filter. The index cannot establish complete current boundary coverage; manual inspection found new boundary admission uses acquire and detached retention uses acquire_exact.
+Manual inspection found new boundary admission uses acquire and detached retention uses acquire_exact.
 
 ## Remaining integration and limits
 

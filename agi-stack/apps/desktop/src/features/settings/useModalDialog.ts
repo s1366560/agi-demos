@@ -13,6 +13,7 @@ type ModalDialogOptions = {
   active?: boolean;
   initialFocusRef?: RefObject<HTMLElement | null>;
   nested?: boolean;
+  returnFocusSelector?: string;
   onClose: () => void;
 };
 
@@ -27,6 +28,7 @@ export function useModalDialog({
   active = true,
   initialFocusRef,
   nested = false,
+  returnFocusSelector,
   onClose,
 }: ModalDialogOptions): RefObject<HTMLElement | null> {
   const dialogRef = useRef<HTMLElement>(null);
@@ -86,9 +88,21 @@ export function useModalDialog({
     return () => {
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener('keydown', handleKeyDown, { capture: nested });
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      // Plugin surface updates can replace the opener during the close commit.
+      // Restore only after that commit, resolving the current trigger if needed.
+      window.requestAnimationFrame(() => {
+        if (
+          previouslyFocused?.isConnected &&
+          previouslyFocused !== document.body &&
+          !dialog.contains(previouslyFocused)
+        ) {
+          previouslyFocused.focus();
+        } else if (returnFocusSelector) {
+          document.querySelector<HTMLElement>(returnFocusSelector)?.focus();
+        }
+      });
     };
-  }, [active, initialFocusRef, nested]);
+  }, [active, initialFocusRef, nested, returnFocusSelector]);
 
   return dialogRef;
 }

@@ -48,8 +48,5 @@ Those defects were corrected before the focused and integration successes above.
 Initial attempt logs were partly overwritten, so the retained final logs must not
 be presented as an uninterrupted first-attempt success.
 
-GitNexus reported LOW impact for the existing hook (three impacts, one direct
-caller). The factory preserves the singleton and definition ordering. Source-based
+The factory preserves the singleton and definition ordering. Source-based
 wiring tests now read both assembly files and assert the singleton uses the factory.
-Some test-file graph lookups were ambiguous or unindexed; their scope was reviewed
-directly rather than treating missing graph results as proof.

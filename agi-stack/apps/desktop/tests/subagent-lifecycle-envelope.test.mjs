@@ -82,10 +82,35 @@ test("real nested spawning and flat completion envelopes form one child lifecycl
   const grouped = groupSubAgentTimelineItems(
     [start, end].map(timelineItemFromSocketEvent),
   );
+
   assert.equal(grouped.groups.length, 1);
   assert.equal(grouped.groups[0].status, "success");
   assert.equal(grouped.groups[0].runId, "child-1");
   assert.equal(grouped.groups[0].summary, "child result");
+});
+
+test("ended notifications with timed_out and pending statuses still project", () => {
+  const timedOut = normalizeSubagentLifecycleEnvelope(
+    envelope("subagent_ended", { status: "timed_out" }),
+    scope,
+  );
+  assert.equal(timedOut.type, "subagent_run_failed");
+  assert.equal(timedOut.data.status, "timed_out");
+  assert.equal(timedOut.data.lifecycle_type, "subagent_ended");
+  const pending = normalizeSubagentLifecycleEnvelope(
+    envelope("subagent_ended", { status: "pending" }),
+    scope,
+  );
+  assert.equal(pending.type, "subagent_queued");
+  assert.equal(pending.data.status, "pending");
+  // Unknown statuses still fail closed.
+  assert.equal(
+    normalizeSubagentLifecycleEnvelope(
+      envelope("subagent_ended", { status: "teleported" }),
+      scope,
+    ),
+    null,
+  );
 });
 
 test("same timestamp siblings retain distinct identities and replay keys", () => {

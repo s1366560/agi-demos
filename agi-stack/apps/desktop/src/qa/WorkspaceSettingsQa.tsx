@@ -295,7 +295,7 @@ function WorkspaceSettingsQa() {
   };
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <main className="workspace-settings-qa-shell">
         <header>
           <div>

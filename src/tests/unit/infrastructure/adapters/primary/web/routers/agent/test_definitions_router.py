@@ -688,6 +688,60 @@ class TestDefinitionsRouterA2AConfig:
         assert response["agent_to_agent_allowlist"] is None
 
     @pytest.mark.asyncio
+    async def test_update_definition_legacy_max_iterations_stays_implicit(self):
+        """Clients echoing max_iterations=10 must not break tenant inheritance."""
+        registry = _make_registry()
+        db = _make_db()
+        existing = _make_agent(metadata={"custom": "kept"})
+        registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+        ):
+            await update_definition(
+                "agent-1",
+                UpdateDefinitionBody(display_name="Renamed", max_iterations=10),
+                request=MagicMock(),
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                definition_authority=authority,
+            )
+
+        updated_agent = registry.update.await_args.args[0]
+        assert updated_agent.metadata["max_iterations_explicit"] is False
+        assert updated_agent.metadata["custom"] == "kept"
+
+    @pytest.mark.asyncio
+    async def test_update_definition_custom_max_iterations_marks_explicit(self):
+        registry = _make_registry()
+        db = _make_db()
+        existing = _make_agent(metadata={})
+        registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+        ):
+            await update_definition(
+                "agent-1",
+                UpdateDefinitionBody(max_iterations=25),
+                request=MagicMock(),
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                definition_authority=authority,
+            )
+
+        updated_agent = registry.update.await_args.args[0]
+        assert updated_agent.metadata["max_iterations_explicit"] is True
+
+    @pytest.mark.asyncio
     async def test_update_definition_idempotent_enabled_flag_preserves_legacy_open_policy(self):
         registry = _make_registry()
         db = _make_db()

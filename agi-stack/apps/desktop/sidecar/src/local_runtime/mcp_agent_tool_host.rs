@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     authorized_tool_host,
-    mcp_supervisor::{McpScope, McpSupervisor},
+    mcp_supervisor::{McpAppDefinition, McpCatalogLease, McpScope, McpSupervisor},
     tool_authority::{canonical_json_digest, ToolEffect, ToolMetadata},
 };
 
@@ -44,6 +44,9 @@ pub(super) struct McpAgentToolHost {
     supervisor: Arc<McpSupervisor>,
     scope: McpScope,
     run_id: String,
+    catalog_lease: McpCatalogLease,
+    apps: Vec<McpAppDefinition>,
+    app_events: Option<(Arc<super::LocalRuntimeState>, String, String)>,
     tools: BTreeMap<String, McpAgentTool>,
     legacy_aliases: BTreeMap<String, String>,
     advertised_aliases: BTreeSet<String>,
@@ -59,18 +62,19 @@ impl McpAgentToolHost {
         let mut tools: BTreeMap<String, McpAgentTool> = BTreeMap::new();
         let mut dispatch_aliases: BTreeMap<String, Option<String>> = BTreeMap::new();
         let mut advertised_alias_candidates = BTreeSet::new();
-        for server in supervisor
-            .list_servers(&scope)
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .filter(|server| {
-                server.enabled
-                    && server.runtime_status == "healthy"
-                    && valid_mcp_identifier(&server.id)
-                    && valid_mcp_identifier(&server.name)
-                    && server_allowed(allowed_servers, &server.id, &server.name)
-            })
-        {
+        let (servers, catalog_lease) = supervisor
+            .acquire_catalog(&scope)
+            .map_err(|error| error.to_string())?;
+        let apps = supervisor
+            .apps_pinned(&catalog_lease, &scope)
+            .map_err(|error| error.to_string())?;
+        for server in servers.into_iter().filter(|server| {
+            server.enabled
+                && server.runtime_status == "healthy"
+                && valid_mcp_identifier(&server.id)
+                && valid_mcp_identifier(&server.name)
+                && server_allowed(allowed_servers, &server.id, &server.name)
+        }) {
             for definition in &server.discovered_tools {
                 let Some(tool_name) = definition.get("name").and_then(Value::as_str) else {
                     continue;
@@ -131,6 +135,9 @@ impl McpAgentToolHost {
             supervisor,
             scope,
             run_id,
+            catalog_lease,
+            apps,
+            app_events: None,
             tools,
             legacy_aliases,
             advertised_aliases,
@@ -154,8 +161,73 @@ impl McpAgentToolHost {
         metadata
     }
 
+    pub(super) fn with_app_events(
+        mut self,
+        state: Arc<super::LocalRuntimeState>,
+        conversation_id: String,
+        message_id: String,
+    ) -> Self {
+        self.app_events = Some((state, conversation_id, message_id));
+        self
+    }
+
     fn tool_by_exposed_name(&self, name: &str) -> Option<&McpAgentTool> {
         resolve_exposed_tool(&self.tools, &self.legacy_aliases, name)
+    }
+
+    /// Resolve app metadata from the scoped catalog, never from tool-returned claims.
+    pub(super) async fn app_result(
+        &self,
+        name: &str,
+        input: Value,
+        output: Value,
+    ) -> Result<Option<Value>, String> {
+        let Some(tool) = self.tool_by_exposed_name(name) else {
+            return Ok(None);
+        };
+        let app = self
+            .apps
+            .iter()
+            .find(|app| app.server_id == tool.server_id && app.tool_name == tool.tool_name);
+        let Some(app) = app else {
+            return Ok(None);
+        };
+        let Some(uri) = app.resource_uri.as_deref() else {
+            return Ok(None);
+        };
+        let contents = self
+            .supervisor
+            .read_resource_pinned(&self.catalog_lease, &self.scope, &tool.server_id, uri)
+            .await
+            .map_err(|error| error.reason_code().to_string())?;
+        let html = contents
+            .iter()
+            .find_map(|content| {
+                let matches_uri = content.get("uri").and_then(Value::as_str) == Some(uri);
+                let is_html = content
+                    .get("mimeType")
+                    .and_then(Value::as_str)
+                    .is_some_and(|mime| {
+                        mime.split(';')
+                            .next()
+                            .is_some_and(|kind| kind == "text/html")
+                    });
+                (matches_uri && is_html)
+                    .then(|| content.get("text").and_then(Value::as_str))
+                    .flatten()
+            })
+            .ok_or_else(|| "local_mcp_app_html_unavailable".to_string())?;
+        Ok(Some(json!({
+            "app_id": app.id,
+            "project_id": self.scope.project_id,
+            "server_name": tool.server_name,
+            "tool_name": tool.tool_name,
+            "resource_uri": uri,
+            "resource_html": html,
+            "ui_metadata": app.ui_metadata,
+            "tool_input": input,
+            "tool_result": output,
+        })))
     }
 }
 
@@ -199,25 +271,37 @@ impl ToolHost for McpAgentToolHost {
         .map_err(|error| CoreError::Tool(error.to_string()))?;
         let outcome = self
             .supervisor
-            .call_tool(
+            .call_tool_pinned(
+                &self.catalog_lease,
                 &self.scope,
                 &definition.server_id,
                 &definition.tool_name,
-                arguments,
+                arguments.clone(),
                 &format!("agent-{call_digest}"),
             )
             .await
             .map_err(|error| {
                 CoreError::Tool(format!("{}: {}", error.reason_code(), error.detail()))
             })?;
-        serde_json::to_string(&json!({
+        let result = json!({
             "server_name": definition.server_name,
             "tool_name": definition.tool_name,
             "content": outcome.content,
             "is_error": outcome.is_error,
             "duplicate": outcome.duplicate,
-        }))
-        .map_err(|error| CoreError::Tool(error.to_string()))
+        });
+        if !outcome.is_error {
+            let fields = &definition.metadata.sensitive_input_fields;
+            publish_app_result(
+                self,
+                tool,
+                &call_digest,
+                super::tool_authority::redact_sensitive_fields(&arguments, fields),
+                super::tool_authority::redact_sensitive_fields(&result, fields),
+            )
+            .await;
+        }
+        serde_json::to_string(&result).map_err(|error| CoreError::Tool(error.to_string()))
     }
 }
 
@@ -227,6 +311,51 @@ fn server_allowed(allowed: Option<&[String]>, server_id: &str, server_name: &str
             .iter()
             .any(|value| value == "*" || value == server_id || value == server_name)
     })
+}
+
+async fn publish_app_result(
+    host: &McpAgentToolHost,
+    tool: &str,
+    call_id: &str,
+    input: Value,
+    output: Value,
+) {
+    let Some((state, conversation_id, message_id)) = host.app_events.as_ref() else {
+        return;
+    };
+    match host.app_result(tool, input, output).await {
+        Ok(Some(mut payload)) => {
+            payload["message_id"] = json!(message_id);
+            payload["tool_call_id"] = json!(call_id);
+            let item = state.timeline_item(
+                "mcp_app_result",
+                conversation_id.clone(),
+                None,
+                None,
+                None,
+                payload,
+            );
+            state.append_timeline(conversation_id, item);
+        }
+        Ok(None) => {}
+        Err(reason) => {
+            tracing::warn!(reason_code = %reason, "MCP app resource unavailable");
+            let item = state.timeline_item(
+                "mcp_app_result",
+                conversation_id.clone(),
+                None,
+                None,
+                None,
+                json!({
+                    "tool_name": tool,
+                    "message_id": message_id,
+                    "tool_call_id": call_id,
+                    "error": reason,
+                }),
+            );
+            state.append_timeline(conversation_id, item);
+        }
+    }
 }
 
 fn valid_mcp_identifier(value: &str) -> bool {

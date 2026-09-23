@@ -248,6 +248,23 @@ def _desired_service(db: AsyncSession) -> PluginMarketplaceDesiredBundleServiceV
     )
 
 
+@pytest.fixture(autouse=True)
+async def initialized_marketplace_scope(db_session):
+    from src.application.services.scoped_profile_initialization_service_v2 import (
+        ScopedProfileInitializationServiceV2,
+    )
+    root = ScopeV2(kind=ScopeKindV2.ROOT)
+    await PlatformPluginDesiredBundleSetRepositoryV2(db_session).record_desired_set(
+        scope=root, desired_set=production_bundle_sources_v2().desired_set,
+        expected_revision=None, actor_id="setup",
+    )
+    await db_session.commit()
+    await ScopedProfileInitializationServiceV2(
+        session_factory=async_sessionmaker(db_session.bind, expire_on_commit=False),
+        production_sources=production_bundle_sources_v2(),
+    ).ensure_initialized(ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-1"), "setup")
+
+
 async def _install(db: AsyncSession):
     signer = Ed25519PrivateKey.generate()
     public_key_pem = _public_key_pem(signer)
@@ -271,7 +288,7 @@ async def test_marketplace_install_persists_only_v2_desired_state(
     decision, bundle, _archive, _public_key = await _install(db_session)
 
     desired = await PlatformPluginDesiredBundleSetRepositoryV2(db_session).current_desired_set(
-        ScopeV2(kind=ScopeKindV2.ROOT)
+        ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-1")
     )
     packages = await PlatformPluginGovernanceRepository(db_session).list_packages()
     legacy_catalog_count = await db_session.scalar(
@@ -333,7 +350,7 @@ async def test_marketplace_same_version_cannot_replace_immutable_bundle(
         actor_id="admin-2",
     )
     desired = await PlatformPluginDesiredBundleSetRepositoryV2(db_session).current_desired_set(
-        ScopeV2(kind=ScopeKindV2.ROOT)
+        ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-1")
     )
 
     assert first.status == "approved"
@@ -342,6 +359,97 @@ async def test_marketplace_same_version_cannot_replace_immutable_bundle(
     assert desired is not None
     assert desired.desired_set.revision == 2
     assert desired.desired_set.bundles[-1].digest == original.digest
+
+
+async def test_marketplace_install_without_signature_material_resolves_from_catalog(
+    db_session: AsyncSession,
+) -> None:
+    """Catalog-driven reinstall omits PEM secrets the catalog redacts anyway."""
+    decision, bundle, archive, public_key = await _install(db_session)
+    repository = PlatformPluginGovernanceRepository(db_session)
+    _ = await repository.uninstall_package(bundle.bundle_id, bundle.version)
+    stored = await repository.get_package_version(bundle.bundle_id, bundle.version)
+    assert stored is not None
+    stored_signature = dict(stored.signature)
+    stored_provenance = dict(stored.provenance)
+    service = PluginMarketplaceInstallService(
+        repository,
+        _desired_service(db_session),
+        FakeArtifactClient(archive),
+        trusted_public_keys=(public_key,),
+    )
+
+    resolved = await service.request_install(
+        request=_request(bundle, archive, public_key).model_copy(
+            update={"signature": None, "provenance": None}
+        ),
+        actor_id="admin-3",
+    )
+
+    assert decision.status == "approved"
+    assert resolved.status == "approved"
+    # The desired set never dropped the bundle (raw row uninstall), so the
+    # reinstall is a no-op at the desired-state layer.
+    assert resolved.desired_changed is False
+    assert resolved.desired_revision == decision.desired_revision
+    reinstalled = await repository.get_package_version(bundle.bundle_id, bundle.version)
+    assert reinstalled is not None
+    assert reinstalled.install_status == "installed"
+    assert reinstalled.signature == stored_signature
+    assert reinstalled.provenance == stored_provenance
+
+
+async def test_marketplace_install_without_material_requires_catalog_entry(
+    db_session: AsyncSession,
+) -> None:
+    signer = Ed25519PrivateKey.generate()
+    public_key = _public_key_pem(signer)
+    bundle, archive = _signed_bundle(signer)
+    service = PluginMarketplaceInstallService(
+        PlatformPluginGovernanceRepository(db_session),
+        _desired_service(db_session),
+        FakeArtifactClient(archive),
+        trusted_public_keys=(public_key,),
+    )
+
+    decision = await service.request_install(
+        request=_request(bundle, archive, public_key).model_copy(
+            update={"signature": None, "provenance": None}
+        ),
+        actor_id="admin-1",
+    )
+
+    assert decision.status == "quarantined"
+    assert "catalog entry is required" in decision.reason
+
+
+async def test_marketplace_install_rejects_signature_digest_drift_from_catalog(
+    db_session: AsyncSession,
+) -> None:
+    decision, bundle, archive, public_key = await _install(db_session)
+    repository = PlatformPluginGovernanceRepository(db_session)
+    _ = await repository.uninstall_package(bundle.bundle_id, bundle.version)
+    stored = await repository.get_package_version(bundle.bundle_id, bundle.version)
+    assert stored is not None
+    stored.signature = {**stored.signature, "signature_sha256": "a" * 64}
+    await db_session.flush()
+    service = PluginMarketplaceInstallService(
+        repository,
+        _desired_service(db_session),
+        FakeArtifactClient(archive),
+        trusted_public_keys=(public_key,),
+    )
+
+    resolved = await service.request_install(
+        request=_request(bundle, archive, public_key).model_copy(
+            update={"signature": None, "provenance": None}
+        ),
+        actor_id="admin-3",
+    )
+
+    assert decision.status == "approved"
+    assert resolved.status == "quarantined"
+    assert "Bundle signature differs from its catalog declaration" in resolved.reason
 
 
 @pytest.mark.parametrize(
@@ -415,6 +523,7 @@ async def test_marketplace_catalog_approval_revocation_and_uninstall_use_v2_desi
         actor_id="platform-admin",
     )
     uninstall = await service.uninstall(
+        tenant_id="tenant-1",
         plugin_id=bundle.bundle_id,
         version=bundle.version,
         actor_id="platform-admin",
@@ -423,8 +532,8 @@ async def test_marketplace_catalog_approval_revocation_and_uninstall_use_v2_desi
     assert approval.granted_permissions == ("tools.execute",)
     assert revoked.revoked_versions == (bundle.version,)
     assert revoked.revoked_permissions == 2
-    assert revoked.desired_removed is True
-    assert uninstall.desired_removed is False
+    assert revoked.desired_removed is False
+    assert uninstall.desired_removed is True
     assert (
         await governance.list_permissions(
             bundle.bundle_id,
@@ -441,6 +550,15 @@ async def test_marketplace_desired_revision_publishes_a_real_v2_generation(
 ) -> None:
     decision, _bundle, archive, public_key = await _install(db_session)
     assert decision.status == "approved"
+    # Explicit ROOT publication coverage is separate from tenant marketplace installation.
+    from src.domain.model.plugins.generated_v2 import BundleReferenceV2
+    await _desired_service(db_session).install(scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        bundle=BundleReferenceV2(bundle_id=_bundle.bundle_id, version=_bundle.version,
+            digest=_bundle.digest, source=f"marketplace://{_bundle.bundle_id}/{_bundle.version}"),
+        actor_id="platform-test")
+    await PlatformPluginGovernanceRepository(db_session).grant_permission(
+        plugin_id=_bundle.bundle_id, permission="tools.execute", scope_type="root",
+        scope_id="global", granted_by="platform-test")
     if stored_source:
         from src.infrastructure.plugins.v2.layer_composer import (
             desired_bundle_set_digest_v2,

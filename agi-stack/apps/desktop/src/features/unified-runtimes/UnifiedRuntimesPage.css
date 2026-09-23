@@ -219,8 +219,8 @@
 
 .unified-runtimes-kind[data-kind='sandbox'],
 .unified-runtimes-kind[data-kind='sandbox_capability'] {
-  background: var(--blue-4);
-  color: var(--blue-11);
+  background: var(--gray-4);
+  color: var(--gray-11);
 }
 
 .unified-runtimes-health[data-health='degraded'] {

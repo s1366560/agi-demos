@@ -45,7 +45,7 @@ def inputs():
     )
     governance = SimpleNamespace(
         get_package_version=AsyncMock(return_value=package),
-        list_active_permissions_for_plugin=AsyncMock(
+        list_permissions=AsyncMock(
             return_value=[SimpleNamespace(permission="service.clock.read")]
         ),
     )
@@ -79,7 +79,9 @@ async def test_signed_archive_returned_and_old_error_identity_preserved(inputs):
     assert verified.manifest.digest == reference.digest
     assert OldError is MarketplacePublicationV2Error
     client.fetch.assert_awaited_once()
-    governance.list_active_permissions_for_plugin.assert_awaited_once_with(reference.bundle_id)
+    governance.list_permissions.assert_awaited_once_with(
+        reference.bundle_id, scope_type="root", scope_id="global"
+    )
 
 
 @pytest.mark.parametrize("field", ["bundle_id", "version", "digest"])
@@ -118,7 +120,7 @@ async def test_real_archive_trust_chain_rejects_changes(inputs, failure):
     elif failure == "reference":
         reference = replace(reference, digest="sha256:" + "0" * 64)
     elif failure == "permissions":
-        governance.list_active_permissions_for_plugin.return_value = []
+        governance.list_permissions.return_value = []
     else:
         options["trusted_public_keys"] = (_public_key_pem(Ed25519PrivateKey.generate()),)
     with pytest.raises(ValueError):

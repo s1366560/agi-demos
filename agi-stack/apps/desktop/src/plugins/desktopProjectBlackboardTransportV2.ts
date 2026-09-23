@@ -330,20 +330,15 @@ function requireLocalPlanV2(
 
 function requireLocalTasksV2(
   input: unknown,
-  workspaceId: string,
+  _workspaceId: string,
 ): readonly Record<string, unknown>[] {
-  if (
-    !isRecordV2(input) ||
-    input.workspace_id !== workspaceId ||
-    !Array.isArray(input.items) ||
-    !Number.isSafeInteger(input.total) ||
-    input.total !== input.items.length ||
-    input.items.some((item) => !isRecordV2(item))
-  ) {
+  // The workspace-core tasks endpoint (and the cloud platform route alike)
+  // serves a bare JSON array — never an {items, total} envelope.
+  if (!Array.isArray(input) || input.some((item) => !isRecordV2(item))) {
     throw contractErrorV2('local_project_blackboard_tasks_contract_invalid');
   }
   return Object.freeze(
-    input.items.map((item) => Object.freeze({ ...(item as Record<string, unknown>) })),
+    input.map((item) => Object.freeze({ ...(item as Record<string, unknown>) })),
   );
 }
 

@@ -23,6 +23,7 @@ from src.application.schemas.plugin_marketplace import (
     MarketplacePackageUninstallRequest,
     MarketplacePackageUninstallResponse,
 )
+from src.application.services.marketplace_signed_scope_v2 import SignedMarketplaceScopeV2
 from src.application.services.plugin_marketplace_catalog_service import (
     PluginMarketplaceCatalogService,
 )
@@ -167,7 +168,7 @@ def _trusted_public_keys(request: Request) -> tuple[str, ...]:
     return keys
 
 
-async def _require_tenant_admin(
+async def _require_tenant_admin(  # pyright: ignore[reportUnusedFunction]  # Used by unified routes.
     db: AsyncSession,
     current_user: User,
     tenant_id: str,
@@ -260,16 +261,25 @@ async def install_package(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Plugin path and request body must identify the same package"),
         )
-    if not _current_user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Only a platform administrator may install a marketplace package"),
-        )
+    from .plugin_marketplace_v3 import authorize_scope
+
+    await authorize_scope(db, _current_user, request.tenant_id, request.project_id)
+    runtime = getattr(http_request.app.state, "scoped_profile_runtime_v2", None)
+    if runtime is None:
+        raise HTTPException(503, _("Scoped plugin runtime is unavailable"))
+    lifecycle = SignedMarketplaceScopeV2(db, runtime, request.tenant_id, request.project_id)
+    await lifecycle.initialize(_current_user.id)
+    previous, old = await lifecycle.begin(plugin_id, request.version)
     decision = await service.request_install(request=request, actor_id=_current_user.id)
     if decision.status == "approved":
-        if decision.desired_changed:
-            await _republish_after_mutation(http_request, db)
-        await db.commit()
+        try:
+            await lifecycle.publish(
+                plugin_id, previous=previous, old=old, actor_id=_current_user.id
+            )
+        except Exception as exc:
+            raise HTTPException(
+                409, _("Signed plugin publication failed; prior version retained")
+            ) from exc
     else:
         await db.rollback()
     return MarketplacePackageResponse(
@@ -292,12 +302,15 @@ async def approve_package(
     db: AsyncSession = Depends(get_db),
 ) -> MarketplacePackageApprovalResponse:
     """Approve only a subset of permissions requested by a verified package."""
-    await _require_tenant_admin(db, current_user, request.tenant_id)
+    from .plugin_marketplace_v3 import authorize_scope
+
+    await authorize_scope(db, current_user, request.tenant_id, request.project_id)
     try:
         result = await service.approve(
             plugin_id=plugin_id,
             version=request.version,
             tenant_id=request.tenant_id,
+            project_id=request.project_id,
             approved_permissions=request.approved_permissions,
             actor_id=current_user.id,
         )
@@ -367,27 +380,28 @@ async def uninstall_package(
     db: AsyncSession = Depends(get_db),
 ) -> MarketplacePackageUninstallResponse:
     """Uninstall a package and remove it from the next desired snapshot."""
-    if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Only a platform administrator may uninstall a marketplace package"),
-        )
+    from .plugin_marketplace_v3 import authorize_scope
+
+    await authorize_scope(db, current_user, request.tenant_id, request.project_id)
+    runtime = getattr(http_request.app.state, "scoped_profile_runtime_v2", None)
+    if runtime is None:
+        raise HTTPException(503, _("Scoped plugin runtime is unavailable"))
+    lifecycle = SignedMarketplaceScopeV2(db, runtime, request.tenant_id, request.project_id)
+    row = await lifecycle.record(plugin_id)
+    if row is None or row.payload["version"] != request.version:
+        raise HTTPException(404, _("Signed installation not found in selected scope"))
     try:
-        result = await service.uninstall(
-            plugin_id=plugin_id,
-            version=request.version,
-            actor_id=current_user.id,
-        )
+        result = await lifecycle.toggle(plugin_id, "uninstall", current_user.id)
     except LookupError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    if result.desired_removed:
-        await _republish_after_mutation(http_request, db)
-    await db.commit()
+        raise HTTPException(404, _(str(exc))) from exc
+    except Exception as exc:
+        raise HTTPException(
+            409, _("Signed plugin publication failed; prior version retained")
+        ) from exc
     return MarketplacePackageUninstallResponse(
-        plugin_id=result.plugin_id,
-        version=result.version,
+        plugin_id=plugin_id,
+        version=request.version,
         status="uninstalled",
-        desired_removed=result.desired_removed,
-        revoked_permissions=result.revoked_permissions,
+        desired_removed=result["desired_removed"],
+        revoked_permissions=result["revoked_permissions"],
     )

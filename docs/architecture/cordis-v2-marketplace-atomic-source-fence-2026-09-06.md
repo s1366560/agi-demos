@@ -12,7 +12,7 @@ The shared helper covers foreground marketplace publication, background live rec
 
 Five new PostgreSQL cases cover desired commit after the earlier standalone precheck, receipt holding the scope lock while desired CAS waits, already-durable ACK retry after desired changes, missing binding and policy changes. The lock test uses distinct backend PIDs and pg_blocking_pids to verify the actual wait relationship. Its observation while the lock is held uses only ordinary count queries; full recovery repository reads occur after release.
 
-The full expanded PostgreSQL runner passed 27 tests in 235.13 seconds, with no skips and owned container cleanup exit 0. Marketplace publication/live/receipt regression passed 16 tests in 249.44 seconds. Ruff, generated protocol, contract completeness and focused Pyright pass; Pyright reports zero errors and warnings. Evidence logs and SHA256 manifest: /var/tmp/cordis-atomic-source-le2muy1b. GitNexus did not index the recently added helper; direct review found the three production callers and verified the shared head-first lock ordering.
+The full expanded PostgreSQL runner passed 27 tests in 235.13 seconds, with no skips and owned container cleanup exit 0. Marketplace publication/live/receipt regression passed 16 tests in 249.44 seconds. Ruff, generated protocol, contract completeness and focused Pyright pass; Pyright reports zero errors and warnings. Evidence logs and SHA256 manifest: /var/tmp/cordis-atomic-source-le2muy1b. Direct review found the three production callers and verified the shared head-first lock ordering.
 
 ## Remaining boundaries
 

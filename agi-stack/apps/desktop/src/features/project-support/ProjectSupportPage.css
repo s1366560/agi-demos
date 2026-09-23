@@ -131,8 +131,8 @@
 
 .project-support-list article > header span[data-status='open'],
 .project-support-list article > header span[data-status='in_progress'] {
-  color: var(--blue-11);
-  background: var(--blue-3);
+  color: var(--gray-11);
+  background: var(--gray-3);
 }
 
 .project-support-list article > header span[data-priority='high'],

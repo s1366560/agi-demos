@@ -317,9 +317,10 @@ test('workspace settings freeze and expose selection semantics while a switch is
   assert.match(workspaceSettingsPage, /!loading && !tenantId && !error/);
   assert.match(workspaceSettingsPage, /settings\.chooseTenantFirst/);
   assert.match(settingsCoreSource, /aria-pressed=\{selected\}/);
-  assert.match(
-    settingsCoreStyles,
-    /\.settings-context-apply\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?bottom:\s*0;/,
+  // Apply stays in document flow so it cannot cover the next settings section.
+  assert.doesNotMatch(
+    settingsCoreStyles.match(/\.settings-context-apply\s*\{[^}]*\}/)?.[0] ?? '',
+    /position:\s*(?:sticky|fixed)/,
   );
   assert.match(
     i18nSource,
@@ -558,11 +559,11 @@ test('Activity inbox remains reachable through the unified feature directory', (
   );
 });
 
-test('appearance and notification settings render the prototype preference summaries', () => {
+test('appearance and notification settings expose theme and notification controls', () => {
   assert.match(settingsCoreSource, /export function PreferenceSummaryPage/);
   assert.match(settingsCoreSource, /settings\.theme/);
   assert.match(settingsCoreSource, /settings\.reviewAlerts/);
-  assert.match(settingsCoreStyles, /\.settings-preference-summary/);
+  assert.match(settingsCoreStyles, /\.settings-notification-controls/);
   assert.doesNotMatch(settingsCoreSource, /PreferenceUnavailablePage/);
   assert.doesNotMatch(settingsCoreSource, /settings\.preferenceUnavailable/);
 });

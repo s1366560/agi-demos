@@ -23,7 +23,7 @@ The generic ledger's historical republish helper remains available for ledger-le
 - Existing live requested recovery: five tests passed in 93.24 seconds.
 - Complete router regression: 25 tests passed in 51.24 seconds.
 - Independently migrated PostgreSQL regression: all 38 cases passed in 529.93 seconds, with no skips. This includes both real admin rollback chains; the owned container was removed with exit 0.
-- Ruff, protocol generation and contract completeness passed. Focused production Pyright reported zero errors and one existing router warning. GitNexus returned LOW for the indexed endpoint; newer helpers remain unindexed and shifted symbol locations limit its scope report, so direct source review covered the new transaction and coordinator calls. Staged secret scanning found no leaks.
+- Ruff, protocol generation and contract completeness passed. Focused production Pyright reported zero errors and one existing router warning. Direct source review covered the new transaction and coordinator calls. Staged secret scanning found no leaks.
 - Durable local logs and SHA256 manifest: `/var/tmp/cordis-root-rollback-t_r1d0pd`. The directory is private and contains the initial test-only failure as well as terminal passing results.
 
 ## Release boundary

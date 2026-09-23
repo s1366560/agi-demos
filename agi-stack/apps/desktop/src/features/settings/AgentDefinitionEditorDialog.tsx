@@ -118,11 +118,7 @@ export function AgentDefinitionEditorDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="agent-definition-dialog-heading">
-          <div className="agent-definition-dialog-icon">
-            <PersonIcon />
-          </div>
           <div>
-            <span>{t('settings.agentsEyebrow')}</span>
             <h2>
               {t(
                 definition

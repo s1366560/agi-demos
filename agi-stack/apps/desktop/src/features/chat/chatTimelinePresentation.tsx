@@ -318,6 +318,10 @@ export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
 
 export function isTimelineItemInitiallyExpanded(item: AgentTimelineItem): boolean {
   if (item.type === 'thought') return true;
+  /* Web conversation parity (ExecutionTimeline defaultExpanded on error):
+     failed rows — tool calls, results, and lifecycle events alike — start
+     expanded so the error detail is visible without a click. */
+  if (item.isError || item.error) return true;
   if (!isImportantTimelineItem(item)) return false;
   return (
     item.type !== 'doom_loop_detected' &&
@@ -343,6 +347,7 @@ export function timelineSummary(
   t: (key: string, values?: Record<string, string | number>) => string,
 ): string {
   const lifecycle = agentLifecyclePresentation(item);
+  if (item.localLlmUnconfigured) return t('chat.localLlmUnconfigured');
   if (item.isError || item.error || item.type === 'error' || lifecycle?.isError) {
     const payload = isRecord(item.payload) ? item.payload : {};
     const errorCode = item.error_code ?? payload.error_code;

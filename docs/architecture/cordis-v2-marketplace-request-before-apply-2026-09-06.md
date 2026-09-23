@@ -19,7 +19,7 @@ Persistence and graph notification complete under the existing Host admission ga
 - Three receipt/order cases rerun after adding the structural assertion that the mutation session is no longer in a transaction at staging: 3 passed in 44.95 seconds. This overlaps the five-case run.
 - Receipt-after-commit retry preserves one runtime/route application and exactly one added receipt event.
 - Logs and SHA256 manifest: `/var/tmp/cordis-market-durable-k71xipr3`.
-- GitNexus impact reported LOW for the changed service and router entry points; manually checked all four service construction sites.
+- Manually checked all four service construction sites.
 
 ## Remaining gates
 

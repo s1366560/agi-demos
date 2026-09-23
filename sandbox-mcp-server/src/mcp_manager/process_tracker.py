@@ -35,6 +35,7 @@ class ManagedServer:
     command: str
     args: List[str] = field(default_factory=list)
     env: Dict[str, str] = field(default_factory=dict)
+    headers: Dict[str, str] = field(default_factory=dict, repr=False)
     status: ServerStatus = ServerStatus.STOPPED
     process: Optional[asyncio.subprocess.Process] = None
     pid: Optional[int] = None

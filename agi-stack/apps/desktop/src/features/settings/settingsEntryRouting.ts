@@ -6,6 +6,7 @@ export type SettingsEntry =
   | 'workspace_overview'
   | 'profile_workspace_switch'
   | 'browser_integration'
+  | 'plugins'
   | 'runtime_connection';
 
 const sectionByEntry = {
@@ -14,6 +15,7 @@ const sectionByEntry = {
   workspace_overview: 'workspace',
   profile_workspace_switch: 'workspace',
   browser_integration: 'browser',
+  plugins: 'plugins',
   runtime_connection: 'connection',
 } as const satisfies Record<SettingsEntry, SettingsSection>;
 

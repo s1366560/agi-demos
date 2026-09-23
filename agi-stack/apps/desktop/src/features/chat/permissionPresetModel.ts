@@ -125,6 +125,11 @@ export function acknowledgeFullAccessWarning(
  * Low-risk derivation: the backend classifies every permission request into
  * the `risk_level` enum ('low' | 'medium' | 'high'); "relaxed" auto-allows
  * exactly the 'low' membership. No keyword matching on tool names or actions.
+ *
+ * Wire semantics: "relaxed" selects the backend `automatic` mode, which
+ * allows reads plus workspace task/file writes and DENIES every other
+ * mutation without asking. Low-risk asks that still surface (tool-initiated
+ * HITL requests) are answered automatically here.
  */
 export function autoApprovalForPermissionRequest(
   preset: PermissionPreset,
@@ -139,20 +144,16 @@ export function autoApprovalForPermissionRequest(
 }
 
 /**
- * Auto-approvals stay truthful on the wire: the response carries
- * `auto_approved` + `preset` markers (stored in `response_data` alongside the
- * granted flag, exactly like the existing `scope` extra) so the timeline can
- * render a resolved-with-preset marker instead of a silent approval.
+ * The HITL respond contract for permission asks accepts exactly
+ * `{action, granted, scope}` — any extra field is rejected with 400. The
+ * resolved-with-preset timeline marker is therefore folded locally by the
+ * caller after the submission succeeds, never sent on the wire.
  */
-export function autoApprovalResponseData(
-  preset: PermissionPreset,
-): Record<string, unknown> {
+export function autoApprovalResponseData(): Record<string, unknown> {
   return {
     action: 'allow',
     granted: true,
     scope: 'once',
-    auto_approved: true,
-    preset,
   };
 }
 
@@ -170,7 +171,7 @@ export function autoApprovalSubmission(
   return {
     requestId: request.id,
     hitlType: 'permission',
-    responseData: autoApprovalResponseData(preset),
+    responseData: autoApprovalResponseData(),
     ...(revision === undefined ? {} : { expectedRevision: revision }),
     idempotencyKey: [
       request.id,

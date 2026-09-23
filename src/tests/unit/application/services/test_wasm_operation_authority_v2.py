@@ -222,3 +222,50 @@ async def test_production_preparation_uses_real_sql_authority_and_signed_runtime
         assert await prepare_agent_wasm_tools_v2(operation) == 1
         (definition,) = resolve(catalog).definitions
         assert "20260914" in await definition.execute(input="production SQL adapter")
+
+
+async def test_project_owned_installation_uses_exact_project_grant_and_publication(
+    setup_authority, test_db, verified
+):
+    from src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models_v3 import (
+        MarketplaceRecordV3,
+    )
+
+    manager, catalog, authority, scope, identity, governance, snapshot = setup_authority
+    package_id = verified.manifest.bundle_id
+    await governance.revoke_permissions(package_id)
+    await governance.grant_permission(
+        plugin_id=package_id,
+        permission="tools.execute",
+        scope_type="project",
+        scope_id=scope.project_id,
+    )
+    owner = ScopeV2(
+        kind=ScopeKindV2.PROJECT, tenant_id=scope.tenant_id, project_id=scope.project_id
+    )
+    record = MarketplaceRecordV3(
+        id="scoped-signed-fixture",
+        tenant_id=scope.tenant_id,
+        project_id=scope.project_id,
+        kind="signed_installation",
+        record_key=package_id,
+        payload={"status": "enabled", "version": verified.manifest.version},
+    )
+    test_db.add(record)
+    await PlatformPluginRepositoryV2(test_db, scope=owner).record_requested_distribution(
+        snapshot, control_envelope_v2(snapshot, version=1, nonce="project-owned-signed-fixture")
+    )
+    await test_db.commit()
+    async with pin_operation_context_v2(
+        manager,
+        operation_id="project-owned",
+        scope=scope,
+        services={OPERATION_IDENTITY_SERVICE_V2: identity},
+    ) as operation:
+        assert await prepare_wasm_operation_tools_v2(operation, authority) == 1
+        (tool,) = resolve(catalog).definitions
+        assert "20260914" in await tool.execute(input="project scoped grant")
+        record.payload = {**record.payload, "status": "disabled"}
+        await test_db.commit()
+        with pytest.raises(RuntimeV2Error, match="permission"):
+            await tool.execute(input="disabled in owner scope")

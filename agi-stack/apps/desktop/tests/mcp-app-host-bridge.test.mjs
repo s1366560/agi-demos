@@ -312,7 +312,7 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
       name: 'release-tools', server_type: 'http', enabled: true, runtime_status: 'running',
     });
     if (url.pathname === '/api/v1/mcp/tools/call') return Response.json({
-      detail: { reason_code: 'cloud_mcp_tool_idempotency_unavailable' },
+      detail: { reason_code: 'cloud_mcp_tool_rejected' },
     }, { status: 409 });
 
     if (url.pathname.endsWith('/resources/read')) return Response.json({ contents: [] });
@@ -337,7 +337,7 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
         runtime_status: 'starting',
       });
     }
-    return Response.json({ content: [], is_error: true, error_code: -32000, error_message: 'cloud_mcp_tool_idempotency_unavailable' });
+    return Response.json({ content: [], is_error: false, error_code: null, error_message: null });
   };
 
   try {
@@ -375,29 +375,27 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
       project_id: 'project-selected',
       idempotency_key: 'mcp-create-action-1',
     });
-    const appFailure = await client.callMCPAppTool(
+    const appResult = await client.callMCPAppTool(
       'release-dashboard',
       'approve_release',
       { release: '2026.07' },
       'desktop-mcp-tool-call:registered-1',
     );
-    assert.equal(appFailure.is_error, true);
-    assert.equal(appFailure.error_code, -32000);
+    assert.equal(appResult.is_error, false);
     await assert.rejects(client.callMCPToolByServerId(
       'release-tools-server-id',
       'approve_release',
       { release: '2026.07' },
       'desktop-mcp-tool-call:server-id-1',
     ), (error) => error.status === 409);
-    const directFailure = await client.callMCPAppToolDirect(
+    const directResult = await client.callMCPAppToolDirect(
       'project-selected',
       'release-tools',
       'approve_release',
       { release: '2026.07' },
       'desktop-mcp-tool-call:direct-1',
     );
-    assert.equal(directFailure.is_error, true);
-    assert.equal(directFailure.error_code, -32000);
+    assert.equal(directResult.is_error, false);
     await client.readMCPAppResource(
       'project-selected',
       'ui://release/dashboard',
@@ -451,7 +449,6 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
           body: {
             tool_name: 'approve_release',
             arguments: { release: '2026.07' },
-            idempotency_key: 'desktop-mcp-tool-call:registered-1',
           },
         },
         {
@@ -466,7 +463,6 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
             server_id: 'release-tools-server-id',
             tool_name: 'approve_release',
             arguments: { release: '2026.07' },
-            idempotency_key: 'desktop-mcp-tool-call:server-id-1',
           },
         },
         {
@@ -478,7 +474,6 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
             server_name: 'release-tools',
             tool_name: 'approve_release',
             arguments: { release: '2026.07' },
-            idempotency_key: 'desktop-mcp-tool-call:direct-1',
           },
         },
         {
@@ -624,12 +619,12 @@ test('MCP settings expose edit, enable-disable, and delete lifecycle actions', (
 
 test('Cloud HTTP 200 tool errors preserve protocol fields and the persisted retry key through V2', async () => {
   const originalFetch = globalThis.fetch;
-  const dispatchedKeys = [];
+  const dispatchedBodies = [];
   const persisted = new Map();
   const payload = {
     content: [{ type: 'text', text: 'upstream MCP tool unavailable' }],
     is_error: true,
-    error_message: 'cloud_mcp_tool_idempotency_unavailable',
+    error_message: 'upstream_mcp_tool_unavailable',
     error_code: -32000,
   };
   globalThis.fetch = async (input, init = {}) => {
@@ -638,7 +633,7 @@ test('Cloud HTTP 200 tool errors preserve protocol fields and the persisted retr
     assert.equal(url.pathname, '/api/v1/mcp/apps/proxy/tool-call');
     const body = JSON.parse(init.body);
     assert.equal(body.project_id, 'project-selected');
-    dispatchedKeys.push(body.idempotency_key);
+    dispatchedBodies.push(body);
     return Response.json(payload, { status: 200 });
   };
   try {
@@ -669,8 +664,10 @@ test('Cloud HTTP 200 tool errors preserve protocol fields and the persisted retr
     const restored = await callMCPAppTool(client, context, params,
       createMCPToolCallKeyStore(storage, () => 'unexpected-new-key'));
     assert.equal(restored.isError, true);
-    assert.equal(dispatchedKeys[1], 'desktop-mcp-tool-call:protocol-error-key');
-    assert.equal(dispatchedKeys[2], dispatchedKeys[1]);
+    // Cloud bodies never carry the replay key (the cloud authority rejects
+    // idempotency keys), but the lease still persists locally for reuse.
+    assert.equal('idempotency_key' in dispatchedBodies[0], false);
+    assert.equal('idempotency_key' in dispatchedBodies[1], false);
     assert.equal(persisted.size, 1);
   } finally {
     globalThis.fetch = originalFetch;

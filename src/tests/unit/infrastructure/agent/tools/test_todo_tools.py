@@ -367,3 +367,78 @@ async def test_plan_drafts_and_build_completion_remain_persistable(
     assert result.is_error is False
     assert len(saved) == 1
     assert saved[0].status.value == status
+
+
+@pytest.mark.parametrize("status", ["in_progress", "completed", "failed"])
+def test_progress_update_schema_does_not_require_structural_write(status: str) -> None:
+    from jsonschema import validate
+
+    from src.infrastructure.agent.tools.permission_metadata_v2 import resolve_tool_permission_v2
+
+    arguments = {"action": "update", "todo_id": "task-stable", "todos": [{"status": status}]}
+    validate(arguments, todowrite_tool.parameters)
+    assert resolve_tool_permission_v2(todowrite_tool, arguments) == "conversation_progress"
+    arguments["todos"][0]["content"] = "Changed task scope"
+    assert resolve_tool_permission_v2(todowrite_tool, arguments) == "workspace_task_write"
+
+
+async def test_build_progress_updates_persist_and_emit_authoritative_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.domain.model.agent.task import AgentTask, TaskStatus
+
+    task = AgentTask(id="task-stable", conversation_id="conv-1", content="Read workspace")
+    writes = []
+
+    class Repo:
+        def __init__(self, session: Any) -> None:
+            pass
+
+        async def find_by_id(self, task_id: str) -> AgentTask:
+            assert task_id == task.id
+            return task
+
+        async def update(self, task_id: str, **updates: Any) -> AgentTask:
+            assert task_id == task.id
+            writes.append(updates)
+            task.status = TaskStatus(updates["status"])
+            return task
+
+        async def save_all(self, *args: Any) -> None:
+            raise AssertionError("Progress must not replace the plan or invalidate its approval")
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository."
+        "SqlAgentTaskRepository",
+        Repo,
+    )
+    tool = make_todo_tools(session_factory=lambda: _DummySession())["todowrite"]
+    ctx = _make_ctx(runtime_context={"effective_mode": "build"})
+    for status in ("in_progress", "completed"):
+        result = await tool.execute(
+            ctx, action="update", todo_id=task.id, todos=[{"status": status}]
+        )
+        assert result.is_error is False
+        assert task.status.value == status
+        assert ctx.consume_pending_events() == [
+            {
+                "type": "task_updated",
+                "conversation_id": "conv-1",
+                "task_id": task.id,
+                "status": status,
+                "content": "Read workspace",
+            }
+        ]
+    assert writes == [{"status": "in_progress"}, {"status": "completed"}]
+
+
+@pytest.mark.parametrize("action", ["add", "replace"])
+@pytest.mark.parametrize("item", [{"status": "pending"}, {"content": " "}])
+async def test_creation_still_requires_content_before_storage(action, item) -> None:
+    def unexpected_storage():
+        raise AssertionError("Invalid creation must not clear or modify the saved plan")
+
+    tool = make_todo_tools(session_factory=unexpected_storage)["todowrite"]
+    result = await tool.execute(_make_ctx(), action=action, todos=[item])
+    assert result.is_error is True
+    assert json.loads(result.output)["code"] == "TODO_CONTENT_REQUIRED"

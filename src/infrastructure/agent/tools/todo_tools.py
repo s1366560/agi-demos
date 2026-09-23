@@ -938,6 +938,9 @@ def _todowrite_permission(arguments: dict[str, Any]) -> str:
         "(pending/in_progress/completed/failed). "
         "For update, first call todoread and copy the exact todos[].id into todo_id; "
         "never use list positions such as 1 or 2 as todo_id. "
+        "For progress-only updates, send only status, timestamps, result_summary or "
+        "evidence_refs in todos[0]; do not resend content, title or priority. "
+        "Content is required when adding or replacing tasks. "
         "Status changes are displayed in the user's UI in real-time."
     ),
     parameters={
@@ -956,7 +959,7 @@ def _todowrite_permission(arguments: dict[str, Any]) -> str:
                     "properties": {
                         "content": {
                             "type": "string",
-                            "description": "Task description",
+                            "description": "Task description; required for add/replace, omit for status-only updates",
                         },
                         "title": {"type": "string", "description": "Short step title"},
                         "description": {
@@ -999,7 +1002,6 @@ def _todowrite_permission(arguments: dict[str, Any]) -> str:
                             "description": "high, medium, low",
                         },
                     },
-                    "required": ["content"],
                 },
             },
             "todo_id": {
@@ -1018,7 +1020,7 @@ def _todowrite_permission(arguments: dict[str, Any]) -> str:
     permission_resolver=_todowrite_permission,
     category="task_management",
 )
-async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
+async def todowrite_tool(  # noqa: C901, PLR0911, PLR0912, PLR0915
     ctx: ToolContext,
     *,
     action: str,
@@ -1045,6 +1047,20 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
 
     conversation_id = ctx.conversation_id or ctx.session_id
     todos_list = todos or []
+    if action in {"replace", "add"} and any(
+        not isinstance(item.get("content"), str) or not item["content"].strip()
+        for item in todos_list
+    ):
+        return ToolResult(
+            output=json.dumps(
+                {
+                    "success": False,
+                    "code": "TODO_CONTENT_REQUIRED",
+                    "error": "Content is required when adding or replacing tasks.",
+                }
+            ),
+            is_error=True,
+        )
     if ctx.runtime_context.get("effective_mode") == "plan" and any(
         item.get("status") in {"in_progress", "completed", "failed"} for item in todos_list
     ):

@@ -84,7 +84,7 @@
   padding: 1px 5px;
   border-radius: 999px;
   background: var(--desktop-surface-cyan-5);
-  color: var(--desktop-cyan-mist);
+  color: var(--desktop-chat-text-tertiary);
   font-size: 8px;
   font-style: normal;
 }
@@ -324,13 +324,13 @@
 
 .prompt-template-source-tabs button.is-active {
   background: var(--desktop-surface-cyan-5);
-  color: var(--desktop-cyan-pale-2);
+  color: var(--desktop-text);
   box-shadow: inset 0 0 0 1px var(--desktop-border-cyan);
 }
 
 .prompt-template-source-tabs button.is-active span {
   background: var(--desktop-surface-cyan-6);
-  color: var(--desktop-text-cyan);
+  color: var(--desktop-text);
 }
 
 .prompt-template-controls {

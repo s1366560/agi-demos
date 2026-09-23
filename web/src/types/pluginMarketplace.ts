@@ -47,12 +47,18 @@ export interface MarketplacePackageInstallRequest {
   artifact: MarketplacePackageArtifactSource;
   artifact_sha256: string;
   manifest: Record<string, unknown>;
-  signature: {
+  /**
+   * Catalog-driven web installs omit both fields: the catalog redacts
+   * signature secrets, so the backend resolves the material from the catalog
+   * row plus the server-side trust store. Explicit material (both fields
+   * together) stays accepted for publisher-side flows.
+   */
+  signature?: {
     algorithm: string;
     public_key_pem: string;
     signature_base64: string;
   };
-  provenance: {
+  provenance?: {
     predicate_type: string;
     builder_id: string;
     subject_name: string;

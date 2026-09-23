@@ -1,12 +1,4 @@
 import { Badge, Button } from '@radix-ui/themes';
-import {
-  ActivityLogIcon,
-  ComponentInstanceIcon,
-  GlobeIcon,
-  IdCardIcon,
-  Link2Icon,
-  LockClosedIcon,
-} from '@radix-ui/react-icons';
 
 import type { DesktopBrowserIntegrationClientV2 } from '../../plugins/desktopBrowserIntegrationAuthorityModuleV2';
 import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
@@ -105,13 +97,6 @@ export function BrowserIntegrationSettingsPage({
       className="settings-preference-page settings-browser-page"
     >
       <section className="settings-panel settings-browser-toggle-panel">
-        <header>
-          <GlobeIcon />
-          <span>
-            <strong>{t('settings.browserEnable')}</strong>
-            <small>{t('settings.browserEnableDescription')}</small>
-          </span>
-        </header>
         <div className="settings-preference-switch-row">
           <span>
             <strong>{t('settings.browserBridge')}</strong>
@@ -120,6 +105,7 @@ export function BrowserIntegrationSettingsPage({
           <button
             type="button"
             role="switch"
+            aria-label={t('settings.browserBridge')}
             aria-checked={enabled}
             className={enabled ? 'active' : ''}
             disabled={toggleBusy}
@@ -136,51 +122,28 @@ export function BrowserIntegrationSettingsPage({
         ) : null}
       </section>
 
-      <section className="settings-panel settings-browser-status-panel">
-        <header>
-          <ComponentInstanceIcon />
-          <span>
-            <strong>{t('settings.browserStatus')}</strong>
-            <small>{t('settings.browserStatusDescription')}</small>
-          </span>
-        </header>
-        <div className="settings-rows">
-          <div className="settings-row">
-            <span>
-              <strong>{t('settings.browserBridge')}</strong>
-            </span>
-            <b>
-              {bridgeStatus
-                ? t(
-                    bridgeStatus.enabled
-                      ? 'settings.browserBridgeEnabled'
-                      : 'settings.browserBridgeDisabled',
-                  )
-                : t('settings.notAvailable')}
-            </b>
-          </div>
-          <div className="settings-row">
-            <span>
-              <strong>{t('settings.browserPort')}</strong>
-            </span>
-            <b>{bridgeStatus ? String(bridgeStatus.port) : t('settings.notAvailable')}</b>
-          </div>
-          <div className="settings-row">
-            <span>
-              <strong>{t('settings.browserBroker')}</strong>
-            </span>
-            <b>
+      <section
+        className="settings-panel settings-browser-status-panel"
+        aria-label={t('settings.browserStatus')}
+      >
+        <dl className="settings-browser-connection-status">
+          <div>
+            <dt>{t('settings.browserBroker')}</dt>
+            <dd>
               <Badge color={brokerConnected ? 'green' : 'gray'} variant="soft">
                 {t(brokerConnected ? 'statusbar.connected' : 'statusbar.disconnected')}
               </Badge>
-            </b>
+            </dd>
           </div>
-        </div>
+          <div>
+            <dt>{t('settings.browserPort')}</dt>
+            <dd>{bridgeStatus ? String(bridgeStatus.port) : t('settings.notAvailable')}</dd>
+          </div>
+        </dl>
       </section>
 
       <section className="settings-panel settings-browser-registration-panel">
         <header>
-          <Link2Icon />
           <span>
             <strong>{t('settings.browserRegistration')}</strong>
             <small>{t('settings.browserRegistrationDescription')}</small>
@@ -252,7 +215,6 @@ export function BrowserIntegrationSettingsPage({
       {bridgeClient ? (
         <section className="settings-panel settings-browser-grants-panel">
           <header>
-            <GlobeIcon />
             <span>
               <strong>{t('settings.browserOriginGrants')}</strong>
               <small>{t('settings.browserOriginGrantsDescription')}</small>
@@ -303,7 +265,6 @@ export function BrowserIntegrationSettingsPage({
       {bridgeClient ? (
         <section className="settings-panel settings-browser-fullcdp-panel">
           <header>
-            <LockClosedIcon />
             <span>
               <strong>{t('settings.browserFullCdp')}</strong>
               <small>{t('settings.browserFullCdpDescription')}</small>
@@ -317,6 +278,7 @@ export function BrowserIntegrationSettingsPage({
             <button
               type="button"
               role="switch"
+              aria-label={t('settings.browserFullCdpToggle')}
               aria-checked={fullCdpEnabled}
               className={fullCdpEnabled ? 'active' : ''}
               disabled={fullCdpToggleBusy}
@@ -377,7 +339,6 @@ export function BrowserIntegrationSettingsPage({
       {bridgeClient ? (
         <section className="settings-panel settings-browser-credentials-panel">
           <header>
-            <IdCardIcon />
             <span>
               <strong>{t('settings.browserCredentials')}</strong>
               <small>{t('settings.browserCredentialsDescription')}</small>
@@ -391,33 +352,42 @@ export function BrowserIntegrationSettingsPage({
               void saveSiteCredential();
             }}
           >
-            <input
-              type="text"
-              autoComplete="off"
-              placeholder={t('settings.browserCredentialsOriginPlaceholder')}
-              aria-label={t('settings.browserCredentialsOrigin')}
-              value={credentialOrigin}
-              disabled={credentialSaving}
-              onChange={(event) => setCredentialOrigin(event.currentTarget.value)}
-            />
-            <input
-              type="text"
-              autoComplete="off"
-              placeholder={t('settings.browserCredentialsUsernamePlaceholder')}
-              aria-label={t('settings.browserCredentialsUsername')}
-              value={credentialUsername}
-              disabled={credentialSaving}
-              onChange={(event) => setCredentialUsername(event.currentTarget.value)}
-            />
-            <input
-              type="password"
-              autoComplete="new-password"
-              placeholder={t('settings.browserCredentialsPasswordPlaceholder')}
-              aria-label={t('settings.browserCredentialsPassword')}
-              value={credentialPassword}
-              disabled={credentialSaving}
-              onChange={(event) => setCredentialPassword(event.currentTarget.value)}
-            />
+            <label>
+              <span>{t('settings.browserCredentialsOrigin')}</span>
+              <input
+                type="text"
+                autoComplete="off"
+                placeholder={t('settings.browserCredentialsOriginPlaceholder')}
+                aria-label={t('settings.browserCredentialsOrigin')}
+                value={credentialOrigin}
+                disabled={credentialSaving}
+                onChange={(event) => setCredentialOrigin(event.currentTarget.value)}
+              />
+            </label>
+            <label>
+              <span>{t('settings.browserCredentialsUsername')}</span>
+              <input
+                type="text"
+                autoComplete="off"
+                placeholder={t('settings.browserCredentialsUsernamePlaceholder')}
+                aria-label={t('settings.browserCredentialsUsername')}
+                value={credentialUsername}
+                disabled={credentialSaving}
+                onChange={(event) => setCredentialUsername(event.currentTarget.value)}
+              />
+            </label>
+            <label>
+              <span>{t('settings.browserCredentialsPassword')}</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder={t('settings.browserCredentialsPasswordPlaceholder')}
+                aria-label={t('settings.browserCredentialsPassword')}
+                value={credentialPassword}
+                disabled={credentialSaving}
+                onChange={(event) => setCredentialPassword(event.currentTarget.value)}
+              />
+            </label>
             <Button
               type="submit"
               variant="soft"
@@ -478,7 +448,6 @@ export function BrowserIntegrationSettingsPage({
       {bridgeClient ? (
         <section className="settings-panel settings-browser-audit-panel">
           <header>
-            <ActivityLogIcon />
             <span>
               <strong>{t('settings.browserAudit')}</strong>
               <small>{t('settings.browserAuditDescription')}</small>
@@ -520,12 +489,12 @@ export function BrowserIntegrationSettingsPage({
               <table className="settings-browser-audit-table">
                 <thead>
                   <tr>
-                    <th>{t('settings.browserAuditColumn.time')}</th>
-                    <th>{t('settings.browserAuditColumn.tool')}</th>
-                    <th>{t('settings.browserAuditColumn.origin')}</th>
-                    <th>{t('settings.browserAuditColumn.target')}</th>
-                    <th>{t('settings.browserAuditColumn.outcome')}</th>
-                    <th>{t('settings.browserAuditColumn.latency')}</th>
+                    <th scope="col">{t('settings.browserAuditColumn.time')}</th>
+                    <th scope="col">{t('settings.browserAuditColumn.tool')}</th>
+                    <th scope="col">{t('settings.browserAuditColumn.origin')}</th>
+                    <th scope="col">{t('settings.browserAuditColumn.target')}</th>
+                    <th scope="col">{t('settings.browserAuditColumn.outcome')}</th>
+                    <th scope="col">{t('settings.browserAuditColumn.latency')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -552,7 +521,6 @@ export function BrowserIntegrationSettingsPage({
 
       <section className="settings-panel settings-browser-hint-panel">
         <header>
-          <GlobeIcon />
           <span>
             <strong>{t('settings.browserExtensionSetup')}</strong>
           </span>

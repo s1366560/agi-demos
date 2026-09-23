@@ -1,0 +1,40 @@
+{
+  "blockers": [
+    {
+      "id": "9852bfda-ed55-4468-8cde-c1868116b539",
+      "kind": "applied_reference"
+    },
+    {
+      "id": "359895b6-bd56-4602-9dbc-678853867de2",
+      "kind": "applied_reference"
+    }
+  ],
+  "candidates": {
+    "platform_plugin_credential_grants": [],
+    "platform_plugin_http_routes": [],
+    "platform_plugin_packages": [
+      {
+        "plugin_id": "qa-marketplace-marker-bundle",
+        "version": "1.0.0"
+      }
+    ],
+    "platform_plugin_permissions": [
+      {
+        "id": "7f560177-8092-47f1-9882-3b35410a641f",
+        "plugin_id": "qa-marketplace-marker-bundle"
+      }
+    ],
+    "platform_plugin_quota_usage": []
+  },
+  "digest": "11124b3e503d224a8c43bd0c913bb37edebea3bf2ef9816a79edec60e9ec19c9",
+  "files": [],
+  "preserved": [
+    "builtin bundles",
+    "business data",
+    "publication history",
+    "unattributed and shared files",
+    "download caches"
+  ],
+  "schema_version": 1,
+  "target": "69a137cc2939886da7835130cc3a0700520599b0deea30a8975743fdb39a85f2"
+}

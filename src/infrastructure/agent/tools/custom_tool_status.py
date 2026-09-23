@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
         "properties": {},
         "required": [],
     },
-    permission=None,
+    permission="read",
     category="diagnostics",
     tags=frozenset({"custom"}),
 )

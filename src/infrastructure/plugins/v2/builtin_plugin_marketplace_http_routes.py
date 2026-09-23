@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
+from fastapi.routing import APIRoute
+
 from src.application.schemas.plugin_marketplace import (
     MarketplacePackageApprovalResponse,
     MarketplacePackageCatalogEntry,
@@ -62,7 +64,22 @@ def _plugin_marketplace_route_v2(
 def plugin_marketplace_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
     """Return the complete, explicitly claimed ``plugin-marketplace`` inventory row."""
     prefix = _PLUGIN_MARKETPLACE_PREFIX_V2
+    from src.infrastructure.adapters.primary.web.routers.plugin_marketplace_v3 import router
+
+    unified_routes = tuple(
+        _plugin_marketplace_route_v2(
+            path=route.path,
+            methods=tuple(sorted(route.methods)),
+            endpoint=route.endpoint,
+            name=route.name,
+            response_model=route.response_model,
+            status_code=route.status_code,
+        )
+        for route in router.routes
+        if isinstance(route, APIRoute)
+    )
     return (
+        *unified_routes,
         _plugin_marketplace_route_v2(
             path=prefix,
             methods=("GET",),

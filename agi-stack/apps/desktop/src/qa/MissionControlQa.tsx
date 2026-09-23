@@ -340,7 +340,7 @@ function MissionControlQa() {
 
   return (
     <I18nProvider>
-      <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+      <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
         <div className="mission-control-qa-shell">
           <DesktopSidebar
             activeSection={view === 'my-work' ? 'my-work' : 'home'}

@@ -1,0 +1,21 @@
+{
+  "blockers": [],
+  "candidates": {
+    "platform_plugin_credential_grants": [],
+    "platform_plugin_http_routes": [],
+    "platform_plugin_packages": [],
+    "platform_plugin_permissions": [],
+    "platform_plugin_quota_usage": []
+  },
+  "digest": "7bc2fba4e531af327ac956f42499e0c5b7162b297e4a6da32f45199859db4e72",
+  "files": [],
+  "preserved": [
+    "builtin bundles",
+    "business data",
+    "publication history",
+    "unattributed and shared files",
+    "download caches"
+  ],
+  "schema_version": 1,
+  "target": "69a137cc2939886da7835130cc3a0700520599b0deea30a8975743fdb39a85f2"
+}

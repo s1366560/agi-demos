@@ -107,7 +107,7 @@
 .session-execution-graph-run-status.status-running svg,
 .session-execution-graph-summary .status-running svg,
 .session-execution-graph-node.status-running .session-execution-graph-node-icon {
-  color: var(--blue-10);
+  color: var(--gray-10);
 }
 
 .session-execution-graph-run-status.status-completed svg,

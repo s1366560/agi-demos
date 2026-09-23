@@ -23,9 +23,9 @@ import {
 } from '@/utils/channelConfigSanitizers';
 import { buildMarketplaceInstallRequest } from '@/utils/pluginMarketplaceInstall';
 
-
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { InstallPluginPackageModal } from '@/components/marketplace/InstallPluginPackageModal';
+import { PluginMarketplaceV3 } from '@/components/marketplace/v3/PluginMarketplaceV3';
 
 import { ChannelConfigSection } from './ChannelConfigSection';
 import { PluginMarketplaceSection } from './PluginMarketplaceSection';
@@ -630,19 +630,42 @@ export const PluginHub: React.FC = () => {
         </div>
       </section>
 
-      <PluginMarketplaceSection
-        packages={packages}
-        loading={marketplaceLoading}
-        error={marketplaceError}
-        actionKey={packageActionKey}
-        canInstall={canInstallPackages}
-        onRetry={() => {
-          void loadMarketplace();
-        }}
-        onOpen={openPluginDetail}
-        onInstall={handleOpenInstall}
-        onUninstall={handleUninstallPackage}
-      />
+      {tenantId ? (
+        <PluginMarketplaceV3
+          tenantId={tenantId}
+          projectId={selectedProjectId}
+          onInstallSignedV2={
+            canInstallPackages
+              ? () => {
+                  const installer = document.getElementById('signed-plugin-marketplace');
+                  installer?.scrollIntoView({ block: 'start' });
+                  installer?.focus({ preventScroll: true });
+                }
+              : undefined
+          }
+          canManage={
+            canInstallPackages ||
+            (Boolean(currentUser) && currentTenant?.owner_id === currentUser?.id) ||
+            currentUser?.roles.some((role) => role === 'admin' || role === 'owner') === true
+          }
+        />
+      ) : null}
+
+      <div id="signed-plugin-marketplace" tabIndex={-1}>
+        <PluginMarketplaceSection
+          packages={packages}
+          loading={marketplaceLoading}
+          error={marketplaceError}
+          actionKey={packageActionKey}
+          canInstall={canInstallPackages}
+          onRetry={() => {
+            void loadMarketplace();
+          }}
+          onOpen={openPluginDetail}
+          onInstall={handleOpenInstall}
+          onUninstall={handleUninstallPackage}
+        />
+      </div>
 
       <InstallPluginPackageModal
         key={

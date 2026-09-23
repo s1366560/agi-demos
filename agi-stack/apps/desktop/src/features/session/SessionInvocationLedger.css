@@ -126,7 +126,7 @@
 
 .session-invocation-blocker button:focus-visible,
 .session-invocation-inspect:focus-visible {
-  outline: 2px solid var(--cyan-9);
+  outline: 2px solid var(--gray-9);
   outline-offset: 2px;
 }
 
@@ -211,7 +211,7 @@
 
 .status-executing .session-invocation-status-icon,
 .session-invocation-summary .status-executing {
-  color: var(--cyan-9);
+  color: var(--gray-9);
 }
 
 .status-completed .session-invocation-status-icon,
@@ -265,7 +265,7 @@
   white-space: nowrap;
 }
 
-.status-executing .session-invocation-status { color: var(--cyan-9); }
+.status-executing .session-invocation-status { color: var(--desktop-status-running); }
 .status-completed .session-invocation-status { color: var(--green-9); }
 .status-failed .session-invocation-status,
 .status-unknown_outcome .session-invocation-status { color: var(--red-9); }

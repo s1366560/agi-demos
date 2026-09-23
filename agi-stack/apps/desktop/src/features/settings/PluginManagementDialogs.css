@@ -16,7 +16,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.26);
-  border-radius: 18px;
+  border-radius: 12px;
   background: var(--desktop-surface-11);
   color: var(--desktop-text-bright);
   box-shadow: var(--desktop-shadow-dialog);
@@ -24,7 +24,7 @@
 
 .plugin-management-heading {
   display: grid;
-  grid-template-columns: 38px 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: start;
   padding: 22px 24px;
@@ -94,7 +94,7 @@
   align-items: center;
   justify-content: space-between;
   color: var(--desktop-gray-28);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .plugin-activity-toolbar button {
@@ -141,7 +141,7 @@
 .plugin-activity-timeline article > div > span,
 .plugin-activity-empty {
   color: var(--desktop-gray-28);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .plugin-activity-trace code,
@@ -236,7 +236,7 @@
 .plugin-activity-diagnostics p,
 .plugin-activity-timeline p {
   color: var(--desktop-gray-35);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -295,7 +295,7 @@
 
 .plugin-management-body label em {
   color: var(--desktop-red-pale);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -362,7 +362,7 @@
 
 .plugin-management-footer span {
   color: var(--desktop-red-blush);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .plugin-management-footer button {
@@ -422,3 +422,22 @@
     flex-direction: column-reverse;
   }
 }
+
+.plugin-management-heading > svg { display: none; }
+.plugin-management-heading > div > span { display: none; }
+.plugin-management-heading p { line-height: 1.5; }
+.plugin-management-body { overscroll-behavior: contain; }
+.plugin-management-fieldset { min-width: 0; }
+.plugin-activity-section { padding-inline: 0; border: 0; background: transparent; }
+@media (max-width: 640px) {
+  .plugin-management-heading, .plugin-management-body { padding: 16px; }
+  .plugin-management-dialog { width: calc(100vw - 24px); }
+  .plugin-management-backdrop { padding: 12px; }
+}
+
+.plugin-management-body > label { margin-bottom: 16px; }
+.plugin-management-body label:has(> input[type='checkbox']) { display: flex; align-items: center; gap: 10px; line-height: 1.5; }
+.plugin-management-body input[type='checkbox'] { width: 16px; height: 16px; flex: 0 0 16px; padding: 0; margin: 0; }
+.plugin-management-body.compact .plugin-management-state { min-height: 56px; display: flex; justify-content: flex-start; }
+.plugin-management-state > span { display: grid; gap: 6px; }
+.plugin-management-body fieldset { min-width: 0; border: 1px solid var(--desktop-border-17); border-radius: 8px; padding: 16px; }

@@ -115,4 +115,12 @@ test('skill validation covers package naming, scope, metadata, and backend lengt
       specVersion: 'too_long',
     }
   );
+  // The backend caps skill names at 64 characters (SkillCreate.name).
+  assert.deepEqual(
+    validateSkillDraft({
+      ...skillDraftFrom(skill, null),
+      name: 'a'.repeat(65),
+    }),
+    { name: 'too_long' }
+  );
 });

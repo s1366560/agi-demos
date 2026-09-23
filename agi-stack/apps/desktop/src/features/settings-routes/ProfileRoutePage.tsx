@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LockClosedIcon, PersonIcon } from '@radix-ui/react-icons';
+import { Button } from '@radix-ui/themes';
+import './ProfileRoutePage.css';
 
 import { useI18n } from '../../i18n';
 import type { ProfileRouteController } from './profileRouteController';
 import type { ProfileRoutePresentationModel } from './profileRoutePresentationModel';
 import { useNativeRouteAction } from './useNativeRouteAction';
+import { profileSettingsMessages } from './profileSettingsMessages';
 
 type PasswordDraft = Readonly<{
   current: string;
@@ -12,7 +14,11 @@ type PasswordDraft = Readonly<{
   confirm: string;
 }>;
 
-const EMPTY_PASSWORD: PasswordDraft = Object.freeze({ current: '', next: '', confirm: '' });
+const EMPTY_PASSWORD: PasswordDraft = Object.freeze({
+  current: '',
+  next: '',
+  confirm: '',
+});
 
 export function ProfileRoutePage({
   model,
@@ -43,6 +49,7 @@ export function ProfileRoutePage({
   if (!observation) return <ContractGap capability={model.capability} />;
   const busy = action.busyAction !== null;
   const editable = allowed.has('update') && model.state !== 'degraded';
+  const canChangePassword = model.authority === 'cloud' && allowed.has('change-password');
 
   const saveProfile = async (): Promise<void> => {
     const result = await action.run('update', () =>
@@ -65,10 +72,13 @@ export function ProfileRoutePage({
   };
 
   return (
-    <main className="settings-page" data-route-content="profile" data-state={model.state}>
+    <div
+      className="settings-page settings-profile-page"
+      data-route-content="profile"
+      data-state={model.state}
+    >
       <header className="settings-page-heading">
         <div>
-          <span>{t('settings.accountEyebrow')}</span>
           <h1>{t('settings.accountTitle')}</h1>
           <p>{t('settings.accountSubtitle')}</p>
         </div>
@@ -76,7 +86,10 @@ export function ProfileRoutePage({
 
       {model.reasonCode ? (
         <p role="status" data-reason-code={model.reasonCode}>
-          {t('desktopProductionRouter.reason.authorityUnavailable')}
+          {model.authority === 'local' &&
+          model.reasonCode === 'local_profile_mutation_authority_unavailable'
+            ? profileSettingsMessages[locale].localReadOnly
+            : t('desktopProductionRouter.reason.authorityUnavailable')}
         </p>
       ) : null}
       {action.reasonCode ? (
@@ -87,7 +100,6 @@ export function ProfileRoutePage({
 
       <section className="settings-panel">
         <header>
-          <PersonIcon />
           <div>
             <strong>{observation.user.name || observation.user.email}</strong>
             <small>{observation.user.email}</small>
@@ -105,92 +117,126 @@ export function ProfileRoutePage({
         </dl>
       </section>
 
-      <form
-        className="settings-panel"
-        data-action="update"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void saveProfile();
-        }}
-      >
-        <label>
-          <span>{t('settings.subagentEditor.displayName')}</span>
-          <input
-            value={name}
+      {editable ? (
+        <form
+          className="settings-panel settings-profile-form"
+          data-action="update"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveProfile();
+          }}
+        >
+          <label>
+            <span>{t('settings.subagentEditor.displayName')}</span>
+            <input
+              value={name}
+              disabled={busy || !editable}
+              onChange={(event) => setName(event.currentTarget.value)}
+            />
+          </label>
+          <label data-action="change-language">
+            <span>{t('settings.language')}</span>
+            <select
+              value={language}
+              disabled={busy || !editable || !allowed.has('change-language')}
+              onChange={(event) =>
+                setLanguage(event.currentTarget.value === 'zh-CN' ? 'zh-CN' : 'en-US')
+              }
+            >
+              <option value="en-US">{t('settings.englishLocaleName')}</option>
+              <option value="zh-CN">{t('settings.chineseLocaleName')}</option>
+            </select>
+            <small>{profileSettingsMessages[locale].languageOnSave}</small>
+          </label>
+          <Button
+            type="submit"
             disabled={busy || !editable}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-        </label>
-        <label data-action="change-language">
-          <span>{t('settings.language')}</span>
-          <select
-            value={language}
-            disabled={busy || !editable || !allowed.has('change-language')}
-            onChange={(event) =>
-              setLanguage(event.currentTarget.value === 'zh-CN' ? 'zh-CN' : 'en-US')
-            }
+            loading={action.busyAction === 'update'}
           >
-            <option value="en-US">{t('settings.englishLocaleName')}</option>
-            <option value="zh-CN">{t('settings.chineseLocaleName')}</option>
-          </select>
-          <small>{t('settings.languageDescription')}</small>
-        </label>
-        <button type="submit" disabled={busy || !editable}>
-          {t('common.save')}
-        </button>
-      </form>
-
-      <form
-        className="settings-panel"
-        data-action="change-password"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void savePassword();
-        }}
-      >
-        <header>
-          <LockClosedIcon />
+            {t('common.save')}
+          </Button>
+        </form>
+      ) : (
+        <dl className="settings-profile-facts">
           <div>
-            <strong>{t('forcePassword.title')}</strong>
-            <small>{t('forcePassword.passwordHint')}</small>
+            <dt>{t('settings.language')}</dt>
+            <dd>
+              {t(
+                language === 'zh-CN' ? 'settings.chineseLocaleName' : 'settings.englishLocaleName',
+              )}
+            </dd>
           </div>
-        </header>
-        <label>
-          <span>{t('forcePassword.currentPassword')}</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password.current}
-            disabled={busy || !allowed.has('change-password')}
-            onChange={(event) => setPassword({ ...password, current: event.currentTarget.value })}
-          />
-        </label>
-        <label>
-          <span>{t('forcePassword.newPassword')}</span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password.next}
-            disabled={busy || !allowed.has('change-password')}
-            onChange={(event) => setPassword({ ...password, next: event.currentTarget.value })}
-          />
-        </label>
-        <label>
-          <span>{t('forcePassword.confirmPassword')}</span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password.confirm}
-            disabled={busy || !allowed.has('change-password')}
-            onChange={(event) => setPassword({ ...password, confirm: event.currentTarget.value })}
-          />
-        </label>
-        {passwordErrorKey ? <em role="alert">{t(passwordErrorKey)}</em> : null}
-        <button type="submit" disabled={busy || !allowed.has('change-password')}>
-          {t('forcePassword.submit')}
-        </button>
-      </form>
-    </main>
+        </dl>
+      )}
+
+      {canChangePassword ? (
+        <details className="settings-profile-password">
+          <summary>{t('forcePassword.title')}</summary>
+          <form
+            className="settings-panel settings-profile-form"
+            data-action="change-password"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void savePassword();
+            }}
+          >
+            <header>
+              <div>
+                <small>{t('forcePassword.passwordHint')}</small>
+              </div>
+            </header>
+            <label>
+              <span>{t('forcePassword.currentPassword')}</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password.current}
+                disabled={busy || !allowed.has('change-password')}
+                onChange={(event) =>
+                  setPassword({
+                    ...password,
+                    current: event.currentTarget.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              <span>{t('forcePassword.newPassword')}</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={password.next}
+                disabled={busy || !allowed.has('change-password')}
+                onChange={(event) => setPassword({ ...password, next: event.currentTarget.value })}
+              />
+            </label>
+            <label>
+              <span>{t('forcePassword.confirmPassword')}</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={password.confirm}
+                disabled={busy || !allowed.has('change-password')}
+                onChange={(event) =>
+                  setPassword({
+                    ...password,
+                    confirm: event.currentTarget.value,
+                  })
+                }
+              />
+            </label>
+            {passwordErrorKey ? <em role="alert">{t(passwordErrorKey)}</em> : null}
+            <Button
+              type="submit"
+              disabled={busy || !allowed.has('change-password')}
+              loading={action.busyAction === 'change-password'}
+            >
+              {t('forcePassword.submit')}
+            </Button>
+          </form>
+        </details>
+      ) : null}
+    </div>
   );
 }
 

@@ -94,15 +94,16 @@ class DefaultSandboxOperationServiceFactoryV2:
         settings = get_settings()
         distributed_lock = _build_distributed_lock_v2(self.redis_client)
         common = _sandbox_service_options_v2(settings)
+        commit_on_write = not bool(db.info.get("marketplace_transaction_owned", False))
         return SandboxOperationServicesV2(
             sandbox_resource=UnifiedSandboxService(
-                repository=SqlProjectSandboxRepository(db),
+                repository=SqlProjectSandboxRepository(db, commit_on_write=commit_on_write),
                 sandbox_adapter=runtime_services.adapter,
                 distributed_lock=distributed_lock,
                 **common,
             ),
             lifecycle_service=ProjectSandboxLifecycleService(
-                repository=SqlProjectSandboxRepository(db),
+                repository=SqlProjectSandboxRepository(db, commit_on_write=commit_on_write),
                 sandbox_adapter=runtime_services.adapter,
                 distributed_lock=distributed_lock,
                 workspace_sync=WorkspaceSyncService(

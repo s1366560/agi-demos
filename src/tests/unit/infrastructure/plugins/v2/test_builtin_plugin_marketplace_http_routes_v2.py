@@ -33,6 +33,7 @@ def test_plugin_marketplace_row_is_a_complete_explicit_v2_contribution() -> None
             definition.status_code,
         )
         for definition in definitions
+        if definition.path.startswith(prefix)
     ) == (
         (prefix, ("GET",), "list_packages", list[MarketplacePackageCatalogEntry], None),
         (

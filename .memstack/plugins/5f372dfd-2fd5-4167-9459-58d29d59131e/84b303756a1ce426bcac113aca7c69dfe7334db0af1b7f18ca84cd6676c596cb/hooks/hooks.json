@@ -1,0 +1,1 @@
+{"hooks":[{"event":"session_start","command":"python3 ${PLUGIN_ROOT}/scripts/demo_hook.py","timeout_seconds":30},{"event":"before_request","command":"python3 ${PLUGIN_ROOT}/scripts/demo_hook.py","timeout_seconds":30},{"event":"after_tool_execute","command":"python3 ${PLUGIN_ROOT}/scripts/demo_hook.py","timeout_seconds":30}]}

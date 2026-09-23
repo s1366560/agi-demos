@@ -45,9 +45,7 @@ own configuration, repository and model leases.
   consistency and contract completeness checks passed. Public service contracts
   and snapshot entries did not change.
 
-GitNexus classified the Skill Evolution runtime HIGH, its plugin definition
-CRITICAL, and Host apply HIGH. Warnings were reported before edits. Receipt retry
-and supersession were missing from the index; direct tracing covered their shared
+Direct tracing covered the shared receipt retry and supersession
 Host path, HTTP coordinator, marketplace recovery and the separate scoped receipt
 coordinator. No activation was inserted in the earlier HTTP on-commit callback.
 

@@ -63,6 +63,37 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         self._sandbox_resource = sandbox_resource
         self._app_service = app_service
 
+    async def stage_marketplace_package(
+        self,
+        project_id: str,
+        tenant_id: str,
+        installation_id: str,
+        digest: str,
+        files: dict[str, str],
+    ) -> str:
+        """Copy an immutable, validated plugin snapshot into its project sandbox."""
+        from pathlib import PurePosixPath
+        from uuid import UUID
+
+        UUID(installation_id)
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError("Invalid package digest")
+        destination = f"/workspace/.memstack/plugins/{installation_id}/{digest}"
+        await self._sandbox_resource.ensure_sandbox_ready(project_id, tenant_id)
+        for name, content in files.items():
+            relative = PurePosixPath(name)
+            if relative.is_absolute() or ".." in relative.parts or "\\" in name:
+                raise ValueError("Package file escaped snapshot root")
+            written = await self._sandbox_resource.sync_file(
+                project_id,
+                relative.name,
+                content,
+                destination=f"{destination}/{relative.parent.as_posix()}",
+            )
+            if not written:
+                raise RuntimeError("Failed to transfer plugin package to sandbox")
+        return destination
+
     @override
     async def install_and_start(
         self,
@@ -174,7 +205,34 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 timeout=MCP_STOP_TIMEOUT,
             )
             data = self._parse_tool_result(result)
-            return cast(bool, data.get("success", False))
+            if not isinstance(data, dict):
+                return False
+            if data.get("success") is True:
+                return not (result.get("isError") or result.get("is_error"))
+            # Older sandbox trackers report an absent process as this exact response.
+            # Confirm absence from a successful inventory; never infer it from error text.
+            if data != {"success": False, "name": server_name}:
+                return False
+            inventory = await self._sandbox_resource.execute_tool(
+                project_id=project_id,
+                tool_name=TOOL_LIST,
+                arguments={},
+                timeout=MCP_STOP_TIMEOUT,
+            )
+            servers = self._parse_tool_result(inventory)
+            if (
+                inventory.get("isError")
+                or inventory.get("is_error")
+                or not isinstance(servers, list)
+                or any(
+                    not isinstance(item, dict)
+                    or not isinstance(item.get("name"), str)
+                    or not item["name"]
+                    for item in servers
+                )
+            ):
+                return False
+            return all(item["name"] != server_name for item in servers)
         except Exception as e:
             logger.warning(
                 "Failed to stop MCP server: has_server_name=%s error_type=%s",
@@ -215,9 +273,9 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             timeout=MCP_DISCOVER_TIMEOUT,
         )
         tools = self._parse_tool_result(result)
-        if isinstance(tools, list):
-            return cast(list[dict[str, Any]], tools)
-        return []
+        if result.get("isError") or result.get("is_error") or not isinstance(tools, list):
+            raise RuntimeError("MCP tool discovery failed; inspect the server connection")
+        return cast(list[dict[str, Any]], tools)
 
     @override
     async def call_tool(

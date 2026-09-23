@@ -197,7 +197,7 @@ function ComposeAheadQa() {
   );
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="large">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="large">
       <div className="session-steering-qa-shell">
         <aside className="session-steering-qa-rail">
           <div className="session-steering-qa-brand">

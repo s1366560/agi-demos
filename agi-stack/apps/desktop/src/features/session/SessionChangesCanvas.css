@@ -85,9 +85,9 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 11px;
-  border: 1px solid var(--cyan-a6);
+  border: 1px solid var(--gray-a6);
   border-radius: 8px;
-  background: var(--cyan-a2);
+  background: var(--gray-a2);
   font-size: 12px;
 }
 
@@ -125,7 +125,7 @@
 .session-change-file-toggle:hover,
 .session-change-file-toggle.is-expanded {
   color: var(--gray-12);
-  background: var(--cyan-a3);
+  background: var(--gray-a3);
 }
 
 .session-change-file-toggle span {
@@ -169,8 +169,8 @@
 
 .session-change-hunk summary {
   padding: 7px 11px;
-  color: var(--cyan-11);
-  background: var(--cyan-a3);
+  color: var(--gray-11);
+  background: var(--gray-a3);
   font: 11px/1.4 var(--code-font-family, monospace);
   cursor: pointer;
 }
@@ -191,7 +191,7 @@
 
 .session-change-line:hover,
 .session-change-line.is-selected {
-  outline: 1px solid var(--cyan-a8);
+  outline: 1px solid var(--gray-a8);
   outline-offset: -1px;
 }
 
@@ -271,9 +271,9 @@
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 1px solid var(--cyan-a8);
+  border: 1px solid var(--gray-a8);
   border-radius: 5px;
-  color: var(--cyan-11);
+  color: var(--gray-11);
   background: var(--gray-1);
   cursor: pointer;
   opacity: 0;
@@ -292,14 +292,14 @@
   gap: 8px;
   margin: 2px 8px 4px 92px;
   padding: 7px 9px;
-  border: 1px solid var(--cyan-a6);
+  border: 1px solid var(--gray-a6);
   border-radius: 7px;
-  background: var(--cyan-a2);
+  background: var(--gray-a2);
 }
 
 .session-change-comment code {
   flex: 0 0 auto;
-  color: var(--cyan-11);
+  color: var(--gray-11);
   font: 10px/1.5 var(--code-font-family, monospace);
   user-select: none;
 }

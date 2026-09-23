@@ -7,7 +7,7 @@
 .settings-browser-error {
   margin: 10px 0 0;
   color: var(--red-11);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .settings-browser-results {
@@ -24,7 +24,7 @@
 .settings-browser-hint {
   margin: 10px 0 0;
   color: var(--gray-11);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   word-break: break-word;
 }
@@ -38,15 +38,16 @@
 .settings-browser-warning {
   margin: 10px 0 0;
   color: var(--amber-11);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   word-break: break-word;
 }
 
 .settings-browser-credential-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
   margin-top: 12px;
 }
 
@@ -64,8 +65,9 @@
 
 .settings-browser-credential-form input:focus,
 .settings-browser-audit-controls input:focus {
-  outline: none;
-  border-color: var(--blue-8);
+  outline: 2px solid var(--gray-9);
+  outline-offset: 2px;
+  border-color: var(--gray-8);
 }
 
 .settings-browser-audit-controls {
@@ -82,7 +84,7 @@
 .settings-browser-audit-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .settings-browser-audit-table th {
@@ -100,4 +102,75 @@
   color: var(--gray-12);
   vertical-align: top;
   word-break: break-word;
+}
+
+.settings-browser-page .settings-panel > header {
+  grid-template-columns: 1fr;
+}
+.settings-browser-page .settings-panel {
+  min-width: 0;
+}
+.settings-browser-actions,
+.settings-browser-audit-controls,
+.settings-browser-grant-actions {
+  flex-wrap: wrap;
+}
+.settings-browser-page .settings-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.settings-browser-page .settings-row {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.settings-browser-page .settings-row > b {
+  font-weight: 400;
+}
+.settings-browser-connection-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  margin: 0;
+  font-size: 13px;
+}
+.settings-browser-connection-status > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-browser-connection-status dt {
+  color: var(--gray-11);
+}
+.settings-browser-connection-status dd {
+  margin: 0;
+}
+.settings-browser-credential-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--gray-11);
+  font-size: 13px;
+}
+.settings-browser-credential-form input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 34px;
+}
+.settings-browser-credential-form button {
+  justify-self: start;
+}
+.settings-browser-audit-controls input {
+  min-height: 34px;
+}
+.settings-browser-audit-table {
+  table-layout: fixed;
+}
+.settings-browser-audit-table th {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .settings-browser-credential-form {
+    grid-template-columns: 1fr;
+  }
 }

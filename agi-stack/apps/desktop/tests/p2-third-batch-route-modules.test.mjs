@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
 const root = '/tmp/agistack-desktop-test-dist/src/features/settings-routes';
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
@@ -633,13 +634,16 @@ test('native Content pages render controls for their safely declared actions', a
   );
   assert.match(
     localMarkup,
-    /The required service or authority is currently unavailable\./u,
+    /This local profile is managed by your workspace\./u,
   );
   assert.doesNotMatch(
     localMarkup,
     /<code[^>]*>local_profile_mutation_authority_unavailable<\/code>/u,
   );
-  assert.match(localMarkup, /data-action="change-password"[\s\S]*disabled=""/u);
+  assert.doesNotMatch(localMarkup, /data-action="change-password"/u);
+  assert.doesNotMatch(localMarkup, /type="password"/u);
+  assert.doesNotMatch(localMarkup, /data-action="update"/u);
+  assert.match(localMarkup, /settings-profile-facts/u);
 });
 
 function mockFetch(requests, payloads) {

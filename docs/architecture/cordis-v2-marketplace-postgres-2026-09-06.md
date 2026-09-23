@@ -18,7 +18,7 @@ The market publisher starts from a real persisted ROOT startup, resolves the pro
 - Owned container cleanup exited 0.
 - Ruff, diff check and runner Pyright pass; Pyright reports zero errors and warnings.
 - Evidence logs and SHA256 manifest: `/var/tmp/cordis-market-postgres-c2e90589`.
-- GitNexus did not index the runner TESTS constant. Manual review confirms the only runner behavior change is adding this test module; container ownership, environment-only credentials and cleanup remain intact.
+- Manual review confirms the only runner behavior change is adding this test module; container ownership, environment-only credentials and cleanup remain intact.
 
 ## Remaining work
 

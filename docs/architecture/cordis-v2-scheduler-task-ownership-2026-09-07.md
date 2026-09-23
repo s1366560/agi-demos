@@ -23,10 +23,8 @@ different-task cancel-scope error. These tests and the existing scheduler/Cron
 regressions passed: 17 passed, 21 warnings, 17.93 seconds. Ruff and Pyright passed
 with zero errors; Pyright reported zero warnings. No original database was used.
 
-GitNexus CLI reported LOW for `start_scheduler` and `stop_scheduler`, with zero
-indexed callers. Direct source review supplements that incomplete index: the
-production Cron plugin passes these functions as generation acquisition/disposal
-callbacks. Only scheduler lifecycle ownership changes; job registration and
+Direct source review confirms that the production Cron plugin passes
+`start_scheduler` and `stop_scheduler` as generation acquisition/disposal callbacks. Only scheduler lifecycle ownership changes; job registration and
 generation overlap semantics retain their existing regression coverage.
 
 Logs are stored under `/tmp/cordis-scheduler-owner-{red,green,ruff,pyright}.log`

@@ -1,5 +1,5 @@
 import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Cross2Icon, KeyboardIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons';
+import { Cross2Icon, MagnifyingGlassIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import {
@@ -8,10 +8,7 @@ import {
   shortcutChordSegments,
   type ShortcutPlatform,
 } from '../navigation/keyboardShortcutModel';
-import {
-  filterShortcutGroups,
-  keypressCombo,
-} from '../navigation/keyboardShortcutSearchModel';
+import { filterShortcutGroups, keypressCombo } from '../navigation/keyboardShortcutSearchModel';
 import { SettingsPage } from './SettingsCorePages';
 import '../navigation/KeyboardShortcutsDialog.css';
 import './ShortcutSettingsPage.css';
@@ -65,16 +62,9 @@ export function ShortcutSettingsPage({
       className="settings-preference-page settings-shortcuts-page"
     >
       <section className="settings-panel settings-shortcuts-panel">
-        <header>
-          <KeyboardIcon />
-          <span>
-            <strong>{t('settings.shortcutsCatalog')}</strong>
-            <small>{t('settings.shortcutsCatalogDescription')}</small>
-          </span>
-        </header>
         <div className="settings-shortcuts-search-row">
           <label className="settings-shortcuts-search">
-            <MagnifyingGlassIcon />
+            <MagnifyingGlassIcon aria-hidden="true" />
             <input
               value={query}
               onChange={(event) => setQuery(event.currentTarget.value)}
@@ -92,7 +82,7 @@ export function ShortcutSettingsPage({
                 title={t('settings.shortcutComboClear')}
                 onClick={() => setCombo(null)}
               >
-                <Cross2Icon />
+                <Cross2Icon aria-hidden="true" />
               </button>
             </span>
           ) : null}

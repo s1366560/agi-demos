@@ -1452,18 +1452,10 @@ async def _discover_single_server_tools(
         List of tool info dictionaries, or empty list on error.
     """
     try:
-        discover_result = await sandbox_adapter.call_tool(
-            sandbox_id=sandbox_id,
-            tool_name="mcp_server_discover_tools",
-            arguments={"name": server_name},
-            timeout=20.0,  # Fast fail for tool discovery
-        )
+        from src.application.services.marketplace_agent_mcp import agent_mcp_discover
 
-        if discover_result.get("is_error"):
-            logger.warning(f"[AgentWorker] Failed to discover tools for server {server_name}")
-            return []
-
-        return _parse_discovered_tools(discover_result.get("content", []))
+        _ = sandbox_adapter  # Discovery uses the pinned, scoped service graph.
+        return await asyncio.wait_for(agent_mcp_discover(sandbox_id, server_name), timeout=30.0)
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Error discovering tools for server {server_name}: {e}")
@@ -1494,7 +1486,7 @@ async def _discover_tools_for_servers_parallel(
             collected so far. Default is None (no timeout).
 
     Returns:
-        List of tool lists, one per server (excluding failed/timed out servers).
+        List of tool lists, one per running server, preserving failed positions as empty lists.
     """
     # Filter to only running servers
     running_servers = [s for s in servers if s.get("name") and s.get("status") == "running"]
@@ -1532,15 +1524,19 @@ async def _discover_tools_for_servers_parallel(
         # No timeout - wait for all to complete
         results = await asyncio.gather(*discovery_tasks, return_exceptions=True)
 
-    # Filter out exceptions and empty results, but keep successful ones
+    # Preserve server positions: callers bind each result to the corresponding
+    # running server. Dropping a failed result would change another tool's owner.
     successful_results = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             logger.warning(
                 f"[AgentWorker] Discovery failed for {running_servers[i]['name']}: {result}"
             )
-        elif isinstance(result, list) and result:
+            successful_results.append([])
+        elif isinstance(result, list):
             successful_results.append(result)
+        else:
+            successful_results.append([])
 
     return successful_results
 
@@ -2004,24 +2000,6 @@ def _parse_mcp_server_list(content: list[Any]) -> list[Any]:
                 data = json.loads(text)
                 if isinstance(data, dict) and "servers" in data:
                     return cast(list[Any], data["servers"])
-                if isinstance(data, list):
-                    return data
-            except (json.JSONDecodeError, TypeError):
-                pass
-    return []
-
-
-def _parse_discovered_tools(content: list[Any]) -> list[Any]:
-    """Parse tool list from mcp_server_discover_tools response."""
-    import json
-
-    for item in content:
-        if isinstance(item, dict) and item.get("type") == "text":
-            text = item.get("text", "")
-            try:
-                data = json.loads(text)
-                if isinstance(data, dict) and "tools" in data:
-                    return cast(list[Any], data["tools"])
                 if isinstance(data, list):
                     return data
             except (json.JSONDecodeError, TypeError):
@@ -2891,7 +2869,14 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 or agent_mode in getattr(skill, "agent_modes", [])
             ]
             available_skill_names = tuple(s.name for s in filtered_skills)
+            from functools import partial
+
+            from src.application.services.marketplace_skill_runtime import resolve_marketplace_skill
+
             tool_info = make_skill_loader_tool(
+                marketplace_skill_resolver=partial(
+                    resolve_marketplace_skill, tenant_id, project_id or ""
+                ),
                 skill_service=skill_service,
                 tenant_id=tenant_id,
                 project_id=project_id or "",

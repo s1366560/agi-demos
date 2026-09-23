@@ -453,3 +453,15 @@ mod tests {
         assert!(manager_connection(&state, &auth).is_err());
     }
 }
+
+/// Read-only projection for the unified marketplace; signed activation remains authoritative here.
+pub(super) async fn marketplace_installations(
+    state: Arc<LocalRuntimeState>,
+    auth: AuthenticatedContext,
+) -> ResultJson {
+    let request = ScopeRequest {
+        tenant_id: auth.workspace.tenant_id.clone(),
+        project_id: auth.workspace.project_id.clone(),
+    };
+    list(State(state), Extension(auth), Query(request)).await
+}

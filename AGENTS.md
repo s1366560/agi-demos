@@ -14,8 +14,6 @@ Guidance for AI coding assistants (Copilot, Claude, Cursor, Gemini, ...) working
 - **Disk discipline**: before large builds or checkout copies, inspect `df -h .` and `make disk-usage`. Use the canonical `scripts/avernet-bcs/cargo.sh` wrapper; do not create a second BCS target by invoking Cargo directly in `third_party/avernet-bcs`. Default dev/test builds use reduced debug information and no incremental cache; enable larger caches only for a specific debugging session. After merging and finishing validation, remove only your own clean, merged temporary worktrees and test copies, preserving requested artifacts and all unrelated files. Never reclaim space by deleting `.cache` wholesale, database files, Docker volumes, logs, or another task's worktree. See `docs/development-disk-usage.md`.
 - **Security first**: never paste secrets (API keys, tokens, JWTs, passwords). Redact logs.
 - **Code style**: no emojis in code/docs. Prefer immutability. Small files (200–400 lines typical, 800 max). Commit subjects MUST use Conventional Commit syntax with an optional scope, for example `feat(agent): add supervisor verdict tool`, `fix(sandbox): clarify read offset semantics`, `refactor(skills): lift curated lineage into domain`. Keep the first line in that format, then use the Lore protocol trailers below in the body when a body is present.
-- Before editing a symbol: run `gitnexus impact` (see GitNexus section) and report blast radius.
-- Before committing: run `gitnexus detect-changes` to verify scope.
 - **Agent First (top-level architectural rule)**: every **subjective** decision point — anything that requires semantic understanding, intent inference, quality assessment, appropriateness judgment, categorization by meaning, or resolution of ambiguity — **MUST be made by an agent via a structured tool-call**. Hardcoded heuristics for subjective calls are prohibited: no regex-on-text for routing or classification, no keyword matching for intent, no `dict` lookup tables masquerading as policy engines, no hand-tuned thresholds that produce semantic verdicts on their own. The following stay deterministic because they are **structural / arithmetic / protocol** facts, not judgments:
   - set-membership checks (roster, sender-in-participants, permission allow-lists)
   - pure arithmetic (budget counters: turns, USD, wall-seconds)
@@ -232,7 +230,6 @@ Ray actors run from baked Docker images — local edits do **not** take effect u
 ### Never
 
 - Modify the DB directly — always Alembic migrations.
-- Use find-and-replace for renames — use `gitnexus_rename` (understands call graph).
 
 ## Coding Standards
 
@@ -322,47 +319,3 @@ The WS endpoint `/api/v1/agent/ws` authenticates via `?token=<api_key>` query pa
 ## Environment Variables
 
 Core groups (see `.env.example` for full list): `API_*` · `SECRET_KEY`, `LLM_ENCRYPTION_KEY` · `NEO4J_*` · `POSTGRES_*` · `REDIS_*` · `LLM_PROVIDER` + provider keys (`GEMINI_API_KEY`, `DASHSCOPE_API_KEY`, `OPENAI_API_KEY`, ...) · `SANDBOX_*` · `MCP_*`.
-
-<!-- gitnexus:start -->
-# GitNexus — Code Intelligence
-
-This project is indexed by GitNexus as **agi-demos** (163862 symbols, 321420 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
-
-> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
-
-## Always Do
-
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "main"})`.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
-
-## Never Do
-
-- NEVER edit a function, class, or method without first running `impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
-- NEVER commit changes without running `detect_changes()` to check affected scope.
-
-## Resources
-
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/agi-demos/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/agi-demos/clusters` | All functional areas |
-| `gitnexus://repo/agi-demos/processes` | All execution flows |
-| `gitnexus://repo/agi-demos/process/{name}` | Step-by-step execution trace |
-
-## CLI
-
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
-
-<!-- gitnexus:end -->

@@ -159,14 +159,19 @@ test('full preset auto-approves every permission request regardless of risk', ()
   );
 });
 
-test('auto-approval response data carries truthful preset markers', () => {
-  assert.deepEqual(autoApprovalResponseData('relaxed'), {
+test('auto-approval response data stays inside the permission respond contract', () => {
+  // The backend HITL contract rejects any permission response field beyond
+  // {action, granted, scope}; the resolved-with-preset marker is local-only.
+  assert.deepEqual(autoApprovalResponseData(), {
     action: 'allow',
     granted: true,
     scope: 'once',
-    auto_approved: true,
-    preset: 'relaxed',
   });
+  assert.deepEqual(Object.keys(autoApprovalResponseData()).sort(), [
+    'action',
+    'granted',
+    'scope',
+  ]);
 });
 
 test('autoApprovalSubmission builds an idempotent permission response', () => {
@@ -176,7 +181,8 @@ test('autoApprovalSubmission builds an idempotent permission response', () => {
   assert.equal(submission.expectedRevision, 3);
   assert.equal(submission.idempotencyKey, 'hitl-1:3:preset-auto:full');
   assert.equal(submission.responseData.granted, true);
-  assert.equal(submission.responseData.auto_approved, true);
+  assert.equal(submission.responseData.auto_approved, undefined);
+  assert.equal(submission.responseData.preset, undefined);
   assert.equal(
     autoApprovalSubmission(permissionRequest(), 'default'),
     null,

@@ -1,0 +1,166 @@
+[
+  {
+    "type": "observe",
+    "conversation_id": "02170549-2789-45f6-9cb0-6e7a7857957c",
+    "data": {
+      "tool_name": "skill_loader",
+      "result": {
+        "name": "plugin-demo",
+        "skill_id": "2d7d1ee1-aca5-4001-9770-4867767085c8",
+        "tools": [
+          "terminal"
+        ],
+        "dir": null,
+        "source": "database"
+      },
+      "error": null,
+      "duration_ms": 9,
+      "call_id": "call_function_oxbz6n7q9d1o_1",
+      "status": "completed",
+      "tool_execution_id": "exec_81b45766a3c0",
+      "ui_metadata": null,
+      "display": null,
+      "file_metadata": null,
+      "observation": {
+        "name": "plugin-demo",
+        "skill_id": "2d7d1ee1-aca5-4001-9770-4867767085c8",
+        "tools": [
+          "terminal"
+        ],
+        "dir": null,
+        "source": "database"
+      },
+      "agent_id": "builtin:all-access",
+      "message_id": "8a74fb45-5cf1-50e7-b0f4-a22035193183"
+    },
+    "seq": null,
+    "timestamp": "2026-09-23T03:21:12.303289+00:00",
+    "event_time_us": 1790133672302624,
+    "event_counter": 0
+  },
+  {
+    "type": "permission_asked",
+    "conversation_id": "02170549-2789-45f6-9cb0-6e7a7857957c",
+    "data": {
+      "request_id": "perm_3e8a6a7a",
+      "permission": "mcp",
+      "patterns": [
+        "mcp__marketplace_708f357d_demo__echo"
+      ],
+      "metadata": {
+        "tool": "mcp__marketplace_708f357d_demo__echo",
+        "input": {
+          "text": "MARKETPLACE_CLOUD_MODEL_OK"
+        }
+      },
+      "agent_id": "builtin:all-access",
+      "message_id": "8a74fb45-5cf1-50e7-b0f4-a22035193183"
+    },
+    "seq": null,
+    "timestamp": "2026-09-23T03:21:15.945027+00:00",
+    "event_time_us": 1790133675944557,
+    "event_counter": 0
+  },
+  {
+    "type": "observe",
+    "conversation_id": "02170549-2789-45f6-9cb0-6e7a7857957c",
+    "data": {
+      "tool_name": "mcp__marketplace_708f357d_demo__echo",
+      "result": "MARKETPLACE_CLOUD_MODEL_OK",
+      "error": null,
+      "duration_ms": 25,
+      "call_id": "call_01a0cc48218771a0a7984997",
+      "status": "completed",
+      "tool_execution_id": "exec_2c9656970883",
+      "ui_metadata": {
+        "resource_uri": "ui://demo/example.html",
+        "server_name": "marketplace-708f357d-demo",
+        "app_id": "c93b860d-8b36-4ea9-b6b3-54943afe1c92",
+        "title": "",
+        "project_id": "6dc13612-30d2-4a11-b1a9-c5013da66a55"
+      },
+      "display": null,
+      "file_metadata": null,
+      "observation": "MARKETPLACE_CLOUD_MODEL_OK",
+      "agent_id": "builtin:all-access",
+      "message_id": "8a74fb45-5cf1-50e7-b0f4-a22035193183"
+    },
+    "seq": null,
+    "timestamp": "2026-09-23T03:21:50.199047+00:00",
+    "event_time_us": 1790133710198332,
+    "event_counter": 0
+  },
+  {
+    "type": "mcp_app_result",
+    "conversation_id": "02170549-2789-45f6-9cb0-6e7a7857957c",
+    "data": {
+      "app_id": "c93b860d-8b36-4ea9-b6b3-54943afe1c92",
+      "tool_name": "mcp__marketplace_708f357d_demo__echo",
+      "tool_result": "MARKETPLACE_CLOUD_MODEL_OK",
+      "tool_input": {
+        "text": "MARKETPLACE_CLOUD_MODEL_OK"
+      },
+      "resource_html": "<!doctype html><html><body><h1>Marketplace Demo</h1><p>Plugin app is available.</p></body></html>",
+      "resource_uri": "ui://demo/example.html",
+      "ui_metadata": {
+        "resourceUri": "ui://demo/example.html"
+      },
+      "tool_execution_id": "exec_2c9656970883",
+      "project_id": "6dc13612-30d2-4a11-b1a9-c5013da66a55",
+      "server_name": "marketplace-708f357d-demo",
+      "structured_content": null,
+      "agent_id": "builtin:all-access",
+      "message_id": "8a74fb45-5cf1-50e7-b0f4-a22035193183"
+    },
+    "seq": null,
+    "timestamp": "2026-09-23T03:21:50.262190+00:00",
+    "event_time_us": 1790133710261098,
+    "event_counter": 0
+  },
+  {
+    "type": "observe",
+    "conversation_id": "02170549-2789-45f6-9cb0-6e7a7857957c",
+    "data": {
+      "tool_name": "mcp_server_list_prompts",
+      "result": "[]",
+      "error": null,
+      "duration_ms": 0,
+      "call_id": "call_01a0cc4822b9716295324c73",
+      "status": "completed",
+      "tool_execution_id": "exec_10872b8ffb32",
+      "ui_metadata": null,
+      "display": null,
+      "file_metadata": null,
+      "observation": "[]",
+      "agent_id": "builtin:all-access",
+      "message_id": "8a74fb45-5cf1-50e7-b0f4-a22035193183"
+    },
+    "seq": null,
+    "timestamp": "2026-09-23T03:21:50.307948+00:00",
+    "event_time_us": 1790133710307568,
+    "event_counter": 0
+  },
+  {
+    "type": "permission_asked",
+    "conversation_id": "02170549-2789-45f6-9cb0-6e7a7857957c",
+    "data": {
+      "request_id": "perm_86ee5646",
+      "permission": "mcp",
+      "patterns": [
+        "mcp__marketplace_708f357d_demo__echo"
+      ],
+      "metadata": {
+        "tool": "mcp__marketplace_708f357d_demo__echo",
+        "input": {
+          "text": "MARKETPLACE_CLOUD_MODEL_OK"
+        }
+      },
+      "agent_id": "builtin:all-access",
+      "message_id": "8a74fb45-5cf1-50e7-b0f4-a22035193183"
+    },
+    "seq": null,
+    "timestamp": "2026-09-23T03:22:42.535843+00:00",
+    "event_time_us": 1790133762535249,
+    "event_counter": 0
+  }
+]

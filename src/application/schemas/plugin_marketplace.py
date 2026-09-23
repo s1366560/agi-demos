@@ -30,11 +30,15 @@ class MarketplacePackageRequest(BaseModel):
     version: str = Field(min_length=1)
     publisher: str = Field(min_length=1)
     tenant_id: str = Field(min_length=1)
+    project_id: str | None = Field(default=None, min_length=1)
     artifact: MarketplaceArtifactSource
     artifact_sha256: str = Field(min_length=64, max_length=64)
     manifest: dict[str, object]
-    signature: MarketplacePackageSignature
-    provenance: MarketplacePackageProvenance
+    # Catalog-driven clients omit both fields: the catalog redacts signature
+    # secrets, so the service resolves the signing material from the catalog
+    # row plus the server-side trust store. Both must be provided together.
+    signature: MarketplacePackageSignature | None = None
+    provenance: MarketplacePackageProvenance | None = None
     approved_permissions: frozenset[str] = Field(default_factory=frozenset)
     tenant_admin_approved: bool = False
     security_scan_passed: bool = False
@@ -72,6 +76,7 @@ class MarketplacePackageDetailResponse(BaseModel):
 class MarketplacePackageApprovalRequest(BaseModel):
     version: str = Field(min_length=1)
     tenant_id: str = Field(min_length=1)
+    project_id: str | None = Field(default=None, min_length=1)
     approved_permissions: frozenset[str] = Field(default_factory=frozenset)
 
 
@@ -96,6 +101,7 @@ class MarketplacePackageRevocationResponse(BaseModel):
 class MarketplacePackageUninstallRequest(BaseModel):
     version: str = Field(min_length=1)
     tenant_id: str = Field(min_length=1)
+    project_id: str | None = Field(default=None, min_length=1)
 
 
 class MarketplacePackageUninstallResponse(BaseModel):

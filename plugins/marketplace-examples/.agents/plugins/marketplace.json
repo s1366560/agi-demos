@@ -1,0 +1,1 @@
+{"name":"memstack-examples","interface":{"displayName":"MemStack Examples"},"plugins":[{"name":"marketplace-demo","source":{"source":"local","path":"./plugins/marketplace-demo"},"policy":{"installation":"AVAILABLE","authentication":"ON_USE"},"category":"Development"}]}

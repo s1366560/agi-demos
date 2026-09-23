@@ -1210,7 +1210,7 @@ export function NewTaskFlow({
   };
 
   return createPortal(
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <div className="new-task-backdrop">
         <section
           ref={dialogRef}

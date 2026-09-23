@@ -1,0 +1,10 @@
+{
+  "name": "marketplace-demo",
+  "version": "1.0.0",
+  "description": "A local, credential-free example of Skills, MCP tools, lifecycle hooks and an MCP app.",
+  "author": {"name": "MemStack"},
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json",
+  "apps": "./.app.json",
+  "interface": {"displayName": "Marketplace Demo", "shortDescription": "Try the plugin lifecycle", "category": "Development"}
+}

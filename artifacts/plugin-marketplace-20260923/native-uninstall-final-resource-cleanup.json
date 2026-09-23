@@ -1,0 +1,105 @@
+{
+  "checked_at": "2026-09-23T05:09:16.642548+00:00",
+  "mode": "read-only SQLite mode=ro + query_only; JSON/filesystem metadata only",
+  "scope": {
+    "tenant_id": "northstar",
+    "project_id": "desktop-client"
+  },
+  "reference_artifact": "native-oauth-cleanup-retest-before.json",
+  "reference_resources_note": "The reference lists four installation IDs but resources is null; owned server/skill identities are retained in scoped state.json tombstones.",
+  "installation_count": 4,
+  "oauth_receipts_count": 0,
+  "installations": [
+    {
+      "id": "02a2a455-1743-4254-8b8b-7c68d98da342",
+      "plugin_id": "marketplace-demo",
+      "version": "1.0.0",
+      "status": "uninstalled",
+      "oauth_service_count": 0,
+      "snapshot_exists": false,
+      "server_ids": [
+        "local-mcp-5765a82f-0cf0-4be1-9ab1-4fc75056336f"
+      ],
+      "skill_ids": [
+        "plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo"
+      ]
+    },
+    {
+      "id": "56127b0f-812a-4550-88a3-db33d1af46e9",
+      "plugin_id": "marketplace-oauth-fixture",
+      "version": "1.0.0",
+      "status": "uninstalled",
+      "oauth_service_count": 0,
+      "snapshot_exists": false,
+      "server_ids": [
+        "local-mcp-13f51200-64c6-4fe5-88f2-53c11b01b982"
+      ],
+      "skill_ids": []
+    },
+    {
+      "id": "cd24397a-1451-4dc6-95c0-9508b6ff0bc1",
+      "plugin_id": "native-update-demo",
+      "version": "2.0.0",
+      "status": "uninstalled",
+      "oauth_service_count": 0,
+      "snapshot_exists": false,
+      "server_ids": [
+        "local-mcp-2c06ecfb-9ec5-45ee-a462-7c915863b701"
+      ],
+      "skill_ids": [
+        "plugin:87a1f94c-eff1-4bb1-a61d-5598e756bf90:plugin-demo"
+      ]
+    },
+    {
+      "id": "bff4f657-070b-4ede-b73c-85f216d0c967",
+      "plugin_id": "marketplace-oauth-fixture",
+      "version": "1.0.0",
+      "status": "uninstalled",
+      "oauth_service_count": 0,
+      "snapshot_exists": false,
+      "server_ids": [
+        "local-mcp-cb38b79a-857e-4271-881b-fbb617b88eef"
+      ],
+      "skill_ids": []
+    }
+  ],
+  "owned_resource_counts": {
+    "desktop_mcp_servers_v1": 0,
+    "desktop_mcp_apps_v1": 0,
+    "desktop_mcp_marketplace_generations_v1": 0,
+    "desktop_mcp_marketplace_snapshot_leases_v1": 0,
+    "desktop_mcp_tool_call_leases_v2": 0,
+    "desktop_mcp_credential_bindings_v1": 0,
+    "desktop_mcp_credential_cleanup_v2": 0
+  },
+  "owned_skill_statuses": [
+    [
+      "plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo",
+      "deleted"
+    ],
+    [
+      "plugin:87a1f94c-eff1-4bb1-a61d-5598e756bf90:plugin-demo",
+      "deleted"
+    ]
+  ],
+  "vault_key_counts": {
+    "mcp-oauth-binding:": 0,
+    "mcp-oauth-grant:": 0,
+    "mcp-remote-credential.v1": 0,
+    "mcp-stdio-credential.v1": 0
+  },
+  "vault_total_records": 2,
+  "preflight_cache": [
+    {
+      "id": "b57f4522-fe15-4099-b56f-a4c302abc413",
+      "version": "3.0.0",
+      "snapshot_exists": true
+    }
+  ],
+  "remaining_snapshot_directory_count": 1,
+  "hooks": {
+    "records": 68,
+    "last_timestamp_ms": 1790139234288,
+    "failed": 0
+  }
+}

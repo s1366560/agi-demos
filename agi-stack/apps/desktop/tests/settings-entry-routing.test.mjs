@@ -30,3 +30,7 @@ test('runtime recovery actions retain a hidden connection recovery surface', () 
 test('Browser Integration commands open the browser settings section', () => {
   assert.equal(settingsSectionForEntry('browser_integration'), 'browser');
 });
+
+test('plugin directory entry opens native marketplace settings', () => {
+  assert.equal(settingsSectionForEntry('plugins'), 'plugins');
+});

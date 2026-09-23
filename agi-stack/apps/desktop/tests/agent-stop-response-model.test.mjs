@@ -62,12 +62,29 @@ test('only the matching structured stop acknowledgment settles streaming', () =>
 
 test('a matching cancellation event settles while a structured stop error remains recoverable', () => {
   const stopping = beginAgentStopRequest('conversation-1', true);
+  // Runtime wire shape: {type: "cancelled", data: {run_id, status: "cancelled"}}.
+  assert.equal(
+    applyAgentStopEvent(stopping, {
+      type: 'cancelled',
+      data: { conversation_id: 'conversation-1', run_id: 'run-1', status: 'cancelled' },
+    }).status,
+    'stopped',
+  );
+  // Legacy boolean alias still settles.
   assert.equal(
     applyAgentStopEvent(stopping, {
       event_type: 'cancelled',
       data: { conversation_id: 'conversation-1', cancelled: true },
     }).status,
     'stopped',
+  );
+  // A cancelled event without a recognisable cancelled marker does not settle.
+  assert.equal(
+    applyAgentStopEvent(stopping, {
+      type: 'cancelled',
+      data: { conversation_id: 'conversation-1', status: 'running' },
+    }).status,
+    'stopping',
   );
   assert.deepEqual(
     applyAgentStopEvent(stopping, {

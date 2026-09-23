@@ -1,0 +1,110 @@
+.settings-profile-page {
+  width: 100%;
+  max-width: 824px;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-inline: auto;
+  padding: 28px 32px;
+  gap: 24px;
+}
+.settings-profile-page .settings-panel > header {
+  padding-bottom: 16px;
+}
+.settings-profile-page .settings-panel > dl,
+.settings-profile-facts {
+  margin: 0;
+}
+.settings-profile-page dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--desktop-border-2);
+  font-size: 13px;
+}
+.settings-profile-page dt {
+  color: var(--desktop-gray-22);
+}
+.settings-profile-page dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.settings-profile-form {
+  display: grid;
+  gap: 20px;
+}
+.settings-profile-form > label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.settings-profile-form > label > span {
+  color: var(--desktop-text-pale);
+  font-size: 13px;
+  font-weight: 500;
+}
+.settings-profile-form > label > small {
+  color: var(--desktop-gray-22);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.settings-profile-form > label > input,
+.settings-profile-form > label > select {
+  width: 100%;
+  min-width: 0;
+  max-width: 440px;
+  box-sizing: border-box;
+  min-height: 38px;
+  padding: 8px 11px;
+  background: var(--desktop-surface-5);
+  color: var(--desktop-text-pale);
+  border: 1px solid var(--desktop-border-4);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+}
+.settings-profile-form > button {
+  justify-self: start;
+  min-width: 88px;
+}
+.settings-profile-password {
+  padding-top: 20px;
+  border-top: 1px solid var(--desktop-border-2);
+}
+.settings-profile-password > summary {
+  width: fit-content;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.settings-profile-password[open] > summary {
+  margin-bottom: 16px;
+}
+.settings-profile-password .settings-panel > header {
+  padding: 0;
+}
+.settings-profile-form > em,
+.settings-profile-page > [role="alert"] {
+  color: var(--desktop-red-muted);
+  font-size: 13px;
+  font-style: normal;
+}
+.settings-profile-load-state {
+  padding: 24px 32px;
+  font-size: 13px;
+}
+@media (max-width: 850px) {
+  .settings-profile-page {
+    padding: 22px 20px;
+  }
+}
+@media (max-width: 600px) {
+  .settings-profile-page dl > div {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .settings-profile-page dd {
+    text-align: left;
+  }
+}

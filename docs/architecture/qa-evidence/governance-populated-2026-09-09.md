@@ -53,4 +53,3 @@ PYTHONPATH=. uv run python scripts/qa_governance_fixtures.py seed|status|cleanup
 - 事件日志无按 ID 详情端点（仅列表+/types）；列表项已含全部字段，未新增端点，按缺口报告。
 - 运行日志注册表为进程内实现，跨进程/重启不可持久；活环境填充需真实子代理运行，种子脚本无法代写，按缺口报告。
 - DLQ 为全局 Redis 键空间（无租户维度），隔离依赖 QA 标记 + 精确回收。
-- GitNexus CLI 在本环境不可用，影响分析/变更检测未能执行（对应仓库既有说明）。

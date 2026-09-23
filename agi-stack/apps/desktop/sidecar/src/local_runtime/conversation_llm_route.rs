@@ -39,11 +39,14 @@ impl LocalRuntimeState {
 
     pub(super) fn selected_provider_route(&self, tenant_id: &str) -> Option<LlmRouteTarget> {
         let runtime = self.provider_runtime.lock().ok()?;
-        let active: Vec<(&ProviderRuntimeKey, &ProviderRuntimeBinding)> = runtime
+        let mut active: Vec<(&ProviderRuntimeKey, &ProviderRuntimeBinding)> = runtime
             .bindings
             .iter()
             .filter(|(key, _)| key.tenant_id == tenant_id)
             .collect();
+        // Deterministic order so an unpinned multi-provider tenant still
+        // resolves instead of failing closed.
+        active.sort_by(|left, right| left.0.provider_id.cmp(&right.0.provider_id));
         let selected_id = runtime.selections.get(tenant_id);
         let (key, binding) = match selected_id {
             Some(provider_id) => active
@@ -51,12 +54,12 @@ impl LocalRuntimeState {
                 .find(|(key, _)| &key.provider_id == provider_id)
                 .map(|(key, binding)| (*key, *binding))?,
             None => {
-                // No explicit runtime selection: local mode configures at most one
-                // active provider per tenant, so the sole binding is the default.
+                // No explicit runtime selection (auto-select only pins the
+                // first provider created with ready credentials, and the
+                // renderer exposes no pin control yet): fall back to the
+                // deterministic first active binding instead of failing every
+                // conversation with model_unconfigured.
                 let (key, binding) = active.first().copied()?;
-                if active.len() > 1 {
-                    return None;
-                }
                 (key, binding)
             }
         };
@@ -73,24 +76,26 @@ impl LocalRuntimeState {
         &self,
         conversation: &LocalConversation,
     ) -> Arc<dyn LlmPort> {
-        let route = match self.session_store.conversation_llm_route(&conversation.id) {
-            Ok(Some(route)) => route,
-            Ok(None) => {
-                // Unbound conversations have no workspace policy; fall back to the
-                // tenant-selected provider binding so "project default model" works.
-                match self.selected_provider_route(&conversation.tenant_id) {
-                    Some(route) => route,
-                    None => return Arc::new(UnconfiguredLocalLlm),
-                }
-            }
-            Err(_) => return Arc::new(UnconfiguredLocalLlm),
+        // A stored per-conversation route wins while it stays resolvable; a
+        // stale route (provider deleted or reconfigured since) must not
+        // disable a configured tenant default, or the conversation dies with
+        // model_unconfigured even though the catalog shows a healthy provider.
+        let stored_route = self
+            .session_store
+            .conversation_llm_route(&conversation.id)
+            .ok()
+            .flatten()
+            .filter(|route| {
+                self.validate_conversation_llm_route(&conversation.tenant_id, route)
+                    .is_ok()
+            });
+        let route = match stored_route {
+            Some(route) => route,
+            None => match self.selected_provider_route(&conversation.tenant_id) {
+                Some(route) => route,
+                None => return Arc::new(UnconfiguredLocalLlm),
+            },
         };
-        if self
-            .validate_conversation_llm_route(&conversation.tenant_id, &route)
-            .is_err()
-        {
-            return Arc::new(UnconfiguredLocalLlm);
-        }
         let key = ProviderRuntimeKey {
             tenant_id: conversation.tenant_id.clone(),
             provider_id: route.provider_id.clone(),

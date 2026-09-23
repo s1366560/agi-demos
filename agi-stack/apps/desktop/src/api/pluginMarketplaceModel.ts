@@ -68,7 +68,7 @@ export function marketplaceInstallAvailability(
   if (entry.revoked) return 'revoked';
   if (entry.install_status === 'installed') return 'installed';
   if (entry.security_scan_status !== 'passed') return 'scan_pending';
-  return marketplaceSignatureMaterial(entry) === null ? 'unsigned' : 'ready';
+  return marketplaceIntegrityAnchors(entry) ? 'ready' : 'unsigned';
 }
 
 export function marketplacePluginPermissions(manifest: Record<string, unknown>): string[] {
@@ -86,9 +86,8 @@ export function buildMarketplaceInstallRequest(
   entry: MarketplacePluginCatalogEntry,
   tenantId: string,
 ): MarketplacePluginInstallRequest | null {
-  const material = marketplaceSignatureMaterial(entry);
   const tenant = tenantId.trim();
-  if (!material || !tenant) return null;
+  if (!marketplaceIntegrityAnchors(entry) || !tenant) return null;
   return {
     plugin_id: entry.plugin_id,
     version: entry.version,
@@ -101,47 +100,28 @@ export function buildMarketplaceInstallRequest(
     },
     artifact_sha256: entry.artifact_digest,
     manifest: entry.manifest,
-    signature: material.signature,
-    provenance: material.provenance,
     approved_permissions: marketplacePluginPermissions(entry.manifest),
     tenant_admin_approved: true,
     security_scan_passed: entry.security_scan_status === 'passed',
   };
 }
 
-type MarketplaceSignatureMaterial = {
-  signature: MarketplacePluginInstallRequest['signature'];
-  provenance: MarketplacePluginInstallRequest['provenance'];
-};
-
-function marketplaceSignatureMaterial(
-  entry: MarketplacePluginCatalogEntry,
-): MarketplaceSignatureMaterial | null {
-  const signature = entry.signature;
-  const provenance = entry.provenance;
-  const publicKeyPem = stringValue(signature.public_key_pem);
-  const signatureBase64 =
-    stringValue(signature.signature_base64) ?? stringValue(entry.manifest.signature);
-  const predicateType =
-    stringValue(provenance.predicate_type) ?? stringValue(provenance.predicateType);
-  const builderId = stringValue(provenance.builder_id) ?? stringValue(provenance.builderId);
-  const subjectName =
-    stringValue(provenance.subject_name) ?? stringValue(provenance.subjectName);
-  if (!publicKeyPem || !signatureBase64 || !predicateType || !builderId || !subjectName) {
-    return null;
-  }
-  return {
-    signature: {
-      algorithm: stringValue(signature.algorithm) ?? 'Ed25519',
-      public_key_pem: publicKeyPem,
-      signature_base64: signatureBase64,
-    },
-    provenance: {
-      predicate_type: predicateType,
-      builder_id: builderId,
-      subject_name: subjectName,
-    },
-  };
+/**
+ * The catalog redacts signature secrets by contract (no PEM material is ever
+ * exposed), so the install request carries no signature/provenance and the
+ * backend resolves the signing material from the catalog row plus its own
+ * trust store. Availability therefore hinges on the row carrying the redacted
+ * integrity anchors that resolution verifies against.
+ */
+function marketplaceIntegrityAnchors(entry: MarketplacePluginCatalogEntry): boolean {
+  const fingerprint = stringValue(entry.signature.public_key_sha256);
+  const signatureDigest = stringValue(entry.signature.signature_sha256);
+  const provenance = isRecord(entry.provenance)
+    ? Object.values(entry.provenance).some(
+        (value) => typeof value === 'string' && value.trim(),
+      )
+    : false;
+  return Boolean(fingerprint && signatureDigest && provenance);
 }
 
 function stringValue(value: unknown): string | null {

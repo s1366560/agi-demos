@@ -2,7 +2,7 @@
 
 The V1 retirement preflight now exports only a ROOT globally-ready V2 publication. Publication versions are allocated independently by scope, so ordering all ready rows by version could previously select a tenant publication as the platform disaster-recovery baseline. Both automatic selection and an explicit foreign nonce now respect the ROOT scope boundary; the existing export schema and `migration_globally_ready_missing` error remain unchanged.
 
-The regression was reproduced before the query change: four failing scope cases and two existing passing cases. After the change, the complete repository test file passed all six cases in 48.55 seconds. Tests cover a lower-version ROOT publication with a higher-version tenant publication, an explicit tenant nonce, and a database containing only the tenant publication. Ruff and focused Pyright passed with zero errors/warnings. GitNexus returned LOW; direct source review also verified the preflight and persisted verification callers.
+The regression was reproduced before the query change: four failing scope cases and two existing passing cases. After the change, the complete repository test file passed all six cases in 48.55 seconds. Tests cover a lower-version ROOT publication with a higher-version tenant publication, an explicit tenant nonce, and a database containing only the tenant publication. Ruff and focused Pyright passed with zero errors/warnings. Direct source review also verified the preflight and persisted verification callers.
 
 Logs: `/tmp/cordis-retirement-root-scope-red.log`, `/tmp/cordis-retirement-root-scope-final.log`, `/tmp/cordis-retirement-root-scope-pyright.log`.
 

@@ -787,8 +787,6 @@ export function ModelProviderWorkspace({
       <section className="provider-detail">
         <header className="provider-detail-topbar">
           <div className="breadcrumb">
-            <span>{t('settings.title')}</span>
-            <span>/</span>
             <span>{t('settings.models')}</span>
             {provider ? (
               <>
@@ -934,10 +932,7 @@ export function ModelProviderWorkspace({
           <div className="provider-detail-scroll">
             <section className="provider-identity">
               <div className="provider-identity-copy">
-                <span>
-                  {t('providers.modelProviderEyebrow')} ·{' '}
-                  {providerTypeDisplayName(provider.provider_type).toUpperCase()}
-                </span>
+                <span>{providerTypeDisplayName(provider.provider_type)}</span>
                 <h1>{provider.name || provider.provider_type}</h1>
                 <div>
                   <ProviderStatusBadge

@@ -151,7 +151,7 @@ SessionProcessor (工具执行)
 - 事件**未**独立成 `sandbox_events.py`，而是归入 `src/domain/events/types.py` + `agent_events.py`（见 2.2）。
 
 ### Phase 2: 重构 Agent Tools — **Partial**
-- DesktopTool / TerminalTool 经 MCP 工具链暴露给 Agent，控制平面通过 `SandboxOrchestrator` 派发。具体哪些工具直接持有 orchestrator 引用，维护时请用 grep / `gitnexus` 核实当前接线状态。
+- DesktopTool / TerminalTool 经 MCP 工具链暴露给 Agent，控制平面通过 `SandboxOrchestrator` 派发。具体哪些工具直接持有 orchestrator 引用，维护时请用 `rg` 核实当前接线状态。
 
 ### Phase 3: 重构 REST API — **Done**
 - `src/infrastructure/adapters/primary/web/routers/project_sandbox.py` 通过 `get_orchestrator()` 注入 `SandboxOrchestrator`，desktop / terminal 启停端点均经 orchestrator。

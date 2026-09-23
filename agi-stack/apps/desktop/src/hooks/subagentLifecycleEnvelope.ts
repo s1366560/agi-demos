@@ -62,9 +62,14 @@ export function normalizeSubagentLifecycleEnvelope(
   let type = inner.type;
   if (type === "subagent_spawned") type = "subagent_started";
   if (type === "subagent_ended") {
+    // Mirror the cloud trace snapshot's status→timeline mapping so live
+    // ended notifications match the 3s snapshot projection, including
+    // timed_out/pending runs (payload.status rides through unchanged).
     if (payload.status === "completed") type = "subagent_run_completed";
-    else if (payload.status === "failed") type = "subagent_run_failed";
+    else if (payload.status === "failed" || payload.status === "timed_out")
+      type = "subagent_run_failed";
     else if (payload.status === "cancelled") type = "subagent_killed";
+    else if (payload.status === "pending") type = "subagent_queued";
     else return null;
   }
   const timestamp = event.timestamp ?? inner.timestamp;

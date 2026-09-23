@@ -1050,7 +1050,7 @@
       },
       "contract_digest": "sha256:f12298ec43cfbe059cb0a23c30a00519171af18a10385b9c7930246c3b264af6",
       "artifact": {
-        "digest": "sha256:9f4afc24a65613e9db34c38ca1d8728e14ebdc7e88d82fcfd2f4c3c89538c947",
+        "digest": "sha256:b15c934ac0309e3aa2f2a7b4955dbcad58e53e0143c8265db27793deb841db70",
         "source": "repo+python://src/infrastructure/plugins/v2/sandbox_operation_services.py"
       }
     },
@@ -1097,7 +1097,7 @@
       },
       "contract_digest": "sha256:b5de20c732299c8b212b78d631a2ed70828ab4929f0576a390cbe6f3a6967124",
       "artifact": {
-        "digest": "sha256:9f4afc24a65613e9db34c38ca1d8728e14ebdc7e88d82fcfd2f4c3c89538c947",
+        "digest": "sha256:b15c934ac0309e3aa2f2a7b4955dbcad58e53e0143c8265db27793deb841db70",
         "source": "repo+python://src/infrastructure/plugins/v2/sandbox_operation_services.py"
       }
     },
@@ -1144,7 +1144,7 @@
       },
       "contract_digest": "sha256:10868f4371f5689a787195fe94b2333b1427b7cfe81d239d764a48695b4fd354",
       "artifact": {
-        "digest": "sha256:8fd7c0e25015341d26c849c8cd43dd5444b4a5f9207c3e7cb27bb94d6ffbe91b",
+        "digest": "sha256:26dba50a435238d3af13e0b90eac40c529cd7ae533ae0b4803b4af26911a63c1",
         "source": "repo+python://src/infrastructure/plugins/v2/mcp_services.py"
       }
     },
@@ -1191,7 +1191,7 @@
       },
       "contract_digest": "sha256:e135f2957e11313055a0137dcf3f8231af583ee046e6d9aec89e90197d4ad1ed",
       "artifact": {
-        "digest": "sha256:8fd7c0e25015341d26c849c8cd43dd5444b4a5f9207c3e7cb27bb94d6ffbe91b",
+        "digest": "sha256:26dba50a435238d3af13e0b90eac40c529cd7ae533ae0b4803b4af26911a63c1",
         "source": "repo+python://src/infrastructure/plugins/v2/mcp_services.py"
       }
     },
@@ -9934,7 +9934,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:032d2d6caa18b7d0fd9c30dd27ece389a23ee1e2082cf377f07d673d0693f5b7",
+        "digest": "sha256:deb85998796a4ff9ef812c8e7fead38dd6ffe360edba4f965012fd43b0a612b4",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_plugin_marketplace_http_routes.py"
       }
     },

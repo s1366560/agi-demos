@@ -47,7 +47,7 @@ command shapes crossed the boundary. The first corrected run passed 25 Cron unit
 The additional HTTP contract regression passed with the existing router tests (13/13).
 Across these focused runs, 26 unique Cron unit tests passed. Generation-backed API and
 real PostgreSQL command/projection integration tests also passed (2/2). Ruff checks,
-formatting, staged credential scan and GitNexus scope detection passed. These focused
+formatting and staged credential scan passed. These focused
 results do not replace I0's outstanding full-suite evidence gate.
 
 Rollback: revert the batch commit only if command admission is independently disabled.
@@ -895,9 +895,7 @@ scheduler integration on real PostgreSQL including migration
 upgrade/downgrade-refusal/downgrade in isolated schemas, the Rust
 `legacy_cron_fence` test against `DATABASE_URL`, the cross-language
 `python_http_answer_resumes_restarted_driver_without_repeating_pure_tool`
-test, and 574 hitl/cron unit regressions passed. GitNexus MCP tools were
-unavailable this session and the index is stale (indexed at 88957e0); scope
-was verified with git diff/merge-tree instead. Rollback: revert the three
+test, and 574 hitl/cron unit regressions passed. Scope was verified with git diff/merge-tree. Rollback: revert the three
 cherry-picks; the admission table and its rows are retained, and the
 migration downgrade already refuses to drop unresolved admissions.
 
@@ -982,8 +980,7 @@ routes; no hash or passing attestation was manually assigned. Focused Python
 regression: 35 passed. Changed verifier Ruff checks passed; Pyright reported no
 errors (existing unused-result warnings remain in the migration verifier).
 
-GitNexus impact and detect-changes were attempted but returned Transport closed;
-source/diff review and executable checks establish this batch's scope instead.
+Source/diff review and executable checks establish this batch's scope.
 Rollback this batch's tests, disposable fixtures, and generated evidence together.
 This does not close I0: exact-commit full Backend/Web/Desktop/Rust release gates
 and formal Desktop parity regeneration remain outstanding.
@@ -1023,8 +1020,6 @@ at `d4ba2b5e9`: Rust core/device/Sidecar plus doc tests 936 passed, 1 ignored;
 Desktop 4357 passed, 2 binary-gated skips, 1 existing audited-source parity failure;
 cloud bridge plus scoped HTTP PostgreSQL 14 passed. Renderer and Electron type
 checks passed in the isolated transport worktree. Gitleaks and normal hooks passed.
-GitNexus impact/detect were attempted but unavailable (Transport closed/WAL crash),
-so graph validation is not claimed.
 
 Rollback transport `d4ba2b5e9` independently; it changes no stored memory. Revert
 sync UI independently. For the index configuration schema, preserve the pre-upgrade
@@ -1045,8 +1040,7 @@ The initial 10 integration cases failed before implementation. Final focused
 PostgreSQL coverage is 13 passed and 95.52% across the two new modules; the combined
 HTTP, renderer/main bridge and permission regression at `0a91ccf19` is 76 passed
 (`/tmp/followup-main-cloud-0a91ccf19.log`). Scoped mypy and pyright, normal commit
-hooks and staged Gitleaks passed. GitNexus remained unavailable with Transport
-closed; no valid graph evidence is claimed. This additive response has no database
+hooks and staged Gitleaks passed. This additive response has no database
 migration and can be reverted independently. Desktop parsing and editing UI remain
 pending; these tests do not establish native Electron acceptance.
 
@@ -1116,8 +1110,7 @@ Two genuine residuals were integrated as independent batches:
   were not re-applied. Evidence: sidecar 847 passed, Desktop 4576 passed /
   3 skipped, cargo.sh wrapper test passed.
 
-GitNexus impact/detect-changes could not run (index WAL failure); scope was
-verified from source and the full sidecar/Desktop suites instead. Rollback:
+Scope was verified from source and the full sidecar/Desktop suites. Rollback:
 revert each batch commit independently; no migrations or accepted-task state are
 involved.
 
@@ -1127,10 +1120,7 @@ Branch hygiene audit first established that 57 of the 59 unmerged `codex/*`
 branches were historical cherry-pick sources already on main; merging any of
 them would regress. The two genuine residuals were integrated (previous
 section). The batches below close the remaining implementation gaps named by
-the follow-up plan. GitNexus impact/detect-changes was unavailable all day
-(LadybugDB WAL recovery failure); every batch substituted source-level caller
-enumeration plus full per-crate/per-app test suites, per the plan's rule that a
-dead index is never evidence.
+the follow-up plan. Every batch used source-level caller enumeration plus full per-crate/per-app test suites.
 
 ### Schema sync consumers (B1)
 

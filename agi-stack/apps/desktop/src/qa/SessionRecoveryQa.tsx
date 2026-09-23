@@ -107,7 +107,7 @@ function SessionRecoveryQa() {
   }, []);
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <div
         className={`session-steering-qa-shell session-recovery-qa-shell${qaRail ? ' has-context-rail' : ''}`}
       >

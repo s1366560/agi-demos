@@ -56,7 +56,9 @@ export function createDesktopProjectMcpAppsHttpProjectionV2(
           ...(method === 'callMCPToolByServerId' ? { server_id: args[0] } : {}),
           tool_name: args[1],
           arguments: args[2],
-          idempotency_key: args[3],
+          // Cloud has no durable tool idempotency and fails closed on any key;
+          // only the local sidecar authority accepts one.
+          ...(runtime.mode === 'cloud' ? {} : { idempotency_key: args[3] }),
         };
       } else if (method === 'callMCPAppToolDirect') {
         path = '/api/v1/mcp/apps/proxy/tool-call';
@@ -65,7 +67,7 @@ export function createDesktopProjectMcpAppsHttpProjectionV2(
           server_name: args[1],
           tool_name: args[2],
           arguments: args[3],
-          idempotency_key: args[4],
+          ...(runtime.mode === 'cloud' ? {} : { idempotency_key: args[4] }),
         };
       } else {
         const read = method === 'readMCPAppResource';

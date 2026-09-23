@@ -1,0 +1,31 @@
+{
+  "blockers": [],
+  "candidates": {
+    "platform_plugin_credential_grants": [],
+    "platform_plugin_http_routes": [],
+    "platform_plugin_packages": [
+      {
+        "plugin_id": "qa-marketplace-marker-bundle",
+        "version": "1.0.0"
+      }
+    ],
+    "platform_plugin_permissions": [
+      {
+        "id": "7f560177-8092-47f1-9882-3b35410a641f",
+        "plugin_id": "qa-marketplace-marker-bundle"
+      }
+    ],
+    "platform_plugin_quota_usage": []
+  },
+  "digest": "3bbdb929fd006afc3dce05a9e4bd14a4c69e6fd82b37df2a1af9a7b1632c92cc",
+  "files": [],
+  "preserved": [
+    "builtin bundles",
+    "business data",
+    "publication history",
+    "unattributed and shared files",
+    "download caches"
+  ],
+  "schema_version": 1,
+  "target": "69a137cc2939886da7835130cc3a0700520599b0deea30a8975743fdb39a85f2"
+}

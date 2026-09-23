@@ -95,8 +95,6 @@ Archived clusters (see [archive/README.md](archive/README.md) for the full list)
 
 ```bash
 rg -n "ARCHITECTURE.md|api-reference.md|/agent/chat|React 18|Vite 6|plan_enter" README.md docs web sdk
-npx gitnexus status
 ```
 
-The first command catches common stale claims. The second confirms that the code
-intelligence index matches the current commit before relying on graph-derived facts.
+The command catches common stale claims.

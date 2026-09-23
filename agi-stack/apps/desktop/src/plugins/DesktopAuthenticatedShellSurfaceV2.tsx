@@ -77,7 +77,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
     <TitlebarToolbarProvider>
       <Theme
         appearance={meta.appearance}
-        accentColor="cyan"
+        accentColor="gray"
         grayColor="slate"
         radius="medium"
         scaling="95%"

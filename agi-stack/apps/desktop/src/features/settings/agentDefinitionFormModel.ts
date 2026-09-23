@@ -13,6 +13,7 @@ export type AgentDefinitionEditorDraft = {
   executionBackendAcpAgentKey: string;
   workspaceType: 'shared' | 'isolated' | 'inherited';
   workspaceBaseDir: string;
+  workspaceConfigExtra: Record<string, unknown> | null;
   temperature: number;
   maxTokens: number;
   maxIterations: number;
@@ -80,6 +81,7 @@ export function agentDefinitionDraftFrom(
       executionBackendAcpAgentKey: '',
       workspaceType: 'shared',
       workspaceBaseDir: '',
+      workspaceConfigExtra: null,
       temperature: 0.7,
       maxTokens: 4096,
       maxIterations: 10,
@@ -137,6 +139,7 @@ export function agentDefinitionDraftFrom(
     workspaceType: workspaceTypeValue(workspaceConfig),
     workspaceBaseDir:
       stringValue(workspaceConfig?.base_dir) || stringValue(workspaceConfig?.base_path),
+    workspaceConfigExtra: workspaceConfigExtraValue(workspaceConfig),
     temperature: numberValue(definition.temperature, 0.7),
     maxTokens: numberValue(definition.max_tokens, 4096),
     maxIterations: numberValue(definition.max_iterations, 10),
@@ -275,6 +278,9 @@ export function agentDefinitionMutationFromDraft(
           }
         : { type: 'memstack' },
     workspace_config: {
+      // Fields the form does not model (max_size_mb, persona_files, ...)
+      // pass through so a save never resets them to backend defaults.
+      ...(draft.workspaceConfigExtra ?? {}),
       type: draft.workspaceType,
       base_dir: draft.workspaceBaseDir.trim(),
     },
@@ -423,6 +429,16 @@ function delegateCapabilityTierValue(
     value === 'none'
     ? value
     : '';
+}
+
+const WORKSPACE_CONFIG_MODELED_KEYS = new Set(['type', 'sandbox_scope', 'base_dir', 'base_path']);
+
+function workspaceConfigExtraValue(
+  workspaceConfig: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!workspaceConfig) return null;
+  const extra = Object.entries(workspaceConfig).filter(([key]) => !WORKSPACE_CONFIG_MODELED_KEYS.has(key));
+  return extra.length > 0 ? Object.fromEntries(extra) : null;
 }
 
 function workspaceTypeValue(

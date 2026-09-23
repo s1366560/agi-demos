@@ -26,16 +26,20 @@ const labels = {
   subagents: ['SubAgents', 'Delegated specialist workers'],
 };
 
-test('settings information architecture matches the approved prototype order', () => {
+test('settings groups separate personal preferences, AI configuration and integrations', () => {
   assert.deepEqual(SETTINGS_GROUPS, [
     { id: 'account_context', sections: ['account', 'workspace'] },
     {
       id: 'preferences',
-      sections: ['general', 'updates', 'appearance', 'notifications', 'shortcuts', 'browser'],
+      sections: ['general', 'appearance', 'notifications', 'shortcuts', 'updates'],
     },
     {
       id: 'ai_resources',
-      sections: ['models', 'mcp', 'skills', 'plugins', 'agents', 'subagents'],
+      sections: ['models', 'agents', 'subagents'],
+    },
+    {
+      id: 'integrations',
+      sections: ['mcp', 'skills', 'plugins', 'browser'],
     },
   ]);
 });
@@ -53,17 +57,17 @@ test('empty settings search preserves the full section order', () => {
     'account',
     'workspace',
     'general',
-    'updates',
     'appearance',
     'notifications',
     'shortcuts',
-    'browser',
+    'updates',
     'models',
+    'agents',
+    'subagents',
     'mcp',
     'skills',
     'plugins',
-    'agents',
-    'subagents',
+    'browser',
   ]);
 });
 

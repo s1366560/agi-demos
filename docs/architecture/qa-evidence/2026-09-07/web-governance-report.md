@@ -16,7 +16,7 @@
 
 QA workspace: `b30bf32d-36f0-4832-bcca-252a8df18b15`，名称 QA Web Workspace 20260907；项目 `738ace12-0d21-48ca-847d-cd0c2802816d`。ID通过项目内真实工作空间链接获取，与服务器查证一致。
 
-DLQ修复：`admin_dlq_application_authority_v2.py`增加异步按需加载User.roles→UserRole.role，再交给原管理员检查；排除tenant/project scoped角色作为ROOT管理员。权限集合及服务依赖保持。新增真实SQLite ORM请求回归从4个500失败转为global-admin200、普通/租户/项目管理员403。DLQ相关17测试通过，Ruff通过；root合并本批共55 focused tests、Pyright、hooks与gitleaks通过。GitNexus require_admin影响LOW、1直接依赖+9管理路由。
+DLQ修复：`admin_dlq_application_authority_v2.py`增加异步按需加载User.roles→UserRole.role，再交给原管理员检查；排除tenant/project scoped角色作为ROOT管理员。权限集合及服务依赖保持。新增真实SQLite ORM请求回归从4个500失败转为global-admin200、普通/租户/项目管理员403。DLQ相关17测试通过，Ruff通过；root合并本批共55 focused tests、Pyright、hooks与gitleaks通过。
 
 API复验（2026-09-07，restart7）：
 - admin GET /api/v1/admin/dlq/stats → 200，总数0。

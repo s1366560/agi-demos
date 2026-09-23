@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   CheckCircledIcon,
-  ComponentInstanceIcon,
   Cross2Icon,
   ExclamationTriangleIcon,
   Pencil2Icon,
@@ -59,9 +58,7 @@ export function ChannelConnectionsDialog({
         tabIndex={-1}
       >
         <header className="plugin-management-heading">
-          <ComponentInstanceIcon />
           <div>
-            <span>{t('settings.pluginsEyebrow')}</span>
             <h2>{t('settings.channels.title')}</h2>
             <p>{t('settings.channels.description')}</p>
           </div>
@@ -100,7 +97,6 @@ export function ChannelConnectionsDialog({
                 </div>
               ) : management.configs.length === 0 ? (
                 <div className="plugin-management-state">
-                  <ComponentInstanceIcon />
                   <span>{t('settings.channels.empty')}</span>
                 </div>
               ) : (
@@ -111,6 +107,7 @@ export function ChannelConnectionsDialog({
                     return (
                       <article key={channel.id}>
                         <div className="channel-connection-summary">
+                          <h3>{channel.name}</h3>
                           <span className={`channel-status ${channel.status}`}>
                             {channel.status === 'connected' ? (
                               <CheckCircledIcon />
@@ -119,7 +116,6 @@ export function ChannelConnectionsDialog({
                             )}
                             {t(`settings.channels.status.${channel.status}`)}
                           </span>
-                          <h3>{channel.name}</h3>
                           <p>{channel.channel_type}</p>
                           {channel.last_error ? <small>{channel.last_error}</small> : null}
                         </div>
@@ -175,7 +171,9 @@ export function ChannelConnectionsDialog({
                             <button
                               type="button"
                               className="danger-ghost"
-                              aria-label={t('settings.channels.deleteNamed', { name: channel.name })}
+                              aria-label={t('settings.channels.deleteNamed', {
+                                name: channel.name,
+                              })}
                               title={t('settings.channels.deleteNamed', { name: channel.name })}
                               disabled={busy}
                               onClick={() => setConfirmDeleteId(channel.id)}
@@ -218,6 +216,7 @@ function ChannelConnectionEditor({
     channelConnectionDraftFrom(editor.schema, editor.config),
   );
   const [errors, setErrors] = useState<ChannelConnectionErrors>({});
+  const editorRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
   const update = (name: string, value: unknown) => {
@@ -236,6 +235,11 @@ function ChannelConnectionEditor({
   const submit = () => {
     const nextErrors = validateChannelConnectionDraft(editor.schema, draft, Boolean(editor.config));
     setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      window.requestAnimationFrame(() => {
+        editorRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+      });
+    }
     if (Object.keys(nextErrors).length === 0) {
       void management.save(
         channelConnectionMutationFromDraft(editor.schema, draft, Boolean(editor.config)),
@@ -245,7 +249,7 @@ function ChannelConnectionEditor({
 
   return (
     <>
-      <div className="plugin-management-body channel-editor-body">
+      <div ref={editorRef} className="plugin-management-body channel-editor-body">
         <div className="channel-editor-basics">
           {!editor.config ? (
             <label>
@@ -269,18 +273,27 @@ function ChannelConnectionEditor({
             <span>{t('settings.channels.name')} *</span>
             <input
               ref={nameRef}
+              aria-required="true"
+              aria-invalid={Boolean(errors.name)}
+              aria-describedby={errors.name ? 'channel-name-error' : undefined}
               value={draft.name}
               disabled={management.busyId !== null}
               onChange={(event) => update('name', event.target.value)}
             />
-            {errors.name ? <em role="alert">{t('settings.channels.error.required')}</em> : null}
+            {errors.name ? (
+              <em id="channel-name-error" role="alert">
+                {t('settings.channels.error.required')}
+              </em>
+            ) : null}
           </label>
           <label>
             <span>{t('settings.channels.descriptionField')}</span>
             <input
               value={draft.description}
               disabled={management.busyId !== null}
-              onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, description: event.target.value }))
+              }
             />
           </label>
           <label className="plugin-config-checkbox">
@@ -288,7 +301,9 @@ function ChannelConnectionEditor({
               type="checkbox"
               checked={draft.enabled}
               disabled={management.busyId !== null}
-              onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, enabled: event.target.checked }))
+              }
             />
             <span>{t('settings.channels.enabled')}</span>
           </label>
@@ -312,13 +327,27 @@ function ChannelConnectionEditor({
             ))}
           </div>
         )}
-        {management.error ? <div className="plugin-management-error">{management.error}</div> : null}
+        {management.error ? (
+          <div className="plugin-management-error" role="alert">
+            {management.error}
+          </div>
+        ) : null}
       </div>
       <footer className="plugin-management-footer">
-        <button type="button" className="secondary" disabled={management.busyId !== null} onClick={management.closeEditor}>
+        <button
+          type="button"
+          className="secondary"
+          disabled={management.busyId !== null}
+          onClick={management.closeEditor}
+        >
           {t('common.cancel')}
         </button>
-        <button type="button" className="primary" disabled={management.busyId !== null || editor.loading} onClick={submit}>
+        <button
+          type="button"
+          className="primary"
+          disabled={management.busyId !== null || editor.loading}
+          onClick={submit}
+        >
           {management.busyId !== null ? <ReloadIcon className="managed-resource-spin" /> : null}
           {editor.config ? t('common.save') : t('common.create')}
         </button>
@@ -346,33 +375,68 @@ function ChannelField({
   if (field.kind === 'boolean') {
     return (
       <label className="plugin-config-checkbox">
-        <input type="checkbox" checked={value === true} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+        <input
+          type="checkbox"
+          checked={value === true}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.checked)}
+        />
         <span>{field.label}</span>
       </label>
     );
   }
   return (
     <label className={error ? 'invalid' : ''}>
-      <span>{field.label} {field.required && !(editing && field.kind === 'secret') ? <b>*</b> : null}</span>
+      <span>
+        {field.label} {field.required && !(editing && field.kind === 'secret') ? <b>*</b> : null}
+      </span>
       {field.kind === 'select' ? (
-        <select value={String(value ?? '')} disabled={disabled} onChange={(event) => onChange(field.options.find((option) => String(option) === event.target.value) ?? event.target.value)}>
+        <select
+          aria-invalid={Boolean(error)}
+          aria-required={field.required}
+          aria-describedby={error ? `channel-field-${field.name}-error` : undefined}
+          value={String(value ?? '')}
+          disabled={disabled}
+          onChange={(event) =>
+            onChange(
+              field.options.find((option) => String(option) === event.target.value) ??
+                event.target.value,
+            )
+          }
+        >
           <option value="">{t('settings.channels.selectOption')}</option>
-          {field.options.map((option) => <option key={String(option)} value={String(option)}>{String(option)}</option>)}
+          {field.options.map((option) => (
+            <option key={String(option)} value={String(option)}>
+              {String(option)}
+            </option>
+          ))}
         </select>
       ) : (
         <input
+          aria-invalid={Boolean(error)}
+          aria-required={field.required && !(editing && field.kind === 'secret')}
+          aria-describedby={error ? `channel-field-${field.name}-error` : undefined}
+          autoComplete={field.kind === 'secret' ? 'new-password' : undefined}
           type={field.kind === 'secret' ? 'password' : field.kind === 'text' ? 'text' : 'number'}
           value={typeof value === 'string' || typeof value === 'number' ? value : ''}
           min={field.minimum ?? undefined}
           max={field.maximum ?? undefined}
           step={field.kind === 'integer' ? 1 : field.kind === 'number' ? 'any' : undefined}
-          placeholder={field.kind === 'secret' && editing ? t('settings.channels.secretPlaceholder') : field.placeholder}
+          placeholder={
+            field.kind === 'secret' && editing
+              ? t('settings.channels.secretPlaceholder')
+              : field.placeholder
+          }
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         />
       )}
       {field.help ? <small>{field.help}</small> : null}
-      {error ? <em role="alert">{t(`settings.channels.error.${error}`)}</em> : null}
+      {error ? (
+        <em id={`channel-field-${field.name}-error`} role="alert">
+          {t(`settings.channels.error.${error}`)}
+        </em>
+      ) : null}
     </label>
   );
 }

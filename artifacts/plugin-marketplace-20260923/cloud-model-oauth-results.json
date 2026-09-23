@@ -1,0 +1,58 @@
+[
+  {
+    "type": "observe",
+    "conversation_id": "62ad41bc-02fa-4c5f-b2c2-498a05b3f34f",
+    "data": {
+      "tool_name": "mcp__marketplace_6ac81710_fixture__echo",
+      "result": "MARKETPLACE_OAUTH_MODEL_OK",
+      "error": null,
+      "duration_ms": 139,
+      "call_id": "call_function_5nntdebxk0pb_1",
+      "status": "completed",
+      "tool_execution_id": "exec_806c4f7246d9",
+      "ui_metadata": {
+        "resource_uri": "ui://oauth-fixture/app.html",
+        "server_name": "marketplace-6ac81710-fixture",
+        "app_id": "a389cce2-a88a-4f10-a5a2-dde403494fbe",
+        "title": "",
+        "project_id": "6dc13612-30d2-4a11-b1a9-c5013da66a55"
+      },
+      "display": null,
+      "file_metadata": null,
+      "observation": "MARKETPLACE_OAUTH_MODEL_OK",
+      "agent_id": "builtin:all-access",
+      "message_id": "b547686a-e093-51b1-b3b2-150e3973151e"
+    },
+    "seq": null,
+    "timestamp": "2026-09-23T03:44:04.086949+00:00",
+    "event_time_us": 1790135044085782,
+    "event_counter": 0
+  },
+  {
+    "type": "mcp_app_result",
+    "conversation_id": "62ad41bc-02fa-4c5f-b2c2-498a05b3f34f",
+    "data": {
+      "app_id": "a389cce2-a88a-4f10-a5a2-dde403494fbe",
+      "tool_name": "mcp__marketplace_6ac81710_fixture__echo",
+      "tool_result": "MARKETPLACE_OAUTH_MODEL_OK",
+      "tool_input": {
+        "text": "MARKETPLACE_OAUTH_MODEL_OK"
+      },
+      "resource_html": "<!doctype html><html><body><h1>OAuth connected</h1><p>Protected marketplace app is available.</p></body></html>",
+      "resource_uri": "ui://oauth-fixture/app.html",
+      "ui_metadata": {
+        "resourceUri": "ui://oauth-fixture/app.html"
+      },
+      "tool_execution_id": "exec_806c4f7246d9",
+      "project_id": "6dc13612-30d2-4a11-b1a9-c5013da66a55",
+      "server_name": "marketplace-6ac81710-fixture",
+      "structured_content": null,
+      "agent_id": "builtin:all-access",
+      "message_id": "b547686a-e093-51b1-b3b2-150e3973151e"
+    },
+    "seq": null,
+    "timestamp": "2026-09-23T03:44:04.129290+00:00",
+    "event_time_us": 1790135044127982,
+    "event_counter": 0
+  }
+]

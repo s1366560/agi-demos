@@ -197,7 +197,7 @@ async def test_rejects_non_root_scope_and_protected_bundle_mutation(
     service = _service(db_session)
     root = _scope()
 
-    with pytest.raises(ValueError, match="root scope"):
+    with pytest.raises(ValueError, match="initialized"):
         await service.install(
             scope=replace(root, kind=ScopeKindV2.TENANT, tenant_id="tenant-a"),
             bundle=_marketplace_bundle(),

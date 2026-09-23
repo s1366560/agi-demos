@@ -22,6 +22,7 @@ from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.domain.model.agent import Conversation
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+from src.infrastructure.agent.actor.operation_database import admit_agent_turn_v2
 from src.infrastructure.llm.provider_credentials import resolve_persisted_provider_credential
 from src.infrastructure.plugins.v2.agent_worker_lifecycle_transport_v2 import (
     AgentWorkerLifecycleTransportV2,
@@ -1227,7 +1228,8 @@ class AgentRuntimeBootstrapper:
                 archive_loader=load_agent_generation_archives_v2,
             )
             try:
-                async with admission.admit(
+                async with admit_agent_turn_v2(
+                    admission,
                     descriptor_payload=request.plugin_generation,
                     distribution_payload=request.plugin_distribution,
                     operation_id=f"local-turn:{request.message_id}",

@@ -96,8 +96,11 @@ async def _run(request_file: Path) -> int:
             ),
             archive_loader=load_agent_generation_archives_v2,
         )
+        from src.infrastructure.agent.actor.operation_database import admit_agent_turn_v2
+
         try:
-            async with admission.admit(
+            async with admit_agent_turn_v2(
+                admission,
                 descriptor_payload=request.plugin_generation,
                 distribution_payload=request.plugin_distribution,
                 operation_id=f"local-subprocess-turn:{request.message_id}",

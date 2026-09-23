@@ -16,8 +16,6 @@ Existing duplicate-message ACK and client-turn claim behavior remain ahead of pr
 - Generation tests use actual scoped registries and reservations to prove that neither an outer ROOT generation nor its replacement supplies the scoped turn resolver/distribution. They verify DB/identity/metadata and cancellation release.
 - Ruff passes. Pyright reports zero errors and one pre-existing implicit-string-concatenation warning in router.py; the new helper/test have zero errors and warnings.
 
-GitNexus impact reported 3 upstream relationships for the stream boundary and 8 for Context.with_db, both LOW. New helper modules may be absent from its index; graph results do not substitute for the runtime and SQL tests.
-
 ## Remaining acceptance
 
 No actual LLM conversation or native Electron session was executed in this batch. Workspace-linked preparation still requires the production workspace prompt-context provider to be enabled and owned correctly. WorkspaceCore and other event consumers, concurrent governance fencing, historical migration recovery, V1 retirement and final native acceptance remain open. Post-prepare membership checking is a point-in-time recheck, not a transactional fence against all later revocations.

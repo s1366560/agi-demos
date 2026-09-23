@@ -1,22 +1,8 @@
 .settings-update-card {
   display: grid;
-  gap: 18px;
-  padding: 20px;
-  background: var(--gray-2);
-  border: 1px solid var(--gray-6);
-  border-radius: 12px;
-}
-
-.settings-update-card.tone-progress {
-  border-color: var(--cyan-7);
-}
-
-.settings-update-card.tone-success {
-  border-color: var(--green-7);
-}
-
-.settings-update-card.tone-danger {
-  border-color: var(--red-7);
+  gap: 20px;
+  padding: 0;
+  min-width: 0;
 }
 
 .settings-update-card header,
@@ -44,29 +30,8 @@
 .settings-update-message,
 .settings-update-versions dt,
 .settings-update-progress label {
-  color: var(--gray-10);
-  font-size: 11px;
-}
-
-.settings-update-state-icon {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  flex: 0 0 auto;
-  color: var(--cyan-11);
-  background: var(--cyan-3);
-  border-radius: 9px;
-}
-
-.tone-success .settings-update-state-icon {
-  color: var(--green-11);
-  background: var(--green-3);
-}
-
-.tone-danger .settings-update-state-icon {
-  color: var(--red-11);
-  background: var(--red-3);
+  color: var(--gray-11);
+  font-size: 13px;
 }
 
 .settings-update-message {
@@ -82,29 +47,29 @@
 .settings-update-progress progress {
   width: 100%;
   height: 8px;
-  accent-color: var(--cyan-9);
+  accent-color: var(--gray-9);
 }
 
 .settings-update-versions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
   margin: 0;
 }
 
 .settings-update-versions > div {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  background: var(--gray-3);
-  border: 1px solid var(--gray-6);
-  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--gray-5);
 }
 
 .settings-update-versions dd {
   margin: 0;
   color: var(--gray-12);
-  font-size: 12px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -112,12 +77,12 @@
 .settings-update-card footer {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
 }
 
 .settings-update-card footer button {
-  min-height: 32px;
+  min-height: 34px;
   padding: 0 13px;
   color: var(--gray-12);
   background: var(--gray-4);
@@ -126,13 +91,13 @@
 }
 
 .settings-update-card footer button.primary {
-  color: var(--cyan-12);
-  background: var(--cyan-4);
-  border-color: var(--cyan-8);
+  color: var(--gray-12);
+  background: var(--gray-4);
+  border-color: var(--gray-8);
 }
 
 .settings-update-card footer button:focus-visible {
-  outline: 2px solid var(--cyan-9);
+  outline: 2px solid var(--gray-9);
   outline-offset: 2px;
 }
 
@@ -152,4 +117,11 @@
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.settings-update-card.tone-danger .settings-update-message {
+  color: var(--red-11);
+}
+.settings-update-card header strong {
+  font-weight: 600;
 }

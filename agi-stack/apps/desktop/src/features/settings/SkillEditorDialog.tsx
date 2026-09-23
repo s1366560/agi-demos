@@ -118,11 +118,7 @@ export function SkillEditorDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="agent-definition-dialog-heading">
-          <div className="agent-definition-dialog-icon skill-editor-icon">
-            <MagicWandIcon />
-          </div>
           <div>
-            <span>{t('settings.skillsEyebrow')}</span>
             <h2>
               {t(skill ? 'settings.skillEditor.editTitle' : 'settings.skillEditor.createTitle')}
             </h2>

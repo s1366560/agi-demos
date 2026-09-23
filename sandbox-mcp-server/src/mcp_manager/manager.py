@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from src.mcp_manager.call_leases import drain_tool_calls, tool_call_lease
 from src.mcp_manager.installer import install_package
 from src.mcp_manager.process_tracker import (
     ManagedServer,
@@ -262,6 +263,7 @@ class MCPServerManager:
                         working_dir=self._workspace_dir,
                     )
                     # Build URL for local network server
+                    server.headers = dict(transport_config.get("headers", {}))
                     if server_type == "websocket":
                         server.url = url or f"ws://localhost:{port}/ws"
                     elif server_type == "sse":
@@ -284,6 +286,7 @@ class MCPServerManager:
                         server_type=server_type,
                         command="",
                         url=url,
+                        headers=dict(transport_config.get("headers", {})),
                         status=ServerStatus.RUNNING,
                     )
                     self._tracker._servers[name] = server
@@ -327,8 +330,10 @@ class MCPServerManager:
         Returns True if process exists and hasn't exited.
         """
         server = self._tracker.get_server(name)
-        if not server or not server.process:
+        if not server:
             return False
+        if not server.process:
+            return bool(server.url and not server.command and server.status == ServerStatus.RUNNING)
         # Check if process has exited (returncode is set when process ends)
         return server.process.returncode is None
 
@@ -395,6 +400,7 @@ class MCPServerManager:
             return collected.decode("utf-8", errors="replace")
         return ""
 
+    @drain_tool_calls
     async def stop_server(self, name: str) -> Dict[str, Any]:
         """Stop a running MCP server.
 
@@ -578,6 +584,7 @@ class MCPServerManager:
                 f"MCP server '{name}' is unresponsive and has been stopped. Error: {e}"
             ) from e
 
+    @tool_call_lease
     async def call_tool(
         self,
         server_name: str,
@@ -1229,6 +1236,7 @@ class MCPServerManager:
                 request["params"] = params
 
             headers = {
+                **server.headers,
                 "Content-Type": "application/json",
                 "Accept": "application/json, text/event-stream",
             }
@@ -1242,6 +1250,7 @@ class MCPServerManager:
                     server.url,
                     json=request,
                     headers=headers,
+                    allow_redirects=False,
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as resp:
                     # Retry on 5xx server errors
@@ -1337,6 +1346,7 @@ class MCPServerManager:
             notification["params"] = params
 
         headers = {
+            **server.headers,
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
@@ -1350,6 +1360,7 @@ class MCPServerManager:
                 server.url,
                 json=notification,
                 headers=headers,
+                allow_redirects=False,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
                 if resp.status >= 400:
@@ -1420,7 +1431,7 @@ class MCPServerManager:
             try:
                 import aiohttp
 
-                headers = {"Content-Type": "application/json"}
+                headers = {**server.headers, "Content-Type": "application/json"}
                 session_id = self._session_ids.get(server.name)
                 if session_id:
                     headers["Mcp-Session-Id"] = session_id
@@ -1433,6 +1444,7 @@ class MCPServerManager:
                     server.url,
                     json=request,
                     headers=headers,
+                    allow_redirects=False,
                     timeout=aiohttp.ClientTimeout(total=5),
                 ):
                     pass

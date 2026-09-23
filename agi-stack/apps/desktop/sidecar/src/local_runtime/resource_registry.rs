@@ -140,6 +140,7 @@ impl DesktopSessionStore {
             .prepare(
                 "SELECT scope_id, value_json FROM desktop_managed_resources
                  WHERE kind = 'provider' AND scope_kind = 'tenant'
+                   AND status <> 'deleted'
                  ORDER BY scope_id ASC, id ASC",
             )
             .map_err(|error| error.to_string())?;

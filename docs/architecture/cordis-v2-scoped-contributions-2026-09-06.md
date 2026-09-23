@@ -19,7 +19,7 @@ The projector resolves each matching contribution to the actual provider using s
 - Pyright: zero errors and warnings. Generator and completeness checks passed.
 - Production Loader test confirms actual tool contributions are installed and an incomplete prepared tool set reaches contribution validation instead of silently returning empty. It does not execute a real Agent or provider operation.
 
-Shared DTO impact was CRITICAL (129 direct and 559 upstream relationships). GitNexus did not index the newer projector; its UNKNOWN result is not low-risk evidence. Full Desktop testing is required because the first run caught the renderer parser's unknown-field rejection. Web regression also caught an initially accidental required-field change; both parser errors were corrected before final acceptance.
+Full Desktop testing is required because the first run caught the renderer parser's unknown-field rejection. Web regression also caught an initially accidental required-field change; both parser errors were corrected before final acceptance.
 
 The next batch must connect authenticated fresh-DB Agent streaming to scoped prepare/publication/reservation. Workspace prompt-context remains unavailable in the enabled production profile. Governance revocation fencing, historical migration recovery, V1 retirement and final native acceptance remain open.
 

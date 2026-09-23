@@ -510,7 +510,10 @@ class ProjectAgentActor:
                 "message_id": request.message_id,
             },
         }
-        return self._plugin_admission_v2.admit(
+        from src.infrastructure.agent.actor.operation_database import admit_agent_turn_v2
+
+        return admit_agent_turn_v2(
+            self._plugin_admission_v2,
             descriptor_payload=request.plugin_generation,
             distribution_payload=request.plugin_distribution,
             operation_id=f"ray-turn:{request.message_id}",

@@ -44,6 +44,8 @@ const {
   timelineItemsForDisplay,
   timelineDayKey,
   timelineDayLabel,
+  timelineRowDurationMs,
+  thoughtTimelineDurationMs,
   toolCallDiffStat,
   toolCallArgumentsStreaming,
   toolCallPairDurationMs,
@@ -6063,19 +6065,142 @@ test("tool call durations format for quick scanning", () => {
   assert.equal(formatToolCallDuration(-5), "");
 });
 
+test("thought duration badge reads now − start while streaming (web ThinkingBlock)", () => {
+  const streamingThought = {
+    id: "thought-1",
+    type: "thought",
+    eventTimeUs: 1_000_000_000,
+    metadata: { streaming: true },
+  };
+
+  // 3.2s elapsed since the thought started.
+  assert.equal(
+    thoughtTimelineDurationMs(streamingThought, 1_003_200),
+    3200,
+  );
+  // No elapsed time yet -> no badge.
+  assert.equal(thoughtTimelineDurationMs(streamingThought, 1_000_000), null);
+  // A non-finite clock never produces a badge.
+  assert.equal(
+    thoughtTimelineDurationMs(streamingThought, Number.NaN),
+    null,
+  );
+});
+
+test("thought duration badge reads completion − start once finished", () => {
+  const completedThought = {
+    id: "thought-2",
+    type: "thought",
+    eventTimeUs: 1_000_000_000,
+    metadata: {
+      streaming: false,
+      thoughtCompletionEventTimeUs: 1_004_500_000,
+      thoughtCompletionEventCounter: 9,
+    },
+  };
+
+  assert.equal(thoughtTimelineDurationMs(completedThought, 2_000_000), 4500);
+
+  // Persisted history without a completion marker renders no badge (never a
+  // wall-clock fallback).
+  const persistedThought = {
+    id: "thought-3",
+    type: "thought",
+    eventTimeUs: 1_000_000_000,
+    metadata: { streaming: false },
+  };
+  assert.equal(thoughtTimelineDurationMs(persistedThought, 2_000_000), null);
+
+  // Non-thought items and missing starts never produce a badge.
+  assert.equal(
+    thoughtTimelineDurationMs(
+      { id: "act-1", type: "act", eventTimeUs: 1_000_000 },
+      2_000,
+    ),
+    null,
+  );
+  assert.equal(
+    thoughtTimelineDurationMs(
+      { id: "thought-4", type: "thought", eventTimeUs: 0, metadata: {} },
+      2_000,
+    ),
+    null,
+  );
+});
+
+test("row meta surfaces duration data and never falls back to a wall-clock", () => {
+  // Direct duration fields on the item win first.
+  assert.equal(
+    timelineRowDurationMs({
+      id: "run-1",
+      type: "graph_run_completed",
+      eventTimeUs: 1_000_000,
+      duration_ms: 4200,
+    }),
+    4200,
+  );
+  assert.equal(
+    timelineRowDurationMs({
+      id: "run-2",
+      type: "graph_run_completed",
+      eventTimeUs: 1_000_000,
+      durationMs: 900,
+    }),
+    900,
+  );
+  // Payload-reported durations are honored too.
+  assert.equal(
+    timelineRowDurationMs({
+      id: "run-3",
+      type: "skill_execution",
+      eventTimeUs: 1_000_000,
+      payload: { duration_ms: 1500 },
+    }),
+    1500,
+  );
+  // No duration data -> null (the row meta renders nothing, never a
+  // wall-clock time).
+  assert.equal(
+    timelineRowDurationMs({
+      id: "run-4",
+      type: "context_status",
+      eventTimeUs: 1_700_000_000_000_000,
+      timestamp: 1_700_000_000_000,
+    }),
+    null,
+  );
+  // Negative, non-numeric, and non-finite values are rejected.
+  assert.equal(
+    timelineRowDurationMs({
+      id: "run-5",
+      type: "skill_execution",
+      eventTimeUs: 1_000_000,
+      duration_ms: -3,
+    }),
+    null,
+  );
+  assert.equal(
+    timelineRowDurationMs({
+      id: "run-6",
+      type: "skill_execution",
+      eventTimeUs: 1_000_000,
+      duration_ms: "3s",
+    }),
+    null,
+  );
+});
+
 test("structured tool presentation metadata drives worklog anatomy", () => {
   const pair = pairToolCallItems([
     {
-      id: "act-edit",
-      tool_call_id: "fixture-edit",
+      id: "act-edit", tool_call_id: "fixture-edit",
       type: "act",
       toolName: "patch",
       display: { kind: "edit" },
       eventTimeUs: 1_000_000,
     },
     {
-      id: "observe-edit",
-      tool_call_id: "fixture-edit",
+      id: "observe-edit", tool_call_id: "fixture-edit",
       type: "observe",
       toolName: "patch",
       display: { kind: "edit" },

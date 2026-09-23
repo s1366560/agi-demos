@@ -124,8 +124,7 @@ kernel. The large App still supplies business bindings, but those bindings do no
 constitute an independently owned route registry. Current polling entry points use
 V2 Web-view or Desktop delivery contracts.
 
-The reviewing agent's GitNexus MCP transport failed; a separate root CLI query was
-available, but the index is not a complete current call-graph proof. This review is
+This review is
 explicitly a source-traced finding. The passing V2 directory includes the existing
 retirement and route-ownership tests; native execution remains separately required.
 

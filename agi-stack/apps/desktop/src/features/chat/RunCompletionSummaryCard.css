@@ -40,7 +40,7 @@
   place-items: center;
   border: 1px solid rgba(var(--desktop-cyan-soft-rgb), 0.28);
   border-radius: 6px;
-  color: var(--desktop-cyan-soft);
+  color: var(--desktop-chat-text-secondary);
 }
 
 .run-completion-card.outcome-failed .run-completion-icon {
@@ -239,7 +239,7 @@
   border: 1px solid rgba(var(--desktop-cyan-soft-rgb), 0.3);
   border-radius: 6px;
   background: transparent;
-  color: var(--desktop-cyan-soft);
+  color: var(--desktop-chat-text);
   cursor: pointer;
   font-size: 11px;
 }

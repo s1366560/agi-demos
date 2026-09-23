@@ -50,7 +50,7 @@
 }
 
 .session-context-section > header > em {
-  color: var(--cyan-9);
+  color: var(--gray-9);
   font-size: 9px;
   font-style: normal;
 }
@@ -80,12 +80,12 @@
 .session-context-progress > span i {
   display: block;
   height: 100%;
-  background: var(--cyan-9);
+  background: var(--gray-9);
   border-radius: inherit;
 }
 
 .session-context-progress > b {
-  color: var(--cyan-10);
+  color: var(--gray-10);
   font-size: 9px;
   font-weight: 600;
 }
@@ -206,7 +206,7 @@
 
 .session-context-surfaces-list > button:hover,
 .session-context-surfaces-list > button:focus-visible {
-  color: var(--cyan-9);
+  color: var(--gray-9);
   outline: none;
 }
 

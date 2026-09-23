@@ -1,12 +1,12 @@
 .settings-shortcuts-panel {
   display: grid;
   gap: 12px;
-  padding-bottom: 14px;
+  padding: 0;
 }
 
 .settings-shortcuts-panel > :not(header) {
-  margin-right: 14px;
-  margin-left: 14px;
+  margin-right: 0;
+  margin-left: 0;
 }
 
 .settings-shortcuts-panel .shortcuts-group {
@@ -44,7 +44,7 @@
 }
 
 .settings-shortcuts-search input::placeholder {
-  color: var(--desktop-faint);
+  color: var(--desktop-muted);
 }
 
 .settings-shortcuts-combo-chip {
@@ -76,7 +76,7 @@
 .settings-shortcuts-hint,
 .settings-shortcuts-note {
   margin: 0;
-  color: var(--desktop-faint);
+  color: var(--desktop-muted);
   font-size: 12px;
 }
 
@@ -86,4 +86,26 @@
   color: var(--desktop-muted);
   font-size: 13px;
   text-align: center;
+}
+
+.settings-shortcuts-search:focus-within {
+  outline: 2px solid var(--gray-9);
+  outline-offset: 2px;
+}
+.settings-shortcuts-search-row {
+  flex-wrap: wrap;
+}
+.settings-shortcuts-search {
+  min-width: min(100%, 240px);
+}
+.settings-shortcuts-panel .shortcuts-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--gray-5);
+}
+.settings-shortcuts-panel .shortcuts-row__label {
+  font-size: 13px;
+}
+.settings-shortcuts-combo-chip button:focus-visible {
+  outline: 2px solid var(--gray-9);
+  outline-offset: 2px;
 }

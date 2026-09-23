@@ -155,7 +155,7 @@ test('MCP Apps V2 Local preserves all six endpoint bodies and App visibility fai
       error.payload.reason_code === 'local_mcp_tool_not_app_visible',
   );
 });
-test('MCP Apps V2 Cloud preserves 200 error result, 409 detail and every idempotency key', async () => {
+test('MCP Apps V2 Cloud omits idempotency keys, preserves 200 error result and 409 detail', async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     const path = new URL(url).pathname;
@@ -167,32 +167,48 @@ test('MCP Apps V2 Cloud preserves 200 error result, 409 detail and every idempot
       return new Response(
         JSON.stringify({
           detail: {
-            reason_code: 'cloud_mcp_tool_idempotency_unavailable',
-            message: 'Durable idempotency unavailable',
+            reason_code: 'cloud_mcp_tool_rejected',
+            message: 'Tool call rejected',
             arguments: { secret: 'test-only-secret' },
           },
         }),
         { status: 409, headers: { 'Content-Type': 'application/json' } },
       );
-    return json(unavailable);
+    // Cloud authority has no durable tool idempotency: a request carrying a
+    // key would fail closed with cloud_mcp_tool_idempotency_unavailable.
+    if (body && 'idempotency_key' in body)
+      return json({
+        ...unavailable,
+        content: [{ type: 'text', text: 'unexpected idempotency key on the wire' }],
+      });
+    return json({
+      content: [{ type: 'text', text: 'ok' }],
+      is_error: false,
+      error_code: null,
+    });
   };
   const f = fixture(config('cloud'));
-  assert.equal((await f.client.callMCPAppTool('app-1', 'open', {}, 'app-key')).error_code, -32000);
   assert.equal(
-    (await f.client.callMCPAppToolDirect('project-1', 'tools', 'open', {}, 'direct-key')).is_error,
-    true,
+    (await f.client.callMCPAppTool('app-1', 'open', {}, 'app-key')).is_error,
+    false,
+  );
+  assert.equal(
+    (await f.client.callMCPAppToolDirect('project-1', 'tools', 'open', {}, 'direct-key'))
+      .is_error,
+    false,
   );
   await assert.rejects(
     f.client.callMCPToolByServerId('server-1', 'open', {}, 'generic-key'),
     (error) =>
       error instanceof DesktopApiError &&
       error.status === 409 &&
-      error.payload.detail.reason_code === 'cloud_mcp_tool_idempotency_unavailable' &&
+      error.payload.detail.reason_code === 'cloud_mcp_tool_rejected' &&
       !JSON.stringify(error.payload).includes('test-only-secret'),
   );
+  // Cloud bodies never carry the replay key (only the local sidecar accepts one).
   assert.deepEqual(
-    calls.filter((x) => x.method === 'POST').map((x) => x.body.idempotency_key),
-    ['app-key', 'direct-key', 'generic-key'],
+    calls.filter((x) => x.method === 'POST').map((x) => 'idempotency_key' in x.body),
+    [false, false, false],
   );
   assert.deepEqual(
     calls.filter((x) => x.method === 'GET').map((x) => x.path),

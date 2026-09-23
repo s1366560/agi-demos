@@ -70,14 +70,45 @@ new Function("require", "module", "exports", compiled.outputFiles[0].text)(
   module,
   module.exports,
 );
-const { TaskChecklist, AgentTimeline, I18nProvider, ToastProvider } = module.exports;
+const { TaskChecklist, AgentTimeline, I18nProvider, ToastProvider } =
+  module.exports;
 
 const ITEMS = [
-  { id: "a", content: "Write the model", status: "completed", priority: "high", orderIndex: 0 },
-  { id: "b", content: "Wire the panel", status: "in_progress", priority: "medium", orderIndex: 1 },
-  { id: "c", content: "Polish styles", status: "pending", priority: "low", orderIndex: 2 },
-  { id: "d", content: "Retried step", status: "failed", priority: "medium", orderIndex: 3 },
-  { id: "e", content: "Dropped idea", status: "cancelled", priority: "medium", orderIndex: 4 },
+  {
+    id: "a",
+    content: "Write the model",
+    status: "completed",
+    priority: "high",
+    orderIndex: 0,
+  },
+  {
+    id: "b",
+    content: "Wire the panel",
+    status: "in_progress",
+    priority: "medium",
+    orderIndex: 1,
+  },
+  {
+    id: "c",
+    content: "Polish styles",
+    status: "pending",
+    priority: "low",
+    orderIndex: 2,
+  },
+  {
+    id: "d",
+    content: "Retried step",
+    status: "failed",
+    priority: "medium",
+    orderIndex: 3,
+  },
+  {
+    id: "e",
+    content: "Dropped idea",
+    status: "cancelled",
+    priority: "medium",
+    orderIndex: 4,
+  },
 ];
 
 const render = (items) => {
@@ -103,7 +134,7 @@ test("renders nothing when there are no todos", () => {
   container.remove();
 });
 
-test("renders the progress header with counts, percent, and ARIA progressbar", () => {
+test("renders one count summary with an accessible progressbar", () => {
   const { container, root } = render(ITEMS);
   const panel = container.querySelector(".task-checklist");
   assert.ok(panel, "panel renders");
@@ -111,10 +142,7 @@ test("renders the progress header with counts, percent, and ARIA progressbar", (
     container.querySelector(".task-checklist-count").textContent,
     "1/5 completed",
   );
-  assert.equal(
-    container.querySelector(".task-checklist-percent").textContent,
-    "20%",
-  );
+  assert.equal(container.querySelector(".task-checklist-percent"), null);
   const progressbar = container.querySelector("[role='progressbar']");
   assert.ok(progressbar, "progressbar exists");
   assert.equal(progressbar.getAttribute("aria-valuenow"), "20");
@@ -128,7 +156,7 @@ test("renders the progress header with counts, percent, and ARIA progressbar", (
   container.remove();
 });
 
-test("renders one row per task with status icons, active tint, and priority dots", () => {
+test("renders explicit task status labels without ambiguous priority dots", () => {
   const { container, root } = render(ITEMS);
   const rows = container.querySelectorAll(".task-checklist-item");
   assert.equal(rows.length, 5);
@@ -147,10 +175,13 @@ test("renders one row per task with status icons, active tint, and priority dots
     rows[1].querySelector(".task-checklist-icon").getAttribute("aria-label"),
     "In progress",
   );
-  // Priority dots render only for non-medium priorities.
-  assert.ok(rows[0].querySelector(".task-checklist-priority.is-high"));
-  assert.ok(rows[2].querySelector(".task-checklist-priority.is-low"));
-  assert.equal(rows[1].querySelector(".task-checklist-priority"), null);
+  assert.deepEqual(
+    [...container.querySelectorAll(".task-checklist-status")].map(
+      (x) => x.textContent,
+    ),
+    ["Completed", "In progress", "Pending", "Failed", "Cancelled"],
+  );
+  assert.equal(container.querySelector(".task-checklist-priority"), null);
   act(() => root.unmount());
   container.remove();
 });
@@ -166,7 +197,10 @@ test("header toggles the item list while keeping the progress header visible", (
   });
   assert.equal(header.getAttribute("aria-expanded"), "false");
   assert.equal(body.hasAttribute("hidden"), true);
-  assert.ok(container.querySelector("[role='progressbar']"), "progress stays visible");
+  assert.ok(
+    container.querySelector("[role='progressbar']"),
+    "progress stays visible",
+  );
   act(() => root.unmount());
   container.remove();
 });

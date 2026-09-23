@@ -55,8 +55,13 @@ async def run(args: argparse.Namespace) -> None:
                     return
                 raise ValueError("scope has not been initialized")
             current = next(
-                item for item in head.desired_set.bundles if item.bundle_id == replacement.bundle_id
+                (item for item in head.desired_set.bundles if item.bundle_id == replacement.bundle_id),
+                None,
             )
+            if current is None:
+                raise ValueError(
+                    f"desired set has no {replacement.bundle_id} builtin reference to upgrade"
+                )
             print(
                 json.dumps(
                     {
@@ -122,9 +127,11 @@ def main() -> None:
     args = parser.parse_args()
     if args.apply and args.auto:
         parser.error("--apply and --auto are mutually exclusive")
-    if args.auto and (args.expected_revision or args.expected_digest):
+    if args.auto and (args.expected_revision is not None or args.expected_digest):
         parser.error("--auto does not accept --expected-revision or --expected-digest")
-    if args.apply and not (args.expected_revision and args.expected_digest and args.actor_id):
+    if args.apply and not (
+        args.expected_revision is not None and args.expected_digest and args.actor_id
+    ):
         parser.error("--apply requires --expected-revision, --expected-digest and --actor-id")
     if args.auto and not args.actor_id:
         parser.error("--auto requires --actor-id")

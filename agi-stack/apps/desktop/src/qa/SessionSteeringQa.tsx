@@ -3086,7 +3086,7 @@ function SessionSteeringQa() {
   return (
     <Theme
       appearance="dark"
-      accentColor="cyan"
+      accentColor="gray"
       grayColor="slate"
       radius="medium"
       scaling="95%"

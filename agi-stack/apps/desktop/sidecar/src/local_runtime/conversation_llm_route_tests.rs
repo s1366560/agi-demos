@@ -376,6 +376,187 @@ async fn workspace_bound_agent_engine_uses_persisted_conversation_route_over_emp
 }
 
 #[tokio::test]
+async fn stale_conversation_route_falls_back_to_the_tenant_default_provider() {
+    // A persisted conversation route referencing a provider that no longer
+    // exists must not kill the conversation: the tenant default takes over.
+    let state = test_state("conversation-route-secret");
+    state.mock_llm_enabled.store(0, Ordering::Release);
+    let app = local_router(Arc::clone(&state));
+    let (provider_base_url, requests, provider_shutdown) = spawn_provider_chat_server().await;
+    let configured = app
+        .oneshot(authenticated_json_request(
+            "PUT",
+            "/api/v1/llm-providers/local-runtime",
+            "conversation-route-secret",
+            json!({
+                "provider_type": "openai_compatible",
+                "base_url": provider_base_url,
+                "auth_method": "none",
+                "llm_model": "default-model",
+                "allowed_models": ["default-model"],
+                "is_active": true,
+                "expected_revision": 0
+            }),
+        ))
+        .await
+        .expect("configure tenant default provider");
+    assert_eq!(configured.status(), StatusCode::OK);
+
+    let conversation = LocalConversation {
+        id: format!("stale-route-{}", Uuid::new_v4()),
+        project_id: "local-project".to_string(),
+        tenant_id: "local".to_string(),
+        title: "Stale-routed session".to_string(),
+        workspace_id: None,
+        capability_mode: ConversationCapabilityMode::Work,
+        current_mode: ConversationRunMode::Plan,
+        created_at: now_iso(),
+        updated_at: now_iso(),
+    };
+    state
+        .session_store
+        .insert_conversation(&conversation)
+        .expect("insert unbound conversation");
+    state
+        .session_store
+        .update_conversation_llm_route(
+            &conversation.id,
+            Some(&LlmRouteTarget {
+                provider_id: "deleted-provider".to_string(),
+                model_id: "gone-model".to_string(),
+            }),
+            &now_iso(),
+        )
+        .expect("persist stale conversation route");
+
+    let action = state
+        .llm_for_role(&conversation, LlmWorkloadRole::Default)
+        .await
+        .expect("resolve stale-routed conversation LLM")
+        .decide("route this stale request", 0, &[], &[])
+        .await
+        .expect("tenant default must serve a stale conversation route");
+    assert_eq!(
+        action,
+        AgentAction::Finish {
+            answer: "routed answer".to_string()
+        }
+    );
+
+    let captured = requests.lock().await;
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0]["model"], "default-model");
+    drop(captured);
+    provider_shutdown.send(()).ok();
+}
+
+#[tokio::test]
+async fn deleted_provider_does_not_revive_after_runtime_restart() {
+    // Provider delete is a tombstone: the row keeps its last value_json
+    // (with is_active true). The runtime restore query must filter
+    // tombstones or a deleted provider revives on every restart and steals
+    // routing from healthy providers.
+    let root = test_root();
+    std::fs::create_dir_all(&root).expect("create delete-revive root");
+    let store_path = root.join("sessions.db");
+    let workspace_root = root.join("workspace");
+    std::fs::create_dir_all(&workspace_root).expect("create delete-revive workspace");
+    let credential = "delete-revive-secret";
+    let doomed_provider_id: String;
+    {
+        let store = DesktopSessionStore::open(&store_path).expect("open session store");
+        let provider_credentials = ProviderCredentialBroker::in_memory(store.installation_id())
+            .expect("provider credential broker");
+        let state = Arc::new(
+            LocalRuntimeState::new_with_provider_credentials(
+                workspace_root.clone(),
+                LocalToolHost::new(&workspace_root).expect("tool host"),
+                Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints")),
+                credential.to_string(),
+                store,
+                provider_credentials,
+            )
+            .expect("runtime state"),
+        );
+        state
+            .session_store
+            .seed_test_session(credential)
+            .expect("test session");
+        let app = local_router(Arc::clone(&state));
+        let configured = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                credential,
+                json!({
+                    "provider_type": "openai_compatible",
+                    "base_url": "http://127.0.0.1:9/v1",
+                    "auth_method": "none",
+                    "llm_model": "doomed-model",
+                    "allowed_models": ["doomed-model"],
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("configure doomed provider");
+        let create_status = configured.status();
+        let configured_body = response_json(configured).await;
+        assert_eq!(
+            create_status,
+            StatusCode::OK,
+            "configure doomed provider failed: {configured_body}"
+        );
+        doomed_provider_id = "local-runtime".to_string();
+        let doomed_revision = configured_body["revision"].as_u64().expect("provider revision");
+        let deleted = app
+            .oneshot(authenticated_json_request(
+                "DELETE",
+                &format!("/api/v1/llm-providers/{doomed_provider_id}"),
+                credential,
+                json!({
+                    "expected_revision": doomed_revision,
+                    "idempotency_key": "delete-revive-idempotency-key-1"
+                }),
+            ))
+            .await
+            .expect("delete doomed provider");
+        assert_eq!(deleted.status(), StatusCode::OK);
+    }
+
+    // "Restart": reopen the same session store into a fresh runtime state.
+    let store = DesktopSessionStore::open(&store_path).expect("reopen session store");
+    let provider_credentials = ProviderCredentialBroker::in_memory(store.installation_id())
+        .expect("restored credential broker");
+    let state = LocalRuntimeState::new_with_provider_credentials(
+        workspace_root.clone(),
+        LocalToolHost::new(&workspace_root).expect("restored tool host"),
+        Arc::new(SqliteCheckpointStore::in_memory().expect("restored checkpoints")),
+        credential.to_string(),
+        store,
+        provider_credentials,
+    )
+    .expect("restored runtime state");
+
+    let runtime = state.provider_runtime.lock().expect("runtime");
+    assert!(
+        !runtime
+            .bindings
+            .keys()
+            .any(|key| key.provider_id == doomed_provider_id),
+        "a deleted provider must not revive into runtime bindings"
+    );
+    drop(runtime);
+    let route = state.selected_provider_route("local");
+    assert!(
+        route.is_none() || route.expect("route").provider_id != doomed_provider_id,
+        "deleted provider must not be selected after restart"
+    );
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
 async fn persisted_unbound_conversation_route_survives_restart_and_drives_the_llm_model() {
     let root = test_root();
     std::fs::create_dir_all(&root).expect("create conversation route restart root");

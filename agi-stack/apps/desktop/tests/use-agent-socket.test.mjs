@@ -279,7 +279,7 @@ test("steer outcome reads acks, durable echoes, and steer error codes", () => {
   );
   assert.equal(
     agentSteerMessageOutcome(
-      { type: "error", code: "STEER_UNSUPPORTED", message_id: messageId },
+      { type: "error", code: "STEER_NOT_SUPPORTED", message_id: messageId },
       messageId,
     ),
     "rejected",

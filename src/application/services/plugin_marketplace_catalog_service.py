@@ -78,6 +78,7 @@ class PluginMarketplaceCatalogService:
         version: str,
         tenant_id: str,
         approved_permissions: frozenset[str],
+        project_id: str | None = None,
         actor_id: str | None,
     ) -> MarketplaceApprovalResult:
         """Grant only permissions requested by the verified package manifest."""
@@ -102,8 +103,8 @@ class PluginMarketplaceCatalogService:
             _ = await self._repository.grant_permission(
                 plugin_id=plugin_id,
                 permission=permission,
-                scope_type="tenant",
-                scope_id=tenant_id,
+                scope_type="project" if project_id else "tenant",
+                scope_id=project_id or tenant_id,
                 granted_by=actor_id,
             )
         return MarketplaceApprovalResult(
@@ -143,20 +144,32 @@ class PluginMarketplaceCatalogService:
         *,
         plugin_id: str,
         version: str,
+        tenant_id: str,
+        project_id: str | None = None,
         actor_id: str | None = None,
     ) -> MarketplaceUninstallResult:
         """Uninstall one package and remove it from the next desired snapshot."""
-        package = await self._repository.uninstall_package(plugin_id, version)
+        package = await self._repository.get_package_version(plugin_id, version)
         if package is None:
             raise LookupError("marketplace package version was not found")
         mutation = await self._desired_bundles.uninstall(
-            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            scope=ScopeV2(
+                kind=ScopeKindV2.PROJECT if project_id else ScopeKindV2.TENANT,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            ),
             bundle_id=plugin_id,
             version=version,
             actor_id=actor_id,
         )
         revoked_permissions = (
-            await self._repository.revoke_permissions(plugin_id) if mutation.changed else 0
+            await self._repository.revoke_permissions(
+                plugin_id,
+                scope_type="project" if project_id else "tenant",
+                scope_id=project_id or tenant_id,
+            )
+            if mutation.changed
+            else 0
         )
         return MarketplaceUninstallResult(
             plugin_id=plugin_id,

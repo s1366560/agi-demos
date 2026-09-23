@@ -18,10 +18,7 @@ fetch remote sources, reinterpret provenance as trust, or rewrite the ROOT sourc
 Eight isolated tests cover the initialized four-replacement layer, unchanged
 desired-state preservation, missing/tampered sources, foreign-scope layers and
 the protected base Bundle. They passed in 1.47 seconds. Ruff passed; Pyright
-reported zero errors and zero warnings. GitNexus CLI impact classified the changed
-methods and CLI factory LOW; the migration plan method has one direct caller and
-four impacted symbols across the service and scripts. The index is supplemented
-by direct inspection of initialization, repository validation and CLI construction.
+reported zero errors and zero warnings. Validation includes direct inspection of initialization, repository validation and CLI construction.
 
 The existing migration service, CLI and preflight regressions also passed:
 15 passed, seven warnings, 4.47 seconds. These use in-memory SQLite, mocked archive

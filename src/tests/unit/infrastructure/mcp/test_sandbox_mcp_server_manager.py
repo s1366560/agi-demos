@@ -563,3 +563,70 @@ class TestSandboxMCPServerManager:
             "error": "just plain text",
             "raw_output": "just plain text",
         }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("flag", ["isError", "is_error"])
+async def test_discovery_errors_never_become_successful_empty_catalog(flag):
+    resource = AsyncMock()
+    resource.execute_tool.return_value = {
+        "content": [{"type": "text", "text": "Error: private transport diagnostic"}],
+        flag: True,
+    }
+    manager = SandboxMCPServerManager(sandbox_resource=resource)
+    with pytest.raises(RuntimeError, match="MCP tool discovery failed") as failure:
+        await manager.discover_tools(
+            project_id="project",
+            tenant_id="tenant",
+            server_name="protected",
+            server_type="http",
+            transport_config={},
+            ensure_running=False,
+        )
+    assert "private transport" not in str(failure.value)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("inventory", [[], [{"name": "another-server"}]])
+async def test_stop_missing_process_requires_authoritative_inventory(inventory):
+    mgr, resource = TestSandboxMCPServerManager()._make_manager()
+    wrap = TestSandboxMCPServerManager()._tool_result
+    resource.execute_tool.side_effect = [
+        wrap({"success": False, "name": "missing"}, is_error=True),
+        wrap(inventory),
+    ]
+    assert await mgr.stop_server("project", "missing") is True
+    assert resource.execute_tool.call_args.kwargs["tool_name"] == "mcp_server_list"
+    assert resource.execute_tool.call_args.kwargs["project_id"] == "project"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("inventory", [[{"name": "missing"}], [{}], {"error": "unknown"}, None])
+async def test_stop_missing_process_does_not_hide_unknown_or_running_state(inventory):
+    mgr, resource = TestSandboxMCPServerManager()._make_manager()
+    wrap = TestSandboxMCPServerManager()._tool_result
+    resource.execute_tool.side_effect = [
+        wrap({"success": False, "name": "missing"}, is_error=True),
+        wrap(inventory),
+    ]
+    assert await mgr.stop_server("project", "missing") is False
+
+
+@pytest.mark.unit
+async def test_stop_missing_process_inventory_network_failure_is_not_success():
+    mgr, resource = TestSandboxMCPServerManager()._make_manager()
+    resource.execute_tool.side_effect = [
+        TestSandboxMCPServerManager()._tool_result({"success": False, "name": "missing"}),
+        ConnectionError("offline"),
+    ]
+    assert await mgr.stop_server("project", "missing") is False
+
+
+@pytest.mark.unit
+async def test_stop_unknown_error_is_not_treated_as_absence():
+    mgr, resource = TestSandboxMCPServerManager()._make_manager()
+    resource.execute_tool.return_value = TestSandboxMCPServerManager()._tool_result(
+        {"success": False, "name": "missing", "error": "unknown"}
+    )
+    assert await mgr.stop_server("project", "missing") is False
+    resource.execute_tool.assert_awaited_once()

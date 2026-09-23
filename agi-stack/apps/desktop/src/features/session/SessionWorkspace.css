@@ -93,9 +93,9 @@
 }
 
 .session-status-badge.tone-cyan {
-  color: var(--cyan-10);
-  background: color-mix(in srgb, var(--cyan-9) 10%, var(--desktop-surface-12));
-  border-color: color-mix(in srgb, var(--cyan-9) 34%, transparent);
+  color: var(--gray-10);
+  background: color-mix(in srgb, var(--gray-9) 10%, var(--desktop-surface-12));
+  border-color: color-mix(in srgb, var(--gray-9) 34%, transparent);
 }
 
 .session-status-badge.tone-amber {
@@ -159,7 +159,7 @@
 }
 
 .session-workspace-stages .complete { color: var(--green-10); }
-.session-workspace-stages .active { color: var(--cyan-10); }
+.session-workspace-stages .active { color: var(--gray-10); }
 .session-workspace-stages .paused { color: var(--amber-10); }
 .session-workspace-stages .queued { color: var(--desktop-muted); }
 .session-workspace-stages .unavailable { opacity: 0.42; }
@@ -184,7 +184,7 @@
   flex: 0 0 auto;
 }
 
-.session-workspace-more summary {
+.session-workspace-more > summary {
   display: grid;
   width: 32px;
   height: 32px;
@@ -197,11 +197,11 @@
   list-style: none;
 }
 
-.session-workspace-more summary::-webkit-details-marker { display: none; }
+.session-workspace-more > summary::-webkit-details-marker { display: none; }
 
-.session-workspace-more summary:hover,
-.session-workspace-more summary:focus-visible,
-.session-workspace-more[open] summary {
+.session-workspace-more > summary:hover,
+.session-workspace-more > summary:focus-visible,
+.session-workspace-more[open] > summary {
   color: var(--desktop-text);
   background: var(--desktop-panel-raised);
   border-color: var(--desktop-border);
@@ -332,8 +332,8 @@
 }
 
 .session-review-feedback textarea:focus {
-  border-color: var(--cyan-8);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyan-8) 20%, transparent);
+  border-color: var(--gray-8);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gray-8) 20%, transparent);
 }
 
 .session-recovery-dialog {
@@ -557,7 +557,7 @@
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
 }
-.session-authority-notice > svg { color: var(--cyan-9); }
+.session-authority-notice > svg { color: var(--gray-9); }
 .session-authority-notice > span { display: grid; min-width: 0; gap: 2px; }
 .session-authority-notice strong { color: var(--desktop-text); font-size: 11px; }
 .session-authority-notice small { font-size: 9px; line-height: 1.4; }
@@ -588,10 +588,10 @@
   gap: 7px;
   padding: 12px 13px;
   margin-bottom: 6px;
-  border: 1px solid color-mix(in srgb, var(--cyan-8) 28%, var(--desktop-border-soft));
+  border: 1px solid color-mix(in srgb, var(--gray-8) 28%, var(--desktop-border-soft));
   border-radius: 8px;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--cyan-9) 10%, transparent), transparent 54%),
+    linear-gradient(135deg, color-mix(in srgb, var(--gray-9) 10%, transparent), transparent 54%),
     var(--desktop-surface-11);
 }
 
@@ -709,7 +709,7 @@
   font-style: normal;
 }
 
-.timeline-tool-group.status-running > summary em { color: var(--cyan-9); }
+.timeline-tool-group.status-running > summary em { color: var(--desktop-status-running); }
 .timeline-tool-group.status-complete > summary em { color: var(--green-9); }
 .timeline-tool-group.status-failed > summary em { color: var(--red-9); }
 .timeline-tool-group-chevron { transition: transform 140ms var(--ease-out); }
@@ -737,7 +737,7 @@
 }
 
 .session-overview-canvas > header span {
-  color: var(--cyan-9);
+  color: var(--gray-9);
   font-size: 9px;
   font-weight: 750;
   letter-spacing: 0.14em;
@@ -820,8 +820,8 @@
 .session-overview-jump-grid button:hover,
 .session-overview-jump-grid button:focus-visible {
   color: var(--desktop-text);
-  border-color: color-mix(in srgb, var(--cyan-8) 36%, var(--desktop-border));
-  background: color-mix(in srgb, var(--cyan-9) 7%, var(--desktop-surface-19));
+  border-color: color-mix(in srgb, var(--gray-8) 36%, var(--desktop-border));
+  background: color-mix(in srgb, var(--gray-9) 7%, var(--desktop-surface-19));
 }
 
 .session-overview-jump-grid button > span {

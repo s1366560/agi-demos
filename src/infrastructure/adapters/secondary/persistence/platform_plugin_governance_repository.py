@@ -131,13 +131,25 @@ class PlatformPluginGovernanceRepository:
         )
         return result.scalar_one_or_none() is not None
 
-    async def revoke_permissions(self, plugin_id: str) -> int:
-        """Revoke every active grant for a plugin and return the count."""
+    async def revoke_permissions(
+        self, plugin_id: str, *, scope_type: str | None = None, scope_id: str | None = None
+    ) -> int:
+        """Revoke exact scoped grants, or all grants for platform revocation."""
+        if (scope_type is None) != (scope_id is None):
+            raise ValueError("permission scope requires both kind and identifier")
         result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginPermissionModel).where(
                     PlatformPluginPermissionModel.plugin_id == plugin_id,
                     PlatformPluginPermissionModel.revoked_at.is_(None),
+                    *(
+                        [
+                            PlatformPluginPermissionModel.scope_type == scope_type,
+                            PlatformPluginPermissionModel.scope_id == scope_id,
+                        ]
+                        if scope_type is not None
+                        else []
+                    ),
                 )
             )
         )

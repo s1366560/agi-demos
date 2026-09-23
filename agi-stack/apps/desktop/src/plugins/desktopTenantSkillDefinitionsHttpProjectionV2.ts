@@ -39,7 +39,7 @@ export function createDesktopTenantSkillDefinitionsHttpProjectionV2(
   const authority: DesktopTenantSkillDefinitionsAuthorityV2 = {
     async load(scope, signal) {
       scopeParams(scope);
-      const params = new URLSearchParams({ limit: '100', tenant_id: scope.tenantId });
+      const params = new URLSearchParams({ limit: '500', tenant_id: scope.tenantId });
       if (scope.projectId !== null) params.set('project_id', scope.projectId);
       const payload = await request(runtime, `/api/v1/skills/?${params}`, { signal });
       return readCollection(payload) as readonly ManagedSkill[];

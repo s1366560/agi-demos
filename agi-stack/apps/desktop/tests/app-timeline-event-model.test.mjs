@@ -181,6 +181,31 @@ test('signed plugin events preserve authorized JSON output without fabricating w
   }
 });
 
+test('model_unconfigured error events carry the actionable local LLM flag', () => {
+  const sidecarDetail =
+    'llm error: model_unconfigured: configure a local LLM provider before starting an agent';
+  const item = timelineItemFromSocketEvent({
+    type: 'error',
+    conversation_id: 'conversation-1',
+    event_time_us: 1000,
+    counter: 1,
+    data: { content: sidecarDetail, error: sidecarDetail },
+  });
+  assert.equal(item.isError, true);
+  assert.equal(item.localLlmUnconfigured, true);
+  // Unrelated failures keep the raw text without the flag.
+  const other = timelineItemFromSocketEvent({
+    type: 'error',
+    conversation_id: 'conversation-1',
+    event_time_us: 2000,
+    counter: 2,
+    data: { content: 'model_timeout: candidate exceeded 45000 ms' },
+  });
+  assert.equal(other.isError, true);
+  assert.equal(other.localLlmUnconfigured, undefined);
+});
+
+
 test('observe failure normalization trusts boolean envelope status without scanning content', () => {
   for (const toolOutput of [{ isError: true }, JSON.stringify({ is_error: true })]) {
     const item = timelineItemFromSocketEvent({ type: 'observe', data: { is_error: false, tool_output: toolOutput } });

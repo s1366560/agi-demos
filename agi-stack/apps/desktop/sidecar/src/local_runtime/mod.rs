@@ -93,6 +93,7 @@ mod local_route_parity_tests;
 #[cfg(test)]
 mod managed_resource_tests;
 mod mcp_agent_tool_host;
+mod mcp_app_static;
 #[cfg(test)]
 mod mcp_remote_transport_tests;
 mod mcp_supervisor;
@@ -101,6 +102,7 @@ mod mcp_supervisor_tests;
 mod parity_routes;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
+mod plugin_marketplace_v3;
 mod local_plugin_routes_v2;
 mod local_plugin_tool_host_v2;
 mod platform_plugin_route_admission_v2;
@@ -250,6 +252,7 @@ impl LocalRuntimeService {
             .mcp_supervisor
             .install_credential_vault(mcp_credential_vault)
             .map_err(|error| error.to_string())?;
+        plugin_marketplace_v3::recover(&state)?;
         state
             .mcp_supervisor
             .prepare_startup_recovery()
@@ -2320,7 +2323,12 @@ impl LocalRuntimeState {
                 },
                 run.id.clone(),
                 Some(&profile.allowed_mcp_servers),
-            )?;
+            )?
+            .with_app_events(
+                Arc::clone(self),
+                conversation.id.clone(),
+                run.message_id.clone(),
+            );
             dynamic_metadata.extend(mcp_host.authority_metadata_by_name());
             tool_hosts.push(Arc::new(mcp_host));
         }
@@ -2424,6 +2432,12 @@ impl LocalRuntimeState {
         let llm: Arc<dyn LlmPort> =
             Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile));
         let plugin_metadata = plugin_metadata.restrict_to(&tool_host.list_tools());
+        let marketplace_hooks = plugin_marketplace_v3::hooks::Hooks::capture(
+            self, &conversation.tenant_id, &conversation.project_id,
+        )?;
+        marketplace_hooks.run("session_start").await.map_err(|error| error.to_string())?;
+        let llm = marketplace_hooks.wrap_llm(llm);
+        let tool_host = marketplace_hooks.wrap_tools(tool_host);
         Ok((
             ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
                 .with_max_rounds(max_rounds)
@@ -2797,18 +2811,16 @@ impl LocalRuntimeState {
         policy: &Value,
         role: LlmWorkloadRole,
     ) -> Arc<dyn LlmPort> {
-        let mut targets = match routing_targets_for_role(policy, role) {
-            Ok(targets) => targets,
-            Err(_) => return Arc::new(UnconfiguredLocalLlm),
-        };
-        if targets.is_empty() {
-            // A workspace policy without explicit routing targets means routing
-            // was never configured for this workspace. Fall back to the
-            // tenant-level runtime default (explicit selection, or the sole
-            // active binding in local mode) so a freshly created workspace can
-            // run with the configured provider instead of failing closed with
-            // model_unconfigured.
-            if let Some(route) = self.selected_provider_route(tenant_id) {
+        // Explicit workspace targets keep priority, and the tenant-level
+        // runtime default (explicit selection, or the sole active binding in
+        // local mode) always rides as the last-resort failover candidate. A
+        // stale policy — targets referencing providers that no longer exist,
+        // or roles that fail validation — must never disable a configured
+        // tenant default: the user-visible state would be model_unconfigured
+        // even though the provider catalog shows a healthy provider.
+        let mut targets = routing_targets_for_role(policy, role).unwrap_or_default();
+        if let Some(route) = self.selected_provider_route(tenant_id) {
+            if !targets.contains(&route) {
                 targets.push(route);
             }
         }
@@ -3313,6 +3325,7 @@ fn local_router_with_generation_admission(
         .route("/mcp/tools/list", get(mcp_tools_list))
         .route("/mcp/tools/call", post(mcp_tools_call))
         .merge(platform_plugin_marketplace_v2::router())
+        .merge(plugin_marketplace_v3::router())
         .merge(local_plugin_routes_v2::router())
         .merge(knowledge_authority_v2::router())
         .merge(parity_routes::router())
@@ -3349,7 +3362,9 @@ fn local_router_with_generation_admission(
         ))
         .layer(local_cors_layer())
         .with_state(Arc::clone(&state));
-    public_router.merge(workspace_core_bridge::router(state))
+    public_router
+        .merge(workspace_core_bridge::router(state))
+        .merge(mcp_app_static::router())
 }
 
 fn local_cors_origins(renderer_origin: Option<&str>) -> Vec<HeaderValue> {
@@ -21342,6 +21357,149 @@ mod tests {
             .await
             .expect_err("no binding anywhere must stay unconfigured");
         assert!(error.to_string().contains("model_unconfigured"));
+    }
+
+    #[tokio::test]
+    async fn stale_policy_targets_fall_back_to_the_tenant_default_binding() {
+        // A committed workspace policy referencing a provider that no longer
+        // exists must not disable a healthy tenant-level provider.
+        let state = test_state("launch-secret");
+        state.mock_llm_enabled.store(0, Ordering::Release);
+        {
+            let mut runtime = state.provider_runtime.lock().expect("runtime");
+            let key = ProviderRuntimeKey {
+                tenant_id: "local".to_string(),
+                provider_id: "provider-a".to_string(),
+            };
+            runtime.bindings.insert(
+                key.clone(),
+                ProviderRuntimeBinding {
+                    provider_type: "openai".to_string(),
+                    base_url: "http://127.0.0.1:1/v1".to_string(),
+                    model: "model-a".to_string(),
+                    auth_method: "api_key".to_string(),
+                },
+            );
+            runtime.credentials.insert(key, "llm-secret".to_string());
+        }
+        let stale_policy = json!({
+            "roles": {
+                "default": {"provider_id": "deleted-provider", "model_id": "gone-model"},
+                "fast": null,
+                "coding": {"provider_id": "deleted-provider", "model_id": "gone-model"},
+                "vision": null,
+            },
+            "fallbacks": [],
+        });
+        let llm = state.llm_for_policy("local", &stale_policy, LlmWorkloadRole::Coding);
+        let error = llm
+            .decide("goal", 0, &[], &[])
+            .await
+            .expect_err("the unreachable test endpoint must fail");
+        assert!(
+            !error.to_string().contains("model_unconfigured"),
+            "stale workspace targets must not disable the configured tenant default: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_policy_targets_stay_unconfigured_without_binding() {
+        let state = test_state("launch-secret");
+        state.mock_llm_enabled.store(0, Ordering::Release);
+        let stale_policy = json!({
+            "roles": {
+                "default": {"provider_id": "deleted-provider", "model_id": "gone-model"},
+                "fast": null,
+                "coding": null,
+                "vision": null,
+            },
+            "fallbacks": [],
+        });
+        let llm = state.llm_for_policy("local", &stale_policy, LlmWorkloadRole::Default);
+        let error = llm
+            .decide("goal", 0, &[], &[])
+            .await
+            .expect_err("no binding anywhere must stay unconfigured");
+        assert!(error.to_string().contains("model_unconfigured"));
+    }
+
+    #[tokio::test]
+    async fn unpinned_multi_provider_tenant_resolves_deterministic_default() {
+        // Multiple active bindings without an explicit runtime selection
+        // (credentials attached after creation never trigger auto-select)
+        // must resolve deterministically instead of failing every turn.
+        let state = test_state("launch-secret");
+        state.mock_llm_enabled.store(0, Ordering::Release);
+        {
+            let mut runtime = state.provider_runtime.lock().expect("runtime");
+            for (provider_id, model) in [("provider-b", "model-b"), ("provider-a", "model-a")] {
+                let key = ProviderRuntimeKey {
+                    tenant_id: "local".to_string(),
+                    provider_id: provider_id.to_string(),
+                };
+                runtime.bindings.insert(
+                    key.clone(),
+                    ProviderRuntimeBinding {
+                        provider_type: "openai".to_string(),
+                        base_url: "http://127.0.0.1:1/v1".to_string(),
+                        model: model.to_string(),
+                        auth_method: "api_key".to_string(),
+                    },
+                );
+                runtime.credentials.insert(key, "llm-secret".to_string());
+            }
+        }
+        let route = state
+            .selected_provider_route("local")
+            .expect("unpinned multi-provider tenant must resolve");
+        assert_eq!(route.provider_id, "provider-a");
+        assert_eq!(route.model_id, "model-a");
+        let llm = state.llm_for_policy(
+            "local",
+            &json!({"roles": {}, "fallbacks": []}),
+            LlmWorkloadRole::Default,
+        );
+        let error = llm
+            .decide("goal", 0, &[], &[])
+            .await
+            .expect_err("the unreachable test endpoint must fail");
+        assert!(
+            !error.to_string().contains("model_unconfigured"),
+            "an unpinned multi-provider tenant must still run: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn unparseable_policy_falls_back_to_the_tenant_default_binding() {
+        let state = test_state("launch-secret");
+        state.mock_llm_enabled.store(0, Ordering::Release);
+        {
+            let mut runtime = state.provider_runtime.lock().expect("runtime");
+            let key = ProviderRuntimeKey {
+                tenant_id: "local".to_string(),
+                provider_id: "provider-a".to_string(),
+            };
+            runtime.bindings.insert(
+                key.clone(),
+                ProviderRuntimeBinding {
+                    provider_type: "openai".to_string(),
+                    base_url: "http://127.0.0.1:1/v1".to_string(),
+                    model: "model-a".to_string(),
+                    auth_method: "api_key".to_string(),
+                },
+            );
+            runtime.credentials.insert(key, "llm-secret".to_string());
+        }
+        let broken_policy = json!({ "roles": "not-an-object", "fallbacks": [] });
+        let llm = state.llm_for_policy("local", &broken_policy, LlmWorkloadRole::Default);
+        let error = llm
+            .decide("goal", 0, &[], &[])
+            .await
+            .expect_err("the unreachable test endpoint must fail");
+        assert!(
+            !error.to_string().contains("model_unconfigured"),
+            "an unparseable policy must not disable the configured tenant default: {error}"
+        );
     }
 
     #[tokio::test]

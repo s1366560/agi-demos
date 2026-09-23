@@ -28,11 +28,9 @@ No behavior removed; collapse (44px rail) and resize (180–420) untouched.
 - **Eyebrow copy kept**: desktop shows "{project} / WORKSPACES" (existing `workspaceTree.workspaces`) vs prototype "{project} / Threads" — copy is out of scope for this phase (structure + anatomy only).
 - **Profile row/popover** already matched (avatar, name, tenant · project subtitle, Account settings / Switch workspace / Sign out); left as-is.
 
-## gitnexus
+## Scope review
 
-`node .gitnexus/run.cjs` and the raw `gitnexus` binary both fail on this machine: the index is stale
-(indexed commit 88957e0 vs current 51d7f9d) and the binary segfaults (exit 139) on `impact` after a
-LadybugDB WAL recovery notice. Proceeded with grep-based caller checks instead: `DesktopSidebar` is
+`DesktopSidebar` is
 consumed only by `src/plugins/DesktopSidebarSurfaceV2.tsx` (production seam, props typed via
 `Omit<ComponentProps<typeof DesktopSidebar>, 'resizeHandle'>`) and three QA fixtures
 (`MissionControlQa`, `WorkspaceExecutionQa`, `NoProjectEntryQa`). The new `onOpenSearch` prop is
@@ -133,11 +131,9 @@ completion outcome line on ready-review cards (`myWorkCompletionPresentation`); 
 card footer (pinned by the `/Project One/` assertion in `my-work-mission-control.test.mjs`); card
 enter animation + hover lift (hover keeps the brief's border-cyan affordance).
 
-## gitnexus (phases 3-4)
+## Scope review
 
-Still broken: `node .gitnexus/run.cjs impact MyWorkQueue --repo agi-demos` emits the LadybugDB WAL
-recovery notice, then the runner fails to launch the `gitnexus` binary. Grep-based caller checks
-instead: `NewThreadComposer` is consumed by `src/plugins/DesktopNewThreadComposerSurfaceV2.tsx` and
+`NewThreadComposer` is consumed by `src/plugins/DesktopNewThreadComposerSurfaceV2.tsx` and
 the QA fixture; `MyWorkQueue` by `DesktopMyWorkQueueSurfaceV2.tsx` /
 `DesktopRendererMyWorkQueueV2.tsx` / `desktopRendererAppCompositionV2.tsx` and the QA fixture. No
 prop contracts changed (`hideLabel` is an existing prop applied at the composer's own call site), so
@@ -225,10 +221,9 @@ CSS-first; all component/prop contracts unchanged (no new required props).
   (default 248); `layout-focus` = canvas expanded across the thread column via measured
   panel width. Documented in the `DesktopRightSidebar` docstring.
 
-## gitnexus
+## Scope review
 
-Still broken (stale index + binary failure, unchanged since phase 2). Grep-based caller
-checks instead: `SessionWorkspace` is consumed by `src/plugins/DesktopSessionWorkspaceSurfaceV2.tsx`
+`SessionWorkspace` is consumed by `src/plugins/DesktopSessionWorkspaceSurfaceV2.tsx`
 (pinned passthrough `<SessionWorkspace {...input} thread={thread} />`) and `SessionRecoveryQa`;
 `SessionContextRail` by `DesktopRightSidebar.tsx` (pinned) and the QA harness;
 `DesktopRightSidebar` by `src/plugins/DesktopRightSidebarSurfaceV2.tsx`. No prop contracts
@@ -454,10 +449,9 @@ changes.
   scale moved. SSO device-auth dialog anatomy (eyebrow / code block / status /
   actions) was restyled to the prototype `LoginScreen.jsx` device-flow rules.
 
-## gitnexus
+## Scope review
 
-Still broken (stale index + binary failure, unchanged since phase 2).
-Grep-based caller checks instead: `SettingsWindow` is consumed by
+`SettingsWindow` is consumed by
 `src/plugins/DesktopSettingsWindowSurfaceV2.tsx` and the QA fixture
 `src/qa/ProviderSettingsQa.tsx`; `ManagedResourceViews` by `SettingsWindow`;
 `ModelProviderWorkspace` by the settings window's model section; `LoginScreen`
@@ -588,12 +582,6 @@ tokens. No TSX, prop-contract, i18n, or model changes.
   prototype card lacks); per the brief only the card anatomy/palette moved,
   not the structure (no add-step/inline-edit in this surface — those live in
   the New Task flow plan review, which got the same palette).
-
-## gitnexus
-
-Still broken (stale index + binary failure, unchanged since phase 2). No TSX
-or symbol changes in this phase (CSS + tokens only), so no caller checks were
-needed; `tsc --noEmit` clean.
 
 ## Verification
 

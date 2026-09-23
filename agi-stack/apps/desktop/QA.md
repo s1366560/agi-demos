@@ -899,8 +899,6 @@ Shift + M`, `Select model`, `Reasoning effort: Medium`, and
 - `make desktop-bundle-smoke`
 - Local login/workspace/conversation/WS smoke against `127.0.0.1:8000`
 - `git diff --check -- agi-stack/apps/desktop`
-- `mcp__gitnexus.detect_changes({scope: "staged"})` reports low risk with no
-  changed symbols or affected execution processes for the staged desktop files.
 - Browser plugin DOM snapshot failed in this pass with
   `incrementalAriaSnapshot is not a function`, so rendered validation fell back
   to `agent-browser` against `http://127.0.0.1:5173/`.

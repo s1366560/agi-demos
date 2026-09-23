@@ -3,7 +3,7 @@
   padding: 16px;
   color: var(--gray-12);
   background:
-    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--cyan-9) 8%, transparent), transparent 34%),
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--gray-9) 8%, transparent), transparent 34%),
     var(--color-panel-solid);
 }
 
@@ -47,9 +47,9 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  color: var(--cyan-11);
-  background: var(--cyan-a3);
-  border: 1px solid var(--cyan-a6);
+  color: var(--gray-11);
+  background: var(--gray-a3);
+  border: 1px solid var(--gray-a6);
   border-radius: 9px;
 }
 
@@ -109,7 +109,7 @@
 
 .session-agent-tree-summary .status-running svg,
 .session-agent-tree-node.status-running .session-agent-tree-node-icon {
-  color: var(--blue-10);
+  color: var(--gray-10);
 }
 
 .session-agent-tree-summary .status-completed svg,
@@ -251,15 +251,15 @@
   gap: 5px;
   align-items: center;
   padding: 5px 7px;
-  color: var(--cyan-11);
+  color: var(--gray-11);
   font-size: 10px;
-  border: 1px solid var(--cyan-a6);
+  border: 1px solid var(--gray-a6);
   border-radius: 6px;
 }
 
 .session-agent-open-session:hover,
 .session-agent-open-session:focus-visible {
-  background: var(--cyan-a3);
+  background: var(--gray-a3);
   outline: none;
 }
 
@@ -316,7 +316,7 @@
 }
 
 .session-agent-communications li > span {
-  color: var(--cyan-10);
+  color: var(--gray-10);
 }
 
 .session-agent-communications p {

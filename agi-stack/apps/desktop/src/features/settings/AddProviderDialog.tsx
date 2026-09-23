@@ -280,7 +280,6 @@ export function AddProviderDialog({
       >
         <header>
           <div>
-            <span>{t('providers.productName')}</span>
             <h2>{t('providers.addProviderStep', { step })}</h2>
           </div>
           <button

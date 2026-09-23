@@ -300,6 +300,13 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         "find",
         "ls",
         "dir",
+        # Fixed sandbox protocol inspection endpoints; these do not invoke tools.
+        "mcp_server_list",
+        "mcp_server_list_prompts",
+        "mcp_server_get_prompt",
+        "mcp_server_list_resources",
+        "mcp_server_read_resource",
+        "mcp_server_discover_tools",
     }
 
     # Write-type tools - require user confirmation

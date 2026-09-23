@@ -108,6 +108,7 @@ async def test_bound_skill_loader_runtimes_are_isolated_during_interleaved_await
             "tier": 1,
             "agent_mode": "react-a",
             "skip_database": False,
+            "status": "active",
         }
     ]
     assert service_b.list_calls == [
@@ -117,6 +118,7 @@ async def test_bound_skill_loader_runtimes_are_isolated_during_interleaved_await
             "tier": 1,
             "agent_mode": "react-b",
             "skip_database": False,
+            "status": "active",
         }
     ]
     assert sync_a.calls[0]["sandbox_id"] == "sandbox-a"

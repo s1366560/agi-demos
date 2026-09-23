@@ -34,6 +34,8 @@ from src.domain.events.agent_events import (
     AgentPlanSuggestedEvent,
     AgentPolicyFilteredEvent,
     AgentSelectionTraceEvent,
+    AgentSkillExecutionCompleteEvent,
+    AgentSkillExecutionStartEvent,
     AgentSkillMatchedEvent,
     AgentThoughtEvent,
 )
@@ -2035,6 +2037,15 @@ class StreamMixin:
                 matched_skill,
                 tool_set=turn_tool_set,
             )
+            yield cast(
+                dict[str, Any],
+                AgentSkillExecutionStartEvent(
+                    skill_id=matched_skill.id,
+                    skill_name=matched_skill.name,
+                    tools=list(matched_skill.tools),
+                    query=processed_user_message,
+                ).to_event_dict(),
+            )
 
         # Phase 7: Memory runtime prompt augmentation
         memory_context, hook_events = await self._apply_before_prompt_build_hook(
@@ -2364,6 +2375,21 @@ class StreamMixin:
         # Calculate execution time before post-process (post-process is
         # lightweight — just hook delivery — so this is accurate enough).
         execution_time_ms = int((time.time() - start_time) * 1000)
+        # Settle the forced-skill execution lifecycle so clients render the
+        # terminal state instead of freezing at the matched step.
+        if matched_skill and should_inject_prompt:
+            yield cast(
+                dict[str, Any],
+                AgentSkillExecutionCompleteEvent(
+                    skill_id=matched_skill.id,
+                    skill_name=matched_skill.name,
+                    success=bool(self._stream_success),
+                    tool_results=[],
+                    execution_time_ms=execution_time_ms,
+                    summary=None,
+                    error=None,
+                ).to_event_dict(),
+            )
         # Count tool calls from conversation context for skill evolution capture.
         tool_call_count = sum(
             1 for msg in conversation_context if msg.get("role") in ("tool", "function")

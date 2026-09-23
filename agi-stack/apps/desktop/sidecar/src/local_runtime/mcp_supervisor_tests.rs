@@ -14,6 +14,9 @@ use agistack_core::{
 use serde_json::json;
 use uuid::Uuid;
 
+#[path = "mcp_app_event_tests.rs"]
+mod app_event_tests;
+
 use super::{
     authority_store::{
         DesktopExecutionEnvironment, DesktopExecutionEnvironmentKind, DesktopPermissionProfile,

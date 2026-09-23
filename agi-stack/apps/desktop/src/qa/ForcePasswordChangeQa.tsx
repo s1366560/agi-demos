@@ -72,7 +72,7 @@ if (!container) throw new Error('Missing root element');
 globalThis.__forcePasswordChangeQaRoot ??= createRoot(container);
 globalThis.__forcePasswordChangeQaRoot.render(
   <I18nProvider>
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <ForcePasswordChangeQa />
     </Theme>
   </I18nProvider>,

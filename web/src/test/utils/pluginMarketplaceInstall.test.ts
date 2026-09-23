@@ -19,9 +19,18 @@ const signedEntry: MarketplacePackageCatalogEntry = {
   install_status: 'uninstalled',
   manifest: {
     signature: 'c2ln',
-    manifests: [{ permissions: ['tools.execute', 'network.egress'] }, { permissions: ['tools.execute'] }],
+    manifests: [
+      { permissions: ['tools.execute', 'network.egress'] },
+      { permissions: ['tools.execute'] },
+    ],
   },
-  signature: { algorithm: 'Ed25519', public_key_pem: 'pem-public', signature_base64: 'c2ln' },
+  // Catalog rows redact signature secrets; the anchors below are what the
+  // backend resolution verifies against.
+  signature: {
+    algorithm: 'Ed25519',
+    public_key_sha256: 'f'.repeat(64),
+    signature_sha256: 'e'.repeat(64),
+  },
   provenance: {
     predicateType: 'https://slsa.dev/provenance/v1',
     builderId: 'builder-v2',
@@ -46,9 +55,9 @@ describe('pluginMarketplaceInstall model', () => {
       marketplaceInstallAvailability({
         ...signedEntry,
         signature: { algorithm: 'Ed25519' },
-        provenance: { builder_id: 'builder-v2' },
       })
     ).toBe('unsigned');
+    expect(marketplaceInstallAvailability({ ...signedEntry, provenance: {} })).toBe('unsigned');
   });
 
   it('collects declared permissions from bundle manifests, deduplicated and sorted', () => {
@@ -59,8 +68,11 @@ describe('pluginMarketplaceInstall model', () => {
     expect(marketplacePackagePermissions({})).toEqual([]);
   });
 
-  it('pins the exact protocol-v2 install request shape', () => {
-    expect(buildMarketplaceInstallRequest(signedEntry, 'tenant-1')).toEqual({
+  it('pins the exact protocol-v2 install request shape without signature material', () => {
+    const request = buildMarketplaceInstallRequest(signedEntry, 'tenant-1');
+    expect(Object.keys(request ?? {})).not.toContain('signature');
+    expect(Object.keys(request ?? {})).not.toContain('provenance');
+    expect(request).toEqual({
       plugin_id: 'release/notifier',
       version: '2.4.1',
       publisher: 'MemStack Labs',
@@ -72,37 +84,19 @@ describe('pluginMarketplaceInstall model', () => {
       },
       artifact_sha256: 'a'.repeat(64),
       manifest: signedEntry.manifest,
-      signature: {
-        algorithm: 'Ed25519',
-        public_key_pem: 'pem-public',
-        signature_base64: 'c2ln',
-      },
-      provenance: {
-        predicate_type: 'https://slsa.dev/provenance/v1',
-        builder_id: 'builder-v2',
-        subject_name: 'release/notifier',
-      },
       approved_permissions: ['network.egress', 'tools.execute'],
       tenant_admin_approved: true,
       security_scan_passed: true,
     });
   });
 
-  it('maps snake_case provenance and falls back to the manifest signature', () => {
-    const request = buildMarketplaceInstallRequest(
-      {
-        ...signedEntry,
-        signature: { public_key_pem: 'pem-public' },
-        provenance: {
-          predicate_type: 'https://slsa.dev/provenance/v1',
-          builder_id: 'builder-v2',
-          subject_name: 'release/notifier',
-        },
-      },
-      'tenant-1'
-    );
-    expect(request?.signature.signature_base64).toBe('c2ln');
-    expect(request?.provenance.builder_id).toBe('builder-v2');
+  it('refuses entries without integrity anchors and blank tenants', () => {
+    expect(
+      buildMarketplaceInstallRequest(
+        { ...signedEntry, signature: { public_key_pem: 'pem-public' } },
+        'tenant-1'
+      )
+    ).toBeNull();
     expect(buildMarketplaceInstallRequest(signedEntry, '  ')).toBeNull();
   });
 });

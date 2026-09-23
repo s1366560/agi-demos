@@ -90,9 +90,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
       badge={
         message.mentions?.length
           ? t('chat.mentionCount', { count: message.mentions.length })
-          : kind === 'agent'
-            ? t('session.workspaceAgent')
-            : null
+          : null
       }
       className="workspace-message"
       timelineItemId={message.id}
@@ -134,10 +132,10 @@ export function NarrativeMessageFrame({
   children,
 }: {
   kind: 'user' | 'agent' | 'runtime';
-  label: string;
+  label?: string;
   time: string;
   content: string;
-  badge: string | null;
+  badge?: string | null;
   className: string;
   timelineItemId?: string;
   streaming?: boolean;
@@ -163,9 +161,11 @@ export function NarrativeMessageFrame({
       <div className="session-message-body">
         <header className="transcript-meta">
           <span className="session-message-identity">
-            <strong className="session-message-label" title={label}>
-              {label}
-            </strong>
+            {label ? (
+              <strong className="session-message-label" title={label}>
+                {label}
+              </strong>
+            ) : null}
             {badge ? <span className="session-message-badge">{badge}</span> : null}
             {time ? (
               <time className="session-message-time" title={time}>

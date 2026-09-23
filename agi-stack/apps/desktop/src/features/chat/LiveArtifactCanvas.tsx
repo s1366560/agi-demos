@@ -344,7 +344,7 @@ export function LiveArtifactCanvas({
               {t('artifact.localBadge')}
             </Badge>
           ) : null}
-          <Badge color="cyan" variant="soft">
+          <Badge color="gray" variant="soft">
             {language}
           </Badge>
           <button type="button" onClick={copyActiveContent} title={t('artifact.copy')}>

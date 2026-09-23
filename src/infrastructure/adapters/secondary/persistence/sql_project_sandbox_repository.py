@@ -35,10 +35,17 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
     # This repository doesn't use a standard model for CRUD
     _model_class = None
 
-    def __init__(self, session: AsyncSession) -> None:
-        """Initialize the repository."""
+    def __init__(self, session: AsyncSession, *, commit_on_write: bool = True) -> None:
+        """Let transaction-owning callers retain their locks and rollback boundary."""
         super().__init__(session)
         self._session = session
+        self._commit_on_write = commit_on_write
+
+    async def _finish_write(self) -> None:
+        if self._commit_on_write:
+            await self._session.commit()
+        else:
+            await self._session.flush()
 
     def _to_domain(self, orm: Any) -> ProjectSandbox:
         """Convert ORM model to domain entity."""
@@ -101,7 +108,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
             # Insert new
             self._session.add(orm)
 
-        await self._session.commit()
+        await self._finish_write()
         return association
 
     async def find_by_id(self, association_id: str) -> ProjectSandbox | None:
@@ -226,7 +233,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         orm = await self._session.get(ProjectSandboxORM, association_id)
         if orm:
             await self._session.delete(orm)
-            await self._session.commit()
+            await self._finish_write()
             return True
         return False
 
@@ -244,7 +251,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         orm = result.scalar_one_or_none()
         if orm:
             await self._session.delete(orm)
-            await self._session.commit()
+            await self._finish_write()
             return True
         return False
 

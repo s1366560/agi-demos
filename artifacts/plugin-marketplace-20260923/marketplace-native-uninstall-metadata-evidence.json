@@ -1,0 +1,40 @@
+{
+  "scope": "8dbcf7b05789bb9ca4e29df28de3821bc0a2389788d4877586d0870575797a03",
+  "installations": [
+    {
+      "id": "02a2a455-1743-4254-8b8b-7c68d98da342",
+      "plugin_id": "marketplace-demo",
+      "version": "1.0.0",
+      "status": "uninstalled",
+      "snapshot_exists": false,
+      "oauth_services": []
+    },
+    {
+      "id": "56127b0f-812a-4550-88a3-db33d1af46e9",
+      "plugin_id": "marketplace-oauth-fixture",
+      "version": "1.0.0",
+      "status": "uninstalled",
+      "snapshot_exists": false,
+      "oauth_services": [
+        {
+          "name": "fixture",
+          "status": "connected",
+          "has_flow": false
+        }
+      ]
+    },
+    {
+      "id": "cd24397a-1451-4dc6-95c0-9508b6ff0bc1",
+      "plugin_id": "native-update-demo",
+      "version": "2.0.0",
+      "status": "uninstalled",
+      "snapshot_exists": false,
+      "oauth_services": []
+    }
+  ],
+  "oauth_receipts_count": 3,
+  "preflights_count": 1,
+  "snapshot_directory_count": 1,
+  "hook_records": 68,
+  "last_hook_timestamp_ms": 1790139234288
+}

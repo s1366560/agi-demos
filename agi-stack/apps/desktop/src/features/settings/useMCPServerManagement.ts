@@ -398,11 +398,18 @@ export function useMCPServerManagement({
         ) {
           return;
         }
+        // Identity fields ride only on real changes: the backend re-installs
+        // the runtime whenever server_type or transport_config is present.
+        const transportChanged =
+          input.serverType !== target.server_type ||
+          Boolean(input.credential?.secret) ||
+          JSON.stringify(transportConfig) !== JSON.stringify(target.transport_config ?? null);
         await requestContext.client.updateMCPServer(target.id, {
           name: input.name,
           description: input.description ?? null,
-          server_type: input.serverType,
-          transport_config: transportConfig,
+          ...(transportChanged
+            ? { server_type: input.serverType, transport_config: transportConfig }
+            : {}),
           enabled: target.enabled,
           project_id: config.projectId,
           ...(config.mode === 'local' ? { expected_revision: mcpServerRevision(target) } : {}),

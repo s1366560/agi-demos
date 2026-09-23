@@ -15,7 +15,7 @@
 
 邀请修复：InviteAccept订阅既有operation availability，登录会话待generation就绪才校验/显示接受入口；公开verify采用既有kernel身份传输，仅/invitations/verify路径段加入no-auth清单，accept和租户邀请管理仍需认证/运行时。后端verify明确匿名端点；它会将过期邀请标为expired，但不会接受邀请或添加成员。匿名UI复测使用127.0.0.1独立来源，随后访问login确认没有既有登录会话。没有通用绕过客户端或延时重试。
 
-回归：deferred generation测试修复前失败；修复后InviteAccept3项、invitationService2项、httpClient38项共43通过；OAuthCallback和oauthLoginService另9通过。ESLint0错误（kernel现有4警告）。GitNexus页面/verify LOW；共享认证判断HIGH（115间接引用），仅扩展既有公开验证路径。
+回归：deferred generation测试修复前失败；修复后InviteAccept3项、invitationService2项、httpClient38项共43通过；OAuthCallback和oauthLoginService另9通过。ESLint0错误（kernel现有4警告）。
 
 自动化补充证据（不能替代真实外部闭环）：
 - web/src/test/pages/OAuthCallback.test.tsx：可信会话写入/服务端指定返回路径、无效state理由、缺state传输前拒绝。

@@ -221,12 +221,13 @@ test('composer execution context routes selected Web resources into the cloud Ag
     },
   ];
 
+  // Cloud default: no subagent routing field — the cloud send_message contract
+  // has none, and the subagent chip stays a context resource reference.
   assert.deepEqual(composerAgentExecutionContext('Review this change', contextItems), {
     message: '/review Review this change',
     mentions: ['agent-research'],
     agentId: 'definition-reviewer',
     forcedSkillName: 'source-research',
-    subAgentId: 'subagent-security',
     appModelContext: {
       desktop_composer_context: {
         resources: [
@@ -239,6 +240,11 @@ test('composer execution context routes selected Web resources into the cloud Ag
       },
     },
   });
+  // Local mode keeps the authoritative subagent selector.
+  assert.equal(
+    composerAgentExecutionContext('Review this change', contextItems, 'local').subAgentId,
+    'subagent-security',
+  );
 });
 
 test('new composer threads forward the selected Sub Agent through every launch transport', () => {

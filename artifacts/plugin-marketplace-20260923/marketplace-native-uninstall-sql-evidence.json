@@ -1,0 +1,33 @@
+{
+  "scope": {
+    "tenant_id": "northstar",
+    "project_id": "desktop-client"
+  },
+  "owned_resource_counts": {
+    "desktop_mcp_servers_v1": 0,
+    "desktop_mcp_apps_v1": 0,
+    "desktop_mcp_marketplace_generations_v1": 0,
+    "desktop_mcp_marketplace_snapshot_leases_v1": 0,
+    "desktop_mcp_credential_bindings_v1": 0,
+    "desktop_mcp_credential_cleanup_v2": 0
+  },
+  "skill_statuses": [
+    [
+      "plugin:02a2a455-1743-4254-8b8b-7c68d98da342:plugin-demo",
+      "deleted"
+    ],
+    [
+      "plugin:87a1f94c-eff1-4bb1-a61d-5598e756bf90:plugin-demo",
+      "deleted"
+    ]
+  ],
+  "vault_key_counts": {
+    "mcp-oauth-binding:": 0,
+    "mcp-oauth-grant:": 0,
+    "mcp:": 0,
+    "mcp-remote:": 0,
+    "mcp-remote-credential.v1": 0,
+    "mcp-stdio-credential.v1": 0
+  },
+  "vault_total_records": 2
+}

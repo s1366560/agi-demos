@@ -116,7 +116,7 @@ function SessionEvidenceQa() {
   const presentation = checksView ? 'checks' : 'sources';
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <main className="qa-evidence-page">
         <aside className="review-panel qa-evidence-panel">
           <header className="qa-evidence-head">

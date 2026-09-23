@@ -1,0 +1,182 @@
+{
+  "blockers": [],
+  "digest": "3bbdb929fd006afc3dce05a9e4bd14a4c69e6fd82b37df2a1af9a7b1632c92cc",
+  "files": [],
+  "preserved": [
+    "builtin bundles",
+    "business data",
+    "publication history",
+    "unattributed and shared files",
+    "download caches"
+  ],
+  "schema_version": 1,
+  "tables": {
+    "platform_plugin_credential_grants": [],
+    "platform_plugin_http_routes": [],
+    "platform_plugin_packages": [
+      {
+        "artifact_digest": "72c0cb07813e4b4b4cdc8077ab718f4ecb9059042fa0321ca5feeca11a65d7bc",
+        "artifact_registry": "http://127.0.0.1:64212",
+        "artifact_repository": "qa/marker",
+        "created_at": {
+          "$datetime": "2026-09-14T04:08:21.914232+00:00"
+        },
+        "install_status": "uninstalled",
+        "manifest": {
+          "artifacts": [
+            {
+              "artifact_id": "marker-wasm",
+              "digest": "sha256:efc79f6a71ebe6d1a648a9fa448df29e4abf8a61b0d00dfa834ab19a85b78ddc",
+              "media_type": "application/wasm",
+              "path": "artifacts/marker.wasm",
+              "size_bytes": 42,
+              "target": "python"
+            }
+          ],
+          "bundle_id": "qa-marketplace-marker-bundle",
+          "digest": "sha256:5690047548f07476e64db9b812514d7732d90fd4898f014634c1affef3637e18",
+          "layers": [
+            {
+              "disabled_entry_ids": [],
+              "entries": [
+                {
+                  "config": {
+                    "tool_name": "qa_marketplace_marker"
+                  },
+                  "enabled": true,
+                  "entry_id": "qa-marketplace-marker",
+                  "inject": {
+                    "catalog": "service:tool-set-catalog"
+                  },
+                  "isolate": {},
+                  "module_ref": "wasm://qa-marketplace-marker/score-v1",
+                  "parent_entry_id": null,
+                  "permissions": [
+                    "tools.execute"
+                  ],
+                  "plugin_ref": "qa-marketplace-marker",
+                  "quotas": {
+                    "max_wasm_fuel": 10000,
+                    "max_wasm_memory_bytes": 65536
+                  },
+                  "restart_policy": "hot-generation",
+                  "scope": {
+                    "kind": "root"
+                  }
+                }
+              ],
+              "kind": "bundle",
+              "layer_id": "qa-marketplace-marker",
+              "replacements": [],
+              "scope": {
+                "kind": "root"
+              }
+            }
+          ],
+          "manifests": [
+            {
+              "modules": [
+                {
+                  "artifact": {
+                    "digest": "sha256:efc79f6a71ebe6d1a648a9fa448df29e4abf8a61b0d00dfa834ab19a85b78ddc",
+                    "provenance": null,
+                    "signature": null,
+                    "source": "bundle://qa-marketplace-marker/artifacts/marker.wasm"
+                  },
+                  "contract": {
+                    "config_schema": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "tool_name": {
+                          "const": "qa_marketplace_marker"
+                        }
+                      },
+                      "required": [
+                        "tool_name"
+                      ],
+                      "type": "object"
+                    },
+                    "events": {
+                      "emits": [],
+                      "handles": []
+                    },
+                    "services": {
+                      "provides": [],
+                      "requires": [
+                        {
+                          "alias": "catalog",
+                          "contributes": true,
+                          "service": "service:tool-set-catalog",
+                          "version": "1.0.0"
+                        }
+                      ]
+                    }
+                  },
+                  "contract_digest": "sha256:395ce743a765ceed3aa05cbdfb5b0c93c2ee6f400e2569e335de25f49c560574",
+                  "entrypoint": "score",
+                  "module_ref": "wasm://qa-marketplace-marker/score-v1",
+                  "targets": [
+                    "python"
+                  ]
+                }
+              ],
+              "permissions": [
+                "tools.execute"
+              ],
+              "plugin_id": "qa-marketplace-marker",
+              "quotas": {
+                "max_wasm_fuel": 10000,
+                "max_wasm_memory_bytes": 65536
+              },
+              "runtime": "wasm",
+              "schema_version": 2,
+              "trust": "signed",
+              "version": "1.0.0"
+            }
+          ],
+          "provenance": "repo://qa/marketplace-wasm-fixture",
+          "schema_version": 2,
+          "signature": "ZV6rnQccYlyTiyeRFxls6q+k3eO/XicC7CQGzUlfCLILCZ2iYpdD2iJ2RIgbxSIuS3zf5O45tNgq0KR/wspLBA==",
+          "version": "1.0.0"
+        },
+        "oci_manifest_digest": "60d883da00b927a2ddd42b27b7949f43074a55b7a4c82e8749287e2e2fa01717",
+        "plugin_id": "qa-marketplace-marker-bundle",
+        "provenance": {
+          "builderId": "local-native-desktop-qa/build_and_verify.py",
+          "predicateType": "urn:memstack:qa:source-byte-review:v1",
+          "reference": "repo://qa/marketplace-wasm-fixture",
+          "subjectName": "qa-marketplace-marker-bundle"
+        },
+        "publisher": "local-native-desktop-qa",
+        "revocation_reason": "Desktop QA lifecycle acceptance completed",
+        "revoked": true,
+        "security_scan_status": "passed",
+        "signature": {
+          "algorithm": "Ed25519",
+          "public_key_sha256": "21efc75fc4f330b278c5a5a5e2d6e3be9a5310bf99c98be259a3e8e9ceadd25f",
+          "signature_sha256": "aa64eeb604f857a46f7a63987f17dca19039130f4506ce8396ad93bfc5a1b25b"
+        },
+        "version": "1.0.0"
+      }
+    ],
+    "platform_plugin_permissions": [
+      {
+        "granted_at": {
+          "$datetime": "2026-09-14T04:08:21.914232+00:00"
+        },
+        "granted_by": "a5a3f688-85ee-467d-b936-fa38607a65ea",
+        "id": "7f560177-8092-47f1-9882-3b35410a641f",
+        "permission": "tools.execute",
+        "plugin_id": "qa-marketplace-marker-bundle",
+        "revoked_at": {
+          "$datetime": "2026-09-14T08:48:29.929725+00:00"
+        },
+        "scope_id": "02f6fccc-0ac9-4729-bac7-38e77d1c61ef",
+        "scope_type": "tenant"
+      }
+    ],
+    "platform_plugin_quota_usage": []
+  },
+  "target": "69a137cc2939886da7835130cc3a0700520599b0deea30a8975743fdb39a85f2"
+}

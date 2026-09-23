@@ -59,7 +59,7 @@ function WorkspaceCreateQa() {
   };
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <main className="workspace-create-qa-shell">
         <header>
           <div>

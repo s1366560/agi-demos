@@ -28,6 +28,11 @@ vi.mock('antd', async () => {
   };
 });
 
+// V3 lifecycle and public browsing have dedicated component tests.
+vi.mock('@/components/marketplace/v3/PluginMarketplaceV3', () => ({
+  PluginMarketplaceV3: () => null,
+}));
+
 vi.mock('@/stores/project');
 vi.mock('@/stores/tenant');
 vi.mock('@/stores/auth', () => ({
@@ -76,10 +81,13 @@ const signedMarketplacePackage = {
   manifest: {
     schema_version: 2,
     targets: ['python'],
-    signature: 'c2ln',
     manifests: [{ permissions: ['tools.execute'] }],
   },
-  signature: { algorithm: 'Ed25519', public_key_pem: 'pem-public', signature_base64: 'c2ln' },
+  signature: {
+    algorithm: 'Ed25519',
+    public_key_sha256: 'c'.repeat(64),
+    signature_sha256: 'd'.repeat(64),
+  },
   provenance: {
     predicateType: 'https://slsa.dev/provenance/v1',
     builderId: 'builder-v2',
@@ -223,6 +231,12 @@ describe('PluginHub', () => {
     fireEvent.click(installButton);
 
     const checkbox = await screen.findByRole('checkbox');
+    const unapprovedConfirm = (
+      await screen.findAllByRole('button', { name: 'tenant.pluginHub.pluginsList.install' })
+    ).find((button) => button.closest('.ant-modal-container'));
+    expect(unapprovedConfirm).toBeDisabled();
+    expect(pluginMarketplaceService.installPackage).not.toHaveBeenCalled();
+    expect(unapprovedConfirm?.closest('.ant-modal-container')).toHaveTextContent('tools.execute');
     fireEvent.click(checkbox);
     const confirm = (
       await screen.findAllByRole('button', { name: 'tenant.pluginHub.pluginsList.install' })
@@ -244,22 +258,15 @@ describe('PluginHub', () => {
             manifest_sha256: 'b'.repeat(64),
           },
           artifact_sha256: 'a'.repeat(64),
-          signature: {
-            algorithm: 'Ed25519',
-            public_key_pem: 'pem-public',
-            signature_base64: 'c2ln',
-          },
-          provenance: {
-            predicate_type: 'https://slsa.dev/provenance/v1',
-            builder_id: 'builder-v2',
-            subject_name: 'signed-plugin',
-          },
           approved_permissions: ['tools.execute'],
           tenant_admin_approved: true,
           security_scan_passed: true,
         })
       );
     });
+    const submitted = vi.mocked(pluginMarketplaceService.installPackage).mock.calls[0]?.[1];
+    expect(submitted).not.toHaveProperty('signature');
+    expect(submitted).not.toHaveProperty('provenance');
     await waitFor(() => {
       expect(messageMock.success).toHaveBeenCalled();
     });

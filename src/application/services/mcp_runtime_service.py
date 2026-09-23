@@ -13,7 +13,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from src.application.services.mcp_app_service import MCPAppService
 from src.domain.exceptions.mcp import MCPLockBusyError
@@ -191,7 +191,7 @@ class MCPRuntimeService:
         config_changed = server_type is not None or transport_config is not None
         runtime_reconfigured = name_changed or config_changed
 
-        if old_enabled != new_enabled:
+        if old_enabled != new_enabled or enabled is False:
             if new_enabled:
                 try:
                     await self._install_start_and_sync(updated, tenant_id, reason="enable")
@@ -706,7 +706,9 @@ class MCPRuntimeService:
         if config.headers:
             result["headers"] = config.headers
 
-        return result
+        from src.infrastructure.plugins.marketplace_credentials import open_transport
+
+        return cast(dict[str, Any], open_transport(result))
 
     async def _install_start_and_sync(
         self,

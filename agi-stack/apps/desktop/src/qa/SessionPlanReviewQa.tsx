@@ -74,7 +74,7 @@ function SessionPlanReviewQa() {
   };
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <main
         style={{
           boxSizing: 'border-box',

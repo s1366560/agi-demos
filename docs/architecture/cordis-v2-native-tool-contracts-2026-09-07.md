@@ -51,9 +51,7 @@ Desktop sidecar. It does not modify `third_party/avernet-bcs` or its cached buil
 Small modules hold the new definition and moved LLM/plan implementations; the
 existing large local runtime module shrinks.
 
-GitNexus returned LOW for disambiguated trait symbols and UNKNOWN for unindexed
-native symbols. Manual inspection found 43 related implementations, so the graph's
-zero direct callers was not treated as zero impact. The regression covers the
+Manual inspection found 43 related implementations. The regression covers the
 actual native wrapper chain. Task-file rustfmt and diff checks passed. Strict
 clippy did not pass: its 11 sidecar binary and 12 test diagnostics point to
 pre-existing statements, including managed-store, MSRV and terminal code. They

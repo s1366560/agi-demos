@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -6,7 +6,10 @@ import {
 
 import { useI18n } from '../../i18n';
 import type { AgentTimelineItem } from '../../types';
-import { formatTimelineTime } from './chatTimelinePresentation';
+import {
+  formatToolCallDuration,
+  thoughtTimelineDurationMs,
+} from './chatTimelineModel';
 
 /* Web conversation parity 2026-12 (ThinkingBlock): the thought card uses the
    web's Brain glyph. @radix-ui/react-icons ships no brain/lightbulb icon, so
@@ -50,7 +53,17 @@ export function ThoughtTimelineCard({
   const contentId = useId();
   const labelId = useId();
   const streaming = Boolean(item.metadata?.streaming);
-  const time = formatTimelineTime(item);
+  /* Web conversation parity 2026-12 (ThinkingBlock): the header carries a
+     duration badge (now − start while streaming, end − start once complete),
+     ticking once per second during streaming — never a wall-clock time. */
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!streaming) return undefined;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [streaming]);
+  const durationMs = thoughtTimelineDurationMs(item, nowMs);
+  const duration = durationMs !== null ? formatToolCallDuration(durationMs) : '';
   const content = item.content ?? '';
 
   return (
@@ -91,7 +104,9 @@ export function ThoughtTimelineCard({
           {!expanded && content ? (
             <span className="thought-timeline-preview">{content}</span>
           ) : null}
-          {time ? <time className="thought-timeline-time">{time}</time> : null}
+          {duration ? (
+            <span className="thought-timeline-duration">{duration}</span>
+          ) : null}
         </button>
         <div
           id={contentId}

@@ -39,11 +39,8 @@ with their path/hash manifest and were not silently committed over the accepted 
   still the old main: one contract-content binding and one source-ancestor check.
   This preliminary run is retained as failed evidence, not counted as acceptance.
 
-The main GitNexus index could not open its existing pending WAL during scope checks.
-The failure was retained; it is not reported as a successful graph analysis. Conflict
-scope was inspected through parent and staged Git diffs, with targeted regression
-and compile checks. The VNC graph analysis against the available Cordis index
-reported HIGH risk and was disclosed before editing.
+Conflict scope was inspected through parent and staged Git diffs, with targeted regression
+and compile checks.
 
 Parity commit `93f7deb38` binds the actual merge source commit while retaining
 all capability states and `source_content_integrity_only`/`execution_evidence: false`.

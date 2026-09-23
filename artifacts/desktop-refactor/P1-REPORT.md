@@ -137,9 +137,3 @@ Pre-existing dirty files from the earlier web-parity task (`ChatPanel.css`, `Cha
   carries these colors, but font-size/weight/spacing rules live in feature CSS, later phases.
 - No hard-coded-hex clashes exist in feature CSS (budget 0 held), so no file needed emergency
   tokenization in this phase.
-
-## gitnexus
-
-CSS-value-only change set — symbol impact analysis is N/A (no JS/TS symbols edited; `theme.tsx` and
-`theme-init.js` received hex-literal value swaps only). `detect-changes` equivalent for CSS is the
-design-tokens/theme contract suite, which is green. No commit made.

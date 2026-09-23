@@ -22,6 +22,7 @@ import {
   shouldSkipLiveTimelineEvent,
 } from './chatTimelineModel';
 import { readConversationTitleStreamEvent } from './conversationTitleEventModel';
+import { isModelUnconfiguredError } from './localLlmReadinessModel';
 import { applyHitlResponseStreamEvent } from './hitlResponseEventModel';
 import type {
   AgentInputFileMetadata,
@@ -303,6 +304,10 @@ export function timelineItemFromSocketEvent(
     item.content = socketErrorDetail(payload) ?? 'Agent run failed.';
     item.error = item.content;
     item.isError = true;
+    // The sidecar's stable "no usable LLM routing target" token: carry a
+    // flag so views present the localized, actionable explanation while the
+    // raw payload stays available as evidence.
+    if (isModelUnconfiguredError(item.content)) item.localLlmUnconfigured = true;
   }
 
   const display = objectField(data, 'display');

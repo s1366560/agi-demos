@@ -91,7 +91,12 @@ impl LocalRuntimeState {
                 },
                 run.id.clone(),
                 Some(&profile.allowed_mcp_servers),
-            )?;
+            )?
+            .with_app_events(
+                Arc::clone(self),
+                conversation.id.clone(),
+                run.message_id.clone(),
+            );
             let mut child_dynamic_metadata = mcp_host.authority_metadata_by_name();
             let child_mcp_metadata = child_dynamic_metadata.clone();
             let mut child_plugin_host = None;

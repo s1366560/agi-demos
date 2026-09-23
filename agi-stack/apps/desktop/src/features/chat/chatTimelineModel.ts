@@ -1449,6 +1449,53 @@ export function formatToolCallDuration(durationMs: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
+/* Web conversation parity 2026-12 (ThinkingBlock): the thought card carries a
+   duration badge instead of a wall-clock time — while the thought streams the
+   badge reads `now − start`; once the final chunk lands it reads
+   `completion − start` (mergeThoughtStreamChunk records the completion
+   timestamp on the item). Returns null when no timing data exists (persisted
+   history without a completion marker), in which case the badge is omitted
+   entirely rather than falling back to a wall-clock. */
+export function thoughtTimelineDurationMs(
+  item: AgentTimelineItem,
+  nowMs: number,
+): number | null {
+  if (item.type !== 'thought') return null;
+  const startUs = item.eventTimeUs;
+  if (typeof startUs !== 'number' || !Number.isFinite(startUs) || startUs <= 0) {
+    return null;
+  }
+  const metadata = isRecord(item.metadata) ? item.metadata : null;
+  if (metadata?.streaming === true) {
+    if (!Number.isFinite(nowMs)) return null;
+    const elapsedMs = nowMs - startUs / 1000;
+    return elapsedMs > 0 ? elapsedMs : null;
+  }
+  const completionUs = optionalFiniteNumber(
+    metadata?.thoughtCompletionEventTimeUs,
+  );
+  if (completionUs === null) return null;
+  const deltaMs = (completionUs - startUs) / 1000;
+  return deltaMs > 0 ? deltaMs : null;
+}
+
+/* Web conversation parity 2026-12 (execution rows show duration only): the
+   generic lifecycle/runtime row meta renders a duration when the event
+   reports one (duration_ms / durationMs on the item or its payload) and
+   nothing otherwise — never a wall-clock time. */
+export function timelineRowDurationMs(item: AgentTimelineItem): number | null {
+  const direct =
+    optionalFiniteNumber(item.duration_ms) ??
+    optionalFiniteNumber(item.durationMs);
+  if (direct !== null) return direct;
+  const payload = isRecord(item.payload) ? item.payload : null;
+  if (!payload) return null;
+  return (
+    optionalFiniteNumber(payload.duration_ms) ??
+    optionalFiniteNumber(payload.durationMs)
+  );
+}
+
 export function toolCallPresentationKind(pair: ToolCallPair): ToolCallPresentationKind {
   for (const item of [pair.result, pair.call]) {
     const kind = item && isRecord(item.display) ? item.display.kind : null;

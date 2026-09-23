@@ -101,8 +101,9 @@ class TestParallelMCPToolDiscovery:
                 servers=servers,
             )
 
-        # Should have results from server1 and server3 (server2 failed)
-        assert len(results) == 2, f"Expected 2 results, got {len(results)}"
+        # Preserve the failed server's position so later tools retain their owner.
+        assert len(results) == 3
+        assert results[1] == []
 
         # Verify the results are from non-failed servers
         all_tool_names = []
@@ -174,9 +175,9 @@ class TestDiscoverSingleServerTools:
     """Test discovering tools from a single server."""
 
     @pytest.mark.asyncio
-    async def test_discover_single_server_tools_success(self):
+    async def test_discover_single_server_tools_success(self, monkeypatch):
         """Test successful tool discovery from a single server."""
-        import json
+        from unittest.mock import AsyncMock
 
         from src.infrastructure.agent.state.agent_worker_state import (
             _discover_single_server_tools,
@@ -184,16 +185,11 @@ class TestDiscoverSingleServerTools:
 
         mock_adapter = MagicMock()
 
-        # Use JSON format that _parse_discovered_tools expects
         tools_data = [{"name": "test_tool", "description": "Test tool"}]
-
-        async def mock_call_tool(*args, **kwargs):
-            return {
-                "content": [{"type": "text", "text": json.dumps(tools_data)}],
-                "is_error": False,
-            }
-
-        mock_adapter.call_tool = mock_call_tool
+        managed = AsyncMock(return_value=tools_data)
+        monkeypatch.setattr(
+            "src.application.services.marketplace_agent_mcp.agent_mcp_discover", managed
+        )
 
         tools = await _discover_single_server_tools(
             sandbox_adapter=mock_adapter,
@@ -204,6 +200,8 @@ class TestDiscoverSingleServerTools:
         # Should return list of tool info dicts
         assert isinstance(tools, list)
         assert len(tools) >= 1
+        managed.assert_awaited_once_with("test-sandbox", "test_server")
+        mock_adapter.call_tool.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_discover_single_server_tools_handles_exception(self):

@@ -1,0 +1,1 @@
+{"mcpServers":{"demo":{"command":"python3","args":["${PLUGIN_ROOT}/scripts/demo_mcp.py"]}}}

@@ -16,7 +16,7 @@ An unbound pending request remains root_receipt_pending. A changed desired set, 
 - Initial new run: 3 passed, one error-code assertion failed because an unbound competing request was validated before comparing the captured state. The read ordering was corrected and the full new run passed. Background fixture logs about unavailable default PostgreSQL were not the assertion failure.
 - Ruff, generated protocol/contract completeness and focused Pyright pass; Pyright reports zero errors/warnings.
 - Evidence logs and SHA256 manifest: `/var/tmp/cordis-root-requested-1b45hy6k`.
-- GitNexus did not index the recent startup helper symbols. Direct review covered the single persistent startup caller, pre/post state checks and unchanged final receipt/install transaction.
+- Direct review covered the single persistent startup caller, pre/post state checks and unchanged final receipt/install transaction.
 
 ## Remaining work
 

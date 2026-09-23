@@ -16,14 +16,14 @@ Features:
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import Lock
 from typing import Any, cast
 
-from src.domain.model.agent.skill import Skill
+from src.domain.model.agent.skill import Skill, SkillStatus
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
@@ -100,6 +100,7 @@ class _SkillLoaderDeps:
     sandbox_id: str = ""
     skip_database: bool = True
     skill_availability: SkillAvailabilityV2 | None = None
+    marketplace_skill_resolver: Callable[[str], Awaitable[Skill | None]] | None = None
 
 
 _skill_loader_runtime: ContextVar[_SkillLoaderDeps | None] = ContextVar(
@@ -127,6 +128,7 @@ async def _load_available_skills(
         tier=1,
         agent_mode=deps.agent_mode,
         skip_database=deps.skip_database,
+        status=SkillStatus.ACTIVE,
     )
     return cast(list[Skill], skills)
 
@@ -240,18 +242,27 @@ async def skill_loader_tool(  # noqa: C901
         )
 
     try:
+        owned_skill = (
+            await deps.marketplace_skill_resolver(skill_name)
+            if deps.marketplace_skill_resolver is not None
+            else None
+        )
         # Load Tier 1 metadata to find cached skill info
-        skills_cache = await _load_available_skills(deps)
-        cached_skill: Skill | None = next(
+        skills_cache = [owned_skill] if owned_skill else await _load_available_skills(deps)
+        cached_skill: Skill | None = owned_skill or next(
             (s for s in skills_cache if s.name == skill_name),
             None,
         )
 
         # Load full content (Tier 3)
-        content: str | None = await deps.skill_service.load_skill_content(
-            tenant_id=deps.tenant_id,
-            skill_name=skill_name,
-            project_id=deps.project_id,
+        content: str | None = (
+            owned_skill.full_content
+            if owned_skill
+            else await deps.skill_service.load_skill_content(
+                tenant_id=deps.tenant_id,
+                skill_name=skill_name,
+                project_id=deps.project_id,
+            )
         )
         resolved_file_path = cached_skill.file_path if cached_skill else None
 
@@ -364,9 +375,11 @@ def make_skill_loader_tool(
     sandbox_id: str = "",
     skip_database: bool = True,
     available_skill_names: Sequence[str] = (),
+    marketplace_skill_resolver: Callable[[str], Awaitable[Skill | None]] | None = None,
 ) -> ToolInfo:
     """Return a SkillLoader ToolInfo bound to one generation dependency set."""
     runtime = _SkillLoaderDeps(
+        marketplace_skill_resolver=marketplace_skill_resolver,
         skill_service=skill_service,
         tenant_id=tenant_id,
         project_id=project_id,

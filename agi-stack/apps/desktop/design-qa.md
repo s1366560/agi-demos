@@ -222,9 +222,6 @@ events remain immutable; new local runtime events carry the richer presentation 
   remains.
 - Rust timeline presentation tests: 4 passed.
 - Rust demo seed compatibility tests: 3 passed.
-- GitNexus impact: `AgentTimeline` CRITICAL due to direct ChatPanel and QA consumers;
-  `NarrativeMessageFrame`, `ToolCallPairView`, and `TimelineItemView` HIGH; the final
-  `buildSessionNarrative` grouping adjustment LOW with one direct Chat consumer.
 
 final result: passed
 
@@ -316,8 +313,6 @@ primary menu, chip, keyboard, responsive, and session interactions were repeated
 - Rust formatting and Clippy with warnings denied: passed.
 - Native Tauri launch: passed through `make -C agi-stack run-desktop`; the Vite/Tauri process
   remained live through browser QA.
-- GitNexus change detection reports the expected high-risk App/runtime orchestration surface; no
-  `LocalConversation` change was introduced.
 
 final result: passed
 

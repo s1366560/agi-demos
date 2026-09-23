@@ -329,7 +329,6 @@ function ResourceCatalogItem({
   onSelect: () => void;
 }) {
   const { t } = useI18n();
-  const meta = sectionMeta[section];
   const view = managedResourceView(section, item);
   return (
     <button
@@ -338,9 +337,6 @@ function ResourceCatalogItem({
       aria-pressed={selected}
       onClick={onSelect}
     >
-      <span className="managed-resource-item-icon">
-        <meta.Icon />
-      </span>
       <span className="managed-resource-item-copy">
         <b>{view.title}</b>
         <small>{view.description || t('settings.noDescription')}</small>
@@ -424,11 +420,7 @@ function ResourceDetail({
     <>
       <header className="managed-resource-detail-topbar">
         <div className="managed-resource-breadcrumb">
-          <span>{t('settings.title')}</span>
-          <span>/</span>
           <span>{t(meta.label)}</span>
-          <span>/</span>
-          <b>{view.title}</b>
         </div>
         <div>
           {notice ? (
@@ -528,10 +520,6 @@ function ResourceDetail({
       <div className="managed-resource-detail-scroll">
         <section className="managed-resource-identity">
           <div className="managed-resource-identity-copy">
-            <span>
-              {t(meta.singular).toUpperCase()} ·{' '}
-              {factValue(facts, 'scope')?.toUpperCase() || t('settings.currentScope').toUpperCase()}
-            </span>
             <h1>{view.title}</h1>
             <p>{view.description || t('settings.noDescription')}</p>
             <div>
@@ -584,8 +572,8 @@ function ResourceDetail({
               <section className="managed-resource-card" key={group.key}>
                 <header>
                   <div>
-                    <span>{t(`settings.group.${group.key}`).toUpperCase()}</span>
-                    <h2>{t(`settings.group.${group.key}Description`)}</h2>
+                    <h2>{t(`settings.group.${group.key}`)}</h2>
+                    <p>{t(`settings.group.${group.key}Description`)}</p>
                   </div>
                 </header>
                 <div className="managed-resource-chips">

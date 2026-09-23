@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { Badge } from '@radix-ui/themes';
-import { LockClosedIcon } from '@radix-ui/react-icons';
+import { Button } from '@radix-ui/themes';
 
 import { useI18n } from '../../i18n';
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
-import { SettingsPage } from './SettingsCorePages';
 
 export function AccountSessionSecurityPage({
   auth,
@@ -17,72 +15,74 @@ export function AccountSessionSecurityPage({
 }>) {
   const { locale, t } = useI18n();
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const session = auth.session;
-
+  const isLocal = config.mode === 'local';
   const signOut = async () => {
     setSigningOut(true);
+    setSignOutFailed(false);
     try {
       await onSignOut();
+    } catch {
+      setSignOutFailed(true);
     } finally {
       setSigningOut(false);
     }
   };
 
   return (
-    <SettingsPage
-      eyebrow={t('settings.security')}
-      title={t('settings.sessionSecurity')}
-      description={t('settings.securityDescription')}
-      className="settings-account-page"
-    >
-      <section className="settings-panel settings-security-panel">
-        <header>
-          <LockClosedIcon />
-          <span>
-            <strong>{t('settings.sessionSecurity')}</strong>
-            <small>{t('settings.securityDescription')}</small>
-          </span>
-          <Badge color={auth.status === 'signed_in' ? 'green' : 'gray'} variant="soft">
-            {t(`settings.authStatus.${auth.status}`)}
-          </Badge>
-        </header>
-        <dl className="settings-rows">
-          <div>
-            <dt>{t('settings.authMethod')}</dt>
-            <dd>{session?.auth_method ?? t('settings.notAvailable')}</dd>
-          </div>
-          <div>
-            <dt>{t('settings.sessionSecurity')}</dt>
-            <dd>
-              {session
-                ? t(session.trusted_device ? 'settings.trustedDevice' : 'settings.temporarySession')
-                : t('settings.notAvailable')}
-            </dd>
-          </div>
-          <div>
-            <dt>{t('settings.sessionExpires')}</dt>
-            <dd>
-              {session?.expires_at
-                ? new Date(session.expires_at).toLocaleString(locale)
-                : t('settings.notAvailable')}
-            </dd>
-          </div>
-          <div>
-            <dt>{t('runtime.connectionMode')}</dt>
-            <dd>{config.mode}</dd>
-          </div>
-        </dl>
-      </section>
-      {auth.status === 'signed_in' ? (
-        <button
-          className="settings-signout"
-          type="button"
-          disabled={signingOut}
-          onClick={() => void signOut()}
-        >
-          {signingOut ? t('settings.signingOut') : t('settings.signOutOfMemStack')}
-        </button>
+    <section className="settings-account-security" aria-label={t('settings.sessionSecurity')}>
+      <h2>{t('settings.sessionSecurity')}</h2>
+      <dl className="settings-security-facts">
+        <div>
+          <dt>{t('runtime.connectionMode')}</dt>
+          <dd>{t(`runtime.mode.${config.mode}`)}</dd>
+        </div>
+        <div>
+          <dt>{t('settings.authMethod')}</dt>
+          <dd>
+            {session ? t(authMethodMessageKey(session.auth_method)) : t('settings.notAvailable')}
+          </dd>
+        </div>
+        {!isLocal && session ? (
+          <>
+            <div>
+              <dt>{t('settings.sessionSecurity')}</dt>
+              <dd>
+                {t(session.trusted_device ? 'settings.trustedDevice' : 'settings.temporarySession')}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('settings.sessionExpires')}</dt>
+              <dd>
+                {session.expires_at
+                  ? new Date(session.expires_at).toLocaleString(locale)
+                  : t('settings.notAvailable')}
+              </dd>
+            </div>
+          </>
+        ) : null}
+      </dl>
+      {signOutFailed ? (
+        <p className="settings-inline-error" role="alert">
+          {t('desktopProductionRouter.reason.authorityUnavailable')}
+        </p>
       ) : null}
-    </SettingsPage>
+      {auth.status === 'signed_in' ? (
+        <Button variant="soft" color="gray" loading={signingOut} onClick={() => void signOut()}>
+          {signingOut ? t('settings.signingOut') : t('settings.signOutOfMemStack')}
+        </Button>
+      ) : null}
+    </section>
   );
+}
+
+function authMethodMessageKey(method: string): string {
+  const keys: Record<string, string> = {
+    password: 'settings.authMethod.password',
+    workspace_sso: 'settings.authMethod.workspaceSso',
+    api_key: 'settings.authMethod.apiKey',
+    local: 'settings.authMethod.local',
+  };
+  return keys[method] ?? 'settings.notAvailable';
 }

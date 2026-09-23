@@ -20,6 +20,9 @@ const {
 const { markdownLinkPresentation } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/markdownLinkModel.js',
 );
+const { isTimelineItemInitiallyExpanded } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelinePresentation.js',
+);
 
 const readSource = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
@@ -97,12 +100,15 @@ test('session messages use the mission-control narrative hierarchy', () => {
     chatStyles,
     /\.session-thread-message\.user \.session-message-surface \{[\s\S]*background: var\(--desktop-bubble-user-bg\)/,
   );
-  assert.match(chatStyles, /\.session-thread-message\.agent \{[\s\S]*background: transparent/);
+  assert.match(
+    chatStyles,
+    /\.session-thread-message\.agent,[\s\S]*?\.workspace-message\.agent \{[\s\S]*?background: transparent/,
+  );
   assert.match(chatStyles, /\.session-message-actions \{[\s\S]*opacity: 0/);
   assert.doesNotMatch(chatStyles, /\.session-thread-message\.agent \.transcript-meta \{[\s\S]*opacity: 0/);
   assert.match(
     chatStyles,
-    /\.session-chat-narrative \.message\.session-thread-message\.user \{[\s\S]*width: fit-content;[\s\S]*margin-left: auto;/,
+    /\.session-chat-narrative \.message\.session-thread-message\.user,[\s\S]*?\.workspace-message\.user \{[\s\S]*?width: fit-content;[\s\S]*?margin-left: auto;/,
   );
 });
 
@@ -508,6 +514,60 @@ test('doom-loop detection is immediately visible without expanding routine activ
   );
 });
 
+test('failed timeline rows auto-expand like the web execution steps', () => {
+  // Web conversation parity (ExecutionTimeline defaultExpanded on error):
+  // failed tool calls and failed lifecycle rows start expanded; routine rows
+  // stay collapsed.
+  assert.equal(
+    isTimelineItemInitiallyExpanded({
+      id: 'act-1',
+      type: 'act',
+      toolName: 'run_tests',
+      isError: true,
+      eventTimeUs: 1_000_000,
+    }),
+    true,
+  );
+  assert.equal(
+    isTimelineItemInitiallyExpanded({
+      id: 'observe-1',
+      type: 'observe',
+      toolName: 'run_tests',
+      error: 'exit code 1',
+      eventTimeUs: 2_000_000,
+    }),
+    true,
+  );
+  assert.equal(
+    isTimelineItemInitiallyExpanded({
+      id: 'runtime-1',
+      type: 'context_status',
+      eventTimeUs: 3_000_000,
+    }),
+    false,
+  );
+  assert.equal(
+    isTimelineItemInitiallyExpanded({
+      id: 'act-2',
+      type: 'act',
+      toolName: 'run_tests',
+      eventTimeUs: 4_000_000,
+    }),
+    false,
+  );
+  // The expansion policy (not the visibility policy) owns the error rule.
+  const importancePolicy = chatSource.match(
+    /function isImportantTimelineItem\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
+  )?.[0];
+  const expansionPolicy = chatSource.match(
+    /function isTimelineItemInitiallyExpanded\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
+  )?.[0];
+  assert.ok(importancePolicy, 'timeline importance policy must remain explicit');
+  assert.ok(expansionPolicy, 'timeline expansion policy must remain explicit');
+  assert.match(importancePolicy, /item\.isError|item\.error/);
+  assert.match(expansionPolicy, /item\.isError \|\| item\.error/);
+});
+
 test('conversation terminal events stay visible while their raw payloads stay collapsed', () => {
   const importancePolicy = chatSource.match(
     /function isImportantTimelineItem\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
@@ -791,17 +851,22 @@ test('tool groups default to summaries while failures expand', () => {
   assert.doesNotMatch(thoughtTimelineCardSource, /MarkdownContent/);
   assert.doesNotMatch(thoughtTimelineCardSource, /StarIcon|thought-timeline-live/);
   assert.match(thoughtTimelineCardSource, /viewBox="0 0 24 24"[\s\S]*stroke="currentColor"/);
+  // Web parity 2026-12 (ThinkingBlock): the header carries a ticking duration
+  // badge (now − start while streaming, end − start once complete) instead of
+  // a wall-clock time; the icon chip stays static neutral while streaming.
   assert.match(
     thoughtTimelineCardSource,
-    /const time = formatTimelineTime\(item\)[\s\S]*className="thought-timeline-time"/,
+    /const durationMs = thoughtTimelineDurationMs\(item, nowMs\)[\s\S]*className="thought-timeline-duration"/,
   );
+  assert.doesNotMatch(thoughtTimelineCardSource, /formatTimelineTime|thought-timeline-time/);
   assert.match(
     thoughtTimelineCardSource,
     /streaming[\s\S]*className="thought-timeline-streaming-dots"[\s\S]*aria-hidden="true"/,
   );
   assert.doesNotMatch(thoughtTimelineCardSource, /steps|currentStep|progressbar/);
   assert.match(chatStyles, /\.thought-timeline-card \{/);
-  assert.match(chatStyles, /\.thought-timeline-card\.is-streaming/);
+  assert.match(chatStyles, /\.thought-timeline-duration \{/);
+  assert.doesNotMatch(chatStyles, /thought-timeline-icon-pulse|\.thought-timeline-icon\.is-streaming/);
   assert.match(
     chatStyles,
     /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.thought-timeline-streaming-dots/,
@@ -862,9 +927,29 @@ test('session narrative column stays readable and timeline rows indent under the
     chatStyles,
     /\.session-chat-narrative \.agent-timeline > \.message\.timeline-row,[\s\S]*?margin-left: 44px/,
   );
+  // The avatar offset covers every assistant-scoped block: MCP app cards and
+  // collapsed-turn placeholders indent like the tool groups and thought cards.
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.agent-timeline > \.mcp-app-timeline-card,[\s\S]*?margin-left: 44px/,
+  );
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.agent-timeline > \.timeline-turn-placeholder-shell,[\s\S]*?margin-left: 44px/,
+  );
+  // The collapsed group preview tracks the 44px offset plus the group's own
+  // 26px content indent (web ml-6 inside the offset column).
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.timeline-tool-group-preview \{[\s\S]*?margin: 0 0 6px 70px/,
+  );
   assert.match(
     chatStyles,
     /@container \(max-width: 520px\)[\s\S]*\.agent-timeline > \.thought-timeline-card,[\s\S]*?margin-left: 0/,
+  );
+  assert.match(
+    chatStyles,
+    /@container \(max-width: 520px\)[\s\S]*\.timeline-tool-group-preview \{[\s\S]*?margin-left: 26px/,
   );
 });
 

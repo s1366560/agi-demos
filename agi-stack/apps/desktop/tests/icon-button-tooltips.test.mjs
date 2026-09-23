@@ -52,8 +52,8 @@ const modelProviderWorkspaceSource = readSource('features/settings/ModelProvider
 const providerConnectionPanelSource = readSource(
   'features/settings/ProviderConnectionPanel.tsx',
 );
-const channelConnectionsDialogSource = readSource(
-  'features/settings/ChannelConnectionsDialog.tsx',
+const { ChannelConnectionsDialog } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/settings/ChannelConnectionsDialog.js',
 );
 const i18nSource = readSource('i18n.tsx');
 
@@ -168,7 +168,7 @@ test('plan step toggle and edit buttons expose localized tooltips', () => {
 test('settings window close button exposes a localized tooltip', () => {
   assert.match(
     settingsWindowSource,
-    /aria-label=\{t\('settings\.close'\)\} title=\{t\('settings\.close'\)\}/,
+    /aria-label=\{t\('settings\.close'\)\}\s+title=\{t\('settings\.close'\)\}/,
   );
 });
 
@@ -194,16 +194,25 @@ test('provider secret visibility toggle exposes a localized tooltip', () => {
 });
 
 test('channel edit and delete icon buttons expose localized tooltips', () => {
-  assertTitleMirrorsAriaLabel(
-    channelConnectionsDialogSource,
-    "t('settings.channels.editNamed', { name: channel.name })",
-    'channel edit',
-  );
-  assertTitleMirrorsAriaLabel(
-    channelConnectionsDialogSource,
-    "t('settings.channels.deleteNamed', { name: channel.name })",
-    'channel delete',
-  );
+  const markup = renderToStaticMarkup(React.createElement(I18nProvider, null,
+    React.createElement(ChannelConnectionsDialog, { management: {
+      open: true, close() {}, busyId: null, loading: false, catalog: [],
+      configs: [{ id: 'channel', name: 'Fixture channel', channel_type: 'slack',
+        enabled: true, status: 'connected' }],
+    } }),
+  ));
+  const namedButtons = [...markup.matchAll(/<button\b[^>]*>/g)]
+    .map(([tag]) => ({
+      label: tag.match(/aria-label="([^"]+)"/)?.[1],
+      title: tag.match(/title="([^"]+)"/)?.[1],
+    }))
+    .filter(({ label }) => label?.includes('Fixture channel'));
+  assert.equal(namedButtons.length, 2, 'edit and delete both retain named accessible labels');
+  assert.equal(new Set(namedButtons.map(({ label }) => label)).size, 2);
+  for (const { label, title } of namedButtons) {
+    assert.equal(title, label);
+    assert.doesNotMatch(label, /settings\.channels\./);
+  }
 });
 
 test('tooltip copy keys exist in both i18n dictionaries', () => {

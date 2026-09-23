@@ -42,10 +42,7 @@ tests of retained active behavior continue to run.
 The obsolete launch cleanup passed 76 focused tests covering retained worker/goal
 behavior, draining, Redis authority and retirement. Its 37 removed tests exercised
 only deleted unreachable helpers. Ruff passed; Pyright reported zero errors and
-174 pre-existing warnings (the prior files reported 191 warnings). GitNexus reported
-MEDIUM for the application container and Provider class, LOW for the affected
-facades and launch paths. New helper symbols are absent from the existing index;
-manual call-site inspection and real lifecycle tests supplement the graph evidence.
+174 pre-existing warnings (the prior files reported 191 warnings). Manual call-site inspection and real lifecycle tests provide additional evidence.
 
 The deployment reuses the already-admitted generation-2 bundle because this change
 modifies the transport boundary and removes dead code, without modifying a

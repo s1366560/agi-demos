@@ -13,7 +13,7 @@ from collections.abc import Callable
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.domain.model.plugins.generated_v2 import BundleReferenceV2
+from src.domain.model.plugins.generated_v2 import BundleReferenceV2, ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
@@ -45,7 +45,9 @@ class ScopedInstalledBundleLoaderV2:
         )
         self._http_client_factory = http_client_factory or _create_http_client
 
-    async def __call__(self, reference: BundleReferenceV2) -> VerifiedBundleArchiveV2:
+    async def __call__(
+        self, reference: BundleReferenceV2, *, scope: ScopeV2 = ScopeV2(kind=ScopeKindV2.ROOT)
+    ) -> VerifiedBundleArchiveV2:
         # A total deadline also bounds slow streams that never hit an idle timeout.
         async with asyncio.timeout(60):
             async with self._session_factory() as session:
@@ -56,6 +58,7 @@ class ScopedInstalledBundleLoaderV2:
                         production_sources=self._production_sources,
                         trusted_public_keys=self._trusted_public_keys,
                         allowed_registries=self._allowed_registries,
+                        scope=scope,
                     )
                     return await loader.load(reference)
 

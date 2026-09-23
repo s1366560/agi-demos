@@ -229,6 +229,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
         )
         app.state.platform_plugin_receipt_recovery_v2 = receipt_recovery
         receipt_recovery.start()
+        from src.application.services.marketplace_cache_recovery import MarketplaceCacheRecovery
+
+        cache_recovery = MarketplaceCacheRecovery(
+            async_session_factory, app.state.platform_plugin_runtime_v2
+        )
+        app.state.marketplace_cache_recovery = cache_recovery
+        cache_recovery.start()
     except BaseException:
         await _shutdown_application_plugins_v2(app)
         raise
@@ -246,6 +253,9 @@ async def _shutdown_application_plugins_v2(app: FastAPI) -> None:
     from .startup.scoped_profile_runtime_v2 import shutdown_scoped_profile_runtime_v2
 
     try:
+        cache_recovery = getattr(app.state, "marketplace_cache_recovery", None)
+        if cache_recovery is not None:
+            await cache_recovery.stop()
         await shutdown_scoped_profile_runtime_v2(app)
     finally:
         http_routes = getattr(app.state, "platform_plugin_http_routes", None)

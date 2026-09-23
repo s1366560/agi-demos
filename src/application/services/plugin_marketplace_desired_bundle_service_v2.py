@@ -125,6 +125,8 @@ class PluginMarketplaceDesiredBundleServiceV2:
         current = await self._repository.current_desired_set(scope)
         if current is not None:
             return current
+        if scope.kind is not ScopeKindV2.ROOT:
+            raise ValueError("marketplace scope must be initialized before mutation")
         return await self._repository.record_desired_set(
             scope=scope,
             desired_set=self._baseline,
@@ -147,8 +149,11 @@ class PluginMarketplaceDesiredBundleServiceV2:
 
     @staticmethod
     def _require_root_scope(scope: ScopeV2) -> None:
-        if scope != ScopeV2(kind=ScopeKindV2.ROOT):
-            raise ValueError("marketplace desired Bundle mutations require root scope")
+        from src.infrastructure.plugins.v2.scope import validate_scope_v2
+
+        validate_scope_v2(scope)
+        if scope.kind is ScopeKindV2.SESSION:
+            raise ValueError("marketplace installation requires tenant or project scope")
 
 
 __all__ = [

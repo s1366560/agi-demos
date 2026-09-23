@@ -1,0 +1,11 @@
+{
+  "deleted": {
+    "platform_plugin_credential_grants": 0,
+    "platform_plugin_http_routes": 0,
+    "platform_plugin_packages": 1,
+    "platform_plugin_permissions": 1,
+    "platform_plugin_quota_usage": 0
+  },
+  "digest": "3bbdb929fd006afc3dce05a9e4bd14a4c69e6fd82b37df2a1af9a7b1632c92cc",
+  "files_deleted": 0
+}

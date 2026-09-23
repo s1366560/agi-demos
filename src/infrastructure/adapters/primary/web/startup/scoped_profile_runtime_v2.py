@@ -1,6 +1,7 @@
 """Application-owned scoped publication, artifact loading and admission."""
 
 from collections.abc import Sequence
+from functools import partial
 from typing import cast
 
 from fastapi import FastAPI
@@ -66,6 +67,12 @@ class ScopedProfileRuntimeV2:
         if self._closed:
             raise RuntimeV2Error("scoped_runtime_closed", "scoped runtime is closed")
         _ = await self._initializer.ensure_initialized(scope, actor_id=actor_id)
+        from src.application.services.marketplace_signed_scope_v2 import (
+            reconcile_signed_session_scope,
+        )
+
+        async with self._sessions() as session:
+            await reconcile_signed_session_scope(session, scope, actor_id)
         return await self.publish_current(scope, required_services=required_services)
 
     async def publish_current(
@@ -76,7 +83,7 @@ class ScopedProfileRuntimeV2:
         return await ScopedProfilePublicationServiceV2(
             session_factory=self._sessions,
             coordinator=self._coordinator,
-            load_verified_bundle=self._loader,
+            load_verified_bundle=partial(self._loader, scope=scope),
             required_services=required_services,
         ).publish_current(scope)
 
@@ -105,7 +112,7 @@ class ScopedProfileRuntimeV2:
             )
         archives: list[VerifiedBundleArchiveV2] = []
         for reference in state.source.bundles:
-            archive = cast(object, await self._loader(reference))
+            archive = cast(object, await self._loader(reference, scope=scope))
             if not isinstance(archive, VerifiedBundleArchiveV2):
                 raise RuntimeV2Error(
                     "scope_bundle_unverified", "recovery requires verified archives"

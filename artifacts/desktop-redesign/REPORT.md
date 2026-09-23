@@ -112,12 +112,6 @@ card on the panel ladder with a tinted 32px avatar, user bubble is
 right-aligned at 85% max-width, code frames/inline chips/thought card match
 the web treatments, and both themes stay correct.
 
-## GitNexus
-
-`node .gitnexus/run.cjs` is available (index stale vs current commit). All
-changes are CSS values and one test regex — no symbols touched, so impact
-analysis is N/A for this redesign.
-
 ## Deliberately NOT changed
 
 - Composer (`--session-composer-radius: 8px`, control radius 6px, 11px font):

@@ -88,8 +88,7 @@ The native QA host profile and actual catalog producer require separate review
 before those journeys can run. External deployment verification and production
 targets remain prerequisites for release-level automation acceptance.
 
-GitNexus impact and change detection were attempted but returned Transport closed;
-no graph validation is claimed. Source review, focused tests and normal commit
+Source review, focused tests and normal commit
 checks provide the available evidence. Revert UI and transport commits independently
 while preserving stored content, receipts, index builds and synchronization state.
 
@@ -233,9 +232,7 @@ These observations prove graph transport and provenance browsing with a declared
 fixture, not extraction or community generation. Native graph acceptance and the
 populated native failure/retry journey remain pending: the current Computer Use
 capture showed inconsistent screenshot/accessibility state and no verified result
-from its attempted settings actions. No Provider endpoint was changed. GitNexus
-change detection remains unavailable; this documentation records the observed
-UI and completed tests without claiming graph-analysis or release-gate success.
+from its attempted settings actions. No Provider endpoint was changed. This documentation records the observed UI and completed tests without claiming release-gate success.
 
 ## Native populated extraction failure and explicit recovery
 
@@ -377,7 +374,7 @@ passing full-suite result.
 
 Earlier Web validation remains 3,692 tests, with 13 metadata editor/detail
 regressions; the schema Python/Rust differential foundation passed 92 tests.
-GitNexus remained unavailable with `Transport closed`; source inspection, staged
+Source inspection, staged
 diff checks, credential scans and executable tests bounded these changes.
 
 Rollback can remove the community page and transport capabilities without

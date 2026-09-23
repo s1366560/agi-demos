@@ -167,7 +167,7 @@ const client: WorkspaceCollaborationClient = {
 
 function WorkspaceCollaborationQa() {
   return (
-    <Theme accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <main className="parity-runtime-qa">
         <header data-qa-state={qaState}>
           <div>

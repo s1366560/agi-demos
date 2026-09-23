@@ -177,25 +177,7 @@ test('install roots stay isolated behind pnpm-only lockfiles', () => {
   );
   assert.equal(rootWorkspace.packages, undefined);
   assert.deepEqual(browserExtensionWorkspace.packages, []);
-  assert.deepEqual(rootWorkspace.allowBuilds, {
-    '@ladybugdb/core': true,
-    '@scarf/scarf': false,
-    gitnexus: false,
-    'onnxruntime-node': false,
-    protobufjs: false,
-    sharp: false,
-    'tree-sitter': false,
-    'tree-sitter-c-sharp': false,
-    'tree-sitter-cpp': false,
-    'tree-sitter-go': false,
-    'tree-sitter-java': false,
-    'tree-sitter-javascript': false,
-    'tree-sitter-php': false,
-    'tree-sitter-python': false,
-    'tree-sitter-ruby': false,
-    'tree-sitter-rust': false,
-    'tree-sitter-typescript': false,
-  });
+  assert.deepEqual(rootWorkspace.allowBuilds, {});
   assert.equal(prototypeWorkspace.packages, undefined);
   assert.deepEqual(prototypeWorkspace.allowBuilds, { esbuild: true });
 

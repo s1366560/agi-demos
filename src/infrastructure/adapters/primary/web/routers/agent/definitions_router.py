@@ -581,9 +581,11 @@ async def update_definition(
                 execution_backend_from_metadata(existing.metadata),
             )
         if "max_iterations" in updates:
+            # Mirror create semantics: the legacy default keeps the agent on
+            # tenant-config inheritance instead of forcing an explicit value.
             updates["metadata"] = _with_max_iterations_metadata(
                 updates.get("metadata", existing.metadata),
-                explicit=True,
+                explicit=updates["max_iterations"] != LEGACY_DEFAULT_MAX_ITERATIONS,
             )
         normalize_updated_agent_a2a(existing, updates)
         _apply_updates(existing, updates)

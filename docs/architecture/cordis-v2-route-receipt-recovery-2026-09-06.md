@@ -18,7 +18,7 @@ The synchronous `on_commit` callback runs after persistence but before Host admi
 - Existing route publication suite: 23 passed in 266.05 seconds.
 - Existing real SQL marketplace archive execution regression: 1 passed in 23.10 seconds.
 - Logs and SHA256 manifest: `/var/tmp/cordis-route-receipt-pqcqdjpz`.
-- GitNexus impact was LOW for coordinator methods and startup initializer; the new retry method was absent from the index. Source review covered its Host receipt identity, route identity and callback order.
+- Source review covered the retry method's Host receipt identity, route identity and callback order.
 
 ## Remaining work
 

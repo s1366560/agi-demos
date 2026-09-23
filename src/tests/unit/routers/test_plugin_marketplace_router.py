@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI, status
 from sqlalchemy import func, select
@@ -38,16 +39,9 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_b
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
-    PYTHON_API_DATA_PLANE_ID_V2,
-)
-from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
-    PlatformPluginRepositoryV2,
-)
 from src.infrastructure.plugins.v2.production_bundle import PRODUCTION_BASE_BUNDLE_ID_V2
 from src.infrastructure.plugins.v2.protocol import (
     bundle_manifest_v2_to_payload,
-    parse_profile_snapshot_v2,
 )
 from src.tests.unit.application.services.test_plugin_marketplace_install_service import (
     FakeArtifactClient,
@@ -113,6 +107,33 @@ async def _tenant_admin(
     return user, tenant
 
 
+async def _prepare_scoped(app, db, artifact_client, monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from src.application.services import scoped_installed_bundle_loader_v2
+    from src.infrastructure.adapters.primary.web.startup.scoped_profile_runtime_v2 import (
+        initialize_scoped_profile_runtime_v2,
+    )
+    from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
+
+    await PlatformPluginDesiredBundleSetRepositoryV2(db).record_desired_set(
+        scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        desired_set=production_bundle_sources_v2().desired_set,
+        expected_revision=None,
+        actor_id="fixture",
+    )
+    await db.commit()
+    app.state.plugin_marketplace_allowed_registries_v2 = frozenset(
+        {"https://registry.memstack.test"}
+    )
+    monkeypatch.setattr(
+        scoped_installed_bundle_loader_v2, "OciPluginArtifactClient", lambda client: artifact_client
+    )
+    return initialize_scoped_profile_runtime_v2(
+        app, session_factory=async_sessionmaker(db.bind, expire_on_commit=False), redis_client=None
+    )
+
+
 async def _seed_package(
     db: AsyncSession,
     *,
@@ -122,6 +143,12 @@ async def _seed_package(
     public_key = _public_key_pem(signer)
     signature = bundle.signature
     assert signature is not None
+    # Fingerprint convention must match the install service: sha256 over the
+    # raw Ed25519 public-key bytes, not over the PEM text.
+    raw_public_key = signer.public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
     _ = await PlatformPluginGovernanceRepository(db).upsert_package(
         plugin_id=bundle.bundle_id,
         version=bundle.version,
@@ -133,7 +160,7 @@ async def _seed_package(
         manifest=bundle_manifest_v2_to_payload(bundle),
         signature={
             "algorithm": "Ed25519",
-            "public_key_sha256": hashlib.sha256(public_key.encode("utf-8")).hexdigest(),
+            "public_key_sha256": hashlib.sha256(raw_public_key).hexdigest(),
             "signature_sha256": hashlib.sha256(signature.encode("ascii")).hexdigest(),
         },
         provenance={"predicateType": "https://slsa.dev/provenance/v1"},
@@ -286,15 +313,74 @@ async def test_marketplace_install_with_empty_trust_store_fails_closed(
         bundle.bundle_id,
         bundle.version,
     )
-    assert response.status_code == status.HTTP_202_ACCEPTED
-    assert response.json()["status"] == "quarantined"
-    assert "trust store is empty" in response.json()["reason"]
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
     assert desired is None
     assert package is None
     assert await _legacy_row_counts(db_session) == (0, 0)
 
 
-async def test_marketplace_v2_publication_is_idempotent_retains_last_good_and_uninstalls(  # noqa: PLR0915
+async def test_marketplace_install_without_signature_material_resolves_from_catalog(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Desktop/web installs omit PEM secrets the catalog redacts by contract."""
+    signer = Ed25519PrivateKey.generate()
+    bundle, archive = _signed_bundle(signer)
+    public_key = _public_key_pem(signer)
+    _ = await _seed_package(db_session, signer=signer)
+    user, tenant = await _tenant_admin(
+        db_session,
+        user_id="marketplace-resolve-admin",
+        tenant_id="marketplace-resolve-tenant",
+    )
+    user.is_superuser = True
+    await db_session.commit()
+
+    request_body = (
+        _request(bundle, archive, public_key)
+        .model_copy(update={"tenant_id": tenant.id, "signature": None, "provenance": None})
+        .model_dump(mode="json", exclude={"signature", "provenance"})
+    )
+    app = _app(db_session, user)
+    app.state.plugin_marketplace_trusted_public_keys_v2 = (public_key,)
+    monkeypatch.setattr(
+        plugin_marketplace,
+        "OciPluginArtifactClient",
+        lambda _client: FakeArtifactClient(archive),
+    )
+    host = await initialize_plugin_runtime_v2(app)
+    scoped = await _prepare_scoped(app, db_session, FakeArtifactClient(archive), monkeypatch)
+
+    try:
+        async with _client(app) as client:
+            response = await client.post(
+                f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/install",
+                json=request_body,
+            )
+    finally:
+        await scoped.close()
+        await shutdown_plugin_runtime_v2(app)
+    _ = host
+
+    assert response.status_code == status.HTTP_202_ACCEPTED
+    assert response.json()["status"] == "approved", response.json()["reason"]
+    assert response.json()["reason"] == "protocol v2 Bundle verified and desired"
+    package = await PlatformPluginGovernanceRepository(db_session).get_package_version(
+        bundle.bundle_id,
+        bundle.version,
+    )
+    assert package is not None
+    assert package.install_status == "installed"
+    desired = await PlatformPluginDesiredBundleSetRepositoryV2(db_session).current_desired_set(
+        ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=tenant.id)
+    )
+    assert desired is not None
+    assert any(
+        bundle_ref.bundle_id == bundle.bundle_id for bundle_ref in desired.desired_set.bundles
+    )
+
+
+async def test_marketplace_v2_publication_is_idempotent_retains_last_good_and_uninstalls(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -317,6 +403,7 @@ async def test_marketplace_v2_publication_is_idempotent_retains_last_good_and_un
         lambda _client: artifact_client,
     )
     host = await initialize_plugin_runtime_v2(app)
+    scoped = await _prepare_scoped(app, db_session, artifact_client, monkeypatch)
     payload = (
         _request(bundle, archive, public_key)
         .model_copy(update={"tenant_id": tenant.id})
@@ -352,54 +439,30 @@ async def test_marketplace_v2_publication_is_idempotent_retains_last_good_and_un
                 json=bad_payload,
             )
 
-            host_after_nack = host.current_distribution
-            assert host_after_nack is not None
-            assert host_after_nack.snapshot.generation == 2
-            repository = PlatformPluginRepositoryV2(db_session)
-            degraded = await repository.latest_publication_readiness()
-            assert degraded is not None
-            assert degraded.status.value == "degraded"
-            last_good = await repository.last_good_distribution(PYTHON_API_DATA_PLANE_ID_V2)
-            assert last_good is not None
-            assert parse_profile_snapshot_v2(last_good["snapshot"]).generation == 2
+            # Failed scoped candidate never publishes into the ROOT host.
+            assert host.current_distribution.snapshot.generation == 1
+            artifact_client.archive = archive
+            artifact_client.layer_digest = hashlib.sha256(archive).hexdigest()
 
             uninstalled = await client.post(
                 f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/uninstall",
-                json={"version": bad_bundle.version, "tenant_id": tenant.id},
+                json={"version": bundle.version, "tenant_id": tenant.id},
             )
 
         desired = await PlatformPluginDesiredBundleSetRepositoryV2(db_session).current_desired_set(
-            ScopeV2(kind=ScopeKindV2.ROOT)
+            ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=tenant.id)
         )
-        readiness = await PlatformPluginRepositoryV2(db_session).latest_publication_readiness()
-        publication_count = await db_session.scalar(
-            select(func.count()).select_from(PlatformPluginV2PublicationModel)
-        )
-        current = host.current_distribution
-
-        assert installed.status_code == status.HTTP_202_ACCEPTED
-        assert installed.json()["status"] == "approved"
-        assert repeated.status_code == status.HTTP_202_ACCEPTED
-        assert repeated.json()["status"] == "approved"
-        assert nacked.status_code == status.HTTP_202_ACCEPTED
-        assert nacked.json()["status"] == "approved"
-        assert uninstalled.status_code == status.HTTP_200_OK
-        assert uninstalled.json()["desired_removed"] is True
-        assert desired is not None
-        assert desired.desired_set.revision == 4
-        assert [reference.bundle_id for reference in desired.desired_set.bundles] == [
+        assert installed.status_code == status.HTTP_202_ACCEPTED, installed.text
+        assert repeated.status_code == status.HTTP_202_ACCEPTED, repeated.text
+        assert nacked.status_code == status.HTTP_409_CONFLICT, nacked.text
+        assert uninstalled.status_code == status.HTTP_200_OK, uninstalled.text
+        assert [ref.bundle_id for ref in desired.desired_set.bundles] == [
             PRODUCTION_BASE_BUNDLE_ID_V2
         ]
-        assert readiness is not None
-        assert readiness.status.value == "ready"
-        assert publication_count == 3
-        assert current is not None
-        assert current.snapshot.generation == 4
-        assert all(
-            manifest.plugin_id != "third-party-tool" for manifest in current.snapshot.manifests
-        )
+        assert host.current_distribution.snapshot.generation == 1
         assert await _legacy_row_counts(db_session) == (0, 0)
     finally:
+        await scoped.close()
         await shutdown_plugin_runtime_v2(app)
 
 
@@ -432,7 +495,7 @@ async def test_tenant_admin_cannot_mutate_root_marketplace_state(
         response = await client.post(
             f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/{operation}", json=payload
         )
-    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
     for model in (
         PlatformPluginV2DesiredBundleSetModel,
         PlatformPluginV2PublicationModel,

@@ -18,7 +18,6 @@ Shutdown stops this task before closing the Host. Stop wakes the polling wait an
 
 - Final complete lifecycle/startup/cancellation group: **14 passed** in 83.98 seconds, including the five lifespan cases above.
 - Logs and SHA256 manifest: `/var/tmp/cordis-receipt-recovery-54vufpnl`.
-- GitNexus impact was LOW for lifespan, shutdown and the corrected legacy test; the newer lifespan test was absent from the index and was reviewed directly.
 
 ## Remaining gates
 

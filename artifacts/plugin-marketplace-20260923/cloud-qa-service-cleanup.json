@@ -1,0 +1,37 @@
+{
+  "project_id": "6dc13612-30d2-4a11-b1a9-c5013da66a55",
+  "sandbox_id": "mcp-sandbox-6fa468212558",
+  "termination_http_status": 200,
+  "termination": {
+    "success": true,
+    "message": "Sandbox terminated successfully",
+    "sandbox": null
+  },
+  "after_http_status": 404,
+  "ports_listening_after_cleanup": {
+    "18000": false,
+    "3001": false,
+    "18891": true,
+    "8000": true
+  },
+  "normal_api_health": 200,
+  "stopped_owned_processes": [
+    {
+      "pid": 87162,
+      "service": "API18000"
+    },
+    {
+      "pid": 76843,
+      "service": "Web3001"
+    }
+  ],
+  "qa_browser_tabs_remaining": 0,
+  "removed_unused_task_image": "marketplace-qa-20260923:runtime",
+  "retained": [
+    "OAuth fixture18891",
+    "QA project and conversation data",
+    "screenshots and backups",
+    "curated directory configuration",
+    "normal API8000"
+  ]
+}

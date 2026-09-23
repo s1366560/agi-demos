@@ -76,14 +76,15 @@ export function SubAgentLibraryDialog({
           </button>
         </header>
 
-        <div className="agent-definition-dialog-body subagent-library-body">
-          {loading ? (
-            <div className="subagent-library-state">
-              <ReloadIcon className="managed-resource-spin" />
-              <span>{t('settings.subagentLibrary.loading')}</span>
-            </div>
+        {loading || templates.length > 0 || !error ? (
+          <div className="agent-definition-dialog-body subagent-library-body">
+            {loading ? (
+              <div className="subagent-library-state">
+                <ReloadIcon className="managed-resource-spin" />
+                <span>{t('settings.subagentLibrary.loading')}</span>
+              </div>
           ) : null}
-          {!loading && templates.length === 0 ? (
+          {!loading && !error && templates.length === 0 ? (
             <div className="subagent-library-state">
               <PersonIcon />
               <span>{t('settings.subagentLibrary.empty')}</span>
@@ -127,11 +128,22 @@ export function SubAgentLibraryDialog({
               ))
             : null}
         </div>
+        ) : null}
 
         {error ? (
           <div className="agent-definition-dialog-error" role="alert">
             <ExclamationTriangleIcon />
-            <span>{error}</span>
+            <div className="subagent-library-error-copy">
+              <span>
+                {t(error === 'local_subagent_registry_unavailable'
+                  ? 'settings.subagentLibrary.unavailable'
+                  : 'settings.subagentLibrary.failed')}
+              </span>
+              <details>
+                <summary>{t('settings.subagentLibrary.diagnostics')}</summary>
+                <pre>{error}</pre>
+              </details>
+            </div>
           </div>
         ) : null}
 

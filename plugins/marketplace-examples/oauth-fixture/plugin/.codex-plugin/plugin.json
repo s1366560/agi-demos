@@ -1,0 +1,1 @@
+{"name":"marketplace-oauth-fixture","version":"1.0.0","description":"Local OAuth protected MCP and app acceptance fixture","author":{"name":"MemStack"},"mcpServers":"./.mcp.json","apps":"./.app.json","interface":{"displayName":"OAuth Marketplace Fixture","category":"Development"}}

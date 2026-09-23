@@ -1,24 +1,35 @@
+import { PluginMarketplaceV3 } from './PluginMarketplaceV3';
 import { LocalPluginSettings } from './LocalPluginSettings';
 import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
 import {
   createDesktopBrowserIntegrationClientV2,
   type DesktopBrowserIntegrationOperationsV2,
 } from '../../plugins/desktopBrowserIntegrationAuthorityModuleV2';
-import { createDesktopProjectMcpServersClientV2, type DesktopProjectMcpServersOperationsV2 } from '../../plugins/desktopProjectMcpServersAuthorityModuleV2';
-import { createDesktopTenantProvidersClientV2, type DesktopTenantProvidersOperationsV2 } from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
-import { createDesktopTenantSkillDefinitionsClientV2, type DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
-import { createDesktopTenantSkillPackagesClientV2, type DesktopTenantSkillPackagesOperationsV2 } from '../../plugins/desktopTenantSkillPackagesAuthorityModuleV2';
-import { createDesktopTenantSkillEvolutionClientV2, type DesktopTenantSkillEvolutionOperationsV2 } from '../../plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
+import {
+  createDesktopProjectMcpServersClientV2,
+  type DesktopProjectMcpServersOperationsV2,
+} from '../../plugins/desktopProjectMcpServersAuthorityModuleV2';
+import {
+  createDesktopTenantProvidersClientV2,
+  type DesktopTenantProvidersOperationsV2,
+} from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
+import {
+  createDesktopTenantSkillDefinitionsClientV2,
+  type DesktopTenantSkillDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
+import {
+  createDesktopTenantSkillPackagesClientV2,
+  type DesktopTenantSkillPackagesOperationsV2,
+} from '../../plugins/desktopTenantSkillPackagesAuthorityModuleV2';
+import {
+  createDesktopTenantSkillEvolutionClientV2,
+  type DesktopTenantSkillEvolutionOperationsV2,
+} from '../../plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Theme } from '@radix-ui/themes';
 import { useThemePreference } from '../../theme';
-import {
-  Cross2Icon,
-  CubeIcon,
-  LockClosedIcon,
-  MagnifyingGlassIcon,
-} from '@radix-ui/react-icons';
+import { Cross2Icon, CubeIcon, LockClosedIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
@@ -101,6 +112,8 @@ import { useSubAgentLibraryManagement } from './useSubAgentLibraryManagement';
 import { useSubAgentDefinitionManagement } from './useSubAgentDefinitionManagement';
 import { useMCPServerManagement } from './useMCPServerManagement';
 import './SettingsWindow.css';
+import './SettingsForms.css';
+import { settingsShellMessages } from './settingsShellMessages';
 
 export type { SettingsSection } from './settingsNavigationModel';
 
@@ -167,7 +180,8 @@ export function SettingsWindow({
   onContextChange,
   onSignOut,
 }: SettingsWindowProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const shellCopy = settingsShellMessages(locale);
   const { resolved: appearance } = useThemePreference();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [query, setQuery] = useState('');
@@ -216,17 +230,12 @@ export function SettingsWindow({
     [config, tenantSkillEvolutionOperationsV2],
   );
   const tenantSubAgentDefinitionsClientV2 = useMemo(
-    () => createDesktopTenantSubAgentDefinitionsClientV2(
-      tenantSubAgentDefinitionsOperationsV2, config,
-    ),
+    () =>
+      createDesktopTenantSubAgentDefinitionsClientV2(tenantSubAgentDefinitionsOperationsV2, config),
     [config, tenantSubAgentDefinitionsOperationsV2],
   );
   const tenantAgentDefinitionsClientV2 = useMemo(
-    () =>
-      createDesktopTenantAgentDefinitionsClientV2(
-        tenantAgentDefinitionsOperationsV2,
-        config,
-      ),
+    () => createDesktopTenantAgentDefinitionsClientV2(tenantAgentDefinitionsOperationsV2, config),
     [config, tenantAgentDefinitionsOperationsV2],
   );
   const [resourceCounts, setResourceCounts] = useState<SettingsResourceCounts>({
@@ -247,7 +256,7 @@ export function SettingsWindow({
   const isResourceSection = isResource(section);
   const canManageProviders = providerManagementAllowed(config.mode, auth.user?.roles ?? []);
   const normalizedRoles = new Set(
-    (auth.user?.roles ?? []).map((role) => role.trim().toLowerCase())
+    (auth.user?.roles ?? []).map((role) => role.trim().toLowerCase()),
   );
   const canManageAgentDefinitions = normalizedRoles.has('admin') || normalizedRoles.has('owner');
   const canCreateSkills =
@@ -259,6 +268,7 @@ export function SettingsWindow({
   const settingsDialogRef = useModalDialog({
     active: open,
     initialFocusRef: searchInputRef,
+    returnFocusSelector: '.desktop-design-profile',
     onClose,
   });
   useEffect(() => {
@@ -321,7 +331,9 @@ export function SettingsWindow({
           [resourceSection]:
             resourceSection === 'plugins' && !pluginMarketplaceSettingsAvailable(config.mode)
               ? null
-              : items.length < 100 ? items.length : null,
+              : items.length < 100
+                ? items.length
+                : null,
         }));
         setSelectedResourceId((current) => {
           const target = preferredSelectionId || current;
@@ -339,14 +351,20 @@ export function SettingsWindow({
         if (requestId === resourceRequestId.current) setResourceLoading(false);
       }
     },
-    [config, pluginMarketplaceOperationsV2, resourceContextKey, tenantAgentDefinitionsClientV2, tenantSubAgentDefinitionsClientV2, tenantSkillDefinitionsClientV2]
+    [
+      config,
+      pluginMarketplaceOperationsV2,
+      resourceContextKey,
+      tenantAgentDefinitionsClientV2,
+      tenantSubAgentDefinitionsClientV2,
+      tenantSkillDefinitionsClientV2,
+    ],
   );
   const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
   const reloadSkillResources = useCallback(() => loadResources('skills'), [loadResources]);
   const reloadAgentResources = useCallback(() => loadResources('agents'), [loadResources]);
   const reloadSubAgentResources = useCallback(
-    (preferredSelectionId?: string) =>
-      loadResources('subagents', undefined, preferredSelectionId),
+    (preferredSelectionId?: string) => loadResources('subagents', undefined, preferredSelectionId),
     [loadResources],
   );
   const clearPluginSelection = useCallback(() => setSelectedResourceId(null), []);
@@ -467,7 +485,7 @@ export function SettingsWindow({
         section,
         resourceContextKey,
         loadedResourceSection,
-        loadedResourceContextKey
+        loadedResourceContextKey,
       )
     ) {
       return [];
@@ -491,7 +509,7 @@ export function SettingsWindow({
         section,
         resourceContextKey,
         loadedResourceSection,
-        loadedResourceContextKey
+        loadedResourceContextKey,
       )
         ? null
         : resolveManagedResourceSelection(filteredItems, selectedResourceId),
@@ -504,7 +522,7 @@ export function SettingsWindow({
       resourceLoading,
       section,
       selectedResourceId,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -529,15 +547,15 @@ export function SettingsWindow({
       agents: [t(sectionMeta.agents.label), t(sectionMeta.agents.description)],
       subagents: [t(sectionMeta.subagents.label), t(sectionMeta.subagents.description)],
     }),
-    [t]
+    [t],
   );
   const filteredSettingSections = useMemo(
     () => filterSettingsSections(query, settingsSearchCopy),
-    [query, settingsSearchCopy]
+    [query, settingsSearchCopy],
   );
   const visibleSections = useMemo(
     () => new Set(filteredSettingSections),
-    [filteredSettingSections]
+    [filteredSettingSections],
   );
   const updateModelCount = useCallback((count: number | null) => {
     setResourceCounts((current) => ({ ...current, models: count }));
@@ -613,16 +631,16 @@ export function SettingsWindow({
 
   const managementDialogOpen = Boolean(
     agentManagement.dialog ||
-      skillManagement.dialog ||
-      skillPackageManagement.importKey ||
-      skillPackageManagement.versionsDialog ||
-      skillPackageManagement.evolutionDialog ||
-      pluginManagement.dialog ||
-      channelManagement.open ||
-      channelManagement.editor ||
-      mcpServerManagement.dialog ||
-      subAgentDefinitions.dialog ||
-      subAgentLibrary.dialog
+    skillManagement.dialog ||
+    skillPackageManagement.importKey ||
+    skillPackageManagement.versionsDialog ||
+    skillPackageManagement.evolutionDialog ||
+    pluginManagement.dialog ||
+    channelManagement.open ||
+    channelManagement.editor ||
+    mcpServerManagement.dialog ||
+    subAgentDefinitions.dialog ||
+    subAgentLibrary.dialog,
   );
   const managementDialogs = (
     <SettingsManagementDialogs
@@ -641,7 +659,13 @@ export function SettingsWindow({
   );
 
   const windowContent = (
-    <Theme appearance={appearance} accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme
+      appearance={appearance}
+      accentColor="gray"
+      grayColor="slate"
+      radius="medium"
+      scaling="95%"
+    >
       <div className="settings-window-backdrop" onMouseDown={onClose}>
         <section
           ref={settingsDialogRef}
@@ -665,31 +689,41 @@ export function SettingsWindow({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t('settings.search')}
+                aria-label={t('settings.search')}
+                type="search"
               />
             </label>
-            <button type="button" aria-label={t('settings.close')} title={t('settings.close')} onClick={onClose}>
+            <button
+              type="button"
+              aria-label={t('settings.close')}
+              title={t('settings.close')}
+              onClick={onClose}
+            >
               <Cross2Icon />
             </button>
           </header>
 
           <div className="settings-window-body">
-            <aside className="settings-window-rail">
+            <aside className="settings-window-rail" aria-label={t('settings.title')}>
               {filteredSettingSections.length > 0
                 ? SETTINGS_GROUPS.map((group) => (
                     <SettingsGroup
                       key={group.id}
-                      label={t(
-                        group.id === 'account_context'
-                          ? 'settings.accountContext'
-                          : group.id === 'preferences'
-                            ? 'settings.preferences'
-                            : 'settings.aiResources'
-                      )}
+                      label={
+                        group.id === 'integrations'
+                          ? shellCopy.integrations
+                          : t(
+                              group.id === 'account_context'
+                                ? 'settings.accountContext'
+                                : group.id === 'preferences'
+                                  ? 'settings.preferences'
+                                  : 'settings.aiResources',
+                            )
+                      }
                       sections={group.sections.filter((candidate) =>
-                        visibleSections.has(candidate)
+                        visibleSections.has(candidate),
                       )}
                       active={section}
-                      counts={resourceCounts}
                       onSelect={setSection}
                     />
                   ))
@@ -717,6 +751,8 @@ export function SettingsWindow({
             </aside>
 
             <main
+              key={section}
+              aria-label={t(sectionMeta[section].label)}
               className={`settings-window-content ${
                 section === 'models' ? 'provider-mode' : isResourceSection ? 'managed-mode' : ''
               }`}
@@ -729,11 +765,7 @@ export function SettingsWindow({
                       config={config}
                       loader={profileRouteLoader}
                     />
-                    <AccountSessionSecurityPage
-                      auth={auth}
-                      config={config}
-                      onSignOut={onSignOut}
-                    />
+                    <AccountSessionSecurityPage auth={auth} config={config} onSignOut={onSignOut} />
                   </>
                 ) : (
                   <AccountSettingsPage
@@ -802,7 +834,125 @@ export function SettingsWindow({
                 />
               ) : null}
               {isResourceSection ? (
-                <>
+                <div className="settings-resource-container">
+                  {section === 'plugins' ? (
+                    <PluginMarketplaceV3
+                      config={config}
+                      onInstallSignedV2={() => {
+                        const installer = document.getElementById('signed-plugin-marketplace');
+                        installer?.scrollIntoView({ block: 'start' });
+                        installer?.focus({ preventScroll: true });
+                      }}
+                      canManage={canManagePluginControlPlane || auth.user?.is_superuser === true}
+                    />
+                  ) : null}
+                  <div id={section === 'plugins' ? 'signed-plugin-marketplace' : undefined} tabIndex={-1}>
+                  {section === 'plugins' && !pluginMarketplaceSettingsAvailable(config.mode) ? (
+                    <LocalPluginSettings config={config} canManage={canManagePluginControlPlane} />
+                  ) : (
+                    <ManagedResourceWorkspace
+                      section={section}
+                      items={filteredItems}
+                      selected={selectedResource}
+                      query={resourceQuery}
+                      filter={resourceFilter}
+                      loading={resourceLoading}
+                      error={resourceError}
+                      actionError={
+                        resourceActionError ??
+                        skillPackageManagement.packageActionError ??
+                        subAgentLibrary.error ??
+                        subAgentDefinitions.error
+                      }
+                      busy={
+                        actionBusyId !== null ||
+                        skillPackageManagement.importBusy ||
+                        skillPackageManagement.exportBusyId !== null ||
+                        subAgentLibrary.importBusyId !== null ||
+                        subAgentDefinitions.busy ||
+                        (skillPackageManagement.versionsDialog?.rollbackVersion ?? null) !== null
+                      }
+                      hasAvailableProjects={hasAvailableProjects}
+                      mode={config.mode}
+                      canCreate={
+                        section === 'skills'
+                          ? canCreateSkills
+                          : section === 'plugins'
+                            ? canManagePluginControlPlane
+                            : section === 'agents' || section === 'subagents'
+                              ? canManageAgentDefinitions
+                              : false
+                      }
+                      canManage={
+                        selectedResource
+                          ? managedResourceManagementAllowed(
+                              config.mode,
+                              auth.user?.roles ?? [],
+                              section,
+                              selectedResource,
+                              auth.user?.is_superuser === true,
+                            )
+                          : false
+                      }
+                      onQueryChange={setResourceQuery}
+                      onFilterChange={setResourceFilter}
+                      onSelect={(id) => {
+                        setSelectedResourceId(id);
+                        setResourceActionError(null);
+                      }}
+                      onRetry={() => void loadResources(section)}
+                      onAction={(item) => void toggleResource(item)}
+                      onCreate={() => {
+                        if (section === 'skills') void skillManagement.open(null);
+                        if (section === 'agents') agentManagement.open(null);
+                        if (section === 'subagents') subAgentDefinitions.open(null);
+                      }}
+                      onImport={skillPackageManagement.openImport}
+                      onEdit={(item) => {
+                        if (section === 'skills') void skillManagement.open(item as ManagedSkill);
+                        if (section === 'agents')
+                          agentManagement.open(item as ManagedAgentDefinition);
+                        if (section === 'subagents') {
+                          subAgentDefinitions.open(item as ManagedSubAgent);
+                        }
+                      }}
+                      onVersions={(item) => {
+                        if (section !== 'skills') return;
+                        const skill = item as ManagedSkill;
+                        const canRollback =
+                          managedResourceManagementAllowed(
+                            config.mode,
+                            auth.user?.roles ?? [],
+                            section,
+                            skill,
+                          ) && !resourceIsImmutable(section, skill, config.mode);
+                        skillPackageManagement.openVersions(skill, canRollback);
+                      }}
+                      onExport={(item) =>
+                        void skillPackageManagement.exportPackage(item as ManagedSkill)
+                      }
+                      onEvolution={(item, canManage) =>
+                        skillPackageManagement.openEvolution(item as ManagedSkill, canManage)
+                      }
+                      onSubAgentLibrary={() => void subAgentLibrary.open()}
+                      onImportSubAgent={(item) =>
+                        void subAgentLibrary.importFilesystem(item as ManagedSubAgent)
+                      }
+                      onChannels={channelManagement.launch}
+                      onReload={() => void reloadPluginResources()}
+                      onRemove={(item) => {
+                        if (section === 'plugins') {
+                          pluginManagement.openUninstall(item as ManagedPlugin);
+                        }
+                      }}
+                      onInstall={(item) => {
+                        if (section === 'plugins') {
+                          pluginManagement.openInstall(item as ManagedPlugin);
+                        }
+                      }}
+                    />
+                  )}
+                  </div>
                   {section === 'plugins' ? (
                     <PlatformPluginUiSlots
                       slots={platformPluginUiSlots.slots}
@@ -810,110 +960,7 @@ export function SettingsWindow({
                       loading={platformPluginUiSlots.loading}
                     />
                   ) : null}
-                  {section === 'plugins' && !pluginMarketplaceSettingsAvailable(config.mode) ? (
-                    <LocalPluginSettings config={config} canManage={canManagePluginControlPlane} />
-                  ) : (
-                  <ManagedResourceWorkspace
-                  section={section}
-                  items={filteredItems}
-                  selected={selectedResource}
-                  query={resourceQuery}
-                  filter={resourceFilter}
-                  loading={resourceLoading}
-                  error={resourceError}
-                  actionError={
-                    resourceActionError ?? skillPackageManagement.packageActionError ??
-                    subAgentLibrary.error ??
-                    subAgentDefinitions.error
-                  }
-                  busy={
-                    actionBusyId !== null ||
-                    skillPackageManagement.importBusy ||
-                    skillPackageManagement.exportBusyId !== null ||
-                    subAgentLibrary.importBusyId !== null ||
-                    subAgentDefinitions.busy ||
-                    (skillPackageManagement.versionsDialog?.rollbackVersion ?? null) !== null
-                  }
-                  hasAvailableProjects={hasAvailableProjects}
-                  mode={config.mode}
-                  canCreate={
-                    section === 'skills'
-                      ? canCreateSkills
-                      : section === 'plugins'
-                        ? canManagePluginControlPlane
-                        : section === 'agents' || section === 'subagents'
-                          ? canManageAgentDefinitions
-                          : false
-                  }
-                  canManage={
-                    selectedResource
-                      ? managedResourceManagementAllowed(
-                          config.mode,
-                          auth.user?.roles ?? [],
-                          section,
-                          selectedResource,
-                          auth.user?.is_superuser === true,
-                        )
-                      : false
-                  }
-                  onQueryChange={setResourceQuery}
-                  onFilterChange={setResourceFilter}
-                  onSelect={(id) => {
-                    setSelectedResourceId(id);
-                    setResourceActionError(null);
-                  }}
-                  onRetry={() => void loadResources(section)}
-                  onAction={(item) => void toggleResource(item)}
-                  onCreate={() => {
-                    if (section === 'skills') void skillManagement.open(null);
-                    if (section === 'agents') agentManagement.open(null);
-                    if (section === 'subagents') subAgentDefinitions.open(null);
-                  }}
-                  onImport={skillPackageManagement.openImport}
-                  onEdit={(item) => {
-                    if (section === 'skills') void skillManagement.open(item as ManagedSkill);
-                    if (section === 'agents') agentManagement.open(item as ManagedAgentDefinition);
-                    if (section === 'subagents') {
-                      subAgentDefinitions.open(item as ManagedSubAgent);
-                    }
-                  }}
-                  onVersions={(item) => {
-                    if (section !== 'skills') return;
-                    const skill = item as ManagedSkill;
-                    const canRollback =
-                      managedResourceManagementAllowed(
-                        config.mode,
-                        auth.user?.roles ?? [],
-                        section,
-                        skill
-                      ) && !resourceIsImmutable(section, skill, config.mode);
-                    skillPackageManagement.openVersions(skill, canRollback);
-                  }}
-                  onExport={(item) =>
-                    void skillPackageManagement.exportPackage(item as ManagedSkill)
-                  }
-                  onEvolution={(item, canManage) =>
-                    skillPackageManagement.openEvolution(item as ManagedSkill, canManage)
-                  }
-                  onSubAgentLibrary={() => void subAgentLibrary.open()}
-                  onImportSubAgent={(item) =>
-                    void subAgentLibrary.importFilesystem(item as ManagedSubAgent)
-                  }
-                  onChannels={channelManagement.launch}
-                  onReload={() => void reloadPluginResources()}
-                  onRemove={(item) => {
-                    if (section === 'plugins') {
-                      pluginManagement.openUninstall(item as ManagedPlugin);
-                    }
-                  }}
-                  onInstall={(item) => {
-                    if (section === 'plugins') {
-                      pluginManagement.openInstall(item as ManagedPlugin);
-                    }
-                  }}
-                  />
-                  )}
-                </>
+                </div>
               ) : null}
             </main>
           </div>
@@ -935,7 +982,6 @@ function SettingsGroup({
   label: string;
   sections: SettingsSection[];
   active: SettingsSection;
-  counts: SettingsResourceCounts;
   onSelect: (section: SettingsSection) => void;
 }) {
   const { t } = useI18n();

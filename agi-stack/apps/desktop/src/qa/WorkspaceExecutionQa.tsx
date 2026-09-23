@@ -373,7 +373,7 @@ function WorkspaceExecutionQa() {
   }, [workspaceActivityEventMode]);
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <div className="workspace-execution-qa-shell">
         <DesktopSidebar
           activeSection={null}

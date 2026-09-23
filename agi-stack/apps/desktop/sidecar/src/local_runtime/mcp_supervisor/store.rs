@@ -644,6 +644,7 @@ impl McpStore {
                 let resource_uri = metadata
                     .get("ui/resourceUri")
                     .or_else(|| metadata.get("mcp/ui/resourceUri"))
+                    .or_else(|| metadata.get("ui").and_then(|ui| ui.get("resourceUri")))
                     .and_then(Value::as_str);
                 let Some(resource_uri) = resource_uri else {
                     continue;

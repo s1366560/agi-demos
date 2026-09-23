@@ -77,6 +77,9 @@ class PinnedAgentRuntimeDispatcherV2:
             event=event,
             payload=effective_payload,
         )
+        from src.infrastructure.plugins.marketplace_hooks import dispatch_marketplace_hooks
+
+        await dispatch_marketplace_hooks(operation, event=event, payload=event_payload)
         raw_results = await _dispatch_migrated_event_v2(
             operation,
             event=event,

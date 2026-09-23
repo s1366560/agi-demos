@@ -244,7 +244,7 @@ graph TD
 
 **量级(A 方案 spike→生产,非最终承诺,决策后修订)**:P2 ~8–13 周 · **P3 ~24–52 周(↑↑,最不确定、决定总工期)** · P4 ~6–10 周 · P5 ~8–12 周 · P6 ~4–6 周 · P7 ~6–10 周;总计**多人·数季度**,与 §0 / [05 路线图](05-roadmap.md) §6 一致。
 
-**每波完成判据(统一)**:端点经网关由 Rust 服务、与 Python 字节兼容(F3 golden 绿)、灰度 100% 无回退;`cargo test --workspace` 全绿、core `wasm32` 绿;新增 [04 证据](04-spike-evidence.md) 行 + 路线图更新;拆 `feat`/`docs` 提交(含 `Co-authored-by: Copilot` trailer);`gitnexus detect_changes`。各波实现另起会话/todo。
+**每波完成判据(统一)**:端点经网关由 Rust 服务、与 Python 字节兼容(F3 golden 绿)、灰度 100% 无回退;`cargo test --workspace` 全绿、core `wasm32` 绿;新增 [04 证据](04-spike-evidence.md) 行 + 路线图更新;拆 `feat`/`docs` 提交(含 `Co-authored-by: Copilot` trailer)。各波实现另起会话/todo。
 
 ## 9. 不变量与回滚
 

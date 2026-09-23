@@ -84,7 +84,7 @@ async def bundle_inputs(db_session):
             )
         )
         await PlatformPluginGovernanceRepository(session).grant_permission(
-            plugin_id=bundle.bundle_id, permission="service.clock.read"
+            plugin_id=bundle.bundle_id, permission="service.clock.read", scope_type="root", scope_id="global"
         )
         await session.commit()
     sessions.clear()

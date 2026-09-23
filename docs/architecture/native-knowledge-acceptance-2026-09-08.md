@@ -93,6 +93,5 @@ These files are local execution evidence, not portable CI artifacts:
 - `/tmp/native-knowledge-acceptance-c83044800.json` and `.log`
 - `/tmp/native-knowledge-acceptance-4c3602f2d.json` and `.log`
 
-GitNexus impact/change detection remained unavailable with `Transport closed`.
 Source inspection, isolated regression tests, canonical builds and the native
-journey provide the available evidence; no graph validation is claimed.
+journey provide the available evidence.

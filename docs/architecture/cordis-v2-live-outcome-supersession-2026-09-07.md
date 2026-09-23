@@ -19,7 +19,7 @@ Background recovery now checks for a newer unreceipted request before receipt re
 - Existing market regression: final 16 passed in 257.61 seconds. The initial run had 15 passes and the old stale-error assertion failed because recovery now rejects the newer unbound request first. That test now expects root_receipt_pending and also asserts zero audit rows.
 - The initial SQL NACK assertion expected receipt_invalid; it was corrected to the existing ledger's precise last_good_mismatch error. No ledger acceptance rule was weakened.
 - The expanded PostgreSQL gate passed 35 tests in 425.75 seconds, with no skips; the subsequently added staging competition passed separately in 36.20 seconds. Both owned containers were removed with exit 0. The runner now collects 36 cases. Durable logs and SHA256 manifest: /var/tmp/cordis-live-supersession-7rx93ca0. The additional staging wrapper initially passed an extra test-helper argument; that adapter-only TypeError was corrected before its final run.
-- Ruff, generated protocol and contract completeness pass. Focused route/recovery Pyright has no errors/warnings; Host Pyright has zero errors and four existing warnings. GitNexus reports LOW for indexed Host/route methods, while new recovery methods remain unindexed; direct review covers all new calls.
+- Ruff, generated protocol and contract completeness pass. Focused route/recovery Pyright has no errors/warnings; Host Pyright has zero errors and four existing warnings. Direct review covers all new calls.
 
 ## Remaining release gates
 

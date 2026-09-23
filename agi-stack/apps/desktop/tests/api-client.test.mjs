@@ -4315,7 +4315,7 @@ test('managed skill APIs preserve tenant and project collection scope and status
       calls.map((call) => [String(call.input), call.init?.method]),
       [
         [
-          'http://127.0.0.1:8088/api/v1/skills/?limit=100&tenant_id=tenant+1&project_id=project%2F1',
+          'http://127.0.0.1:8088/api/v1/skills/?limit=500&tenant_id=tenant+1&project_id=project%2F1',
           'GET',
         ],
         [
@@ -4535,7 +4535,7 @@ test('local managed skill import binds frontmatter identity to scope and revisio
       calls.map((call) => [String(call.input), call.init?.method ?? 'GET']),
       [
         [
-          'http://127.0.0.1:8088/api/v1/skills/?limit=100&tenant_id=tenant+1&project_id=project%2F1',
+          'http://127.0.0.1:8088/api/v1/skills/?limit=500&tenant_id=tenant+1&project_id=project%2F1',
           'GET',
         ],
         [

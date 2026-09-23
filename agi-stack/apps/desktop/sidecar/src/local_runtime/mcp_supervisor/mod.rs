@@ -20,6 +20,9 @@ use super::DesktopSessionStore;
 mod hardening_tests;
 mod http;
 mod http_session;
+mod marketplace_generations;
+mod oauth;
+pub(super) use marketplace_generations::McpCatalogLease;
 mod remote_common;
 mod stdio;
 mod store;
@@ -229,6 +232,7 @@ type McpResult<T> = Result<T, McpSupervisorError>;
 #[derive(Clone)]
 pub(super) struct McpSupervisor {
     store: McpStore,
+    marketplace_generations: Arc<Mutex<marketplace_generations::GenerationCatalog>>,
     workspace_root: PathBuf,
     credential_vault: Arc<Mutex<Option<ApplicationCredentialVault>>>,
     limits: SupervisorLimits,
@@ -338,8 +342,13 @@ impl McpSupervisor {
                 workspace_root.canonicalize()
             })
             .map_err(|error| error.to_string())?;
+        let store = McpStore::new(session_store)?;
+        let catalog = store
+            .marketplace_catalog()
+            .map_err(|error| error.to_string())?;
         Ok(Self {
-            store: McpStore::new(session_store)?,
+            store,
+            marketplace_generations: Arc::new(Mutex::new(catalog)),
             workspace_root,
             credential_vault: Arc::new(Mutex::new(credential_vault)),
             limits,
@@ -418,6 +427,7 @@ impl McpSupervisor {
             &request_hash,
         )?;
         self.evict_runtime(server_id)?;
+        Self::oauth_forget_locked(vault_guard.as_ref(), server_id)?;
         if let Err(error) = self.drain_pending_credential_cleanup_locked(vault_guard.as_ref()) {
             tracing::warn!(
                 reason_code = error.reason_code(),
@@ -433,7 +443,16 @@ impl McpSupervisor {
 
     pub(super) fn list_servers(&self, scope: &McpScope) -> McpResult<Vec<McpServerDefinition>> {
         validate_scope(scope)?;
-        self.store.list_servers(scope)
+        let catalog = self
+            .marketplace_generations
+            .lock()
+            .map_err(|_| storage_error())?;
+        Ok(self
+            .store
+            .list_servers(scope)?
+            .into_iter()
+            .filter(|server| Self::marketplace_visible(&catalog, &server.id))
+            .collect())
     }
 
     pub(super) fn server(
@@ -458,7 +477,16 @@ impl McpSupervisor {
 
     pub(super) fn list_apps(&self, scope: &McpScope) -> McpResult<Vec<McpAppDefinition>> {
         validate_scope(scope)?;
-        self.store.list_apps(scope)
+        let catalog = self
+            .marketplace_generations
+            .lock()
+            .map_err(|_| storage_error())?;
+        Ok(self
+            .store
+            .list_apps(scope)?
+            .into_iter()
+            .filter(|app| Self::marketplace_visible(&catalog, &app.server_id))
+            .collect())
     }
 
     pub(super) fn app(
@@ -498,7 +526,17 @@ impl McpSupervisor {
     }
 
     pub(super) async fn recover_all_enabled(&self) -> McpResult<()> {
-        let servers = self.store.enabled_servers()?;
+        let servers = {
+            let catalog = self
+                .marketplace_generations
+                .lock()
+                .map_err(|_| storage_error())?;
+            self.store
+                .enabled_servers()?
+                .into_iter()
+                .filter(|server| Self::marketplace_visible(&catalog, &server.id))
+                .collect::<Vec<_>>()
+        };
         let supervisor = self.clone();
         let _task = tokio::spawn(async move {
             stream::iter(servers)
@@ -688,6 +726,19 @@ impl McpSupervisor {
         arguments: Value,
         idempotency_key: &str,
     ) -> McpResult<McpToolCallOutcome> {
+        let _lease = self.acquire_active_call(scope, server_id)?;
+        self.call_tool_in_generation(scope, server_id, tool_name, arguments, idempotency_key)
+            .await
+    }
+
+    async fn call_tool_in_generation(
+        &self,
+        scope: &McpScope,
+        server_id: &str,
+        tool_name: &str,
+        arguments: Value,
+        idempotency_key: &str,
+    ) -> McpResult<McpToolCallOutcome> {
         validate_identifier(tool_name, "local_mcp_tool_name_invalid")?;
         if !arguments.is_object() {
             return Err(McpSupervisorError::new(
@@ -733,6 +784,7 @@ impl McpSupervisor {
         };
         let mut resources = Vec::new();
         for server in servers {
+            let _generation = self.acquire_active_call(scope, &server.id)?;
             let result = self
                 .request(&server, "resources/list", serde_json::json!({}))
                 .await?;
@@ -757,6 +809,7 @@ impl McpSupervisor {
         uri: &str,
     ) -> McpResult<Vec<Value>> {
         validate_resource_uri(uri)?;
+        let _generation = self.acquire_active_call(scope, server_id)?;
         let server = self.required_server(scope, server_id)?;
         let result = self
             .request(&server, "resources/read", serde_json::json!({ "uri": uri }))
@@ -792,6 +845,7 @@ impl McpSupervisor {
         method: &str,
         params: Value,
     ) -> McpResult<Value> {
+        self.oauth_refresh(&server.id).await?;
         let runtime = self.runtime(server)?;
         let credential_vault = self.credential_vault()?;
         let operation_timeout = self
@@ -819,6 +873,7 @@ impl McpSupervisor {
     }
 
     async fn ensure_initialized(&self, server: &McpServerDefinition) -> McpResult<()> {
+        self.oauth_refresh(&server.id).await?;
         let runtime = self.runtime(server)?;
         let credential_vault = self.credential_vault()?;
         let initialized = tokio::time::timeout(self.limits.initialize_timeout, async {

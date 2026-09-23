@@ -61,6 +61,7 @@ from src.domain.events.agent_events import (
     SubAgentKilledEvent,
     SubAgentSteeredEvent,
 )
+from src.infrastructure.plugins.marketplace_hooks import MarketplaceHookError
 from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 if TYPE_CHECKING:
@@ -3143,6 +3144,8 @@ class SessionProcessor:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 for result in results:
+                    if isinstance(result, MarketplaceHookError):
+                        raise result
                     if isinstance(result, BaseException):
                         logger.error(f"[Processor] Parallel tool execution failed: {result}")
                         yield AgentErrorEvent(
@@ -4863,6 +4866,8 @@ class SessionProcessor:
                     if tool_part.status == ToolState.COMPLETED:
                         self.doom_loop_detector.reset_errors()
 
+                except MarketplaceHookError:
+                    raise
                 except Exception as e:
                     logger.error(
                         "Tool execution error (pipeline): %s",
@@ -4976,6 +4981,8 @@ class SessionProcessor:
                 ):
                     yield ev
 
+            except MarketplaceHookError:
+                raise
             except Exception as e:
                 logger.error("Tool execution error: %s", e, exc_info=True)
                 tool_part.status = ToolState.ERROR

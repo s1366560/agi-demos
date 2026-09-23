@@ -20,7 +20,7 @@
 .my-work-inbox-group > header { display: grid; grid-template-columns: 16px auto 1fr; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--desktop-gray-11); }
 .my-work-inbox-group > header svg { width: 13px; height: 13px; }
 .my-work-inbox-group.needs_input > header svg { color: var(--amber-9); }
-.my-work-inbox-group.running > header svg { color: var(--cyan-9); }
+.my-work-inbox-group.running > header svg { color: var(--desktop-status-running); }
 .my-work-inbox-group.ready_review > header svg { color: var(--green-9); }
 .my-work-inbox-group h2 { margin: 0; color: var(--desktop-text-pale); font-size: 12px; letter-spacing: -.01em; }
 .my-work-inbox-group > header span { justify-self: start; color: var(--desktop-gray-16); font-size: 9px; }
@@ -38,7 +38,7 @@
 .my-work-inbox-card > header { display: grid; grid-template-columns: 7px 13px auto 1fr; align-items: center; gap: 7px; color: var(--desktop-gray-23); font-size: 8px; }
 .my-work-inbox-card > header i { width: 6px; height: 6px; border-radius: 50%; background: currentcolor; }
 .my-work-inbox-card > header i.status-needs_input, .my-work-inbox-card > header i.status-needs_approval { color: var(--amber-9); }
-.my-work-inbox-card > header i.status-running { color: var(--cyan-9); }
+.my-work-inbox-card > header i.status-running { color: var(--desktop-status-running); }
 .my-work-inbox-card > header i.status-ready_review { color: var(--green-9); }
 .my-work-inbox-card > header svg { width: 12px; height: 12px; }
 .my-work-inbox-card > header time { justify-self: end; color: var(--desktop-gray-1); }

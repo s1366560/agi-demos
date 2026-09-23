@@ -33,7 +33,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository
 from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
     SqlProjectRepository,
 )
-from src.infrastructure.agent.mcp.client import MCPClient
 from src.infrastructure.mcp.resource_resolver import MCPAppResourceResolver
 
 from .runtime import (
@@ -244,7 +243,9 @@ class MCPDirectToolCallerProtocolV2(Protocol):
 
 @dataclass(frozen=True, kw_only=True)
 class MCPClientDirectToolCallerV2:
-    """Use the current MCP client adapter behind the V2 Provider seam."""
+    """Call the managed process in its owning project sandbox."""
+
+    sandbox_manager: SandboxMCPServerManager
 
     async def call(
         self,
@@ -253,16 +254,15 @@ class MCPClientDirectToolCallerV2:
         tool_name: str,
         arguments: Mapping[str, Any],
     ) -> object:
-        if server.config is None:
-            raise ValueError("MCP server has no transport configuration")
-        async with MCPClient(
-            server_type=server.config.transport_type.value,
-            transport_config=MCPRuntimeService.to_sandbox_config(server.config),
-        ) as client:
-            return await client.call_tool(
-                tool_name=tool_name,
-                arguments=dict(arguments),
-            )
+        if not server.project_id:
+            raise ValueError("MCP server has no project sandbox")
+        result = await self.sandbox_manager.call_tool(
+            project_id=server.project_id,
+            server_name=server.name,
+            tool_name=tool_name,
+            arguments=dict(arguments),
+        )
+        return {"content": result.content, "isError": result.is_error}
 
 
 @runtime_checkable
@@ -344,7 +344,10 @@ class DefaultMCPOperationServiceFactoryV2:
             app_repo=app_repo,
             resource_resolver=MCPAppResourceResolver(manager_factory=manager_factory),
         )
-        sandbox_manager = SandboxMCPServerManager(
+        from src.application.services.marketplace_oauth_runtime import OAuthSandboxMCPServerManager
+
+        sandbox_manager = OAuthSandboxMCPServerManager(
+            db=db,
             sandbox_resource=sandbox_services.sandbox_resource,
             app_service=app_service,
         )
@@ -358,6 +361,7 @@ class DefaultMCPOperationServiceFactoryV2:
             project_repo=SqlProjectRepository(db),
             redis_client=cast("Redis | None", self.redis_client),
         )
+        sandbox_manager.runtime_service = runtime_service
         return MCPApplicationServicesV2(
             sandbox_manager=sandbox_manager,
             app_service=app_service,
@@ -365,7 +369,7 @@ class DefaultMCPOperationServiceFactoryV2:
             server_repository=server_repository,
             access=SqlMCPProjectAccessV2(_session=db),
             lifecycle_queries=SqlMCPLifecycleQueryV2(_session=db),
-            direct_tool_caller=MCPClientDirectToolCallerV2(),
+            direct_tool_caller=MCPClientDirectToolCallerV2(sandbox_manager=sandbox_manager),
             tool_cache=AgentMCPToolCacheV2(),
         )
 

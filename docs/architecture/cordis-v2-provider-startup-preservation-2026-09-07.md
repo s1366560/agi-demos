@@ -26,11 +26,8 @@ and the five existing local-fallback tests passed: 11 passed in 0.22 seconds.
 They replace storage and encryption dependencies and do not connect to a database.
 Ruff passed; Pyright reported zero errors and five existing warnings.
 
-The GitNexus MCP impact transport failed. A subsequent CLI query reported HIGH
-risk: four direct callers and twelve impacted symbols across four modules, with
-no indexed execution processes. Source tracing identified API startup, agent
-worker startup, runtime bootstrap and project actors. The warning was reported;
-the change preserves the public boolean return contract and explicit reset entry
+Source tracing identified API startup, agent
+worker startup, runtime bootstrap and project actors. The change preserves the public boolean return contract and explicit reset entry
 point. The index is supplemented by this direct call-site review.
 
 The operator launcher resolves the database credential from the existing local

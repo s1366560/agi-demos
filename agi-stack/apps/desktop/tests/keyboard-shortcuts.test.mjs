@@ -235,5 +235,7 @@ test('shortcut settings page renders localized zh-CN copy', () => {
   const markup = withStoredLocale('zh-CN', () => renderShortcutSettingsPage('other'));
   assert.match(markup, /搜索快捷键，或直接按下组合键/);
   assert.match(markup, /打开命令面板/);
-  assert.match(markup, /快捷键目录/);
+  assert.match(markup, /<h1>键盘快捷键<\/h1>/);
+  assert.match(markup, /导航/);
+  assert.match(markup, /输入框/);
 });

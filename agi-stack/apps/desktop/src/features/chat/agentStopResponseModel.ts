@@ -48,8 +48,16 @@ export function applyAgentStopEvent(
   if (eventType === 'ack' && event.action === 'stop_session') {
     return settledAgentStopRequest(state.conversationId);
   }
-  if (eventType === 'cancelled' && structuredBoolean(event, ['cancelled']) === true) {
-    return settledAgentStopRequest(state.conversationId);
+  if (eventType === 'cancelled') {
+    // The runtime emits {type: "cancelled", data: {run_id, status:
+    // "cancelled"}}; the boolean flag form is a legacy alias.
+    if (
+      structuredString(event, ['status']) === 'cancelled' ||
+      structuredBoolean(event, ['cancelled']) === true
+    ) {
+      return settledAgentStopRequest(state.conversationId);
+    }
+    return state;
   }
   if (eventType !== 'error') return state;
 

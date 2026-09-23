@@ -185,7 +185,7 @@ export function requireDesktopTenantSkillDefinitionsV2(
   value: unknown,
   scope: DesktopTenantSkillDefinitionsScopeV2,
 ): readonly ManagedSkill[] {
-  if (!Array.isArray(value) || (scope.authority === 'cloud' && value.length > 100))
+  if (!Array.isArray(value) || (scope.authority === 'cloud' && value.length > 500))
     throw invalidResponse();
   const result = value.map((item) => requireDesktopTenantSkillDefinitionV2(item, scope));
   const ids = result.map((item) => JSON.stringify([item.scope, item.project_id ?? null, item.id]));

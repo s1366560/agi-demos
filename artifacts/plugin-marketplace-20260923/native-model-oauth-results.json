@@ -1,0 +1,113 @@
+{
+  "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+  "runs": [
+    {
+      "id": "local-run-c6c906f2-a179-449a-bde4-2309d8382ac0",
+      "status": "completed"
+    }
+  ],
+  "events": [
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139204925,
+      "type": "act",
+      "toolName": "submit_plan",
+      "toolInput": "{\"tasks\":[{\"content\":\"Invoke mcp__plugin_56127b0f_812__echo__5dfa0e6900092665 exactly once with the text MARKETPLACE_NATIVE_OAUTH_FINAL_OK, capture and report the exact result, then finish immediately without creating or registering anything else.\",\"priority\":\"high\"}]}"
+    },
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139205003,
+      "type": "observe",
+      "toolName": "submit_plan",
+      "toolInput": "{\"tasks\":[{\"content\":\"Invoke mcp__plugin_56127b0f_812__echo__5dfa0e6900092665 exactly once with the text MARKETPLACE_NATIVE_OAUTH_FINAL_OK, capture and report the exact result, then finish immediately without creating or registering anything else.\",\"priority\":\"high\"}]}",
+      "toolOutput": "{\"conversation_id\":\"abf0ecc3-df21-5768-b078-421c22d71e7c\",\"tasks\":[{\"content\":\"Invoke mcp__plugin_56127b0f_812__echo__5dfa0e6900092665 exactly once with the text MARKETPLACE_NATIVE_OAUTH_FINAL_OK, capture and report the exact result, then finish immediately without creating or registering anything else.\",\"conversation_id\":\"abf0ecc3-df21-5768-b078-421c22d71e7c\",\"created_at\":\"2026-09-23T04:53:24.926976+00:00\",\"id\":\"local-plan-task-eaabd66b-1e93-4869-95f1-35403b798c43\",\"order_index\":0,\"priority\":\"high\",\"status\":\"pending\",\"updated_at\":\"2026-09-23T04:53:24.926976+00:00\"}],\"total_count\":1}",
+      "isError": false
+    },
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139205003,
+      "type": "assistant_message",
+      "content": "Plan ready for review."
+    },
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139205003,
+      "type": "complete"
+    },
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139234056,
+      "type": "act",
+      "toolName": "mcp__plugin_56127b0f_812__echo__5dfa0e6900092665",
+      "toolInput": "{\"text\":\"MARKETPLACE_NATIVE_OAUTH_FINAL_OK\"}"
+    },
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139234116,
+      "type": "mcp_app_result",
+      "app_fields": [
+        "app_id",
+        "message_id",
+        "project_id",
+        "resource_html",
+        "resource_uri",
+        "server_name",
+        "tool_call_id",
+        "tool_input",
+        "tool_name",
+        "tool_result",
+        "ui_metadata"
+      ],
+      "app": {
+        "app_id": "local-mcp-app-48b681d451cfa1489a47deaecca7b6a9",
+        "message_id": "desktop-build-be7f6759-9895-4e26-8e18-03b6287e509e",
+        "project_id": "desktop-client",
+        "resource_html": "<!doctype html><html><body><h1>OAuth connected</h1><p>Protected marketplace app is available.</p></body></html>",
+        "resource_uri": "ui://oauth-fixture/app.html",
+        "server_name": "plugin-56127b0f-812a-4550-88a3-db33d1af46e9-fixture",
+        "tool_call_id": "52f9a47ecdf19e8d605291e83e35cfabd7362a2c0f14d8736dd8ad983b7b48c7",
+        "tool_input": {
+          "text": "MARKETPLACE_NATIVE_OAUTH_FINAL_OK"
+        },
+        "tool_name": "echo",
+        "tool_result": {
+          "content": [
+            {
+              "text": "MARKETPLACE_NATIVE_OAUTH_FINAL_OK",
+              "type": "text"
+            }
+          ],
+          "duplicate": false,
+          "is_error": false,
+          "server_name": "plugin-56127b0f-812a-4550-88a3-db33d1af46e9-fixture",
+          "tool_name": "echo"
+        },
+        "ui_metadata": {
+          "ui": {
+            "resourceUri": "ui://oauth-fixture/app.html"
+          }
+        }
+      }
+    },
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139234192,
+      "type": "observe",
+      "toolName": "mcp__plugin_56127b0f_812__echo__5dfa0e6900092665",
+      "toolInput": "{\"text\":\"MARKETPLACE_NATIVE_OAUTH_FINAL_OK\"}",
+      "toolOutput": "{\"content\":[{\"text\":\"MARKETPLACE_NATIVE_OAUTH_FINAL_OK\",\"type\":\"text\"}],\"duplicate\":false,\"is_error\":false,\"server_name\":\"plugin-56127b0f-812a-4550-88a3-db33d1af46e9-fixture\",\"tool_name\":\"echo\"}",
+      "isError": false
+    },
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139252067,
+      "type": "assistant_message",
+      "content": "Invoked mcp__plugin_56127b0f_812__echo__5dfa0e6900092665 exactly once with text MARKETPLACE_NATIVE_OAUTH_FINAL_OK. Exact result: {\"content\":[{\"text\":\"MARKETPLACE_NATIVE_OAUTH_FINAL_OK\",\"type\":\"text\"}],\"duplicate\":false,\"is_error\":false,\"server_name\":\"plugin-56127b0f-812a-4550-88a3-db33d1af46e9-fixture\",\"tool_name\":\"echo\"}."
+    },
+    {
+      "conversation_id": "abf0ecc3-df21-5768-b078-421c22d71e7c",
+      "timestamp": 1790139252067,
+      "type": "complete"
+    }
+  ]
+}

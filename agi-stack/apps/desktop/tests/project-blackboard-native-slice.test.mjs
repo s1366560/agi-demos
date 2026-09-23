@@ -96,11 +96,11 @@ test('Project Blackboard local client reads sidecar plan/tasks and makes every u
         artifact_index: [],
       });
     }
-    return jsonResponse({
-      workspace_id: 'workspace-1',
-      items: [{ id: 'task-1', title: 'Local task', status: 'in_progress' }],
-      total: 1,
-    });
+    // The workspace-core tasks endpoint serves a bare JSON array
+    // (Json<Vec<PublicWorkspaceTask>>) — never an {items, total} envelope.
+    return jsonResponse([
+      { id: 'task-1', title: 'Local task', status: 'in_progress' },
+    ]);
   };
   try {
     const authority = createDesktopProjectBlackboardAuthorityV2(localConfig);

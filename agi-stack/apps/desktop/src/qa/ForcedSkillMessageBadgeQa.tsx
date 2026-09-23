@@ -118,7 +118,7 @@ function ForcedSkillMessageBadgeQa() {
   const state = useMemo(() => timelineState(phase), [phase]);
 
   return (
-    <Theme appearance={appearance} accentColor="cyan" grayColor="slate" radius="medium">
+    <Theme appearance={appearance} accentColor="gray" grayColor="slate" radius="medium">
       <main className="session-workspace-thread" style={{ minHeight: '100vh', padding: 24 }}>
         <section
           className="pane-shell chat-shell session-chat-narrative"

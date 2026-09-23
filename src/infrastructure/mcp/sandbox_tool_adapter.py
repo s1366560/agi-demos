@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast, override
 
+from src.application.services.marketplace_agent_mcp import agent_mcp_call, agent_mcp_resource
 from src.infrastructure.agent.tools.base import AgentTool
 from src.infrastructure.mcp.resource_cache import MCPResourceCache
 
@@ -37,6 +37,9 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
     MCP_PREFIX = "mcp"
     MCP_NAME_SEPARATOR = "__"
+    # Arbitrary remote tools require the run's explicit MCP permission.
+    permission = "mcp"
+    tags = frozenset({"mcp", "sandbox"})
 
     def __init__(
         self,
@@ -178,24 +181,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         if not uri:
             return ""
 
-        # Use injected cache service if available
-        if self._resource_cache is not None:
-            cached = await self._resource_cache.get(uri)
-            if cached is not None:
-                return cached
-
-            try:
-                html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
-                html = html or ""
-                if html:
-                    await self._resource_cache.put(uri, html, ttl=self._cache_ttl_seconds)
-                return html
-            except Exception as e:
-                logger.warning("fetch_resource_html failed for %s: %s", uri, e)
-                return ""
-
-        # Fallback: inline caching (legacy path)
-        return await self._fetch_resource_html_inline(uri)
+        return await agent_mcp_resource(self._sandbox_id, self._server_name, uri)
 
     async def _fetch_resource_html_inline(self, uri: str) -> str:
         """Legacy inline caching path for fetch_resource_html."""
@@ -211,7 +197,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         # Cache miss or expired - fetch fresh
         self._cache_stats["misses"] += 1
         try:
-            html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
+            html = await agent_mcp_resource(self._sandbox_id, self._server_name, uri)
             html = html or ""
 
             # Cache successful result
@@ -249,7 +235,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         if self._resource_cache is not None:
 
             async def _fetch(uri: str) -> str:
-                html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
+                html = await agent_mcp_resource(self._sandbox_id, self._server_name, uri)
                 return html or ""
 
             uri = self.resource_uri
@@ -305,14 +291,8 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
         try:
             # Call the sandbox management tool to proxy the tool call
-            result = await self._sandbox_adapter.call_tool(
-                sandbox_id=self._sandbox_id,
-                tool_name="mcp_server_call_tool",
-                arguments={
-                    "server_name": self._server_name,
-                    "tool_name": self._original_tool_name,
-                    "arguments": json.dumps(kwargs),
-                },
+            result = await agent_mcp_call(
+                self._sandbox_id, self._server_name, self._original_tool_name, kwargs
             )
 
             # Parse result
@@ -537,8 +517,7 @@ def _build_prefetch(
         if resource_cache is not None:
 
             async def _fetch(uri: str) -> str:
-                html = await sandbox_adapter.read_resource(sandbox_id, uri)
-                return html or ""
+                return await fetch_fn()
 
             uri = get_uri()
             if uri:
@@ -707,15 +686,11 @@ def create_sandbox_mcp_server_tool(
     }
     bg_tasks: set[asyncio.Task[Any]] = set()
 
-    # -- Build caching helpers --
-    fetch_resource_html = _build_fetch_resource_html(
-        sandbox_adapter=sandbox_adapter,
-        sandbox_id=sandbox_id,
-        cache_ttl_seconds=cache_ttl_seconds,
-        resource_cache=resource_cache,
-        get_uri=_resource_uri,
-        state=state,
-    )
+    # Resolve authorization on every read, including previously cached App resources.
+    async def fetch_resource_html() -> str:
+        uri = _resource_uri()
+        return await agent_mcp_resource(sandbox_id, server_name, uri) if uri else ""
+
     invalidate_fn = _build_invalidate_cache(
         resource_cache=resource_cache,
         get_uri=_resource_uri,
@@ -743,15 +718,7 @@ def create_sandbox_mcp_server_tool(
         _ = ctx
         logger.info("Executing sandbox MCP tool: %s", name)
         try:
-            result = await sandbox_adapter.call_tool(
-                sandbox_id=sandbox_id,
-                tool_name="mcp_server_call_tool",
-                arguments={
-                    "server_name": server_name,
-                    "tool_name": original_tool_name,
-                    "arguments": json.dumps(kwargs),
-                },
-            )
+            result = await agent_mcp_call(sandbox_id, server_name, original_tool_name, kwargs)
             is_error = result.get("is_error", result.get("isError", False))
             content = result.get("content", [])
 
@@ -788,7 +755,7 @@ def create_sandbox_mcp_server_tool(
         description=description or f"MCP tool {original_tool_name} from {server_name}",
         parameters=parameters,
         execute=execute,
-        permission=None,
+        permission="mcp",
         category="mcp",
         tags=frozenset({"mcp", "sandbox", server_name}),
     )

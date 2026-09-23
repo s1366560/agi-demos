@@ -64,7 +64,5 @@ backup-only fix was identified in the complete four-file diffs.
   compilation succeeded; 4,131 passed, two skipped, zero failed out of 4,133
   tests (109,211 ms). Log: `/tmp/cordis-four-files-evaluation-tests.log`.
 - Backup manifest: four of four SHA-256 checks passed.
-- GitNexus `detect-changes` was attempted but could not open the existing
-  1,222,400-byte pending WAL without its shadow file. No graph result is claimed.
-  Git scope review confirms this is a documentation-only addition; runtime
+- Git scope review confirms this is a documentation-only addition; runtime
   source and parity artifacts remain unchanged.

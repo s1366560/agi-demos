@@ -215,7 +215,7 @@ function AutomationsQa() {
     [state],
   );
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <div className="automations-qa-shell">
         <nav aria-label="Automation QA states">
           {(['populated', 'empty', 'unavailable', 'permission', 'error'] as QaState[]).map(

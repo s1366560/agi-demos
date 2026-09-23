@@ -83,6 +83,11 @@ const definition = {
   workspace_config: {
     sandbox_scope: 'agent',
     base_path: '/srv/agents/reviewer',
+    max_size_mb: 512,
+    persona_files: ['SOUL.md'],
+    shared_files: ['AGENTS.md'],
+    auto_cleanup: true,
+    retention_days: 14,
   },
 };
 
@@ -100,6 +105,7 @@ test('new Agent definition drafts inherit the selected project and safe runtime 
     executionBackendAcpAgentKey: '',
     workspaceType: 'shared',
     workspaceBaseDir: '',
+    workspaceConfigExtra: null,
     temperature: 0.7,
     maxTokens: 4096,
     maxIterations: 10,
@@ -166,6 +172,13 @@ test('editing an Agent definition preserves authoritative identity, runtime, and
     executionBackendAcpAgentKey: 'review-agent',
     workspaceType: 'isolated',
     workspaceBaseDir: '/srv/agents/reviewer',
+    workspaceConfigExtra: {
+      max_size_mb: 512,
+      persona_files: ['SOUL.md'],
+      shared_files: ['AGENTS.md'],
+      auto_cleanup: true,
+      retention_days: 14,
+    },
     temperature: 0.3,
     maxTokens: 6000,
     maxIterations: 18,
@@ -228,6 +241,11 @@ test('Agent definition mutations normalize list fields and fail closed for empty
       acp_agent_key: 'review-agent',
     },
     workspace_config: {
+      max_size_mb: 512,
+      persona_files: ['SOUL.md'],
+      shared_files: ['AGENTS.md'],
+      auto_cleanup: true,
+      retention_days: 14,
       type: 'isolated',
       base_dir: '/srv/agents/reviewer',
     },

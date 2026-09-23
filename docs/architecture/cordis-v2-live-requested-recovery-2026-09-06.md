@@ -15,7 +15,7 @@ The coordinator retains the receipt authority callback with the actual pending o
 - Final route receipt/startup regression: 12 passed in 147.31 seconds. Existing PostgreSQL gate: 20 passed in 96.46 seconds, no skips, owned container cleanup exit 0.
 - Evidence logs and SHA256 manifest: /var/tmp/cordis-live-requested-nq2rr0zt.
 - Ruff, generated protocol and contract completeness checks pass. Focused production Pyright reports zero errors and warnings.
-- GitNexus coordinator analysis reported LOW risk, 3 direct callers and 13 upstream impacts. Recent recovery symbols were unindexed; direct review covered startup, background recovery, route publication and retries.
+- Direct review covered startup, background recovery, route publication and retries.
 
 ## Boundaries
 

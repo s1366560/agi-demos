@@ -62,7 +62,7 @@ function SearchQa() {
   );
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <div className="search-qa-shell">
         <nav aria-label="Search QA states">
           {(['populated', 'empty', 'error', 'no-project'] as SearchQaState[]).map((nextState) => (

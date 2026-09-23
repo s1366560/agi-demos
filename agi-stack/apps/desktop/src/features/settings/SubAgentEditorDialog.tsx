@@ -2,7 +2,6 @@ import { useRef, useState, type ReactNode } from 'react';
 import {
   Cross2Icon,
   ExclamationTriangleIcon,
-  PersonIcon,
   ReloadIcon,
   TrashIcon,
 } from '@radix-ui/react-icons';
@@ -109,11 +108,7 @@ export function SubAgentEditorDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="agent-definition-dialog-heading">
-          <div className="agent-definition-dialog-icon">
-            <PersonIcon />
-          </div>
           <div>
-            <span>{t('settings.subagentsEyebrow')}</span>
             <h2>
               {t(
                 definition

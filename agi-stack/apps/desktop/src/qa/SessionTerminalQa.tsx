@@ -80,7 +80,7 @@ function SessionTerminalQa() {
   const [binding, setBinding] = useState<TerminalBindingState>('connected');
   const [lastInteraction, setLastInteraction] = useState('waiting for xterm input');
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium" scaling="95%">
       <div className="session-steering-qa-shell">
         <aside className="session-steering-qa-rail">
           <div className="session-steering-qa-brand"><CubeIcon /><strong>MemStack</strong></div>

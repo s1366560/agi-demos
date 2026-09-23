@@ -7,7 +7,6 @@ import {
 
 import { useI18n } from '../../i18n';
 import type { AgentTimelineItem } from '../../types';
-import { formatTimelineTime } from './chatTimelinePresentation';
 import { MarkdownContent } from './ChatTranscript';
 import { workPlanTimelinePresentation } from './workPlanTimelineModel';
 
@@ -28,7 +27,6 @@ export function WorkPlanTimelineCard({
   const plan = workPlanTimelinePresentation(item);
   if (!plan) return null;
 
-  const time = formatTimelineTime(item);
   const statusKey = workPlanStatusKey(plan.status);
   const progress =
     plan.currentStep && plan.currentStep <= plan.totalSteps
@@ -66,7 +64,8 @@ export function WorkPlanTimelineCard({
           {statusKey ? (
             <span className="work-plan-timeline-status">{t(statusKey)}</span>
           ) : null}
-          {time ? <time className="work-plan-timeline-time">{time}</time> : null}
+          {/* Web parity: work-plan events carry no duration data, so the header
+              renders no time element (never a wall-clock). */}
         </button>
         <div
           id={contentId}

@@ -215,8 +215,8 @@
 
 .runtime-status.status-executing,
 .runtime-status.status-initializing {
-  background: var(--blue-4);
-  color: var(--blue-11) !important;
+  background: var(--gray-4);
+  color: var(--gray-11) !important;
 }
 
 .runtime-status.status-unhealthy,

@@ -1218,7 +1218,7 @@ export function ArtifactLifecyclePanel({
           <strong>{t('artifact.title')}</strong>
           <small>{t('artifact.description')}</small>
         </span>
-        <Badge color="cyan" variant="soft">
+        <Badge color="gray" variant="soft">
           {t('artifact.currentCount', { count: currentVersions.length })}
         </Badge>
       </header>
@@ -1428,7 +1428,7 @@ export function ArtifactLifecyclePanel({
                 ) : null}
                 {actions.includes('deliver') ? (
                   <Button
-                    color="cyan"
+                    color="gray"
                     disabled={isPending}
                     onClick={() => void onAction(selectedVersion, 'deliver')}
                   >

@@ -1,7 +1,6 @@
 # Version-control and local agent state
 .git
 .github
-.gitnexus
 .omx
 .copilot
 .auto-claude

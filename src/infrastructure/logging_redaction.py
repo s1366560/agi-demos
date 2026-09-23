@@ -18,10 +18,13 @@ _SENSITIVE_QUERY_PARAMS = (
     "auth",
     "authorization",
     "client_secret",
+    "code",
+    "code_verifier",
     "key",
     "password",
     "refresh_token",
     "secret",
+    "state",
     "ticket",
     "token",
 )

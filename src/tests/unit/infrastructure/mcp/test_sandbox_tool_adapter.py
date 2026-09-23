@@ -7,6 +7,13 @@ import pytest
 from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
 
 
+@pytest.fixture
+def managed_call(monkeypatch):
+    call = AsyncMock()
+    monkeypatch.setattr("src.infrastructure.mcp.sandbox_tool_adapter.agent_mcp_call", call)
+    return call
+
+
 @pytest.mark.unit
 class TestSandboxMCPServerToolAdapter:
     """Tests for SandboxMCPServerToolAdapter."""
@@ -75,9 +82,9 @@ class TestSandboxMCPServerToolAdapter:
         assert schema["type"] == "object"
         assert schema["required"] == []
 
-    async def test_execute_success(self):
+    async def test_execute_success(self, managed_call):
         mock_adapter = AsyncMock()
-        mock_adapter.call_tool.return_value = {
+        managed_call.return_value = {
             "content": [{"type": "text", "text": "file content here"}],
             "is_error": False,
         }
@@ -86,19 +93,15 @@ class TestSandboxMCPServerToolAdapter:
         result = await adapter.execute(path="/tmp/test.txt")
 
         assert result == "file content here"
-        mock_adapter.call_tool.assert_called_once_with(
-            sandbox_id="sandbox-1",
-            tool_name="mcp_server_call_tool",
-            arguments={
-                "server_name": "test-server",
-                "tool_name": "read_file",
-                "arguments": '{"path": "/tmp/test.txt"}',
-            },
+        managed_call.assert_awaited_once_with(
+            "sandbox-1", "test-server", "read_file", {"path": "/tmp/test.txt"}
         )
+        mock_adapter.call_tool.assert_not_awaited()
 
-    async def test_execute_error(self):
+
+    async def test_execute_error(self, managed_call):
         mock_adapter = AsyncMock()
-        mock_adapter.call_tool.return_value = {
+        managed_call.return_value = {
             "content": [{"type": "text", "text": "File not found"}],
             "is_error": True,
         }
@@ -109,9 +112,9 @@ class TestSandboxMCPServerToolAdapter:
         assert "Error:" in result
         assert "File not found" in result
 
-    async def test_execute_camelcase_error_field(self):
+    async def test_execute_camelcase_error_field(self, managed_call):
         mock_adapter = AsyncMock()
-        mock_adapter.call_tool.return_value = {
+        managed_call.return_value = {
             "content": [{"type": "text", "text": "error msg"}],
             "isError": True,
         }
@@ -120,18 +123,18 @@ class TestSandboxMCPServerToolAdapter:
         result = await adapter.execute()
         assert "Error:" in result
 
-    async def test_execute_exception(self):
+    async def test_execute_exception(self, managed_call):
         mock_adapter = AsyncMock()
-        mock_adapter.call_tool.side_effect = ConnectionError("lost connection")
+        managed_call.side_effect = ConnectionError("lost connection")
         adapter = self._make_adapter(sandbox_adapter=mock_adapter)
 
         result = await adapter.execute()
         assert "Error executing tool:" in result
         assert "lost connection" in result
 
-    async def test_execute_no_output(self):
+    async def test_execute_no_output(self, managed_call):
         mock_adapter = AsyncMock()
-        mock_adapter.call_tool.return_value = {
+        managed_call.return_value = {
             "content": [],
             "is_error": False,
         }

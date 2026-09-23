@@ -7,7 +7,7 @@
   padding: 20px;
   color: var(--gray-12);
   background:
-    radial-gradient(circle at 8% -6%, color-mix(in srgb, var(--cyan-7) 12%, transparent), transparent 34%),
+    radial-gradient(circle at 8% -6%, color-mix(in srgb, var(--gray-7) 12%, transparent), transparent 34%),
     var(--color-panel-solid);
 }
 
@@ -49,8 +49,8 @@
   flex: none;
   border: 1px solid var(--gray-a5);
   border-radius: 10px;
-  color: var(--cyan-11);
-  background: var(--cyan-a3);
+  color: var(--gray-11);
+  background: var(--gray-a3);
 }
 
 .session-runtime-heading small,
@@ -148,7 +148,7 @@
 .session-runtime-resource:hover,
 .session-runtime-history-list button:hover { background: var(--gray-a3); }
 .session-runtime-resource.selected,
-.session-runtime-history-list button.selected { background: var(--cyan-a3); }
+.session-runtime-history-list button.selected { background: var(--gray-a3); }
 .session-runtime-resource strong,
 .session-runtime-resource code,
 .session-runtime-history-list strong,
@@ -166,7 +166,7 @@
   background: var(--gray-a4);
 }
 
-.family-desktop { color: var(--blue-11); background: var(--blue-a3); }
+.family-desktop { color: var(--gray-11); background: var(--gray-a3); }
 .family-terminal { color: var(--amber-11); background: var(--amber-a3); }
 .family-httpService { color: var(--green-11); background: var(--green-a3); }
 
@@ -185,7 +185,7 @@
 .session-runtime-status.status-running,
 .session-runtime-status.status-ready,
 .session-runtime-status.status-connected { color: var(--green-11); background: var(--green-a3); }
-.session-runtime-status.status-starting { color: var(--blue-11); background: var(--blue-a3); }
+.session-runtime-status.status-starting { color: var(--desktop-status-running); background: rgba(var(--desktop-status-running-rgb), 0.12); }
 .session-runtime-status.status-error { color: var(--red-11); background: var(--red-a3); }
 
 .session-runtime-evidence-body { padding: 14px; }

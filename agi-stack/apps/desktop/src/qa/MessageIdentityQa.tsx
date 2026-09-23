@@ -103,7 +103,7 @@ function mount() {
     <React.StrictMode>
       <I18nProvider>
         <ToastProvider>
-          <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
+          <Theme appearance="dark" accentColor="gray" grayColor="slate" radius="medium">
             <MessageIdentityQa />
           </Theme>
         </ToastProvider>

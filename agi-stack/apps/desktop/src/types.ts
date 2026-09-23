@@ -1406,12 +1406,18 @@ export type MarketplacePluginInstallRequest = {
   artifact: MarketplacePluginArtifactSource;
   artifact_sha256: string;
   manifest: Record<string, unknown>;
-  signature: {
+  /**
+   * Catalog-driven desktop installs omit both fields: the catalog redacts
+   * signature secrets, so the backend resolves the material from the catalog
+   * row plus the server-side trust store. The backend still accepts explicit
+   * material (both fields together) for publisher-side flows.
+   */
+  signature?: {
     algorithm: string;
     public_key_pem: string;
     signature_base64: string;
   };
-  provenance: {
+  provenance?: {
     predicate_type: string;
     builder_id: string;
     subject_name: string;
@@ -1584,6 +1590,14 @@ export type ManagedAgentWorkspaceConfig = {
   base_dir?: string;
   base_path?: string;
   sandbox_scope?: 'session' | 'agent' | 'shared';
+  // Backend-native fields the editor form does not model; they must survive
+  // a save round-trip instead of being reset to defaults.
+  max_size_mb?: number;
+  persona_files?: string[];
+  shared_files?: string[];
+  auto_cleanup?: boolean;
+  retention_days?: number;
+  [key: string]: unknown;
 };
 
 export type ManagedExternalAcpAgent = {
@@ -1776,6 +1790,8 @@ export type AgentTimelineItem = {
   error?: string;
   payload?: unknown;
   metadata?: Record<string, unknown> | null;
+  /** Error event carrying the sidecar's `model_unconfigured` protocol token. */
+  localLlmUnconfigured?: boolean;
   [key: string]: unknown;
 };
 

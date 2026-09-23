@@ -242,6 +242,7 @@ export function DesktopSidebar({
                 type="button"
                 role="menuitem"
                 onClick={() => {
+                  profileTriggerRef.current?.focus();
                   setProfileOpen(false);
                   onOpenAccountSettings();
                 }}
@@ -252,6 +253,7 @@ export function DesktopSidebar({
                 type="button"
                 role="menuitem"
                 onClick={() => {
+                  profileTriggerRef.current?.focus();
                   setProfileOpen(false);
                   onSwitchWorkspace();
                 }}
