@@ -102,10 +102,11 @@ test('app shell mounts the desktop titlebar and status bar exactly once', () => 
     authenticatedShellSurfaceSource,
     /<DesktopRendererTitlebarV2 input=\{surfaces\.titlebar\}\s*\/>/u,
   );
-  // The right sidebar toggle state is owned by the shell for later phases.
-  assert.match(appSource, /localStorage\.getItem\('agistack\.desktop\.rightSidebarOpen'\) === 'true'/);
+  // Tabs and visibility belong to the session-scoped, in-memory work-panel state.
+  assert.match(appSource, /useWorkPanels\(\)/);
+  assert.doesNotMatch(appSource, /localStorage\.getItem\('agistack\.desktop\.rightSidebarOpen'\)/);
   assert.match(appSource, /rightSidebarOpen,/);
-  assert.match(appSource, /onToggleRightSidebar:\s*\(\) => \{/);
+  assert.match(appSource, /onToggleRightSidebar:\s*toggleRightSidebar/);
   // The titlebar reuses the existing sidebar collapse state.
   assert.match(appSource, /sidebarCollapsed,/);
   assert.match(appSource, /onToggleSidebar:\s*\(\) =>/);
@@ -282,7 +283,7 @@ test('the retired tab bar renders nothing while preserving the conversation call
   assert.match(tabBarSource, /onClose:/);
 });
 
-test('right sidebar hosts the context rail and canvas behind an activity bar', () => {
+test('right sidebar hosts opened work tabs through a single header', () => {
   assert.equal(
     (authenticatedShellSurfaceSource.match(/<DesktopRendererRightSidebarV2\b/g) ?? []).length,
     1,
@@ -300,22 +301,21 @@ test('right sidebar hosts the context rail and canvas behind an activity bar', (
     authenticatedShellSurfaceSource,
     /surfaces\.rightSidebar\.kind === 'visible'[\s\S]*<DesktopRendererRightSidebarV2/u,
   );
-  // Activity bar: context, canvas, and browser entries with pressed state;
-  // context/canvas stay session-scoped, browser does not.
-  assert.match(rightSidebarSource, /desktop-right-activity-bar/);
-  assert.equal((rightSidebarSource.match(/aria-pressed=\{effectivePanel ===/g) ?? []).length, 3);
-  assert.match(
-    rightSidebarSource,
-    /disabled=\{canvas\.kind === 'unavailable' \|\| viewModel === null\}/,
-  );
+  // The shell owns navigation; embedded canvas renders only content.
+  assert.doesNotMatch(rightSidebarSource, /desktop-right-activity-bar/);
+  assert.match(rightSidebarSource, /state\.tabs\.map/);
+  assert.match(rightSidebarSource, /role="tablist"/);
+  assert.match(rightSidebarSource, /rightbar\.addView/);
+  assert.match(rightSidebarSource, /disabled=\{!entry\.available\}/);
   assert.match(rightSidebarSource, /<DesktopRendererSessionCanvasV2/u);
+  assert.match(rightSidebarSource, /embedded: true/);
   assert.match(rightSidebarSource, /<SessionContextRail/);
   assert.match(rightSidebarSource, /<BrowserPanel/);
-  // Canvas layout maps to panel width: focus widens, split restores default.
-  assert.match(rightSidebarSource, /layout === 'focus'\) panelWidth\.resize\(/);
-  assert.match(rightSidebarSource, /panelWidth\.reset\(\)/);
-  // Closing the canvas restores focus to the originating trigger.
-  assert.match(rightSidebarSource, /data-session-canvas-trigger/);
+  // Width derives from usable space; expansion preserves the preferred width.
+  assert.match(rightSidebarSource, /workPanelGeometry\(availableWidth, preferredWidth, focused\)/);
+  assert.match(rightSidebarSource, /setFocused\(\(value\) => !value\)/);
+  assert.match(appSource, /rightPanels\.restoreFocus\(\)/);
+
 });
 
 test('shell grid adds a self-sizing third column for the right sidebar', () => {

@@ -329,6 +329,7 @@ export function WorkspaceReviewPanel({
 }) {
   const { t } = useI18n();
   const timelineInspection = useTimelineInspection();
+  const embedded = sessionControls?.embedded === true;
   const [focusedArtifactVersionId, setFocusedArtifactVersionId] = useState<
     string | null
   >(null);
@@ -562,6 +563,7 @@ export function WorkspaceReviewPanel({
       ?.focus();
   };
   useEffect(() => {
+    if (embedded) return;
     const availableTabs = new Set<ReviewTab>(
       [...configuredCanvasTabs.primary, ...configuredCanvasTabs.secondary].map(
         (tab) => tab.id,
@@ -587,6 +589,7 @@ export function WorkspaceReviewPanel({
     }
   }, [
     activeTab,
+    embedded,
     configuredCanvasTabs,
     mcpAppCanvas.tabs.length,
     onTabChange,
@@ -597,11 +600,12 @@ export function WorkspaceReviewPanel({
     sessionRuntimeInfrastructure.events.length,
   ]);
 
-  if (timelineInspection.items.length) {
+  if (timelineInspection.items.length && (!embedded || activeTab === 'activity')) {
     const liveItems = resolveTimelineInspectionItems(timelineInspection.items, timelineItems);
     return (
       <aside className={`${panelClassName} review-panel-inspection`} aria-label={t('timelineDetails.title')}>
         <TimelineStepDetails
+          showCloseButton={!embedded}
           items={liveItems}
           onOpenFile={timelineInspection.onOpenFile}
           onClose={() => {
@@ -615,88 +619,91 @@ export function WorkspaceReviewPanel({
 
   return (
     <aside className={panelClassName} aria-label={t('session.canvas')}>
-      <div className="review-tabs" aria-label={t('session.canvas')}>
-        <nav
-          className="review-tab-scroll"
-          ref={sessionTabListRef}
-          role="tablist"
-          aria-label={t('session.canvas')}
-          aria-orientation="horizontal"
-        >
-          {reviewTabs.map(({ tab, label, value }) => (
-            <button
-              id={tabId(tab)}
-              className={`review-tab ${activeTab === tab ? 'selected' : ''}`}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab}
-              aria-controls={panelId}
-              tabIndex={activeTab === tab ? 0 : -1}
-              aria-label={
-                value
-                  ? t('session.openCanvasTabWithValue', { label, value })
-                  : t('session.openCanvasTab', { label })
-              }
-              key={tab}
-              onKeyDown={(event) => handleTabKeyDown(event, tab)}
-              onClick={() => selectTab(tab)}
-            >
-              <span>{label}</span>
-              {value ? <em>{value}</em> : null}
-            </button>
-          ))}
-        </nav>
-        {chrome.showSessionLayoutActions && sessionControls ? (
-          <div className="review-tab-actions" aria-label={t('session.canvas')}>
-            <Tooltip
-              content={
-                sessionControls.layout === 'focus'
-                  ? t('session.splitView')
-                  : t('session.focusCanvas')
-              }
-            >
-              <IconButton
-                size="1"
-                variant="ghost"
-                color="gray"
+      {!embedded ? (
+        <div className="review-tabs" aria-label={t('session.canvas')}>
+          <nav
+            className="review-tab-scroll"
+            ref={sessionTabListRef}
+            role="tablist"
+            aria-label={t('session.canvas')}
+            aria-orientation="horizontal"
+          >
+            {reviewTabs.map(({ tab, label, value }) => (
+              <button
+                id={tabId(tab)}
+                className={`review-tab ${activeTab === tab ? 'selected' : ''}`}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                aria-controls={panelId}
+                tabIndex={activeTab === tab ? 0 : -1}
                 aria-label={
+                  value
+                    ? t('session.openCanvasTabWithValue', { label, value })
+                    : t('session.openCanvasTab', { label })
+                }
+                key={tab}
+                onKeyDown={(event) => handleTabKeyDown(event, tab)}
+                onClick={() => selectTab(tab)}
+              >
+                <span>{label}</span>
+                {value ? <em>{value}</em> : null}
+              </button>
+            ))}
+          </nav>
+          {chrome.showSessionLayoutActions && sessionControls ? (
+            <div className="review-tab-actions" aria-label={t('session.canvas')}>
+              <Tooltip
+                content={
                   sessionControls.layout === 'focus'
                     ? t('session.splitView')
                     : t('session.focusCanvas')
                 }
-                onClick={() =>
-                  sessionControls.onLayoutChange(
-                    sessionControls.layout === 'focus' ? 'split' : 'focus',
-                  )
-                }
               >
-                {sessionControls.layout === 'focus' ? (
-                  <ColumnsIcon />
-                ) : (
-                  <EnterFullScreenIcon />
-                )}
-              </IconButton>
-            </Tooltip>
-            <Tooltip content={t('session.closeCanvas')}>
-              <IconButton
-                size="1"
-                variant="ghost"
-                color="gray"
-                aria-label={t('session.closeCanvas')}
-                onClick={sessionControls.onClose}
-              >
-                <Cross2Icon />
-              </IconButton>
-            </Tooltip>
-          </div>
-        ) : null}
-      </div>
+                <IconButton
+                  size="1"
+                  variant="ghost"
+                  color="gray"
+                  aria-label={
+                    sessionControls.layout === 'focus'
+                      ? t('session.splitView')
+                      : t('session.focusCanvas')
+                  }
+                  onClick={() =>
+                    sessionControls.onLayoutChange(
+                      sessionControls.layout === 'focus' ? 'split' : 'focus',
+                    )
+                  }
+                >
+                  {sessionControls.layout === 'focus' ? (
+                    <ColumnsIcon />
+                  ) : (
+                    <EnterFullScreenIcon />
+                  )}
+                </IconButton>
+              </Tooltip>
+              <Tooltip content={t('session.closeCanvas')}>
+                <IconButton
+                  size="1"
+                  variant="ghost"
+                  color="gray"
+                  aria-label={t('session.closeCanvas')}
+                  onClick={sessionControls.onClose}
+                >
+                  <Cross2Icon />
+                </IconButton>
+              </Tooltip>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div
         className="review-content"
         id={panelId}
         role="tabpanel"
-        aria-labelledby={tabId(activeTab)}
+        aria-labelledby={embedded ? undefined : tabId(activeTab)}
+        aria-label={embedded ? t('session.canvas') : undefined}
         tabIndex={0}
       >
         {authorityNotice ? (

@@ -211,6 +211,20 @@ impl LlmPort for HookLlm {
         self.hooks.run("before_request").await?;
         self.inner.decide(goal, round, transcript, tools).await
     }
+    async fn decide_with_tools_stream(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        tools: &[agistack_core::ports::ToolDefinition],
+        on_text: &(dyn for<'text> Fn(&'text str) + Send + Sync),
+    ) -> CoreResult<AgentAction> {
+        self.hooks.run("before_request").await?;
+        self.inner
+            .decide_with_tools_stream(goal, round, transcript, tools, on_text)
+            .await
+    }
+
     async fn decide_with_tools(
         &self,
         goal: &str,

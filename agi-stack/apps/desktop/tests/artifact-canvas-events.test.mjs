@@ -580,7 +580,7 @@ test('artifact view modes, data formatting, download, and save authority remain 
 test('Desktop folds artifact canvas events out of the timeline and exposes Browser QA', () => {
   assert.match(appTimelineEventModelSource, /applyArtifactCanvasStreamEvent\(emptyArtifactCanvasState\(\), event\)/);
   assert.match(appTimelineEventModelSource, /artifactCanvasResult\.handled[\s\S]*return existing/);
-  assert.match(appSource, /setReviewTab\('artifacts'\)/);
+  assert.match(appSource, /openRightCanvasPanel\('artifacts'\)/);
   assert.match(appSource, /replayArtifactCanvasEvents\(responseItems\)/);
   assert.match(componentSource, /aria-label=\{t\('artifact\.liveCanvas'\)\}/);
   assert.doesNotMatch(componentSource, /dangerouslySetInnerHTML/);

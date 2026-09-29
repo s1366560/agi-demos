@@ -458,7 +458,7 @@ test('authoritative conversation refresh removes only an unchanged missing selec
   );
   assert.match(appSource, /resetConversationTimeline\(\);[\s\S]*setAgentTaskSignals\(\[\]\)/);
   assert.match(appSource, /activeSectionRef\.current === 'chat'/);
-  assert.match(appSource, /setReviewTab\('overview'\);[\s\S]*workbenchRef\.current\?\.focus\(\)/);
+  assert.match(appSource, /setActiveSection\('workspace'\);[\s\S]*workbenchRef\.current\?\.focus\(\)/);
 });
 
 test('workspace hierarchy uses native navigation controls instead of an incomplete ARIA tree', () => {
@@ -676,16 +676,13 @@ test('connection recovery cannot bypass governed model or workspace settings', (
   assert.doesNotMatch(globalStyles, /\.settings-content \.runtime-panel/);
 });
 
-test('conversation detail restores the mission-control context rail without duplicating authority', () => {
-  // The rail markup lives in SessionContextRail, hosted by the right sidebar.
+test('run details stay flat while actionable status remains in the conversation', () => {
   assert.match(contextRailSource, /className="session-context-rail"/);
   assert.match(rightSidebarSource, /<SessionContextRail/);
-  assert.match(contextRailSource, /session\.runSnapshot/);
-  assert.match(contextRailSource, /session\.workSurfaces/);
-  assert.match(contextRailSource, /session\.latestEvidence/);
-  assert.match(contextRailSource, /session-context-card/);
-  assert.match(contextRailSource, /session-context-rows/);
-  // The banner no longer shares a surface with the rail, so it always shows.
+  assert.match(contextRailSource, /session-context-facts/);
+  assert.match(contextRailSource, /role="alert"/);
+  assert.doesNotMatch(contextRailSource, /session\.runSnapshot|session\.workSurfaces|session\.latestEvidence/);
+  assert.doesNotMatch(contextRailSource, /snapshotProgress|session-context-card|<Button|<form/);
   assert.match(sessionWorkspaceSource, /statusPresentation !== null/);
   assert.doesNotMatch(sessionWorkspaceSource, /surface !== 'conversation'/);
 });
@@ -875,11 +872,9 @@ test('session chrome never renders raw placeholder or mislabeled copy', () => {
     sessionWorkspaceSource,
     /viewModel\.workspaceLabel \?\? t\('session\.notAvailable'\)/,
   );
-  // The run snapshot labels the execution-mode row as a mode, not as the stage.
-  // (The snapshot rows moved to SessionContextRail with the rail migration;
-  // prototype mission-control refactor 2026-09: snapshot rows are now <dt>/<dd>.)
-  assert.match(contextRailSource, /<dt>\{t\('session\.runMode'\)\}<\/dt>/);
-  assert.doesNotMatch(contextRailSource, /<span>\{t\('session\.currentStage'\)\}<\/span>/);
+  // Available execution-mode metadata is labeled as mode, without placeholder rows.
+  assert.match(contextRailSource, /label: t\('session\.runMode'\)/);
+  assert.doesNotMatch(contextRailSource, /t\('session\.notAvailable'\)/);
   // The session title is owned by the application titlebar rather than duplicated here.
   assert.doesNotMatch(sessionWorkspaceSource, /<h1/);
   for (const key of ['session.runMode', 'session.untitled', 'chat.modelNotConfigured']) {
@@ -914,10 +909,10 @@ test('sidebar and context rail widths are user resizable', () => {
   assert.match(sidebarSurfaceSource, /<ResizeHandle/);
   assert.doesNotMatch(authenticatedShellSurfaceSource, /<ResizeHandle/);
   // The resizable rail moved to the right sidebar, which owns its own width.
-  assert.match(rightSidebarSource, /useResizablePanelWidth\(/);
+  assert.match(rightSidebarSource, /workPanelGeometry\(/);
   assert.match(rightSidebarSource, /agistack\.desktop\.rightSidebarWidth/);
   assert.match(rightSidebarSource, /<ResizeHandle/);
-  assert.match(rightSidebarStyles, /\.desktop-right-sidebar-panel\s*\{/);
+  assert.match(rightSidebarStyles, /\.desktop-right-sidebar-content\s*\{/);
 });
 
 test('workspace rows no longer render a decorative capability icon', () => {

@@ -1,132 +1,126 @@
-/* Right sidebar shell: resizable panel plus the 40px activity bar. The grid
-   column itself is declared in styles/chrome.css (third app-shell column). */
-
 .desktop-right-sidebar {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
   grid-column: 3;
   grid-row: 2;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
   border-left: 1px solid var(--desktop-border-soft);
-  background: var(--desktop-panel-2);
+  background: var(--desktop-bg);
 }
-
-.desktop-right-sidebar-panel {
-  position: relative;
-  display: grid;
-  flex: 0 0 auto;
-  min-width: 0;
-  min-height: 0;
-  grid-template-rows: 36px minmax(0, 1fr);
-  overflow: hidden;
+.desktop-right-sidebar-full {
+  grid-column: 2 / 4;
+  z-index: 2;
 }
-
 .desktop-right-sidebar-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 6px 0 12px;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--desktop-border-soft);
 }
-
-.desktop-right-sidebar-head strong {
-  overflow: hidden;
-  color: var(--desktop-muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .desktop-right-sidebar-head button {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 28px;
+  height: 30px;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--desktop-muted);
   cursor: pointer;
 }
-
 .desktop-right-sidebar-head button:hover {
-  background: rgba(var(--desktop-slate-rgb), 0.08);
+  background: var(--desktop-panel-2);
   color: var(--desktop-text);
 }
-
-.desktop-right-sidebar-head button svg {
-  width: 12px;
-  height: 12px;
+.desktop-right-sidebar-head button:focus-visible {
+  outline: 2px solid var(--desktop-cyan);
+  outline-offset: -2px;
 }
-
-.desktop-right-sidebar-content {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.desktop-right-sidebar-content > .session-context-rail {
-  height: 100%;
-}
-
-.desktop-right-sidebar-canvas {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-}
-
-.desktop-right-sidebar-canvas .review-panel {
-  height: 100%;
-  border-left: 0;
-}
-
-.desktop-right-activity-bar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 40px;
-  flex: 0 0 40px;
-  padding-top: 8px;
-  border-left: 1px solid var(--desktop-border-soft);
-  background: var(--desktop-surface-7);
-}
-
-.desktop-right-activity-bar button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--desktop-faint);
-  cursor: pointer;
-}
-
-.desktop-right-activity-bar button:hover:not(:disabled) {
-  background: rgba(var(--desktop-slate-rgb), 0.08);
-  color: var(--desktop-text);
-}
-
-.desktop-right-activity-bar button[aria-pressed='true'] {
-  background: rgba(var(--desktop-cyan-rgb), 0.12);
-  color: var(--desktop-cyan);
-}
-
-.desktop-right-activity-bar button:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.desktop-right-activity-bar button svg {
+.desktop-right-sidebar-head svg {
   width: 14px;
   height: 14px;
+}
+.work-panel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  overflow-x: auto;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+.work-panel-tab {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 180px;
+  border-radius: 5px;
+}
+.work-panel-tab[data-active='true'] {
+  background: var(--desktop-panel-2);
+}
+.work-panel-tab > [role='tab'] {
+  display: block;
+  flex-shrink: 1;
+  min-width: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.work-panel-tab[data-active='true'] > [role='tab'] {
+  color: var(--desktop-text);
+}
+.work-panel-tab-close {
+  opacity: 0.5;
+}
+.work-panel-tab:hover .work-panel-tab-close,
+.work-panel-tab:focus-within .work-panel-tab-close {
+  opacity: 1;
+}
+.desktop-right-sidebar-content {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: grid;
+}
+.desktop-right-sidebar-content > .review-panel {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
+  border: 0;
+  background: transparent;
+}
+.desktop-right-sidebar-content > .review-panel > .review-content {
+  min-height: 0;
+  overflow: auto;
+}
+.desktop-right-sidebar-content > .session-context-rail {
+  overflow: auto;
+}
+.work-panel-empty {
+  padding: 24px;
+  color: var(--desktop-muted);
+  font-size: 13px;
+}
+.work-panel-menu {
+  max-height: min(650px, 80vh);
+  overflow-y: auto;
+}
+.work-panel-menu small {
+  margin-left: auto;
+  padding-left: 20px;
+  font-size: 11px;
+}
+
+.app-shell:has(.desktop-right-sidebar-full) .workbench {
+  visibility: hidden;
 }

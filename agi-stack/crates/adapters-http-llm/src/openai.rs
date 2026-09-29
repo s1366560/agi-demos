@@ -235,6 +235,33 @@ impl HttpLlm {
         let resp = resp
             .error_for_status()
             .map_err(|e| CoreError::Llm(e.to_string()))?;
+        // Some compatible providers ignore the stream flag and return a JSON
+        // completion. Preserve their response while exposing native SSE where supported.
+        if resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| {
+                value
+                    .split(';')
+                    .next()
+                    .is_some_and(|mime| mime.trim() == "application/json")
+            })
+        {
+            let response: ChatResponse = resp
+                .json()
+                .await
+                .map_err(|error| CoreError::Llm(error.to_string()))?;
+            let content = response
+                .choices
+                .into_iter()
+                .next()
+                .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))?
+                .message
+                .content;
+            on_delta(&content);
+            return Ok(content);
+        }
         let mut chunks = resp.bytes_stream();
         let mut line_buffer = Vec::new();
         let mut content = String::new();
@@ -363,6 +390,37 @@ impl LlmPort for HttpLlm {
         transcript: &[TranscriptEntry],
         available_tools: &[String],
     ) -> CoreResult<AgentAction> {
+        self.decide_action(goal, round, transcript, available_tools, None)
+            .await
+    }
+
+    async fn decide_with_tools_stream(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        tools: &[agistack_core::ports::ToolDefinition],
+        on_text: &(dyn for<'text> Fn(&'text str) + Send + Sync),
+    ) -> CoreResult<AgentAction> {
+        let goal = agistack_core::tool_definition::prompt_with_tool_definitions(goal, tools)?;
+        let names = tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect::<Vec<_>>();
+        self.decide_action(&goal, round, transcript, &names, Some(on_text))
+            .await
+    }
+}
+
+impl HttpLlm {
+    async fn decide_action(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        available_tools: &[String],
+        on_text: Option<&(dyn Fn(&str) + Send + Sync)>,
+    ) -> CoreResult<AgentAction> {
         // Render the prompt the model reasons over. The engine still owns the
         // loop; only this single judgment is delegated to the model.
         let mut user =
@@ -380,7 +438,17 @@ impl LlmPort for HttpLlm {
                 user.push_str(&format!("- [{who}] {}\n", e.content));
             }
         }
-        let content = self.chat(DECIDE_SYSTEM, user.clone()).await?;
+        let mut emitted_answer = false;
+        let content = if let Some(on_text) = on_text {
+            let mut decoder = crate::AgentAnswerStream::new();
+            self.chat_stream(DECIDE_SYSTEM, user.clone(), |delta| {
+                decoder.push(delta, on_text);
+                emitted_answer = decoder.has_emitted();
+            })
+            .await?
+        } else {
+            self.chat(DECIDE_SYSTEM, user.clone()).await?
+        };
         let first_wire = serde_json::from_str::<AgentActionWire>(clean_structured(&content));
         let repair_guidance = match first_wire.as_ref() {
             Ok(wire) if wire.has_incomplete_human_decision() => Some(DECISION_REPAIR_GUIDANCE),
@@ -388,6 +456,11 @@ impl LlmPort for HttpLlm {
             Err(_) => Some(ACTION_JSON_REPAIR_GUIDANCE),
         };
         let wire = if let Some(guidance) = repair_guidance {
+            if emitted_answer {
+                return Err(CoreError::Llm(
+                    "invalid action after answer streaming began".into(),
+                ));
+            }
             user.push_str(guidance);
             let repaired = self.chat(DECIDE_SYSTEM, user).await?;
             let wire: AgentActionWire = serde_json::from_str(clean_structured(&repaired))

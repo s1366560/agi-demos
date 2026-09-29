@@ -40,7 +40,6 @@ import {
 import {
   type AgentConversationSession,
   type AgentTaskSignalPatch,
-  type ReviewTab,
 } from '../appShellTypes';
 import { useConversationThreads } from './useConversationThreads';
 import { useConversationMessaging } from './useConversationMessaging';
@@ -91,7 +90,6 @@ export type AgentConversationParams = {
   setRunInputs: Dispatch<SetStateAction<DesktopRunInput[]>>;
   setSectionBackStack: Dispatch<SetStateAction<WorkbenchSection[]>>;
   setSectionForwardStack: Dispatch<SetStateAction<WorkbenchSection[]>>;
-  setReviewTab: Dispatch<SetStateAction<ReviewTab>>;
   setSelectedTaskId: Dispatch<SetStateAction<string>>;
   setAgentConversationSession: Dispatch<
     SetStateAction<AgentConversationSession | null>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Cross2Icon, GlobeIcon, PlusIcon } from '@radix-ui/react-icons';
 
@@ -36,24 +36,52 @@ export function BrowserPanel() {
   const [tabs, setTabs] = useState<readonly IabTab[]>([]);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const lastBoundsRef = useRef<string>('');
+  const mounted = useRef(false);
+  const [loaded, setLoaded] = useState(false);
+  const [failure, setFailure] = useState<{ key: string; retry: () => Promise<unknown> } | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const perform = useCallback(async (action: () => Promise<unknown>, key: string) => {
+    try {
+      await action();
+      return true;
+    } catch {
+      if (mounted.current) setFailure({ key, retry: action });
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     if (!bridge) return undefined;
+    mounted.current = true;
     let disposed = false;
-    bridge
-      .listTabs()
-      .then((payload) => {
-        if (!disposed) setTabs(payload.tabs);
-      })
-      .catch(() => {});
+    let revision = 0;
+    setLoaded(false);
+    const load = async () => {
+      const requestRevision = revision;
+      try {
+        const payload = await bridge.listTabs();
+        if (!disposed && requestRevision === revision) {
+          setTabs(payload.tabs);
+          setLoaded(true);
+        }
+      } catch (error) {
+        if (!disposed && requestRevision === revision) throw error;
+      }
+    };
+    void perform(load, 'browserPanel.loadFailed');
     const unsubscribe = bridge.onTabsChanged((payload) => {
+      if (disposed) return;
+      revision += 1;
       setTabs(payload.tabs);
+      setLoaded(true);
+      setFailure((current) => current?.key === 'browserPanel.loadFailed' ? null : current);
     });
     return () => {
+      mounted.current = false;
       disposed = true;
       unsubscribe();
     };
-  }, [bridge]);
+  }, [bridge, perform]);
 
   useEffect(() => {
     if (!bridge) return undefined;
@@ -70,17 +98,15 @@ export function BrowserPanel() {
       const key = `${bounds.x},${bounds.y},${bounds.width},${bounds.height}`;
       if (key === lastBoundsRef.current) return;
       lastBoundsRef.current = key;
-      void bridge.setBounds(bounds).catch(() => {});
+      void perform(() => bridge.setBounds(bounds), 'browserPanel.displayFailed');
     };
     const rect = element.getBoundingClientRect();
-    void bridge
-      .showPane({
+    void perform(() => bridge.showPane({
         x: Math.round(rect.left),
         y: Math.round(rect.top),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
-      })
-      .catch(() => {});
+      }), 'browserPanel.displayFailed');
     const observer = new ResizeObserver(report);
     observer.observe(element);
     window.addEventListener('resize', report);
@@ -94,7 +120,7 @@ export function BrowserPanel() {
       lastBoundsRef.current = '';
       void bridge.hidePane().catch(() => {});
     };
-  }, [bridge]);
+  }, [bridge, perform]);
 
   if (!bridge) {
     return (
@@ -120,18 +146,25 @@ export function BrowserPanel() {
               tab.active ? 'browser-panel-tab browser-panel-tab-active' : 'browser-panel-tab'
             }
             title={tab.url}
-            onClick={() => void bridge.focusTab(tab.tabId).catch(() => {})}
+            onClick={() => void perform(() => bridge.focusTab(tab.tabId), 'browserPanel.actionFailed')}
           >
             <span className="browser-panel-tab-label">
               {tabLabel(tab, t('browserPanel.untitledTab'))}
             </span>
             <span
               role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                event.stopPropagation();
+                void perform(() => bridge.closeTab(tab.tabId), 'browserPanel.actionFailed');
+              }}
               aria-label={t('browserPanel.closeTab')}
               className="browser-panel-tab-close"
               onClick={(event) => {
                 event.stopPropagation();
-                void bridge.closeTab(tab.tabId).catch(() => {});
+                void perform(() => bridge.closeTab(tab.tabId), 'browserPanel.actionFailed');
               }}
             >
               <Cross2Icon />
@@ -143,17 +176,33 @@ export function BrowserPanel() {
           className="browser-panel-new-tab"
           aria-label={t('browserPanel.newTab')}
           title={t('browserPanel.newTab')}
-          onClick={() => void bridge.createTab().catch(() => {})}
+          onClick={() => void perform(() => bridge.createTab(), 'browserPanel.actionFailed')}
         >
           <PlusIcon />
         </button>
       </div>
+      <div>
+      {failure ? (
+        <div role="alert" className="browser-panel-error">
+          <span>{t(failure.key)}</span>
+          <button type="button" disabled={retrying} onClick={async () => {
+            setRetrying(true);
+            const pending = failure;
+            if (await perform(pending.retry, pending.key)) {
+              setFailure((current) => current === pending ? null : current);
+            }
+            if (mounted.current) setRetrying(false);
+          }}>{t('common.retry')}</button>
+        </div>
+      ) : null}
       <div className="browser-panel-address" title={activeTab?.url ?? ''}>
         <GlobeIcon />
         <span>{activeTab?.url ?? 'about:blank'}</span>
       </div>
+      </div>
       <div className="browser-panel-viewport" ref={viewportRef}>
-        {tabs.length === 0 ? (
+        {!loaded && !failure ? <p role="status">{t('common.loading')}</p> : null}
+        {loaded && !failure && tabs.length === 0 ? (
           <div className="browser-panel-empty">
             <p>{t('browserPanel.empty')}</p>
           </div>

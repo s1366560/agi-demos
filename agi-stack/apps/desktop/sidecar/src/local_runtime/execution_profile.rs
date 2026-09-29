@@ -314,6 +314,19 @@ impl LlmPort for ProfiledLlm {
         self.inner.extract_relationships(memory).await
     }
 
+    async fn decide_with_tools_stream(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        tools: &[agistack_core::ports::ToolDefinition],
+        on_text: &(dyn for<'text> Fn(&'text str) + Send + Sync),
+    ) -> CoreResult<AgentAction> {
+        self.inner
+            .decide_with_tools_stream(&self.goal(goal), round, transcript, tools, on_text)
+            .await
+    }
+
     async fn decide_with_tools(
         &self,
         goal: &str,

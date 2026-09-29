@@ -64,6 +64,7 @@ export function DesktopTitlebar({
           <button
             type="button"
             className="desktop-titlebar-button"
+            data-work-panel-toggle
             aria-label={t('titlebar.toggleRightPanel')}
             aria-pressed={rightSidebarOpen}
             title={t('titlebar.toggleRightPanel')}

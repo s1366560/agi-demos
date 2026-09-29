@@ -9839,6 +9839,36 @@ impl LocalTimelineObserver {
 
 #[async_trait]
 impl ReActObserver for LocalTimelineObserver {
+    fn on_text_end(&self, _session_id: &str, round: u64) {
+        let message_id = format!("local-assistant-{}-{round}", self.message_id);
+        let item = self.state.timeline_item(
+            "text_end",
+            self.conversation_id.clone(),
+            Some(message_id.clone()),
+            Some("assistant"),
+            None,
+            json!({ "message_id": message_id, "round": round }),
+        );
+        let _ = self.state.events.send(item);
+    }
+
+    fn on_text_delta(&self, _session_id: &str, round: u64, delta: &str) {
+        if delta.is_empty() {
+            return;
+        }
+        let message_id = format!("local-assistant-{}-{round}", self.message_id);
+        let item = self.state.timeline_item(
+            "text_delta",
+            self.conversation_id.clone(),
+            Some(message_id.clone()),
+            Some("assistant"),
+            Some(delta.to_string()),
+            json!({ "delta": delta, "message_id": message_id, "round": round }),
+        );
+        // Provisional tokens are live-only; the completed answer is persisted once.
+        let _ = self.state.events.send(item);
+    }
+
     async fn on_tool_call(
         &self,
         _session_id: &str,
@@ -10089,11 +10119,11 @@ impl ReActObserver for LocalTimelineObserver {
         Ok(())
     }
 
-    async fn on_finish(&self, _session_id: &str, _round: u64, answer: &str) -> CoreResult<()> {
+    async fn on_finish(&self, _session_id: &str, round: u64, answer: &str) -> CoreResult<()> {
         let item = self.state.timeline_item(
             "assistant_message",
             self.conversation_id.clone(),
-            Some(format!("local-assistant-{}", Uuid::new_v4())),
+            Some(format!("local-assistant-{}-{round}", self.message_id)),
             Some("assistant"),
             Some(answer.to_string()),
             json!({}),
@@ -10312,6 +10342,10 @@ mod tests {
     use agistack_adapters_mem::ScriptedLlm;
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
+
+    mod streaming_tests {
+        include!("streaming_tests.rs");
+    }
 
     mod conversation_history_tests {
         include!("conversation_history_tests.rs");

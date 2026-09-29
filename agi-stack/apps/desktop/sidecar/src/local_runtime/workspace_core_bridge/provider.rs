@@ -1269,6 +1269,7 @@ fn message_text(message: Option<&Value>) -> Result<String, super::BridgeError> {
 
 fn callback_state(item: &Value) -> Option<(&'static str, bool)> {
     match item.get("type").and_then(Value::as_str) {
+        Some("text_delta") => Some(("delta", false)),
         Some("act") => Some(("tool_call_start", false)),
         Some("observe") => Some(("tool_call_end", false)),
         Some("assistant_message") => Some(("final", true)),

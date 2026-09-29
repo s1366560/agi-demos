@@ -1,230 +1,302 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { DropdownMenu } from '@radix-ui/themes';
+import {
+  ColumnsIcon,
+  Cross2Icon,
+  EnterFullScreenIcon,
+  PlusIcon,
+  ViewVerticalIcon,
+} from '@radix-ui/react-icons';
 
-import { Cross2Icon, GlobeIcon, LayoutIcon, ReaderIcon } from '@radix-ui/react-icons';
-
-import { ResizeHandle, useResizablePanelWidth } from '../../components/ResizeHandle';
+import { ResizeHandle } from '../../components/ResizeHandle';
 import { useI18n } from '../../i18n';
 import { BrowserPanel } from '../browser/BrowserPanel';
+import { useTimelineInspection } from '../session/TimelineInspectionContext';
 import { SessionContextRail } from '../session/SessionContextRail';
+import { getSessionWorkPanelOptions } from '../session/sessionWorkPanelOptions';
 import type { SessionCanvasTabId } from '../session/sessionCanvasModel';
-import type {
-  SessionDetailViewModel,
-  SessionRunAction,
-} from '../session/sessionViewModel';
-import type { SessionCanvasControls } from '../session/workspaceReviewPanelModel';
+import type { SessionDetailViewModel, SessionRunAction } from '../session/sessionViewModel';
 import { DesktopRendererSessionCanvasV2 } from '../../plugins/DesktopRendererSessionCanvasV2';
 import type { DesktopSessionCanvasInputV2 } from '../../plugins/DesktopSessionCanvasSurfaceV2';
+import { workPanelGeometry, type WorkPanelState, type WorkPanelTab } from './workPanelState';
 import './DesktopRightSidebar.css';
-
-export type DesktopRightPanel = 'context' | 'canvas' | 'browser';
 
 export type DesktopRightSidebarCanvasV2 =
   | Readonly<{ kind: 'available'; input: DesktopSessionCanvasInputV2 }>
   | Readonly<{ kind: 'unavailable' }>;
 
-const RIGHT_SIDEBAR_WIDTH_STORAGE_KEY = 'agistack.desktop.rightSidebarWidth';
-// prototype mission-control refactor 2026-09 (phase 5a): the default matches
-// the prototype context-rail width (248px); focus mode lifts the max so the
-// canvas can expand across the thread column (prototype layout-focus).
-const RIGHT_SIDEBAR_WIDTH_CONSTRAINTS = { min: 220, max: 520, default: 248 } as const;
-const RIGHT_SIDEBAR_FOCUS_MAX_WIDTH = 2000;
-const RIGHT_SIDEBAR_ACTIVITY_BAR_WIDTH = 40;
+const WIDTH_KEY = 'agistack.desktop.rightSidebarWidth';
 
 type DesktopRightSidebarProps = {
-  activePanel: DesktopRightPanel;
+  state: WorkPanelState;
   canvas: DesktopRightSidebarCanvasV2;
   viewModel: SessionDetailViewModel | null;
   runActionPending: SessionRunAction | null;
   onRunAction: (action: SessionRunAction, feedback?: string) => void;
   onOpenCanvas: (tab?: SessionCanvasTabId) => void;
-  onSelectPanel: (panel: DesktopRightPanel) => void;
+  onSelectPanel: (panel: WorkPanelTab) => void;
+  onCloseTab: (panel: WorkPanelTab) => void;
   onCloseCanvas: () => void;
   onClose: () => void;
 };
 
-/**
- * Orca-style right sidebar: a 40px vertical activity bar on the outer edge
- * plus a resizable panel hosting the session context rail or the review
- * canvas. Canvas layout mapping: the old split/focus surfaces become panel
- * widths here — 'focus' expands the panel across the thread column (the
- * prototype's layout-focus), 'split' returns it to the default width.
- */
 export function DesktopRightSidebar({
-  activePanel,
+  state,
   canvas,
   viewModel,
   runActionPending,
   onRunAction,
   onOpenCanvas,
   onSelectPanel,
-  onCloseCanvas,
+  onCloseTab,
   onClose,
 }: DesktopRightSidebarProps) {
   const { t } = useI18n();
-  const [canvasLayout, setCanvasLayout] = useState<'split' | 'focus'>('split');
-  const hostRef = useRef<HTMLElement | null>(null);
-  // Focus mode needs a wider clamp than the split panel; the hook re-reads the
-  // constraints every render, so widening the max while focused is enough.
-  const widthConstraints =
-    canvasLayout === 'focus'
-      ? { ...RIGHT_SIDEBAR_WIDTH_CONSTRAINTS, max: RIGHT_SIDEBAR_FOCUS_MAX_WIDTH }
-      : RIGHT_SIDEBAR_WIDTH_CONSTRAINTS;
-  const panelWidth = useResizablePanelWidth(
-    RIGHT_SIDEBAR_WIDTH_STORAGE_KEY,
-    widthConstraints,
-  );
-  const canvasTriggerRef = useRef<string | null>(null);
-
-  // The context rail and review canvas are session-scoped; without a session
-  // the browser panel is the only surface that can render.
-  const effectivePanel: DesktopRightPanel =
-    viewModel === null ? 'browser' : activePanel;
-
-  // Panel width at which the thread column (minmax(0, 1fr)) collapses: the
-  // whole shell row left of the activity bar. Measured from the live grid so
-  // the left sidebar's user-resized width is honored.
-  const measureFocusPanelWidth = () => {
-    if (typeof window === 'undefined') return RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max;
-    const shell = hostRef.current?.closest('.app-shell');
-    if (!(shell instanceof HTMLElement)) return RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max;
-    const sidebarColumn = Number.parseFloat(
-      window.getComputedStyle(shell).gridTemplateColumns.split(' ')[0] ?? '',
-    );
-    if (!Number.isFinite(sidebarColumn)) return RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max;
-    return Math.max(
-      RIGHT_SIDEBAR_WIDTH_CONSTRAINTS.max,
-      Math.round(shell.clientWidth - sidebarColumn - RIGHT_SIDEBAR_ACTIVITY_BAR_WIDTH),
-    );
-  };
-
-  // Keep the focused canvas pinned to the full body width across window
-  // resizes; in split mode the user's chosen width persists untouched.
-  useEffect(() => {
-    if (canvasLayout !== 'focus') return;
-    const refocus = () => panelWidth.resize(measureFocusPanelWidth());
-    window.addEventListener('resize', refocus);
-    return () => window.removeEventListener('resize', refocus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasLayout]);
-
-  // Capture the canvas trigger that opened the panel so closing the canvas
-  // can return focus to it, wherever it lives (thread pane or context rail).
-  useEffect(() => {
-    if (effectivePanel !== 'canvas') return;
-    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
-      canvasTriggerRef.current =
-        document.activeElement.dataset.sessionCanvasTrigger ?? canvasTriggerRef.current;
+  const inspection = useTimelineInspection();
+  const hostRef = useRef<HTMLElement>(null);
+  const [focused, setFocused] = useState(false);
+  const [availableWidth, setAvailableWidth] = useState(1000);
+  const [preferredWidth, setPreferredWidth] = useState<number | null>(() => {
+    try {
+      const value = Number(window.localStorage.getItem(WIDTH_KEY));
+      return Number.isFinite(value) && value >= 360 ? value : null;
+    } catch {
+      return null;
     }
-  }, [effectivePanel]);
+  });
+  useLayoutEffect(() => {
+    const shell = hostRef.current?.closest('.app-shell');
+    if (!(shell instanceof HTMLElement)) return;
+    const measure = () => {
+      const leftWidth = Number.parseFloat(getComputedStyle(shell).gridTemplateColumns) || 0;
+      setAvailableWidth(Math.max(0, shell.clientWidth - leftWidth));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(shell);
+    const mutation = new MutationObserver(measure);
+    mutation.observe(shell, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      mutation.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  const geometry = workPanelGeometry(availableWidth, preferredWidth, focused);
+  useLayoutEffect(() => {
+    const main = hostRef.current?.closest('.app-shell')?.querySelector<HTMLElement>('.workbench');
+    if (!main || !geometry.fullWidth) return;
+    const previous = main.inert;
+    const shouldMoveFocus = main.contains(document.activeElement);
+    main.inert = true;
+    if (shouldMoveFocus) {
+      hostRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+    }
+    return () => {
+      main.inert = previous;
+    };
+  }, [geometry.fullWidth]);
+  useLayoutEffect(() => {
+    hostRef.current
+      ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [state.active]);
 
-  const canvasControls: SessionCanvasControls = {
-    layout: canvasLayout,
-    onLayoutChange: (layout) => {
-      setCanvasLayout(layout);
-      if (layout === 'focus') panelWidth.resize(measureFocusPanelWidth());
-      else panelWidth.reset();
-    },
-    onClose: () => {
-      onCloseCanvas();
-      const triggerId = canvasTriggerRef.current;
-      if (triggerId && typeof window !== 'undefined') {
-        window.requestAnimationFrame(() => {
-          const triggers = document.querySelectorAll<HTMLButtonElement>(
-            '[data-session-canvas-trigger]',
-          );
-          for (const trigger of triggers) {
-            if (trigger.dataset.sessionCanvasTrigger !== triggerId) continue;
-            trigger.focus();
-            break;
-          }
-        });
-      }
-    },
+  const resize = (width: number) => {
+    const next = Math.min(geometry.constraints.max, Math.max(geometry.constraints.min, width));
+    setPreferredWidth(next);
+    try {
+      window.localStorage.setItem(WIDTH_KEY, String(Math.round(next)));
+    } catch {
+      /* Optional preference. */
+    }
   };
-
-  const canvasContent =
-    effectivePanel === 'canvas' && canvas.kind === 'available' ? (
-      <DesktopRendererSessionCanvasV2 input={canvas.input} controls={canvasControls} />
-    ) : null;
-
-  const panelTitle =
-    effectivePanel === 'canvas'
-      ? t('rightbar.canvas')
-      : effectivePanel === 'browser'
-        ? t('rightbar.browser')
-        : t('rightbar.context');
-
+  const options: {
+    id: WorkPanelTab;
+    labelKey: string;
+    available: boolean;
+    reasonKey?: string;
+    group: 'work' | 'details';
+  }[] = [
+    ...(canvas.kind === 'available' ? getSessionWorkPanelOptions(canvas.input.state) : []),
+    {
+      id: 'browser',
+      labelKey: 'rightbar.browser',
+      available: true,
+      group: 'work',
+    },
+    {
+      id: 'run-details',
+      labelKey: 'rightbar.runDetails',
+      available: viewModel !== null,
+      reasonKey: 'rightbar.noSession',
+      group: 'details',
+    },
+  ];
+  const option = options.find((entry) => entry.id === state.active);
+  const label = (id: WorkPanelTab) =>
+    t(options.find((entry) => entry.id === id)?.labelKey ?? 'rightbar.unavailable');
+  const unavailable = !option?.available;
+  const active = state.active;
+  const closeTab = (id: WorkPanelTab) => {
+    if (id === 'activity') inspection.dismiss();
+    onCloseTab(id);
+    if (state.tabs.length > 1)
+      requestAnimationFrame(() => {
+        hostRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+      });
+  };
   return (
-    <aside className="desktop-right-sidebar" aria-label={panelTitle} ref={hostRef}>
-      <div
-        className="desktop-right-sidebar-panel"
-        style={{ width: `${Math.round(panelWidth.width)}px` }}
-      >
+    <aside
+      ref={hostRef}
+      className={`desktop-right-sidebar${geometry.fullWidth ? ' desktop-right-sidebar-full' : ''}`}
+      aria-label={t('rightbar.workspace')}
+      style={{ width: Math.round(geometry.width) }}
+    >
+      {!geometry.fullWidth ? (
         <ResizeHandle
           side="leading"
-          width={panelWidth.width}
-          constraints={widthConstraints}
+          width={geometry.width}
+          constraints={geometry.constraints}
           label={t('rightbar.resize')}
-          onResize={panelWidth.resize}
-          onReset={panelWidth.reset}
+          onResize={resize}
+          onReset={() => resize(geometry.constraints.default)}
         />
-        <header className="desktop-right-sidebar-head">
-          <strong>{panelTitle}</strong>
+      ) : null}
+      <header className="desktop-right-sidebar-head">
+        <div className="work-panel-tabs" role="tablist" aria-label={t('rightbar.workspace')}>
+          {state.tabs.map((id, index) => (
+            <div className="work-panel-tab" data-active={id === active} key={id}>
+              <button
+                type="button"
+                role="tab"
+                id={`work-panel-tab-${id}`}
+                aria-selected={id === active}
+                aria-controls="work-panel-content"
+                tabIndex={id === active ? 0 : -1}
+                title={label(id)}
+                onClick={() => onSelectPanel(id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Delete') {
+                    event.preventDefault();
+                    closeTab(id);
+                    return;
+                  }
+                  const next =
+                    event.key === 'ArrowRight'
+                      ? (index + 1) % state.tabs.length
+                      : event.key === 'ArrowLeft'
+                        ? (index + state.tabs.length - 1) % state.tabs.length
+                        : event.key === 'Home'
+                          ? 0
+                          : event.key === 'End'
+                            ? state.tabs.length - 1
+                            : null;
+                  if (next === null) return;
+                  event.preventDefault();
+                  onSelectPanel(state.tabs[next]);
+                  document.getElementById(`work-panel-tab-${state.tabs[next]}`)?.focus();
+                }}
+              >
+                {label(id)}
+              </button>
+              <button
+                type="button"
+                className="work-panel-tab-close"
+                aria-label={t('rightbar.closeTab', { name: label(id) })}
+                onClick={() => closeTab(id)}
+              >
+                <Cross2Icon />
+              </button>
+            </div>
+          ))}
+        </div>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            <button type="button" aria-label={t('rightbar.addView')} title={t('rightbar.addView')}>
+              <PlusIcon />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content className="work-panel-menu" align="end">
+            {(['work', 'details'] as const).map((group) => (
+              <DropdownMenu.Group key={group}>
+                <DropdownMenu.Label>
+                  {t(group === 'work' ? 'rightbar.workContent' : 'rightbar.runDetails')}
+                </DropdownMenu.Label>
+                {options
+                  .filter((entry) => entry.group === group)
+                  .map((entry) => (
+                    <DropdownMenu.Item
+                      key={entry.id}
+                      disabled={!entry.available}
+                      onSelect={() => onSelectPanel(entry.id)}
+                    >
+                      <span>{t(entry.labelKey)}</span>
+                      {!entry.available ? (
+                        <small>{t(entry.reasonKey ?? 'rightbar.unavailable')}</small>
+                      ) : null}
+                    </DropdownMenu.Item>
+                  ))}
+              </DropdownMenu.Group>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+        {availableWidth >= 840 ? (
           <button
             type="button"
-            aria-label={t('rightbar.close')}
-            title={t('rightbar.close')}
-            onClick={onClose}
+            aria-label={t(focused ? 'session.splitView' : 'session.focusCanvas')}
+            title={t(focused ? 'session.splitView' : 'session.focusCanvas')}
+            onClick={() => setFocused((value) => !value)}
           >
-            <Cross2Icon />
+            {focused ? <ColumnsIcon /> : <EnterFullScreenIcon />}
           </button>
-        </header>
-        <div className="desktop-right-sidebar-content">
-          {effectivePanel === 'canvas' ? (
-            <div className="desktop-right-sidebar-canvas">{canvasContent}</div>
-          ) : effectivePanel === 'browser' ? (
-            <BrowserPanel />
-          ) : viewModel !== null ? (
-            <SessionContextRail
-              viewModel={viewModel}
-              runActionPending={runActionPending}
-              onRunAction={onRunAction}
-              onOpenCanvas={onOpenCanvas}
-            />
-          ) : null}
-        </div>
+        ) : null}
+        <button
+          type="button"
+          aria-label={t('rightbar.hide')}
+          title={t('rightbar.hide')}
+          onClick={onClose}
+        >
+          <ViewVerticalIcon />
+        </button>
+      </header>
+      <div
+        className="desktop-right-sidebar-content"
+        id="work-panel-content"
+        role="tabpanel"
+        aria-labelledby={active ? `work-panel-tab-${active}` : undefined}
+      >
+        {active === 'browser' ? (
+          <BrowserPanel />
+        ) : active === 'run-details' && viewModel ? (
+          <SessionContextRail
+            viewModel={viewModel}
+            runActionPending={runActionPending}
+            onRunAction={onRunAction}
+            onOpenCanvas={onOpenCanvas}
+          />
+        ) : unavailable ? (
+          <div className="work-panel-empty" role="status">
+            {t(option?.reasonKey ?? 'rightbar.unavailable')}
+          </div>
+        ) : canvas.kind === 'available' ? (
+          <DesktopRendererSessionCanvasV2
+            input={canvas.input}
+            controls={{
+              embedded: true,
+              layout: focused ? 'focus' : 'split',
+              onLayoutChange: (layout) => setFocused(layout === 'focus'),
+              onClose: () => {
+                if (active) closeTab(active);
+              },
+            }}
+          />
+        ) : null}
       </div>
-      <nav className="desktop-right-activity-bar">
-        <button
-          type="button"
-          aria-label={t('rightbar.context')}
-          aria-pressed={effectivePanel === 'context'}
-          title={t('rightbar.context')}
-          disabled={viewModel === null}
-          onClick={() => onSelectPanel('context')}
-        >
-          <ReaderIcon />
-        </button>
-        <button
-          type="button"
-          aria-label={t('rightbar.canvas')}
-          aria-pressed={effectivePanel === 'canvas'}
-          title={t('rightbar.canvas')}
-          disabled={canvas.kind === 'unavailable' || viewModel === null}
-          onClick={() => onSelectPanel('canvas')}
-        >
-          <LayoutIcon />
-        </button>
-        <button
-          type="button"
-          aria-label={t('rightbar.browser')}
-          aria-pressed={effectivePanel === 'browser'}
-          title={t('rightbar.browser')}
-          onClick={() => onSelectPanel('browser')}
-        >
-          <GlobeIcon />
-        </button>
-      </nav>
     </aside>
   );
 }

@@ -235,6 +235,8 @@
     "src/features/session/workspaceReviewPanelModel.ts",
     "src/features/session/workspaceArtifactModel.ts",
     "src/features/session/sessionCanvasModel.ts",
+    "src/features/session/sessionWorkPanelOptions.ts",
+    "src/features/chrome/workPanelState.ts",
     "src/features/session/sessionChangesModel.ts",
     "src/features/session/sessionChangesReviewModel.ts",
     "src/features/session/sessionRunInputModel.ts",

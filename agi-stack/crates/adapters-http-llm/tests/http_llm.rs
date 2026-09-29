@@ -16,6 +16,14 @@ use tokio::net::TcpListener;
 /// Spawn a one-route mock that returns `status`/`body` for every request, and
 /// records the raw request bytes it received. Returns (base_url, captured).
 async fn mock(status: u16, body: &'static str) -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
+    mock_content_type(status, body, "application/json").await
+}
+
+async fn mock_content_type(
+    status: u16,
+    body: &'static str,
+    content_type: &'static str,
+) -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let captured = Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
@@ -32,7 +40,7 @@ async fn mock(status: u16, body: &'static str) -> (String, Arc<tokio::sync::Mute
                 .push(String::from_utf8_lossy(&buf[..n]).to_string());
             let reason = if status == 200 { "OK" } else { "ERROR" };
             let resp = format!(
-                "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                "HTTP/1.1 {status} {reason}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
                 body.len(),
                 body
             );
@@ -285,7 +293,7 @@ async fn stream_complete_collects_openai_sse_deltas() {
         "data: [DONE]\n\n"
     );
     let body: &'static str = Box::leak(stream_body.to_string().into_boxed_str());
-    let (base, captured) = mock(200, body).await;
+    let (base, captured) = mock_content_type(200, body, "text/event-stream").await;
 
     let llm = HttpLlm::new(base, "m").with_api_key("stream-key");
     let mut deltas = Vec::new();
@@ -318,7 +326,7 @@ async fn anthropic_stream_complete_collects_text_deltas() {
         "data: {\"type\":\"message_stop\"}\n\n"
     );
     let body: &'static str = Box::leak(stream_body.to_string().into_boxed_str());
-    let (base, captured) = mock(200, body).await;
+    let (base, captured) = mock_content_type(200, body, "text/event-stream").await;
 
     let llm = AnthropicLlm::new(base, "claude-test")
         .with_api_key("anthropic-key")
@@ -347,7 +355,7 @@ async fn anthropic_stream_error_maps_to_core_error() {
         "data: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"try later\"}}\n\n"
     );
     let body: &'static str = Box::leak(stream_body.to_string().into_boxed_str());
-    let (base, _captured) = mock(200, body).await;
+    let (base, _captured) = mock_content_type(200, body, "text/event-stream").await;
 
     let llm = AnthropicLlm::new(base, "claude-test");
     let err = llm.stream_complete("s", "u", |_| {}).await.unwrap_err();
@@ -516,4 +524,24 @@ async fn permission_protocol_is_advertised_only_by_an_engine_with_the_host_port(
             assert_eq!(request.contains("permission_invocation"), enabled);
         }
     }
+}
+
+#[tokio::test]
+async fn agent_stream_accepts_providers_returning_json_instead_of_sse() {
+    let body = Box::leak(chat_body(r#"{"kind":"finish","answer":"Hello"}"#).into_boxed_str());
+    let (base, _) = mock(200, body).await;
+    let output = std::sync::Mutex::new(String::new());
+    let action = HttpLlm::new(base, "test")
+        .decide_with_tools_stream("hi", 1, &[], &[], &|text| {
+            output.lock().unwrap().push_str(text);
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        action,
+        AgentAction::Finish {
+            answer: "Hello".into()
+        }
+    );
+    assert_eq!(*output.lock().unwrap(), "Hello");
 }

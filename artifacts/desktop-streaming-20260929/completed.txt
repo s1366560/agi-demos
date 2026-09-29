@@ -1,0 +1,247 @@
+Window: "agi-stack Desktop", App: Electron.
+0 标准窗口 agi-stack Desktop, Secondary Actions: Raise
+	1 container agi-stack Desktop
+		2 container
+			3 HTML 内容 agi-stack Desktop, URL: 127.0.0.1:5173/
+				4 container
+					5 container
+						6 切换按钮 Description: 切换侧栏, Value: 1
+							7 图像
+						8 文本 流式输出验证：请直接用中文写一篇约1000字的短文，介绍春天的公园。分成十个自然段，开头写 STREAM_NATIVE_OK，结尾写 STREAM_DONE。不要调用任何工具，不要读写文件。
+						9 container 会话工具
+							10 开合三角标记 更多会话操作
+								11 图像
+							12 开合三角标记 会话工具
+							13 开合三角标记 插件
+						14 切换按钮 Description: 切换右侧面板, Value: 0
+							15 图像
+						16 container 主导航
+							17 按钮 MemStack
+								18 文本 MemStack
+							19 按钮 新建线程
+								20 图像
+								21 文本 新建线程
+							22 按钮 搜索
+								23 图像
+								24 文本 搜索
+							25 container
+								26 文本 Desktop Client
+								27 按钮 新建工作空间
+							28 container 工作空间与会话导航
+								29 container
+									30 按钮 折叠 任务
+										31 图像
+									32 文本 任务
+									33 文本 14 个会话
+									34 标题 今天, Value: 3
+										35 文本 今天
+									36 container
+										37 按钮 今天有哪些AI相关的新闻, Help: 今天有哪些AI相关的新闻 Local runtime 空闲 08:12
+											38 文本 今天有哪些AI相关的新闻
+										39 弹出式按钮 “今天有哪些AI相关的新闻”的操作
+											40 图像
+									41 标题 更早, Value: 3
+										42 文本 更早
+									43 container
+										44 按钮 Timeline UI verification: use one available read-only tool to list the current directory, then b, Help: Timeline UI verification: use one available read-only tool to list the current directory, then b Local runtime 空闲 9月22日
+											45 文本 Timeline UI verification: use one available read-only tool to list the current directory, then b
+										46 弹出式按钮 “Timeline UI verification: use one available read-only tool to list the current directory, then b”的操作
+											47 图像
+									48 container
+										49 按钮 hi, Help: hi Local runtime 空闲 9月22日
+											50 文本 hi
+										51 弹出式按钮 “hi”的操作
+											52 图像
+									53 container
+										54 按钮 hi, Help: hi Local runtime 空闲 9月22日
+											55 文本 hi
+										56 弹出式按钮 “hi”的操作
+											57 图像
+									58 container
+										59 按钮 e2e-smoke-chat-20260920, Help: e2e-smoke-chat-20260920 Local runtime 空闲 9月20日
+											60 文本 e2e-smoke-chat-20260920
+										61 弹出式按钮 “e2e-smoke-chat-20260920”的操作
+											62 图像
+									63 container
+										64 按钮 hi, Help: hi Local runtime 空闲 9月20日
+											65 文本 hi
+										66 弹出式按钮 “hi”的操作
+											67 图像
+									68 container
+										69 按钮 fix-verify-final, Help: fix-verify-final Local runtime 空闲 9月20日
+											70 文本 fix-verify-final
+										71 弹出式按钮 “fix-verify-final”的操作
+											72 图像
+									73 container
+										74 按钮 fix-verify-clean, Help: fix-verify-clean Local runtime 空闲 9月20日
+											75 文本 fix-verify-clean
+										76 弹出式按钮 “fix-verify-clean”的操作
+											77 图像
+									78 container
+										79 按钮 fix-verify-stale-route, Help: fix-verify-stale-route Local runtime 空闲 9月20日
+											80 文本 fix-verify-stale-route
+										81 弹出式按钮 “fix-verify-stale-route”的操作
+											82 图像
+									83 container
+										84 按钮 fix-verify-20260920, Help: fix-verify-20260920 Local runtime 空闲 9月20日
+											85 文本 fix-verify-20260920
+										86 弹出式按钮 “fix-verify-20260920”的操作
+											87 图像
+									88 container
+										89 按钮 hi, Help: hi Local runtime 空闲 9月20日
+											90 文本 hi
+										91 弹出式按钮 “hi”的操作
+											92 图像
+									93 container
+										94 按钮 hi, Help: hi Local runtime 空闲 9月20日
+											95 文本 hi
+										96 弹出式按钮 “hi”的操作
+											97 图像
+									98 container
+										99 按钮 hi, Help: hi Local runtime 空闲 9月17日
+											100 文本 hi
+										101 弹出式按钮 “hi”的操作
+											102 图像
+									103 container
+										104 按钮 请仅回复 NATIVE_CORDIS_V2_OK，不要调用工具。, Help: 请仅回复 NATIVE_CORDIS_V2_OK，不要调用工具。 Local runtime 空闲 8月25日
+											105 文本 请仅回复 NATIVE_CORDIS_V2_OK，不要调用工具。
+										106 弹出式按钮 “请仅回复 NATIVE_CORDIS_V2_OK，不要调用工具。”的操作
+											107 图像
+									108 按钮 折叠 编程测试
+										109 图像
+									110 按钮 编程测试 4 个会话 状态不可用
+										111 文本 编程测试
+										112 文本 4 个会话
+										113 图像 状态不可用
+									114 container
+										115 按钮 流式输出验证：请直接用中文写一篇约1000字的短文，介绍春天的公园。分成十个自然段，开头写 STREAM_NATIVE_OK，结尾写 STREAM_DONE。不要调用任何工具，不要读写文件。, Help: 流式输出验证：请直接用中文写一篇约1000字的短文，介绍春天的公园。分成十个自然段，开头写 STREAM_NATIVE_OK，结尾写 STREAM_DONE。不要调用任何工具，不要读写文件。 Local runtime 空闲 08:43
+											116 文本 流式输出验证：请直接用中文写一篇约1000字的短文，介绍春天的公园。分成十个自然段，开头写 STREAM_NATIVE_OK，结尾写 STREAM_DONE。不要调用任何工具，不要读写文件。
+										117 弹出式按钮 “流式输出验证：请直接用中文写一篇约1000字的短文，介绍春天的公园。分成十个自然段，开头写 STREAM_NATIVE_OK，结尾写 STREAM_DONE。不要调用任何工具，不要读写文件。”的操作
+											118 图像
+									119 container
+										120 按钮 Reply with UI_CLEAN_NATIVE_OK only. Do not call tools., Help: Reply with UI_CLEAN_NATIVE_OK only. Do not call tools. Local runtime 空闲 9月22日
+											121 文本 Reply with UI_CLEAN_NATIVE_OK only. Do not call tools.
+										122 弹出式按钮 “Reply with UI_CLEAN_NATIVE_OK only. Do not call tools.”的操作
+											123 图像
+									124 container
+										125 按钮 hi, Help: hi Local runtime 空闲 9月11日
+											126 文本 hi
+										127 弹出式按钮 “hi”的操作
+											128 图像
+									129 container
+										130 按钮 完成一个简单的小游戏开发, Help: 完成一个简单的小游戏开发 Local runtime 空闲 9月10日
+											131 文本 完成一个简单的小游戏开发
+										132 弹出式按钮 “完成一个简单的小游戏开发”的操作
+											133 图像
+									134 按钮 展开 Avernet Native Restart Canary
+										135 图像
+									136 按钮 Avernet Native Restart Canary 按需加载 未激活
+										137 文本 Avernet Native Restart Canary
+										138 文本 按需加载
+										139 图像 未激活
+									140 按钮 展开 Hi
+										141 图像
+									142 按钮 Hi 按需加载 未激活
+										143 文本 Hi
+										144 文本 按需加载
+										145 图像 未激活
+									146 按钮 展开 Desktop Client
+										147 图像
+									148 按钮 Desktop Client 按需加载 未激活
+										149 文本 Desktop Client
+										150 文本 按需加载
+										151 图像 未激活
+									152 按钮 展开 Release Reliability
+										153 图像
+									154 按钮 Release Reliability 按需加载 未激活
+										155 文本 Release Reliability
+										156 文本 按需加载
+										157 图像 未激活
+							158 弹出式按钮 全部功能
+							159 弹出式按钮 Local Desktop Northstar Labs · Desktop Client
+								160 图像
+								161 文本 Local Desktop
+								162 container
+									163 text Northstar Labs  ·  Desktop Client
+								164 图像
+							165 分离器 Description: 调整侧栏宽度, Value: 290
+						166 container 智能体会话详情
+							167 container 会话流
+								168 container
+									169 container 会话记录
+										170 container 智能体会话时间线
+											171 container
+												172 文本 08:43
+												173 工具栏 消息操作
+													174 按钮 复制消息
+													175 按钮 引用回复
+													176 按钮 编辑消息
+													177 按钮 删除消息
+												178 文本 流式输出验证：请直接用中文写一篇约1000字的短文，介绍春天的公园。分成十个自然段，开头写 STREAM_NATIVE_OK，结尾写 STREAM_DONE。不要调用任何工具，不要读写文件。
+											179 按钮 收起本轮并隐藏 2 条响应记录
+											180 container 本轮智能体响应
+											181 开合三角标记 已完成 1 个步骤
+												182 文本 已完成 1 个步骤
+											183 container
+												184 文本 08:44
+												185 工具栏 消息操作
+													186 按钮 复制消息
+													187 按钮 引用回复
+													188 按钮 重试回复
+													189 切换按钮 Description: 置顶消息, Value: 0
+													190 按钮 保存为模板
+												191 文本 Plan ready for review.
+											192 container
+												193 文本 08:44
+												194 工具栏 消息操作
+													195 按钮 复制消息
+													196 按钮 引用回复
+													197 按钮 编辑消息
+													198 按钮 删除消息
+												199 文本 请直接回答，不要规划，不要调用工具：写一篇约1000字的春日公园短文，十个自然段，开头 STREAM_NATIVE_OK，最后 STREAM_DONE。
+											200 按钮 收起本轮并隐藏 1 条响应记录
+											201 container 本轮智能体响应
+											202 container
+												203 文本 08:44
+												204 工具栏 消息操作
+													205 按钮 复制消息
+													206 按钮 引用回复
+													207 按钮 重试回复
+													208 切换按钮 Description: 置顶消息, Value: 0
+													209 按钮 保存为模板
+												210 文本 STREAM_NATIVE_OK
+												211 文本 春天的公园是一幅缓缓展开的画卷，每一笔都浸透着生命复苏的欣喜。当冬日的寒意渐渐消退，公园里的每一寸土地都开始苏醒过来。柳树抽出嫩绿的新芽，细长的枝条在微风中轻轻摇曳，像少女的长发般柔美动人。草地上，枯黄的落叶下，点点新绿悄然探出头来，为大地披上一层淡淡的绒毯。
+												212 文本 迎春花是春天最早的使者，它们沿着湖畔和路边蔓延开来，金黄色的花朵像一串串小铃铛，在春风中摇曳生姿。紧接着，桃花、杏花、梨花也竞相开放，粉的、白的、淡红的，把公园装点成一个花的海洋。樱花树下，层层叠叠的花瓣随风飘落，地上仿佛铺了一层柔软的粉色绒毯，游人漫步其中，宛如置身仙境。
+												213 文本 湖面上的冰早已融化，碧绿的湖水倒映着蓝天白云和岸边婀娜的垂柳。湖中的天鹅和野鸭悠然自得地游弋着，偶尔一头扎进水中觅食，激起一圈圈涟漪。几只燕子掠过水面，轻盈的身姿划过空气，留下一道道优美的弧线。
+												214 文本 公园的小径上，三三两两的游客漫步其中。有老人坐在长椅上晒太阳，脸上洋溢着安详的笑容；有年轻人戴着耳机慢跑，享受着春日的清新空气；还有孩子们在草地上奔跑嬉戏，欢声笑语回荡在公园的每一个角落。放风筝的孩子们举着五彩斑斓的风筝，在春风中奔跑，看着风筝越飞越高。
+												215 文本 花坛里的郁金香亭亭玉立，红的、黄的、紫的，色彩斑斓，争奇斗艳。蝴蝶在花丛中翩翩起舞，蜜蜂嗡嗡地忙碌着采蜜。空气中弥漫着泥土的芬芳、青草的清香和花朵的馥郁，这些气味交织在一起，令人心旷神怡。
+												216 文本 公园的长廊上，藤蔓植物开始抽出新枝，嫩绿的叶子在阳光下闪闪发亮。老人们喜欢聚集在这里下棋、聊天、唱戏，悠扬的二胡声和京剧唱段为公园增添了浓郁的文化气息。远处的亭子里，几位书法爱好者正在地上练习毛笔字，刚劲有力的笔锋引来路人驻足观看。
+												217 文本 健身区里，晨练的人们伴随着轻柔的音乐打太极拳，动作舒展流畅，如行云流水。单杠上，年轻人展示着矫健的身姿。旁边的空地上，广场舞大妈们随着欢快的节奏翩翩起舞，成为公园里一道活力四射的风景线。
+												218 文本 午后的阳光温暖而柔和，透过树叶的缝隙洒下斑驳的光影。坐在树荫下的长椅上，看一本书，听一首歌，或者只是静静地发呆，都是难得的惬意时光。远处传来悠扬的笛声，不知是哪位隐士在独自吹奏，为这春日的午后增添了几分诗意。
+												219 文本 夕阳西下，天边被染成橘红色，湖面也泛起了金色的波光。游人们依依不舍地离开，但他们的欢声笑语仿佛还留在空气中。公园在暮色中渐渐安静下来，只有晚归的鸟儿还在枝头歌唱，诉说着春天里的故事。
+												220 文本 春天的公园，是自然与人文的完美融合，是喧嚣都市中的一片净土。它用最美的色彩、最动听的声音、最芬芳的气息，抚慰着每一位到来的游人的心灵。在这里，人们找到了与自然对话的方式，也找到了内心的宁静与平和。STREAM_DONE
+									221 按钮 跳至最新
+									222 container
+										223 文本输入区 (settable) 引导此会话…
+										224 弹出式按钮 添加上下文和工具
+										225 开合三角标记 消息输入工具
+										226 工具栏 消息输入工具
+											227 弹出式按钮 切换模型，当前模型：MiniMax-M2.7-highspeed
+										228 弹出式按钮 Description: 审批, Help: 每次权限请求都需要手动确认。
+											229 文本 审批
+											230 文本 :
+											231 文本 默认
+										232 按钮 (disabled) 发送消息
+											233 图像
+					234 container 通知
+	235 关闭按钮
+	236 全屏幕按钮 Help: 此按钮也可以执行缩放窗口的操作, Secondary Actions: 缩放窗口
+	237 最小化按钮
+238 menu bar
+	239 Electron
+	240 File
+	241 Edit
+	242 View
+	243 Window
+
+The focused UI element is 3 HTML 内容 agi-stack Desktop, URL: 127.0.0.1:5173/

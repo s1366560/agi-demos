@@ -6,7 +6,7 @@
     "moduleResolution": "Node",
     "noEmit": false,
     "outDir": "/tmp/agistack-project-agent-test-dist",
-    "rootDir": "..",
+    "rootDir": "../../..",
     "types": ["node"]
   },
   "include": [

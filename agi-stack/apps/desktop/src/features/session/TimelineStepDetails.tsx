@@ -26,9 +26,11 @@ export function TimelineStepDetails({
   items,
   onClose,
   onOpenFile,
+  showCloseButton = true,
 }: {
   items: readonly AgentTimelineItem[];
   onClose: () => void;
+  showCloseButton?: boolean;
   onOpenFile?: (path: string) => void;
 }) {
   const { t } = useI18n();
@@ -100,14 +102,14 @@ export function TimelineStepDetails({
         <h2 ref={headingRef} tabIndex={-1}>
           {model.title ?? (latest ? timelineTitle(latest, t) : t('timelineDetails.title'))}
         </h2>
-        <button
+        {showCloseButton ? <button
           type="button"
           onClick={onClose}
           aria-label={t('common.close')}
           title={t('common.close')}
         >
           <Cross2Icon aria-hidden="true" />
-        </button>
+        </button> : null}
       </header>
       <div
         ref={tabsRef}

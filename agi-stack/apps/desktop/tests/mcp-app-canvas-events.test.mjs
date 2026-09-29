@@ -135,7 +135,7 @@ test('Desktop consumes MCP App results into an official sandboxed renderer and B
     /const mcpAppCanvasResult[\s\S]{0,180}mcpAppCanvasResult\.handled\) return existing/,
   );
   assert.match(appSource, /const openMCPAppResult = useCallback/);
-  assert.match(appSource, /setReviewTab\('apps'\)/);
+  assert.match(appSource, /openRightCanvasPanel\('apps'\)/);
   assert.match(componentSource, /import\('@mcp-ui\/client'\)/);
   assert.match(componentSource, /sandbox=\{sandboxConfig\}/);
   assert.doesNotMatch(componentSource, /dangerouslySetInnerHTML/);

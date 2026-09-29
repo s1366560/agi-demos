@@ -195,7 +195,7 @@ test('titlebar keeps App state authority and native bridge lifecycle without fal
   assert.match(app, /sidebarCollapsed,/u);
   assert.match(app, /rightSidebarOpen,/u);
   assert.match(app, /onToggleSidebar:\s*\(\) =>/u);
-  assert.match(app, /onToggleRightSidebar:\s*\(\) =>/u);
+  assert.match(app, /onToggleRightSidebar:\s*toggleRightSidebar/u);
 
   const projectionIndex = boundary.indexOf('projectDesktopTitlebarCompositionV2');
   const hiddenIndex = boundary.indexOf("input.kind === 'hidden'");

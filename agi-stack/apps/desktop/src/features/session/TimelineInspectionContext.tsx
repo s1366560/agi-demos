@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -28,7 +27,6 @@ export function TimelineInspectionProvider({
   sessionKey,
   onOpen,
   onOpenFile,
-  isOpen,
 }: {
   children: ReactNode;
   sessionKey: string;
@@ -36,39 +34,41 @@ export function TimelineInspectionProvider({
   onOpen: () => void;
   onOpenFile?: (path: string) => void;
 }) {
-  const [selection, setSelection] = useState<{
-    sessionKey: string;
-    items: readonly AgentTimelineItem[];
-  } | null>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
+  const [selections, setSelections] = useState<
+    Readonly<Record<string, readonly AgentTimelineItem[]>>
+  >({});
+  const triggersRef = useRef(new Map<string, HTMLElement>());
+  const sessionRef = useRef(sessionKey);
+  sessionRef.current = sessionKey;
   const inspect = useCallback(
     (items: AgentTimelineItem[], trigger: HTMLElement) => {
       if (!items.length) return;
-      triggerRef.current = trigger;
-      setSelection({ sessionKey, items });
+      triggersRef.current.set(sessionKey, trigger);
+      setSelections((current) => ({ ...current, [sessionKey]: items }));
       onOpen();
     },
     [onOpen, sessionKey],
   );
   const dismiss = useCallback(() => {
-    setSelection(null);
-    const trigger = triggerRef.current;
-    triggerRef.current = null;
-    window.requestAnimationFrame(() => {
-      if (trigger?.isConnected) trigger.focus();
+    setSelections((current) => {
+      const next = { ...current };
+      delete next[sessionKey];
+      return next;
     });
-  }, []);
-  useEffect(() => {
-    if (isOpen === false && selection?.sessionKey === sessionKey) dismiss();
-  }, [isOpen, selection, sessionKey, dismiss]);
+    const trigger = triggersRef.current.get(sessionKey);
+    triggersRef.current.delete(sessionKey);
+    window.requestAnimationFrame(() => {
+      if (sessionRef.current === sessionKey && trigger?.isConnected) trigger.focus();
+    });
+  }, [sessionKey]);
   const value = useMemo(
     () => ({
-      items: selection?.sessionKey === sessionKey ? selection.items : [],
+      items: selections[sessionKey] ?? [],
       inspect,
       dismiss,
       onOpenFile,
     }),
-    [selection, sessionKey, inspect, dismiss, onOpenFile],
+    [selections, sessionKey, inspect, dismiss, onOpenFile],
   );
   return (
     <TimelineInspectionContext.Provider value={value}>

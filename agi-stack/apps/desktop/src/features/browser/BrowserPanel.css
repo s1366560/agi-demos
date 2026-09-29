@@ -152,3 +152,14 @@
   padding: 16px;
   text-align: center;
 }
+
+.browser-panel-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--desktop-text);
+  border-bottom: 1px solid var(--desktop-border-soft);
+  font-size: 12px;
+}

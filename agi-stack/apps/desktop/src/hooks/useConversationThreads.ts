@@ -76,7 +76,6 @@ export function useConversationThreads(params: AgentConversationParams) {
     setError,
     setSectionBackStack,
     setSectionForwardStack,
-    setReviewTab,
     setSelectedTaskId,
     setAgentConversationSession,
     setAgentTaskSignals,
@@ -211,7 +210,6 @@ export function useConversationThreads(params: AgentConversationParams) {
     setSelectedTaskId('');
     resetConversationTimeline();
     setAgentTaskSignals([]);
-    setReviewTab('plan');
     setSectionBackStack([]);
     setSectionForwardStack([]);
     persistNewTaskSession(session);
@@ -235,7 +233,6 @@ export function useConversationThreads(params: AgentConversationParams) {
     setSelectedTaskId('');
     resetConversationTimeline();
     setAgentTaskSignals([]);
-    setReviewTab('overview');
     setSectionBackStack([]);
     setSectionForwardStack([]);
     setDataset((current) => ({

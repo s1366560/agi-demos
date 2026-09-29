@@ -37,6 +37,12 @@ mod permission_config;
 /// checkpoints, or the existing [`ReActEngine::run`] contract.
 #[async_trait]
 pub trait ReActObserver: Send + Sync {
+    /// A provisional answer fragment, delivered before the decision completes.
+    fn on_text_delta(&self, _session_id: &str, _round: u64, _delta: &str) {}
+
+    /// End a provisional text block, including when its decision is dropped.
+    fn on_text_end(&self, _session_id: &str, _round: u64) {}
+
     async fn on_tool_call(
         &self,
         _session_id: &str,
@@ -80,6 +86,35 @@ pub trait ReActObserver: Send + Sync {
         _request: &HitlRequest,
     ) -> CoreResult<()> {
         Ok(())
+    }
+}
+
+struct DecisionStream<'a> {
+    observer: Option<&'a dyn ReActObserver>,
+    session_id: &'a str,
+    round: u64,
+    emitted: std::sync::atomic::AtomicBool,
+}
+
+impl DecisionStream<'_> {
+    fn emit(&self, delta: &str) {
+        if !delta.is_empty() {
+            self.emitted
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            if let Some(observer) = self.observer {
+                observer.on_text_delta(self.session_id, self.round, delta);
+            }
+        }
+    }
+}
+
+impl Drop for DecisionStream<'_> {
+    fn drop(&mut self) {
+        if self.emitted.load(std::sync::atomic::Ordering::Relaxed) {
+            if let Some(observer) = self.observer {
+                observer.on_text_end(self.session_id, self.round);
+            }
+        }
     }
 }
 
@@ -350,10 +385,23 @@ impl ReActEngine {
             // THINK — delegate the semantic decision to the planner/LLM.
             let available = self.tools.tool_definitions()?;
             let decision_goal = permission::decision_goal(&state.goal, &self.permission_suspension);
-            let action = self
-                .llm
-                .decide_with_tools(&decision_goal, state.round, &state.transcript, &available)
-                .await;
+            let action = {
+                let stream = DecisionStream {
+                    observer: observer.as_deref(),
+                    session_id,
+                    round: state.round,
+                    emitted: std::sync::atomic::AtomicBool::new(false),
+                };
+                self.llm
+                    .decide_with_tools_stream(
+                        &decision_goal,
+                        state.round,
+                        &state.transcript,
+                        &available,
+                        &|delta| stream.emit(delta),
+                    )
+                    .await
+            };
             // A decision made before new control input must never be dispatched.
             if self.apply_control(&mut state, control.as_deref()).await? {
                 continue;

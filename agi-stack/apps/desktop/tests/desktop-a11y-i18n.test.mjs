@@ -25,7 +25,9 @@ test('session canvas implements an arrow-key navigable tab pattern', () => {
   assert.match(reviewPanelSource, /tabIndex=\{activeTab === tab \? 0 : -1\}/);
   assert.match(reviewPanelSource, /\['ArrowLeft', 'ArrowRight', 'Home', 'End'\]/);
   assert.match(reviewPanelSource, /role="tabpanel"/);
-  assert.match(reviewPanelSource, /aria-labelledby=\{tabId\(activeTab\)\}/);
+  assert.match(reviewPanelSource, /!embedded \? \(/);
+  assert.match(reviewPanelSource, /aria-label=\{embedded \? t\('session\.canvas'\) : undefined\}/);
+  assert.match(reviewPanelSource, /aria-labelledby=\{embedded \? undefined : tabId\(activeTab\)\}/);
 });
 
 test('new-task review announces and focuses the newly available plan', () => {

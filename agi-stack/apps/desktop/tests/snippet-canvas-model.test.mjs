@@ -190,8 +190,7 @@ test('code blocks publish snippet canvas requests and App subscribes to open scr
   assert.match(highlightedCodeSource, /code-block-open-canvas/);
   assert.match(appSource, /subscribeSnippetCanvasRequests/);
   assert.match(appSource, /openSnippetCanvasTab/);
-  assert.match(appSource, /setReviewTab\('artifacts'\)/);
-  assert.match(appSource, /openRightCanvasPanel\(\)/);
+  assert.match(appSource, /openRightCanvasPanel\('artifacts'\)/);
 });
 
 test('the canvas surface never treats a local scratch tab as a persisted artifact', () => {

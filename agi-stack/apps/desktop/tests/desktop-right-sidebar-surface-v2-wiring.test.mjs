@@ -201,19 +201,18 @@ test('right sidebar projection rejects malformed, duplicate, and inactive genera
 });
 
 test('right sidebar seam preserves shell state, local lifecycles, and failure layout', () => {
-  assert.match(app, /localStorage\.getItem\('agistack\.desktop\.rightSidebarOpen'\) === 'true'/u);
-  assert.match(app, /const \[activeRightPanel, setActiveRightPanel\]/u);
+  assert.match(app, /useWorkPanels\(\)/u);
+  assert.doesNotMatch(app, /localStorage\.getItem\('agistack\.desktop\.rightSidebarOpen'\)/u);
   assert.match(app, /rightSidebarAvailable && rightSidebarOpen/u);
-  assert.match(app, /activePanel:\s*activeRightPanel/u);
+  assert.match(app, /state:\s*rightPanelState/u);
   assert.match(app, /onSelectPanel:\s*handleSelectRightPanel/u);
-  assert.match(app, /onCloseCanvas:\s*handleCloseCanvas/u);
+  assert.match(app, /onCloseTab:\s*handleCloseRightTab/u);
 
-  assert.match(rightSidebar, /useResizablePanelWidth\(/u);
+  assert.match(rightSidebar, /workPanelGeometry\(/u);
   assert.match(rightSidebar, /agistack\.desktop\.rightSidebarWidth/u);
-  assert.match(rightSidebar, /useState<'split' \| 'focus'>\('split'\)/u);
-  assert.match(rightSidebar, /useRef<string \| null>\(null\)/u);
-  assert.match(rightSidebar, /document\.activeElement\.dataset\.sessionCanvasTrigger/u);
-  assert.match(rightSidebar, /window\.requestAnimationFrame/u);
+  assert.match(rightSidebar, /state\.tabs\.map/u);
+  assert.match(rightSidebar, /role="tablist"/u);
+  assert.match(rightSidebar, /rightbar\.addView/u);
   assert.match(rightSidebar, /<DesktopRendererSessionCanvasV2/u);
   assert.match(rightSidebar, /<SessionContextRail/u);
   assert.match(rightSidebar, /<BrowserPanel/u);
@@ -229,6 +228,6 @@ test('right sidebar seam preserves shell state, local lifecycles, and failure la
   );
   assert.match(
     rightSidebarStyles,
-    /\.desktop-right-sidebar\s*\{[\s\S]*?grid-column:\s*3;[\s\S]*?grid-row:\s*2;[\s\S]*?overflow:\s*hidden;[\s\S]*?border-left:[\s\S]*?background:/u,
+    /\.desktop-right-sidebar\s*\{[\s\S]*?grid-column:\s*3;[\s\S]*?grid-row:\s*2;[\s\S]*?border-left:[\s\S]*?background:/u,
   );
 });

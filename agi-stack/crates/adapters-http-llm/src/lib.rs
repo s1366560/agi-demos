@@ -20,6 +20,7 @@
 //! is pure transport plus serialization: it makes no judgments, it just carries
 //! the structured tool-call to and from the provider.
 
+mod answer_stream;
 mod anthropic;
 mod embedding;
 mod endpoint;
@@ -27,6 +28,7 @@ mod openai;
 mod rerank;
 mod structured;
 
+pub use answer_stream::AgentAnswerStream;
 pub use anthropic::AnthropicLlm;
 pub use embedding::{HttpEmbedding, VerifiedEmbedding, VerifiedEmbeddingError};
 pub use openai::HttpLlm;

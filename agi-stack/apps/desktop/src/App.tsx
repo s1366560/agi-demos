@@ -317,7 +317,8 @@ import {
   type MCPAppCanvasState,
 } from './features/chat/mcpAppCanvasEventModel';
 import { useToast } from './features/feedback/ToastCenter';
-import type { DesktopRightPanel } from './features/chrome/DesktopRightSidebar';
+import { useWorkPanels } from './features/chrome/useWorkPanels';
+import { EMPTY_WORK_PANEL, type WorkPanelTab } from './features/chrome/workPanelState';
 import {
   clearConversationTabs,
   closeTab,
@@ -691,36 +692,13 @@ export function App() {
   const appShellRef = useRef<HTMLDivElement>(null);
   const loginRestoreTargetRef = useRef<HTMLElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(() => {
-    try { return localStorage.getItem('agistack.desktop.rightSidebarOpen') === 'true'; }
-    catch { return false; }
-  });
-  const rightSidebarPreferenceRef = useRef(rightSidebarOpen);
-  const rememberRightSidebar = (open: boolean) => {
-    rightSidebarPreferenceRef.current = open;
-    setRightSidebarOpenedForCanvas(false);
-    setRightSidebarOpen(open);
-    try { localStorage.setItem('agistack.desktop.rightSidebarOpen', String(open)); }
-    catch { /* Layout remains usable when storage is unavailable. */ }
-  };
+  const rightPanels = useWorkPanels();
+  const openRightCanvasPanel = rightPanels.open;
   // Workbench tabs: view tabs follow the fixed model order, conversation tabs
   // append in open order. The landing view is open from the start.
   const [openTabs, setOpenTabs] = useState<WorkbenchTab[]>([
     { kind: 'view', section: 'workspace' },
   ]);
-  // Right sidebar: which panel is active, and whether the sidebar was opened
-  // only to reveal the canvas (closing such a canvas closes the sidebar too).
-  const [activeRightPanel, setActiveRightPanel] = useState<DesktopRightPanel>('context');
-  const [rightSidebarOpenedForCanvas, setRightSidebarOpenedForCanvas] = useState(false);
-  const openRightCanvasPanel = useCallback(() => {
-    setRightSidebarOpen(true);
-    setActiveRightPanel('canvas');
-    setRightSidebarOpenedForCanvas(!rightSidebarPreferenceRef.current);
-  }, []);
-  const closeRightCanvasPanel = useCallback(() => {
-    setActiveRightPanel('context');
-    setRightSidebarOpenedForCanvas(false);
-  }, []);
   const sidebarPanelWidth = useResizablePanelWidth(
     SIDEBAR_WIDTH_STORAGE_KEY,
     SIDEBAR_WIDTH_CONSTRAINTS,
@@ -798,7 +776,6 @@ export function App() {
   const switchSectionRef = useRef<(section: WorkbenchSection) => void>(() => {});
   const [sectionBackStack, setSectionBackStack] = useState<WorkbenchSection[]>([]);
   const [sectionForwardStack, setSectionForwardStack] = useState<WorkbenchSection[]>([]);
-  const [reviewTab, setReviewTab] = useState<ReviewTab>('overview');
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [sandboxBusy, setSandboxBusy] = useState(false);
   const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(null);
@@ -934,8 +911,7 @@ export function App() {
           artifactCanvasStateRef.current = result.state;
           return result.state;
         });
-        setReviewTab('artifacts');
-        openRightCanvasPanel();
+        openRightCanvasPanel('artifacts');
       }),
     [openRightCanvasPanel],
   );
@@ -1675,6 +1651,14 @@ export function App() {
       ? agentConversationSession.conversation
       : null;
   const scopedConversationId = scopedConversation?.id ?? '';
+  const rightPanelScope = JSON.stringify([agentConversationScopeKey(config), scopedConversationId]);
+  rightPanels.scopeRef.current = rightPanelScope;
+  const rightPanelState = rightPanels.sessions[rightPanelScope] ?? EMPTY_WORK_PANEL;
+  const rightSidebarOpen = rightPanelState.open;
+  const activeRightPanel = rightPanelState.active;
+  const reviewTab: ReviewTab = activeRightPanel && activeRightPanel !== 'browser' && activeRightPanel !== 'run-details'
+    ? activeRightPanel : 'overview';
+
   // Every path that surfaces a conversation (sidebar selection, new-task
   // sessions, resumes) funnels through agentConversationSession, so a single
   // effect keeps the tab row in sync instead of hooking each call site.
@@ -2563,7 +2547,6 @@ export function App() {
       if (activeSectionRef.current === 'chat') {
         activeSectionRef.current = 'workspace';
         setActiveSection('workspace');
-        setReviewTab('overview');
         workbenchRef.current?.focus();
       }
     },
@@ -3091,19 +3074,15 @@ export function App() {
     );
     if (timelineEvents.length) {
       let nextArtifactCanvas = artifactCanvasStateRef.current;
-      let lastArtifactAction: 'open' | 'update' | 'close' | null = null;
       let nextMCPAppCanvas = mcpAppCanvasStateRef.current;
-      let openedMCPApp = false;
       for (const event of timelineEvents) {
         const result = applyArtifactCanvasStreamEvent(nextArtifactCanvas, event);
         if (result.handled) {
           nextArtifactCanvas = result.state;
-          if (result.action) lastArtifactAction = result.action;
         }
         const mcpAppResult = applyMCPAppCanvasStreamEvent(nextMCPAppCanvas, event);
         if (!mcpAppResult.handled) continue;
         nextMCPAppCanvas = mcpAppResult.state;
-        if (mcpAppResult.action === 'open') openedMCPApp = true;
       }
       if (nextArtifactCanvas !== artifactCanvasStateRef.current) {
         artifactCanvasStateRef.current = nextArtifactCanvas;
@@ -3112,19 +3091,6 @@ export function App() {
       if (nextMCPAppCanvas !== mcpAppCanvasStateRef.current) {
         mcpAppCanvasStateRef.current = nextMCPAppCanvas;
         setMCPAppCanvasState(nextMCPAppCanvas);
-      }
-      if (openedMCPApp) {
-        setReviewTab('apps');
-        openRightCanvasPanel();
-      } else if (lastArtifactAction === 'open') {
-        setReviewTab('artifacts');
-        openRightCanvasPanel();
-      } else if (
-        lastArtifactAction === 'close' &&
-        nextArtifactCanvas.tabs.length === 0 &&
-        reviewTab === 'artifacts'
-      ) {
-        closeRightCanvasPanel();
       }
       setConversationTimeline((current) => {
         if (current.conversationId !== activeConversation.id) return current;
@@ -3416,8 +3382,6 @@ export function App() {
     setRunControlState('running');
     setRunLiveMode(true);
     setSelectedTaskId('');
-    setReviewTab('overview');
-    closeRightCanvasPanel();
     setTerminal(null);
     setTerminalLifecycle(null);
     setAgentConversationSession(null);
@@ -4163,7 +4127,6 @@ export function App() {
     setAgentConversationSession(null);
     resetConversationTimeline();
     setAgentTaskSignals([]);
-    setReviewTab('overview');
     setExpandedWorkspaceIds((current) => {
       const next = new Set(current);
       next.delete(scope.workspaceId);
@@ -4404,7 +4367,6 @@ export function App() {
     setAgentConversationSession(null);
     resetConversationTimeline();
     setAgentTaskSignals([]);
-    setReviewTab('overview');
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
     desktopProductionRouteNavigation.clearHash();
     applySectionSideEffects('workspace');
@@ -4892,7 +4854,6 @@ export function App() {
       conversation,
     });
     setAgentTaskSignals([]);
-    setReviewTab('overview');
     if (workspaceId) {
       setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
     }
@@ -5227,8 +5188,7 @@ export function App() {
   );
   const openSessionCanvasTab = useCallback(
     (tab: SessionCanvasTabId) => {
-      setReviewTab(tab);
-      openRightCanvasPanel();
+      openRightCanvasPanel(tab);
     },
     [openRightCanvasPanel],
   );
@@ -5515,7 +5475,6 @@ export function App() {
             ]),
           ),
         }));
-        setReviewTab('plan');
         await loadConversationTimeline(promotedConversation, requestConfig.projectId);
       } catch (caught) {
         setError(formatConnectionError(caught, requestConfig.apiBaseUrl));
@@ -6142,10 +6101,6 @@ export function App() {
     if (isViewTabSection(section)) {
       setOpenTabs((tabs) => ensureViewTab(tabs, section));
     }
-    if (section === 'board') {
-      setReviewTab('changes');
-      closeRightCanvasPanel();
-    }
   };
 
   const nativeOAuthResumeRoute = useCallback(() => {
@@ -6422,34 +6377,26 @@ export function App() {
     switchSection('workspace');
   };
 
-  // The right sidebar hosts the session context rail, the review canvas, and
-  // the in-app browser panel. The browser panel is not session-scoped, so the
-  // sidebar stays available in the chat section even without a session.
+  // Browser views remain available without a selected conversation.
   const rightSidebarAvailable = activeSection === 'chat';
 
   const handleOpenCanvas = (tab?: SessionCanvasTabId) => {
-    setReviewTab(
-      tab ??
-        (sessionDetailViewModel
-          ? defaultSessionCanvasTab(
-              sessionDetailViewModel.status,
-              sessionDetailViewModel.capabilityMode,
-            )
-          : 'overview'),
-    );
-    openRightCanvasPanel();
+    openRightCanvasPanel(tab ?? (sessionDetailViewModel
+      ? defaultSessionCanvasTab(sessionDetailViewModel.status, sessionDetailViewModel.capabilityMode)
+      : 'plan'));
   };
-
-  const handleCloseCanvas = () => {
-    // A canvas the user never asked for takes the whole sidebar down with it.
-    if (rightSidebarOpenedForCanvas) setRightSidebarOpen(false);
-    closeRightCanvasPanel();
+  const handleCloseCanvas = () => rightPanels.hide();
+  const handleSelectRightPanel = (tab: WorkPanelTab) => openRightCanvasPanel(tab);
+  const handleCloseRightTab = (tab: WorkPanelTab) => {
+    rightPanels.dispatch({ type: 'close', tab });
+    if (rightPanelState.tabs.length === 1) rightPanels.restoreFocus();
   };
-
-  const handleSelectRightPanel = (panel: DesktopRightPanel) => {
-    setActiveRightPanel(panel);
-    setRightSidebarOpenedForCanvas(false);
-    if (panel === 'canvas') setRightSidebarOpen(true);
+  const toggleRightSidebar = () => {
+    if (!rightSidebarAvailable) return;
+    if (rightSidebarOpen) rightPanels.hide();
+    else rightPanels.dispatch({ type: 'show', fallback: sessionDetailViewModel
+      ? defaultSessionCanvasTab(sessionDetailViewModel.status, sessionDetailViewModel.capabilityMode)
+      : 'browser' });
   };
 
   const {
@@ -6509,7 +6456,6 @@ export function App() {
     setNewThreadCreating,
     setNewThreadError,
     setNewThreadScope,
-    setReviewTab,
     setRunInputReferences,
     setRunInputs,
     setSectionBackStack,
@@ -6860,24 +6806,10 @@ export function App() {
 
   const selectChatWorkflowTarget = useCallback(
     (target: ChatWorkflowTarget) => {
-      openRightCanvasPanel();
-      if (target === 'changes') {
-        setReviewTab('changes');
-        return;
-      }
-      if (target === 'pull') {
-        setReviewTab('pull');
-        return;
-      }
-      if (target === 'background') {
-        setReviewTab('background');
-        return;
-      }
-      if (target === 'artifacts') {
-        setReviewTab('artifacts');
-        return;
-      }
-      setReviewTab('plan');
+      openRightCanvasPanel(target === 'pull' ? 'checks'
+        : target === 'background' ? 'activity'
+        : target === 'changes' ? 'changes'
+        : target === 'artifacts' ? 'artifacts' : 'plan');
     },
     [openRightCanvasPanel],
   );
@@ -6888,8 +6820,7 @@ export function App() {
       if (!result.handled || result.action !== 'open') return;
       mcpAppCanvasStateRef.current = result.state;
       setMCPAppCanvasState(result.state);
-      setReviewTab('apps');
-      openRightCanvasPanel();
+      openRightCanvasPanel('apps');
     },
     [openRightCanvasPanel],
   );
@@ -7541,7 +7472,7 @@ export function App() {
       onSendChangeComments: handleSendChangeComments,
       onSendMCPAppMessage: (message) => sendChatMessage(message, []),
       onStartTerminal: () => void startTerminal(),
-      onTabChange: setReviewTab,
+      onTabChange: openRightCanvasPanel,
       onTerminalInput: terminalProxy.sendInput,
       onTerminalResize: terminalProxy.resize,
       onToggleChangeReference: (reference) =>
@@ -7773,10 +7704,7 @@ export function App() {
               rightSidebarOpen,
               rightSidebarAvailable,
               onToggleSidebar: () => setSidebarCollapsed((collapsed) => !collapsed),
-              onToggleRightSidebar: () => {
-                if (!rightSidebarAvailable) return;
-                rememberRightSidebar(!rightSidebarOpen);
-              },
+              onToggleRightSidebar: toggleRightSidebar,
             },
           }
         : { kind: 'hidden' },
@@ -7872,7 +7800,8 @@ export function App() {
           ? {
               kind: 'visible',
               props: {
-                activePanel: activeRightPanel,
+                state: rightPanelState,
+                onCloseTab: handleCloseRightTab,
                 canvas: showReviewPanel
                   ? { kind: 'available', input: desktopSessionCanvasInputV2 }
                   : { kind: 'unavailable' },
@@ -7883,7 +7812,7 @@ export function App() {
                 onOpenCanvas: handleOpenCanvas,
                 onSelectPanel: handleSelectRightPanel,
                 onCloseCanvas: handleCloseCanvas,
-                onClose: () => rememberRightSidebar(false),
+                onClose: handleCloseCanvas,
               },
             }
           : { kind: 'hidden' },
@@ -8018,8 +7947,8 @@ export function App() {
         auth={auth}
         capabilitySnapshot={desktopCapabilityState.snapshot}
       >
-        <TimelineInspectionProvider sessionKey={selectedConversationId ?? ''} onOpen={openRightCanvasPanel}
-          isOpen={rightSidebarOpen && activeRightPanel === 'canvas'}>
+        <TimelineInspectionProvider sessionKey={selectedConversationId ?? ''} onOpen={() => openRightCanvasPanel('activity')}
+          isOpen={rightSidebarOpen && activeRightPanel === 'activity'}>
           <DesktopRendererAuthenticatedShellV2
             viewModel={desktopAuthenticatedShellViewModelV2}
           />

@@ -1,6 +1,7 @@
 export type SessionCanvasLayout = 'split' | 'focus';
 
 export type SessionCanvasControls = {
+  embedded?: boolean;
   layout: SessionCanvasLayout;
   onLayoutChange: (layout: SessionCanvasLayout) => void;
   onClose: () => void;

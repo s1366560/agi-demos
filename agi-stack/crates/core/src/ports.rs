@@ -116,6 +116,19 @@ pub trait LlmPort: Send + Sync {
         available_tools: &[String],
     ) -> CoreResult<AgentAction>;
 
+    /// Decide while forwarding decoded answer fragments as they arrive.
+    /// Fragments are provisional; only the returned action commits the decision.
+    async fn decide_with_tools_stream(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        tools: &[ToolDefinition],
+        _on_text: &(dyn for<'text> Fn(&'text str) + Send + Sync),
+    ) -> CoreResult<AgentAction> {
+        self.decide_with_tools(goal, round, transcript, tools).await
+    }
+
     /// Decide with the exact contracts authorized for this round.
     async fn decide_with_tools(
         &self,
